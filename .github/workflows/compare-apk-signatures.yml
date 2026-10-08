@@ -1,0 +1,51 @@
+name: Compare APK Signatures
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/compare-apk-signatures.yml"
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Android SDK tools
+        shell: bash
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "build-tools;35.0.0"
+
+      - name: Download current v0.4 APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download latest-android -p TWBoardingScanner-latest.apk
+
+      - name: Download previous v0.3 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/rex0966445518/stock-monitor-updates/actions/artifacts/11554752077/zip > old.zip
+          unzip -q old.zip -d old
+          find old -type f -maxdepth 2 -print
+
+      - name: Compare signing certificates
+        shell: bash
+        run: |
+          A="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          echo "=== CURRENT V0.4 ==="
+          "$A" verify --print-certs TWBoardingScanner-latest.apk | grep -E "Signer #1 certificate SHA-256|Signer #1 certificate DN"
+          echo "=== PREVIOUS V0.3 ==="
+          "$A" verify --print-certs old/TWBoardingScanner-latest.apk | grep -E "Signer #1 certificate SHA-256|Signer #1 certificate DN"
