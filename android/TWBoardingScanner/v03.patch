@@ -23,7 +23,7 @@ diff -ruN a/README.md b/README.md
 diff -ruN a/app/build.gradle.kts b/app/build.gradle.kts
 --- a/app/build.gradle.kts	2026-10-08 10:20:27.000000000 +0000
 +++ b/app/build.gradle.kts	2026-10-08 11:11:20.000000000 +0000
-@@ -11,10 +11,20 @@
+@@ -11,9 +11,19 @@
          applicationId = "com.rex.twboardingscanner"
          minSdk = 26
          targetSdk = 35
