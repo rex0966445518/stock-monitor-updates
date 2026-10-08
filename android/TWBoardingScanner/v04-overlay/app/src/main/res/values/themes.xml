@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.TWBoardingScanner" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:statusBarColor">#061321</item>
+        <item name="android:navigationBarColor">#061321</item>
+        <item name="colorPrimary">#FF496C</item>
+        <item name="colorSecondary">#36A3FF</item>
+    </style>
+</resources>
