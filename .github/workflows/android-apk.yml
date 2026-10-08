@@ -40,20 +40,23 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Extract project
+      - name: Extract v0.2 base project
         run: |
           rm -rf _android_build
           mkdir -p _android_build
-          unzip -q android/TWBoardingScanner/TWBoardingScanner_Android_v03_source.zip -d _android_build
-          test -d _android_build/TWBoardingScanner_Android_v03
+          unzip -q android/TWBoardingScanner/TWBoardingScanner_Android_v02_source.zip -d _android_build
+          test -d _android_build/TWBoardingScanner_Android_v02
+
+      - name: Apply v0.3 changes
+        run: python3 android/TWBoardingScanner/apply_v03.py
 
       - name: Build APK
-        working-directory: _android_build/TWBoardingScanner_Android_v03
+        working-directory: _android_build/TWBoardingScanner_Android_v02
         run: gradle :app:assembleDebug --stacktrace
 
       - name: Prepare APK
         run: |
-          cp _android_build/TWBoardingScanner_Android_v03/app/build/outputs/apk/debug/app-debug.apk TWBoardingScanner-latest.apk
+          cp _android_build/TWBoardingScanner_Android_v02/app/build/outputs/apk/debug/app-debug.apk TWBoardingScanner-latest.apk
           ls -lh TWBoardingScanner-latest.apk
 
       - name: Upload artifact
