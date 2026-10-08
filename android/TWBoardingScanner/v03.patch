@@ -1,0 +1,203 @@
+diff -ruN a/README.md b/README.md
+--- a/README.md	2026-10-08 10:20:27.000000000 +0000
++++ b/README.md	2026-10-08 11:11:20.000000000 +0000
+@@ -62,3 +62,18 @@
+ - 自選股與排除清單
+ - 背景掃描/Push
+ - API 快取與斷線恢復
++
++
++## v0.3 - C區「長紅爆量」
++新增獨立 C 型掃描：
++- 長紅K實體預設 >= 2%
++- 當日成交量 >= 20日均量 1.8倍
++- 收盤位於當日振幅上方30%內（收盤靠近高點）
++- 成交量至少500張
++- 排除近5日漲幅>=15%、距20MA>=10%、RSI/KD過熱、基本面明顯惡化
++- MACD與法人為加分項，不是C型硬門檻
++- 紅燈：長紅 + 爆量 + 收近高 + C分數>=80
++- 橘燈：長紅 + 量比>=1.5 + C分數>=65
++- 黃燈：紅K實體>=1% + 量比>=1.3 + C分數>=55
++
++C型用於抓「資金突然放大進場」的日K，不代表隔日必然續漲；觸發歷史可供後續回測隔日勝率。
+diff -ruN a/app/build.gradle.kts b/app/build.gradle.kts
+--- a/app/build.gradle.kts	2026-10-08 10:20:27.000000000 +0000
++++ b/app/build.gradle.kts	2026-10-08 11:11:20.000000000 +0000
+@@ -11,9 +11,19 @@
+         applicationId = "com.rex.twboardingscanner"
+         minSdk = 26
+         targetSdk = 35
+-        versionCode = 2
+-        versionName = "0.2.0"
++        versionCode = 3
++        versionName = "0.3.0"
+     }
+ 
+     buildFeatures { viewBinding = true }
++
++    compileOptions {
++        sourceCompatibility = JavaVersion.VERSION_17
++        targetCompatibility = JavaVersion.VERSION_17
++    }
++
++    kotlinOptions {
++        jvmTarget = "17"
++    }
+diff -ruN a/app/src/main/java/com/rex/twboardingscanner/data/DemoDataProvider.kt b/app/src/main/java/com/rex/twboardingscanner/data/DemoDataProvider.kt
+--- a/app/src/main/java/com/rex/twboardingscanner/data/DemoDataProvider.kt	2026-10-08 10:20:27.000000000 +0000
++++ b/app/src/main/java/com/rex/twboardingscanner/data/DemoDataProvider.kt	2026-10-08 11:11:20.000000000 +0000
+@@ -10,7 +10,7 @@
+ class DemoDataProvider {
+     fun load(): List<StockSnapshot> = listOf(
+         StockSnapshot(
+-            code="1590", name="亞德客-KY", sector=StockSector.ELECTROMECHANICAL, price=1245.0, changePct=2.1,
++            code="1590", name="亞德客-KY", sector=StockSector.ELECTROMECHANICAL, price=1245.0, openPrice=1208.0, highPrice=1252.0, lowPrice=1202.0, changePct=2.1,
+             volumeLots=1800, avg20VolumeLots=1000.0,
+             ma5=1215.0, ma10=1205.0, ma20=1220.0, ma60=1320.0,
+             ma5SlopeUp=true, maConverging=true, rsi=53.8, kdOverheated=false,
+diff -ruN a/app/src/main/java/com/rex/twboardingscanner/domain/Models.kt b/app/src/main/java/com/rex/twboardingscanner/domain/Models.kt
+--- a/app/src/main/java/com/rex/twboardingscanner/domain/Models.kt	2026-10-08 10:20:27.000000000 +0000
++++ b/app/src/main/java/com/rex/twboardingscanner/domain/Models.kt	2026-10-08 11:11:20.000000000 +0000
+@@ -1,6 +1,6 @@
+ package com.rex.twboardingscanner.domain
+ 
+-enum class RadarType { A_EARLY_BREAKOUT, B_DEEP_REVERSAL }
++enum class RadarType { A_EARLY_BREAKOUT, B_DEEP_REVERSAL, C_LONG_RED_VOLUME }
+ enum class SignalLight { NONE, YELLOW, ORANGE, RED, WEAKENING }
+ 
+ enum class StockSector(val label: String) {
+@@ -24,6 +24,9 @@
+     val name: String,
+     val sector: StockSector,
+     val price: Double,
++    val openPrice: Double,
++    val highPrice: Double,
++    val lowPrice: Double,
+     val changePct: Double,
+     val volumeLots: Int,
+     val avg20VolumeLots: Double,
+diff -ruN a/app/src/main/java/com/rex/twboardingscanner/domain/ScoringEngine.kt b/app/src/main/java/com/rex/twboardingscanner/domain/ScoringEngine.kt
+--- a/app/src/main/java/com/rex/twboardingscanner/domain/ScoringEngine.kt	2026-10-08 10:20:26.000000000 +0000
++++ b/app/src/main/java/com/rex/twboardingscanner/domain/ScoringEngine.kt	2026-10-08 11:11:20.000000000 +0000
+@@ -98,4 +98,43 @@
+         }
+         return SignalResult(s.code, s.name, RadarType.B_DEEP_REVERSAL, finalScore, light, reasons, blockers, s)
+     }
++
++    fun evaluateC(s: StockSnapshot): SignalResult {
++        val reasons = mutableListOf<String>()
++        val blockers = mutableListOf<String>()
++
++        if (s.volumeLots < 500) blockers += "成交量低於500張"
++        if (s.fundamentalsDeteriorating) blockers += "基本面明顯惡化"
++        if ((s.fiveDayGainPct ?: 0.0) >= 15.0) blockers += "近5日漲幅過大"
++        if (kotlin.math.abs(s.distanceFromMa20Pct ?: 0.0) >= 10.0) blockers += "距20MA乖離過大"
++        if (s.kdOverheated || (s.rsi ?: 0.0) >= 75.0) blockers += "短線過熱"
++
++        val bodyPct = if (s.openPrice > 0) (s.price - s.openPrice) / s.openPrice * 100.0 else 0.0
++        val dayRange = (s.highPrice - s.lowPrice).coerceAtLeast(0.01)
++        val closeNearHigh = ((s.highPrice - s.price) / dayRange) <= 0.30
++        val volRatio = if (s.avg20VolumeLots > 0) s.volumeLots / s.avg20VolumeLots else 0.0
++        val longRed = bodyPct >= 2.0 && s.changePct > 0.0
++        val volumeBurst = volRatio >= 1.8
++
++        var score = 0.0
++        if (longRed) { score += 30; reasons += "長紅K實體>=2%" }
++        if (volumeBurst) { score += 30; reasons += "成交量>=20日均量1.8倍" }
++        else if (volRatio >= 1.5) score += 20
++        if (closeNearHigh) { score += 15; reasons += "收盤接近當日高點" }
++        if (s.price >= (s.ma5 ?: s.price)) score += 5
++        if (s.price >= (s.ma20 ?: s.price)) { score += 5; reasons += "站上20MA" }
++        if (s.difRising || s.macdGoldenCross || s.macdTurnedPositive || s.macdRedExpanding) { score += 10; reasons += "MACD同步改善" }
++        if ((s.foreignToday ?: 0) > 0 || (s.foreign3d ?: 0) > 0 || (s.trust3d ?: 0) > 0) { score += 5; reasons += "法人籌碼加分" }
++
++        val finalScore = score.toInt().coerceIn(0, 100)
++        val hardPass = longRed && volumeBurst && closeNearHigh
++        val light = when {
++            blockers.any { it.contains("成交量") || it.contains("基本面") || it.contains("過熱") } -> SignalLight.NONE
++            hardPass && finalScore >= 80 -> SignalLight.RED
++            longRed && volRatio >= 1.5 && finalScore >= 65 -> SignalLight.ORANGE
++            bodyPct >= 1.0 && volRatio >= 1.3 && finalScore >= 55 -> SignalLight.YELLOW
++            else -> SignalLight.NONE
++        }
++        return SignalResult(s.code, s.name, s.sector, RadarType.C_LONG_RED_VOLUME, finalScore, light, reasons, blockers, s)
++    }
+ }
+diff -ruN a/app/src/main/java/com/rex/twboardingscanner/ui/MainActivity.kt b/app/src/main/java/com/rex/twboardingscanner/ui/MainActivity.kt
+--- a/app/src/main/java/com/rex/twboardingscanner/ui/MainActivity.kt	2026-10-08 10:20:27.000000000 +0000
++++ b/app/src/main/java/com/rex/twboardingscanner/ui/MainActivity.kt	2026-10-08 11:11:20.000000000 +0000
+@@ -49,7 +49,7 @@
+         b.industryFilterButton.setOnClickListener { showIndustryFilterDialog() }
+         updateIndustryFilterButton()
+         b.recycler.adapter = adapter
+-        listOf("今日新觸發", "A｜起漲", "B｜深跌", "等待區", "已失效").forEach { b.tabLayout.addTab(b.tabLayout.newTab().setText(it)) }
++        listOf("今日新觸發", "A｜起漲", "B｜深跌", "C｜長紅爆量", "等待區", "已失效").forEach { b.tabLayout.addTab(b.tabLayout.newTab().setText(it)) }
+         b.tabLayout.addOnTabSelectedListener(object: TabLayout.OnTabSelectedListener {
+             override fun onTabSelected(tab: TabLayout.Tab?) { selectedTab = tab?.position ?: 0; render() }
+             override fun onTabUnselected(tab: TabLayout.Tab?) {}
+@@ -70,7 +70,7 @@
+     private fun runScan() {
+         val source = provider.load()
+         val filteredSource = source.filter { it.sector in enabledSectors }
+-        val all = filteredSource.flatMap { s -> listOf(engine.evaluateA(s), engine.evaluateB(s)) }
++        val all = filteredSource.flatMap { s -> listOf(engine.evaluateA(s), engine.evaluateB(s), engine.evaluateC(s)) }
+         latest = all
+         var newTriggers = 0
+         all.filter { it.light != SignalLight.NONE }.forEach { r ->
+@@ -82,7 +82,8 @@
+         val now = SimpleDateFormat("HH:mm:ss", Locale.TAIWAN).format(Date())
+         val aCount = all.count { it.radarType.name.startsWith("A_") && it.light != SignalLight.NONE }
+         val bCount = all.count { it.radarType.name.startsWith("B_") && it.light != SignalLight.NONE }
+-        b.statusText.text = "A型掃描：ON　B型掃描：ON\n掃描股票：${filteredSource.size}/${source.size}　A:${aCount}　B:${bCount}　新觸發:${newTriggers}　最後更新:${now}"
++        val cCount = all.count { it.radarType.name.startsWith("C_") && it.light != SignalLight.NONE }
++        b.statusText.text = "A型掃描：ON　B型掃描：ON　C型掃描：ON\n掃描股票：${filteredSource.size}/${source.size}　A:${aCount}　B:${bCount}　C:${cCount}　新觸發:${newTriggers}　最後更新:${now}"
+         render()
+     }
+ 
+@@ -90,8 +91,9 @@
+         val filtered = when(selectedTab) {
+             1 -> latest.filter { it.radarType.name.startsWith("A_") && it.light != SignalLight.NONE }
+             2 -> latest.filter { it.radarType.name.startsWith("B_") && it.light != SignalLight.NONE }
+-            3 -> latest.filter { it.score in 65..84 }
+-            4 -> latest.filter { it.light == SignalLight.WEAKENING }
++            3 -> latest.filter { it.radarType.name.startsWith("C_") && it.light != SignalLight.NONE }
++            4 -> latest.filter { it.score in 65..84 }
++            5 -> latest.filter { it.light == SignalLight.WEAKENING }
+             else -> latest.filter { it.light == SignalLight.RED || it.light == SignalLight.ORANGE }
+         }.sortedByDescending { it.score }
+         adapter.submit(filtered)
+diff -ruN a/app/src/main/java/com/rex/twboardingscanner/ui/SignalAdapter.kt b/app/src/main/java/com/rex/twboardingscanner/ui/SignalAdapter.kt
+--- a/app/src/main/java/com/rex/twboardingscanner/ui/SignalAdapter.kt	2026-10-08 10:20:27.000000000 +0000
++++ b/app/src/main/java/com/rex/twboardingscanner/ui/SignalAdapter.kt	2026-10-08 11:11:20.000000000 +0000
+@@ -18,7 +18,11 @@
+     override fun onBindViewHolder(h: VH, position: Int) {
+         val r = items[position]
+         val s = r.snapshot
+-        val type = if (r.radarType.name.startsWith("A_")) "A型起漲" else "B型深跌反轉"
++        val type = when {
++            r.radarType.name.startsWith("A_") -> "A型起漲"
++            r.radarType.name.startsWith("B_") -> "B型深跌反轉"
++            else -> "C型長紅爆量"
++        }
+         val light = when(r.light) {
+             SignalLight.RED -> "🔴"
+             SignalLight.ORANGE -> "🟠"
+@@ -30,6 +34,7 @@
+         h.b.score.text = "${s.sector.label}｜AI符合度：${r.score}%"
+         h.b.details.text = "MACD DIF ${s.dif ?: "待更新"} / Signal ${s.signal ?: "待更新"} / OSC ${s.osc ?: "待更新"}\n" +
+             "RSI ${s.rsi ?: "待更新"}｜MA5 ${s.ma5 ?: "-"}｜MA10 ${s.ma10 ?: "-"}｜MA20 ${s.ma20 ?: "-"}\n" +
++            "開 ${s.openPrice}｜高 ${s.highPrice}｜低 ${s.lowPrice}\n" +
+             "量 ${s.volumeLots}張｜20日均量 ${s.avg20VolumeLots.toInt()}張｜外資3日 ${s.foreign3d ?: "待更新"}｜投信3日 ${s.trust3d ?: "待更新"}"
+         h.b.trigger.text = "觸發原因：${if (r.reasons.isEmpty()) "尚未達門檻" else r.reasons.joinToString("＋")}" +
+             (if (r.blockers.isNotEmpty()) "\n阻擋：${r.blockers.joinToString("；")}" else "")
+diff -ruN a/app/src/main/res/layout/activity_main.xml b/app/src/main/res/layout/activity_main.xml
+--- a/app/src/main/res/layout/activity_main.xml	2026-10-08 10:20:27.000000000 +0000
++++ b/app/src/main/res/layout/activity_main.xml	2026-10-08 11:11:20.000000000 +0000
+@@ -23,7 +23,7 @@
+         android:id="@+id/statusText"
+         android:layout_width="match_parent"
+         android:layout_height="wrap_content"
+-        android:text="A型掃描：ON　B型掃描：ON"
++        android:text="A型掃描：ON　B型掃描：ON　C型掃描：ON"
+         android:paddingTop="6dp"
+         android:paddingBottom="6dp" />
