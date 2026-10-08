@@ -76,7 +76,7 @@ if 'fun evaluateC' not in s:
             bodyPct >= 1.0 && volRatio >= 1.3 && finalScore >= 55 -> SignalLight.YELLOW
             else -> SignalLight.NONE
         }
-        return SignalResult(s.code, s.name, RadarType.C_LONG_RED_VOLUME, finalScore, light, reasons, blockers, s)
+        return SignalResult(s.code, s.name, s.sector, RadarType.C_LONG_RED_VOLUME, finalScore, light, reasons, blockers, s)
     }
 '''
     s = s.rsplit('\n}',1)[0] + '\n' + insert + '\n}\n'
