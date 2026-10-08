@@ -63,7 +63,10 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}):RecyclerVi
         h.b.price.text = String.format("%,.2f  %+.2f%%", s.price, s.changePct)
         h.b.price.setTextColor(if (s.changePct >= 0) Color.parseColor("#FF496C") else Color.parseColor("#2FD18A"))
         h.b.scoreRing.setScore(r.score, accent)
+        h.b.chartView.showAxes = true
+        h.b.chartView.setWindow(60)
         h.b.chartView.setBars(s.bars)
+        VolumeStrip.bind(h.b.volumeSummary, h.b.recentVolumes, s.bars)
 
         h.b.indicatorChips.removeAllViews()
         r.checks.filter { it.selected || it.extra }.forEach { check ->

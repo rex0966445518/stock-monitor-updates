@@ -3,17 +3,17 @@
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="12dp">
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
             <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical"><com.rex.twboardingscanner.ui.ScoreRingView android:id="@+id/scoreRing" android:layout_width="68dp" android:layout_height="68dp" /></LinearLayout><TextView android:id="@+id/badge" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FFFFFF" android:textStyle="bold" android:paddingLeft="10dp" android:paddingRight="10dp" android:paddingTop="5dp" android:paddingBottom="5dp" />
+                <TextView android:id="@+id/badge" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FFFFFF" android:textStyle="bold" android:paddingLeft="10dp" android:paddingRight="10dp" android:paddingTop="5dp" android:paddingBottom="5dp" />
                 <TextView android:id="@+id/codeName" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="20sp" />
                 <TextView android:id="@+id/sector" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#93AAC0" />
                 <TextView android:id="@+id/price" android:layout_width="match_parent" android:layout_height="wrap_content" android:textStyle="bold" android:textSize="26sp" />
-            <com.google.android.material.chip.ChipGroup android:id="@+id/indicatorChips" android:layout_width="match_parent" android:layout_height="wrap_content" app:chipSpacingHorizontal="4dp" app:chipSpacingVertical="2dp" />
-
-        </LinearLayout>
             </LinearLayout>
-
-        <com.rex.twboardingscanner.ui.MiniStockChartView android:id="@+id/chartView" android:layout_width="match_parent" android:layout_height="190dp" android:layout_marginTop="6dp" />
-
+            <com.rex.twboardingscanner.ui.ScoreRingView android:id="@+id/scoreRing" android:layout_width="68dp" android:layout_height="68dp" />
+        </LinearLayout>
+        <com.rex.twboardingscanner.ui.MiniStockChartView android:id="@+id/chartView" android:layout_width="match_parent" android:layout_height="245dp" android:layout_marginTop="6dp" />
+        <TextView android:id="@+id/volumeSummary" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#7BDFFE" android:textSize="14sp" android:textStyle="bold" android:paddingTop="8dp" android:paddingBottom="6dp" />
+        <LinearLayout android:id="@+id/recentVolumes" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:paddingBottom="6dp" />
         <TextView android:id="@+id/trigger" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="4dp" android:textColor="#C7D7E5" android:textSize="12sp" />
+        <com.google.android.material.chip.ChipGroup android:id="@+id/indicatorChips" android:layout_width="match_parent" android:layout_height="wrap_content" app:chipSpacingHorizontal="4dp" app:chipSpacingVertical="2dp" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

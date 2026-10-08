@@ -19,6 +19,7 @@ class MiniStockChartView @JvmOverloads constructor(context: Context, attrs: Attr
     private var count = 32
     private var selected = -1
     var detailed = false
+    var showAxes = false
     var onSelected: ((ChartPoint) -> Unit)? = null
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val grid = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(26,52,76) }
@@ -37,16 +38,16 @@ class MiniStockChartView @JvmOverloads constructor(context: Context, attrs: Attr
     override fun onDraw(c: Canvas) {
         super.onDraw(c)
         c.drawColor(Color.rgb(7,24,39))
-        textPaint.textSize = (if (detailed) 10 else 8) * resources.displayMetrics.scaledDensity
+        textPaint.textSize = (if (detailed || showAxes) 10 else 8) * resources.displayMetrics.scaledDensity
         textPaint.textAlign = Paint.Align.LEFT
         val points = series.takeLast(count)
         if (points.isEmpty()) { c.drawText("尚無日線資料", dp(10f), height/2f, textPaint); return }
-        val left = dp(5f); val right = width - if (detailed) dp(53f) else dp(3f)
+        val left = dp(5f); val right = width - if (detailed || showAxes) dp(53f) else dp(3f)
         val h = height.toFloat(); val plotW = (right-left).coerceAtLeast(1f)
-        val title = dp(if (detailed) 19f else 13f)
+        val title = dp(if (detailed || showAxes) 19f else 13f)
         val priceTop = title + dp(7f); val priceBottom = h*.47f
         val volTop = h*.51f+title; val volBottom = h*.69f
-        val macdTop = h*.73f+title; val macdBottom = h - dp(if (detailed) 25f else 6f)
+        val macdTop = h*.73f+title; val macdBottom = h - dp(if (detailed || showAxes) 25f else 6f)
         if (priceBottom <= priceTop || macdBottom <= macdTop) return
         c.drawText("日 K",left,title,textPaint)
         c.drawText("成交量（張）",left,volTop-dp(4f),textPaint)
@@ -63,11 +64,11 @@ class MiniStockChartView @JvmOverloads constructor(context: Context, attrs: Attr
         for (i in 0..3) {
             val y = priceTop+(priceBottom-priceTop)*i/3
             c.drawLine(left,y,right,y,grid)
-            if (detailed) c.drawText(String.format("%.2f",maxP-range*i/3),right+dp(3f),y+dp(3f),textPaint)
+            if (detailed || showAxes) c.drawText(String.format("%.2f",maxP-range*i/3),right+dp(3f),y+dp(3f),textPaint)
         }
         c.drawLine(left,volBottom,right,volBottom,grid)
         c.drawLine(left,zero,right,zero,grid)
-        if (detailed) {
+        if (detailed || showAxes) {
             c.drawText(String.format("%.0f",maxV/1000),right+dp(3f),volTop+dp(9f),textPaint)
             c.drawText(String.format("%.2f",maxM),right+dp(3f),macdTop+dp(9f),textPaint)
             c.drawText("0",right+dp(3f),zero+dp(3f),textPaint)
@@ -89,7 +90,7 @@ class MiniStockChartView @JvmOverloads constructor(context: Context, attrs: Attr
             }
         }
         fun line(color: Int, value: (ChartPoint)->Double?, y: (Double)->Float) {
-            paint.color=color;paint.strokeWidth=dp(if(detailed) 1.3f else .8f)
+            paint.color=color;paint.strokeWidth=dp(if(detailed || showAxes) 1.3f else .8f)
             for(i in 1 until points.size) {
                 val a=value(points[i-1]);val b=value(points[i])
                 if(a!=null && b!=null)c.drawLine(x(i-1),y(a),x(i),y(b),paint)
@@ -101,7 +102,7 @@ class MiniStockChartView @JvmOverloads constructor(context: Context, attrs: Attr
         line(Color.rgb(49,212,232),{it.dif},::my)
         line(Color.rgb(240,166,66),{it.dea},::my)
         if(points.none { it.dif!=null }) c.drawText("MACD 資料不足30日",left,zero,textPaint)
-        if(detailed) {
+        if(detailed || showAxes) {
             val from=series.size-points.size
             if(selected in from until series.size) {
                 val xx=x(selected-from);paint.color=Color.argb(180,215,237,255);paint.strokeWidth=dp(.8f)

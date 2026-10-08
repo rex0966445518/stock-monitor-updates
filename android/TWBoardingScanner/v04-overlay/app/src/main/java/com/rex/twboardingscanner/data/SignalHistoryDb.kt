@@ -7,6 +7,8 @@ import com.rex.twboardingscanner.domain.SignalResult
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.rex.twboardingscanner.domain.DailyBar
+import org.json.JSONArray
 
 data class HistoryRow(
     val code:String,
@@ -29,10 +31,11 @@ data class HistoryRow(
     val rsiPass:Boolean,
     val volumePass:Boolean,
     val epsPass:Boolean?,
-    val ruleReport:String = ""
+    val ruleReport:String = "",
+    val chartBars:List<DailyBar> = emptyList()
 )
 
-class SignalHistoryDb(context: Context): SQLiteOpenHelper(context, "signals.db", null, 4) {
+class SignalHistoryDb(context: Context): SQLiteOpenHelper(context, "signals.db", null, 5) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE signal_history(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,7 +43,7 @@ class SignalHistoryDb(context: Context): SQLiteOpenHelper(context, "signals.db",
             price REAL, change_pct REAL, ts INTEGER, scan_date TEXT,
             rsi REAL, ma20 REAL, volume_ratio REAL, eps REAL,
             macd_pass INTEGER, ma20_pass INTEGER, rsi_pass INTEGER, volume_pass INTEGER, eps_pass INTEGER,
-            rule_report TEXT,
+            rule_report TEXT, chart_bars TEXT,
             UNIQUE(code,radar,light,reasons,scan_date)
         )""")
         db.execSQL("CREATE INDEX idx_signal_date ON signal_history(scan_date)")
@@ -62,12 +65,13 @@ class SignalHistoryDb(context: Context): SQLiteOpenHelper(context, "signals.db",
             ).forEach { runCatching { db.execSQL(it) } }
         }
         if (oldVersion < 4) db.execSQL("ALTER TABLE signal_history ADD COLUMN rule_report TEXT")
+        if (oldVersion < 5) db.execSQL("ALTER TABLE signal_history ADD COLUMN chart_bars TEXT")
     }
 
     @Synchronized
     fun insertIfNew(r: SignalResult): Boolean {
         val s = r.snapshot
-        val reasons = "v0.4.4｜日K " + r.snapshot.bars.lastOrNull()?.let { com.rex.twboardingscanner.domain.RuleMetrics.tradingDate(it.time) }.toString() + "｜" + r.reasons.joinToString("；")
+        val reasons = "v0.4.6｜日K " + r.snapshot.bars.lastOrNull()?.let { com.rex.twboardingscanner.domain.RuleMetrics.tradingDate(it.time) }.toString() + "｜" + r.reasons.joinToString("；")
         val report = r.checks.filter { it.selected || it.extra }.joinToString("\n") { check ->
             val state = when(check.state) {
                 com.rex.twboardingscanner.domain.CheckState.PASS -> "通過"
@@ -82,8 +86,8 @@ class SignalHistoryDb(context: Context): SQLiteOpenHelper(context, "signals.db",
         val macd = metrics.macdUp == true
         val sql = """INSERT OR IGNORE INTO signal_history(
             code,name,sector,radar,light,score,reasons,price,change_pct,ts,scan_date,
-            rsi,ma20,volume_ratio,eps,macd_pass,ma20_pass,rsi_pass,volume_pass,eps_pass,rule_report
-        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+            rsi,ma20,volume_ratio,eps,macd_pass,ma20_pass,rsi_pass,volume_pass,eps_pass,rule_report,chart_bars
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
 
         writableDatabase.compileStatement(sql).use { st ->
             st.bindString(1, r.code)
@@ -107,9 +111,20 @@ class SignalHistoryDb(context: Context): SQLiteOpenHelper(context, "signals.db",
             st.bindLong(19, if (metrics.volumeAtLeast(if (r.radarType == com.rex.twboardingscanner.domain.RadarType.C_LONG_RED_VOLUME) 2.0 else 1.5) == true) 1 else 0)
             if (metrics.earnings == null) st.bindNull(20) else st.bindLong(20, if (metrics.earnings == true) 1 else 0)
             st.bindString(21, report)
+            val savedBars=JSONArray()
+            s.bars.forEach { b -> savedBars.put(JSONArray().put(b.time).put(b.open).put(b.high).put(b.low).put(b.close).put(b.volumeShares)) }
+            st.bindString(22, savedBars.toString())
             return st.executeInsert() != -1L
         }
     }
+
+    private fun decodeBars(raw: String?): List<DailyBar> = runCatching {
+        val array=JSONArray(raw ?: "[]")
+        (0 until array.length()).map { i ->
+            val b=array.getJSONArray(i)
+            DailyBar(b.getLong(0),b.getDouble(1),b.getDouble(2),b.getDouble(3),b.getDouble(4),b.getLong(5))
+        }
+    }.getOrDefault(emptyList())
 
     private fun bindNullableDouble(st: android.database.sqlite.SQLiteStatement, idx:Int, v:Double?) {
         if (v == null) st.bindNull(idx) else st.bindDouble(idx, v)
@@ -155,7 +170,8 @@ class SignalHistoryDb(context: Context): SQLiteOpenHelper(context, "signals.db",
                     b("rsi_pass"),
                     b("volume_pass"),
                     bn("eps_pass"),
-                    c.getString(c.getColumnIndexOrThrow("rule_report")) ?: ""
+                    c.getString(c.getColumnIndexOrThrow("rule_report")) ?: "",
+                    decodeBars(c.getString(c.getColumnIndexOrThrow("chart_bars")))
                 )
             }
         }

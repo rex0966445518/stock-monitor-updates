@@ -48,7 +48,7 @@ jobs:
           chmod 600 "$HOME/.android/debug.keystore"
           keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | head -8
 
-      - name: Prepare v0.4.5 project
+      - name: Prepare v0.4.6 project
         run: |
           rm -rf _android_build
           mkdir -p _android_build
@@ -69,7 +69,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging TWBoardingScanner-latest.apk | head -8
           ls -lh TWBoardingScanner-latest.apk
           sha256sum TWBoardingScanner-latest.apk
-          cp TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.5.apk
+          cp TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.6.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -83,4 +83,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest-android --cleanup-tag -y || true
-          gh release create latest-android TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.5.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.5：點擊掃描或日誌卡片查看日K、成交量、MACD；30/60/120/250日切換、K棒數值、重新查詢與Goodinfo入口；修正MACD暖機資料。固定 Beta 簽章。"             --latest
+          gh release create latest-android TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.6.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.6：卡片直接顯示完整寬度日K、成交量、MACD，加入最新成交張數、較前日增減、20日均量倍數及近5日數據；新日誌保存圖表。點擊仍可放大。固定 Beta 簽章。"             --latest

@@ -56,6 +56,12 @@ class HistoryAdapter(private val onClick: (HistoryRow) -> Unit = {}): RecyclerVi
         h.b.price.text = String.format("%,.2f  %+.2f%%", r.price, r.changePct)
         h.b.price.setTextColor(if (r.changePct >= 0) Color.parseColor("#FF496C") else Color.parseColor("#2FD18A"))
         h.b.scoreRing.setScore(r.score, accent)
+        h.b.chartView.showAxes = true
+        h.b.chartView.setWindow(60)
+        h.b.chartView.setBars(r.chartBars)
+        h.b.chartView.visibility = if (r.chartBars.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+        h.b.chartView.setOnClickListener { onClick(r) }
+        VolumeStrip.bind(h.b.volumeSummary, h.b.recentVolumes, r.chartBars)
 
         h.b.indicatorChips.removeAllViews()
         h.b.reasons.text = if (r.ruleReport.isNotBlank()) r.reasons + "\n" + r.ruleReport

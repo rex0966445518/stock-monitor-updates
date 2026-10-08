@@ -475,7 +475,7 @@ class MainActivity: AppCompatActivity() {
 
         val rv = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
-            adapter = HistoryAdapter { row -> openStockChart(row.code, row.name) }.apply { submit(rows) }
+            adapter = HistoryAdapter { row -> openStockChart(row.code, row.name, bars = row.chartBars) }.apply { submit(rows) }
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 dp(520)
