@@ -23,7 +23,7 @@ diff -ruN a/README.md b/README.md
 diff -ruN a/app/build.gradle.kts b/app/build.gradle.kts
 --- a/app/build.gradle.kts	2026-10-08 10:20:27.000000000 +0000
 +++ b/app/build.gradle.kts	2026-10-08 11:11:20.000000000 +0000
-@@ -11,8 +11,8 @@
+@@ -11,10 +11,20 @@
          applicationId = "com.rex.twboardingscanner"
          minSdk = 26
          targetSdk = 35
@@ -34,6 +34,15 @@ diff -ruN a/app/build.gradle.kts b/app/build.gradle.kts
      }
  
      buildFeatures { viewBinding = true }
++
++    compileOptions {
++        sourceCompatibility = JavaVersion.VERSION_17
++        targetCompatibility = JavaVersion.VERSION_17
++    }
++
++    kotlinOptions {
++        jvmTarget = "17"
++    }
 diff -ruN a/app/src/main/java/com/rex/twboardingscanner/data/DemoDataProvider.kt b/app/src/main/java/com/rex/twboardingscanner/data/DemoDataProvider.kt
 --- a/app/src/main/java/com/rex/twboardingscanner/data/DemoDataProvider.kt	2026-10-08 10:20:27.000000000 +0000
 +++ b/app/src/main/java/com/rex/twboardingscanner/data/DemoDataProvider.kt	2026-10-08 11:11:20.000000000 +0000
