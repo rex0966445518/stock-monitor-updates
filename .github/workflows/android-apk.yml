@@ -1,0 +1,70 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "android/TWBoardingScanner/**"
+      - ".github/workflows/android-apk.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Extract project
+        run: |
+          rm -rf _android_build
+          mkdir -p _android_build
+          unzip -q android/TWBoardingScanner/TWBoardingScanner_Android_v02_source.zip -d _android_build
+          ls -la _android_build/TWBoardingScanner_Android_v02
+
+      - name: Build debug APK
+        working-directory: _android_build/TWBoardingScanner_Android_v02
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Prepare APK
+        run: |
+          cp _android_build/TWBoardingScanner_Android_v02/app/build/outputs/apk/debug/app-debug.apk TWBoardingScanner-latest.apk
+          ls -lh TWBoardingScanner-latest.apk
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TWBoardingScanner-APK
+          path: TWBoardingScanner-latest.apk
+          if-no-files-found: error
+
+      - name: Publish rolling latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest-android --cleanup-tag -y || true
+          gh release create latest-android TWBoardingScanner-latest.apk \
+            --target "${GITHUB_SHA}" \
+            --title "台股上車掃描器 Android 最新版" \
+            --notes "由 GitHub Actions 自動編譯。下載 TWBoardingScanner-latest.apk 後可直接安裝。" \
+            --latest
