@@ -1,0 +1,49 @@
+name: Diagnose Android APK
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/apk-diagnostics.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Android SDK tools
+        shell: bash
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "build-tools;35.0.0" "platform-tools"
+
+      - name: Download latest release APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download latest-android -p TWBoardingScanner-latest.apk
+          ls -lh TWBoardingScanner-latest.apk
+          sha256sum TWBoardingScanner-latest.apk
+          unzip -t TWBoardingScanner-latest.apk | tail -5
+
+      - name: APK signature verification
+        shell: bash
+        run: |
+          APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          "$APKSIGNER" verify --verbose --print-certs TWBoardingScanner-latest.apk
+
+      - name: APK package metadata
+        shell: bash
+        run: |
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$AAPT" dump badging TWBoardingScanner-latest.apk | head -20
