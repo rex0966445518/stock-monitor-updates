@@ -43,18 +43,23 @@ class ScoreRingView @JvmOverloads constructor(
 
     override fun onDraw(c: Canvas) {
         super.onDraw(c)
-        val pad = 10f
+        val density = resources.displayMetrics.density
+        base.strokeWidth = 2f * density
+        arc.strokeWidth = 2f * density
+        number.textSize = 25f * density
+        grade.textSize = 9f * density
+        val pad = 5f * density
         val rect = RectF(pad, pad, width - pad, height - pad)
         c.drawArc(rect, -90f, 360f, false, base)
         arc.color = accent
         c.drawArc(rect, -90f, 360f * score / 100f, false, arc)
-        c.drawText(score.toString(), width / 2f, height / 2f + 8f, number)
+        c.drawText(score.toString(), width / 2f, height / 2f + 6f * density, number)
         val g = when {
             score >= 85 -> "A"
             score >= 75 -> "A-"
             score >= 65 -> "B"
             else -> "觀察"
         }
-        c.drawText(g, width / 2f, height / 2f + 30f, grade)
+        c.drawText(g, width / 2f, height / 2f + 20f * density, grade)
     }
 }

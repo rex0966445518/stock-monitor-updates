@@ -27,6 +27,7 @@ import com.rex.twboardingscanner.data.SignalHistoryDb
 import com.rex.twboardingscanner.databinding.ActivityMainBinding
 import com.rex.twboardingscanner.domain.DailyBar
 import com.rex.twboardingscanner.domain.RadarType
+import com.rex.twboardingscanner.domain.ScanConditions
 import com.rex.twboardingscanner.domain.ScoringEngine
 import com.rex.twboardingscanner.domain.SignalLight
 import com.rex.twboardingscanner.domain.SignalResult
@@ -58,9 +59,8 @@ class MainActivity: AppCompatActivity() {
     private val prefs by lazy { getSharedPreferences("scanner_filters", MODE_PRIVATE) }
     private var enabledSectors: MutableSet<StockSector> = mutableSetOf()
     private var sectorCounts: Map<StockSector, Int> = emptyMap()
-    private var avoidHot = true
-    private var avoidLimitUp = true
-    private var avoidNegativeEps = true
+    private val radarSelections = mutableMapOf<RadarType, Set<String>>()
+    private var rescanPending = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,6 +88,9 @@ class MainActivity: AppCompatActivity() {
             override fun onTabReselected(tab: TabLayout.Tab?) {}
         })
 
+        b.conditionAButton.setOnClickListener { showRadarConditions(RadarType.A_EARLY_BREAKOUT) }
+        b.conditionBButton.setOnClickListener { showRadarConditions(RadarType.B_DEEP_REVERSAL) }
+        b.conditionCButton.setOnClickListener { showRadarConditions(RadarType.C_LONG_RED_VOLUME) }
         b.scanConditionButton.setOnClickListener { showScanConditionsDialog() }
         b.refreshButton.setOnClickListener { startFullScan() }
         b.logButton.setOnClickListener { showLogDatePicker() }
@@ -102,6 +105,8 @@ class MainActivity: AppCompatActivity() {
             return
         }
 
+        val scanRules = radarSelections.mapValues { it.value.toSet() }
+        val scanSectors = enabledSectors.toSet()
         isScanning = true
         b.scanProgress.isIndeterminate = true
         b.progressTitle.text = "準備全市場資料…"
@@ -148,9 +153,7 @@ class MainActivity: AppCompatActivity() {
                 workers.submit {
                     try {
                         val userExcluded =
-                            stock.sector !in enabledSectors ||
-                            (avoidLimitUp && stock.changePct >= 9.5) ||
-                            (avoidNegativeEps && stock.epsTtm != null && stock.epsTtm < 0.0)
+                            stock.sector !in scanSectors
 
                         if (userExcluded) {
                             excluded.incrementAndGet()
@@ -162,18 +165,12 @@ class MainActivity: AppCompatActivity() {
                                 insufficient.incrementAndGet()
                             } else {
                                 val snap = calculator.build(stock, bars)
-                                val hot = (snap.fiveDayGainPct ?: 0.0) >= 15.0 ||
-                                    (snap.distanceFromMa20Pct ?: 0.0) >= 10.0 ||
-                                    (snap.rsi ?: 0.0) >= 75.0
-
-                                if (avoidHot && hot) {
-                                    excluded.incrementAndGet()
-                                } else {
+                                run {
                                     analyzed.incrementAndGet()
                                     val r = listOf(
-                                        engine.evaluateA(snap),
-                                        engine.evaluateB(snap),
-                                        engine.evaluateC(snap)
+                                        engine.evaluateA(snap, scanRules.getValue(RadarType.A_EARLY_BREAKOUT)),
+                                        engine.evaluateB(snap, scanRules.getValue(RadarType.B_DEEP_REVERSAL)),
+                                        engine.evaluateC(snap, scanRules.getValue(RadarType.C_LONG_RED_VOLUME))
                                     )
                                     results.addAll(r)
 
@@ -224,7 +221,11 @@ class MainActivity: AppCompatActivity() {
                     analyzed.get(), excluded.get(), insufficient.get(), failed.get()
                 )
                 render()
-                handler.postDelayed({ startFullScan() }, 15 * 60 * 1000L)
+                handler.removeCallbacksAndMessages(null)
+                if (rescanPending) {
+                    rescanPending = false
+                    startFullScan()
+                } else handler.postDelayed({ startFullScan() }, 15 * 60 * 1000L)
             }
         }
     }
@@ -280,9 +281,12 @@ class MainActivity: AppCompatActivity() {
             3 -> latest.filter { it.radarType == RadarType.C_LONG_RED_VOLUME && it.light != SignalLight.NONE }
             4 -> latest.filter { it.score in 65..84 }
             5 -> latest.filter { it.light == SignalLight.WEAKENING }
-            else -> latest.filter { it.light == SignalLight.RED || it.light == SignalLight.ORANGE }
+            else -> latest.filter { it.light != SignalLight.NONE }
         }.distinctBy { "${it.code}_${it.radarType}" }.sortedByDescending { it.score }
 
+        b.summaryA.text = "A 起漲\n${latest.count { it.radarType == RadarType.A_EARLY_BREAKOUT && it.light != SignalLight.NONE }}"
+        b.summaryB.text = "B 反轉\n${latest.count { it.radarType == RadarType.B_DEEP_REVERSAL && it.light != SignalLight.NONE }}"
+        b.summaryC.text = "C 長紅爆量\n${latest.count { it.radarType == RadarType.C_LONG_RED_VOLUME && it.light != SignalLight.NONE }}"
         adapter.submit(filtered)
     }
 
@@ -295,17 +299,17 @@ class MainActivity: AppCompatActivity() {
         }
         if (enabledSectors.isEmpty()) enabledSectors = StockSector.entries.toMutableSet()
 
-        avoidHot = prefs.getBoolean("avoid_hot", true)
-        avoidLimitUp = prefs.getBoolean("avoid_limit_up", true)
-        avoidNegativeEps = prefs.getBoolean("avoid_negative_eps", true)
+        RadarType.entries.forEach { type ->
+            val rules = ScanConditions.forRadar(type)
+            val savedRules = prefs.getStringSet("rules_${type.name}", null)
+            radarSelections[type] = savedRules?.intersect(rules.map { it.id }.toSet())
+                ?: rules.filter { it.defaultEnabled }.map { it.id }.toSet()
+        }
     }
 
     private fun saveScanSettings() {
         prefs.edit()
             .putStringSet("enabled_sectors", enabledSectors.map { it.name }.toSet())
-            .putBoolean("avoid_hot", avoidHot)
-            .putBoolean("avoid_limit_up", avoidLimitUp)
-            .putBoolean("avoid_negative_eps", avoidNegativeEps)
             .apply()
     }
 
@@ -326,27 +330,6 @@ class MainActivity: AppCompatActivity() {
             })
         }
 
-        heading("排除條件")
-
-        val hotBox = CheckBox(this).apply {
-            text = "避開已經高漲的股"
-            setTextColor(Color.WHITE)
-            isChecked = avoidHot
-        }
-        val limitBox = CheckBox(this).apply {
-            text = "避開已經漲停的股"
-            setTextColor(Color.WHITE)
-            isChecked = avoidLimitUp
-        }
-        val epsBox = CheckBox(this).apply {
-            text = "避開 EPS 為負值的公司"
-            setTextColor(Color.WHITE)
-            isChecked = avoidNegativeEps
-        }
-        box.addView(hotBox)
-        box.addView(limitBox)
-        box.addView(epsBox)
-
         heading("產業篩選")
         val sectorBoxes = linkedMapOf<StockSector, CheckBox>()
         StockSector.entries.forEach { sector ->
@@ -360,26 +343,77 @@ class MainActivity: AppCompatActivity() {
         }
 
         MaterialAlertDialogBuilder(this)
-            .setTitle("掃描條件")
+            .setTitle("共同產業篩選")
             .setView(scroll)
             .setNeutralButton("產業全選") { _, _ ->
                 enabledSectors = StockSector.entries.toMutableSet()
-                avoidHot = hotBox.isChecked
-                avoidLimitUp = limitBox.isChecked
-                avoidNegativeEps = epsBox.isChecked
                 saveScanSettings()
             }
             .setNegativeButton("取消", null)
             .setPositiveButton("套用並重新掃描") { _, _ ->
                 val chosen = sectorBoxes.filterValues { it.isChecked }.keys.toMutableSet()
                 enabledSectors = if (chosen.isEmpty()) StockSector.entries.toMutableSet() else chosen
-                avoidHot = hotBox.isChecked
-                avoidLimitUp = limitBox.isChecked
-                avoidNegativeEps = epsBox.isChecked
                 saveScanSettings()
-                startFullScan()
+                requestConfiguredScan()
             }
             .show()
+    }
+
+    private fun requestConfiguredScan() {
+        if (isScanning) {
+            rescanPending = true
+            Toast.makeText(this, "條件已儲存；本輪完成後自動依新條件重掃", Toast.LENGTH_LONG).show()
+        } else startFullScan()
+    }
+
+    private fun showRadarConditions(type: RadarType) {
+        val title = when (type) {
+            RadarType.A_EARLY_BREAKOUT -> "A｜起漲掃描條件"
+            RadarType.B_DEEP_REVERSAL -> "B｜深跌反轉掃描條件"
+            RadarType.C_LONG_RED_VOLUME -> "C｜長紅爆量掃描條件"
+        }
+        val rules = ScanConditions.forRadar(type)
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+        }
+        box.addView(TextView(this).apply {
+            text = "勾選條件全部滿足才會入選；未勾選不限制。\n資料不足不視為通過。法人資料目前尚未接入。\n產業為共同設定；歷史資料至少 A/B 35 日、C 20 日。\n分數是所有指標的符合比例，不是獲利機率，也不另設入選分數門檻。"
+            setTextColor(Color.parseColor("#9FBAD0"))
+        })
+        val checks = rules.associate { rule ->
+            val cb = CheckBox(this).apply {
+                text = rule.label
+                setTextColor(Color.WHITE)
+                isChecked = rule.id in radarSelections.getValue(type)
+                minHeight = dp(48)
+            }
+            box.addView(cb)
+            rule.id to cb
+        }
+        val scroll = ScrollView(this).apply { addView(box) }
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(title).setView(scroll)
+            .setNeutralButton("恢復預設", null)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("儲存並掃描", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                rules.forEach { checks.getValue(it.id).isChecked = it.defaultEnabled }
+            }
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val selected = checks.filterValues { it.isChecked }.keys.toSet()
+                if (selected.isEmpty()) {
+                    Toast.makeText(this, "請至少勾選一項條件", Toast.LENGTH_SHORT).show()
+                } else {
+                    radarSelections[type] = selected
+                    prefs.edit().putStringSet("rules_${type.name}", selected).apply()
+                    dialog.dismiss()
+                    requestConfiguredScan()
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun showLogDatePicker() {

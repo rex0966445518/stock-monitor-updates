@@ -38,7 +38,9 @@ class SignalAdapter:RecyclerView.Adapter<SignalAdapter.VH>() {
         }
 
         h.b.root.strokeColor = accent
-        h.b.root.strokeWidth = if (r.light == SignalLight.RED) 3 else 1
+        h.b.root.strokeWidth = (2 * h.b.root.resources.displayMetrics.density).toInt()
+        h.b.root.animate().cancel()
+        h.b.root.alpha = 1f
         h.b.badge.text = when(r.radarType) {
             RadarType.A_EARLY_BREAKOUT -> "A 起漲"
             RadarType.B_DEEP_REVERSAL -> "B 反轉"
@@ -59,33 +61,27 @@ class SignalAdapter:RecyclerView.Adapter<SignalAdapter.VH>() {
         h.b.indicatorChips.removeAllViews()
         val macd = s.difRising && (s.macdGoldenCross || s.macdTurnedPositive || s.macdRedExpanding || s.macdNegBarsShrinking)
         val vr = if (s.avg20VolumeLots > 0) s.volumeLots / s.avg20VolumeLots else 0.0
-        addCheck(h, "MACD", macd)
-        addCheck(h, "MA20", s.ma20?.let { s.price >= it } == true)
-        addCheck(h, "RSI", (s.rsi ?: 0.0) > 50)
-        addCheck(h, "成交量", vr >= 1.2)
+        addCheck(h, "MACD轉強", macd)
+        addCheck(h, "站上20MA", s.ma20?.let { s.price >= it } == true)
+        addCheck(h, "RSI > 50", (s.rsi ?: 0.0) > 50)
+        addCheck(h, "量增", vr >= 1.2)
         addCheck(h, "EPS", (s.epsTtm ?: Double.NEGATIVE_INFINITY) > 0)
 
         h.b.trigger.text = if (r.reasons.isEmpty()) "尚未達主要觸發" else "觸發：${r.reasons.take(3).joinToString("＋")}"
 
-        if (r.light == SignalLight.RED) {
-            h.b.root.animate().alpha(.62f).setDuration(350).withEndAction {
-                h.b.root.animate().alpha(1f).setDuration(350).start()
-            }.start()
-        } else {
-            h.b.root.alpha = 1f
-        }
+
     }
 
     private fun addCheck(h:VH, label:String, pass:Boolean) {
-        if (!pass) return
+
         val chip = Chip(h.b.root.context).apply {
-            text = "✓"
-            textSize = 16f
+            text = if (pass) "✓ $label" else "− $label"
+            textSize = 11f
             isClickable = false
             isCheckable = false
             contentDescription = label
-            chipBackgroundColor = ColorStateList.valueOf(Color.parseColor("#123B36"))
-            setTextColor(Color.parseColor("#69F0C2"))
+            chipBackgroundColor = ColorStateList.valueOf(Color.parseColor(if (pass) "#103A38" else "#13293F"))
+            setTextColor(Color.parseColor(if (pass) "#69F0C2" else "#8CA6C0"))
             if (android.os.Build.VERSION.SDK_INT >= 26) tooltipText = label
         }
         h.b.indicatorChips.addView(chip)

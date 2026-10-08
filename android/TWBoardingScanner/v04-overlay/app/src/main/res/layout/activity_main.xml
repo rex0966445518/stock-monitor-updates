@@ -1,139 +1,34 @@
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="10dp"
-    android:background="#061321">
+<?xml version='1.0' encoding='utf-8'?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="10dp" android:background="@drawable/radar_background">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical">
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:hint="搜尋股號">
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/searchInput"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="number"
-                android:textColor="#FFFFFF"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="8dp"><TextView android:id="@+id/summaryA" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="3dp" android:background="@drawable/neon_panel" android:text="A 起漲&#10;0" android:textColor="#FF5278" android:textSize="18sp" android:textStyle="bold" android:gravity="center" /><TextView android:id="@+id/summaryB" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="3dp" android:background="@drawable/neon_panel" android:text="B 反轉&#10;0" android:textColor="#FFBF57" android:textSize="18sp" android:textStyle="bold" android:gravity="center" /><TextView android:id="@+id/summaryC" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="3dp" android:background="@drawable/neon_panel" android:text="C 長紅爆量&#10;0" android:textColor="#42BBFF" android:textSize="18sp" android:textStyle="bold" android:gravity="center" /></LinearLayout><LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
+        <com.google.android.material.textfield.TextInputLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:hint="搜尋股號" app:boxStrokeColor="#3386B7" app:hintTextColor="#91B5D2">
+            <com.google.android.material.textfield.TextInputEditText android:id="@+id/searchInput" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="number" android:textColor="#FFFFFF" />
         </com.google.android.material.textfield.TextInputLayout>
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/searchButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:text="搜尋"/>
+        <com.google.android.material.button.MaterialButton android:id="@+id/searchButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="搜尋" app:backgroundTint="#102E49" app:strokeColor="#3386B7" app:strokeWidth="1dp" app:cornerRadius="12dp" android:textColor="#D9EFFF" />
     </LinearLayout>
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp">
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/scanConditionButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="掃描條件"/>
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/logButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginStart="4dp"
-            android:layout_marginEnd="4dp"
-            android:text="日曆日誌"/>
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/refreshButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="重新掃描"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"><com.google.android.material.button.MaterialButton android:id="@+id/conditionAButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="2dp" android:text="A 掃描條件" android:textSize="12sp" android:textColor="#FF5278" app:backgroundTint="#102E49" app:strokeColor="#FF5278" app:strokeWidth="1dp" app:cornerRadius="12dp" /><com.google.android.material.button.MaterialButton android:id="@+id/conditionBButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="2dp" android:text="B 掃描條件" android:textSize="12sp" android:textColor="#FFBF57" app:backgroundTint="#102E49" app:strokeColor="#FFBF57" app:strokeWidth="1dp" app:cornerRadius="12dp" /><com.google.android.material.button.MaterialButton android:id="@+id/conditionCButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="2dp" android:text="C 掃描條件" android:textSize="12sp" android:textColor="#42BBFF" app:backgroundTint="#102E49" app:strokeColor="#42BBFF" app:strokeWidth="1dp" app:cornerRadius="12dp" /></LinearLayout><LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp">
+        <com.google.android.material.button.MaterialButton android:id="@+id/scanConditionButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="產業篩選" app:backgroundTint="#102E49" app:strokeColor="#3386B7" app:strokeWidth="1dp" app:cornerRadius="12dp" android:textColor="#D9EFFF" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/logButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="4dp" android:layout_marginEnd="4dp" android:text="日曆日誌" app:backgroundTint="#102E49" app:strokeColor="#3386B7" app:strokeWidth="1dp" app:cornerRadius="12dp" android:textColor="#D9EFFF" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/refreshButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="重新掃描" app:backgroundTint="#102E49" app:strokeColor="#3386B7" app:strokeWidth="1dp" app:cornerRadius="12dp" android:textColor="#D9EFFF" />
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/statusText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="準備掃描上市櫃…"
-        android:textColor="#D7E7F5"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp"/>
+    <TextView android:id="@+id/statusText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="準備掃描上市櫃…" android:textColor="#D7E7F5" android:paddingTop="6dp" android:paddingBottom="6dp" />
 
-    <com.google.android.material.card.MaterialCardView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:cardBackgroundColor="#0B2034"
-        app:cardCornerRadius="14dp"
-        app:strokeColor="#1F66A6"
-        app:strokeWidth="1dp">
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="12dp">
-            <TextView
-                android:id="@+id/progressTitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="全市場掃描"
-                android:textColor="#FFFFFF"
-                android:textStyle="bold"
-                android:textSize="17sp"/>
-            <com.google.android.material.progressindicator.LinearProgressIndicator
-                android:id="@+id/scanProgress"
-                android:layout_width="match_parent"
-                android:layout_height="8dp"
-                android:layout_marginTop="8dp"
-                app:indicatorColor="#FF496C"
-                app:trackColor="#183B5A"/>
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp">
-                <TextView
-                    android:id="@+id/progressCount"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="已處理 0 / 0 檔"
-                    android:textColor="#C7D9EA"/>
-                <TextView
-                    android:id="@+id/etaText"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="預估時間 --"
-                    android:textColor="#FF8AA0"/>
+    <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" app:cardBackgroundColor="#0B2034" app:cardCornerRadius="14dp" app:strokeColor="#1F66A6" app:strokeWidth="1dp">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="12dp">
+            <TextView android:id="@+id/progressTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="全市場掃描" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="17sp" />
+            <com.google.android.material.progressindicator.LinearProgressIndicator android:id="@+id/scanProgress" android:layout_width="match_parent" android:layout_height="8dp" android:layout_marginTop="8dp" app:indicatorColor="#FF496C" app:trackColor="#183B5A" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp">
+                <TextView android:id="@+id/progressCount" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="已處理 0 / 0 檔" android:textColor="#C7D9EA" />
+                <TextView android:id="@+id/etaText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="預估時間 --" android:textColor="#FF8AA0" />
             </LinearLayout>
-            <TextView
-                android:id="@+id/progressStats"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="已分析 0｜排除 0｜資料不足 0｜失敗 0"
-                android:textColor="#8FAAC3"
-                android:textSize="12sp"/>
+            <TextView android:id="@+id/progressStats" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="已分析 0｜排除 0｜資料不足 0｜失敗 0" android:textColor="#8FAAC3" android:textSize="12sp" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <com.google.android.material.tabs.TabLayout
-        android:id="@+id/tabLayout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:tabMode="scrollable"
-        app:tabTextColor="#8FA7BE"
-        app:tabSelectedTextColor="#FF5C78"
-        app:tabIndicatorColor="#FF496C"/>
+    <com.google.android.material.tabs.TabLayout android:id="@+id/tabLayout" android:layout_width="match_parent" android:layout_height="wrap_content" app:tabMode="scrollable" app:tabTextColor="#8FA7BE" app:tabSelectedTextColor="#FF5C78" app:tabIndicatorColor="#FF496C" android:background="#071B2F" />
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recycler"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"/>
+    <androidx.recyclerview.widget.RecyclerView android:id="@+id/recycler" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:clipToPadding="false" android:paddingBottom="8dp" />
 </LinearLayout>
