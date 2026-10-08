@@ -14,7 +14,7 @@ import com.rex.twboardingscanner.domain.RadarType
 import com.rex.twboardingscanner.domain.SignalLight
 import com.rex.twboardingscanner.domain.SignalResult
 
-class SignalAdapter:RecyclerView.Adapter<SignalAdapter.VH>() {
+class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}):RecyclerView.Adapter<SignalAdapter.VH>() {
     private val items = mutableListOf<SignalResult>()
 
     fun submit(list:List<SignalResult>) {
@@ -33,6 +33,11 @@ class SignalAdapter:RecyclerView.Adapter<SignalAdapter.VH>() {
     override fun onBindViewHolder(h:VH, pos:Int) {
         val r = items[pos]
         val s = r.snapshot
+        h.b.root.isClickable = true
+        h.b.root.isFocusable = true
+        h.b.root.setOnClickListener { onClick(r) }
+        h.b.chartView.setOnClickListener { onClick(r) }
+        h.b.root.contentDescription = "${r.code} ${r.name}，點擊查看日K、成交量與MACD"
         val accent = when(r.radarType) {
             RadarType.A_EARLY_BREAKOUT -> Color.parseColor("#FF496C")
             RadarType.B_DEEP_REVERSAL -> Color.parseColor("#F6A623")
@@ -77,7 +82,7 @@ class SignalAdapter:RecyclerView.Adapter<SignalAdapter.VH>() {
         val date = s.bars.lastOrNull()?.let { RuleMetrics.tradingDate(it.time).toString() } ?: "無資料"
         val upgraded = if (r.technicalUpgrade) "｜技術升級" else ""
         val mode = if (r.radarType == RadarType.C_LONG_RED_VOLUME) "最新日K（可能更新）" else "排除當日"
-        h.b.trigger.text = "日K $date｜$mode$upgraded\n所選條件通過率 ${r.score}%" +
+        h.b.trigger.text = "日K $date｜$mode$upgraded\n所選條件通過率 ${r.score}%｜點擊看完整圖表" +
             if (r.radarType == RadarType.C_LONG_RED_VOLUME) "\n長紅爆量觀察訊號；尚無回測證明隔日續漲" else ""
 
 

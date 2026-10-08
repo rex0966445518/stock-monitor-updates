@@ -27,29 +27,36 @@ class MarketDataProvider(private val context: Context) {
         return result.distinctBy { it.code }.sortedBy { it.code }
     }
 
-    fun loadHistory(stock: MarketStock): List<DailyBar> {
+    fun loadHistory(stock: MarketStock): List<DailyBar> = loadSymbolHistory(stock.code, stock.market, false)
+
+    fun loadChartHistory(code: String, market: Market? = null): List<DailyBar> {
+        require(code.matches(Regex("[0-9]{4}")))
+        for (candidate in market?.let { listOf(it) } ?: Market.entries) {
+            if (Thread.currentThread().isInterrupted) return emptyList()
+            val bars = loadSymbolHistory(code, candidate, true)
+            if (bars.isNotEmpty()) return bars
+        }
+        return emptyList()
+    }
+
+    private fun loadSymbolHistory(code: String, market: Market, forceRefresh: Boolean): List<DailyBar> {
         val cacheDir = File(context.cacheDir, "price_history_v044").apply { mkdirs() }
-        val file = File(cacheDir, "${stock.code}_${stock.market.name}.json")
-        val maxAge = 60 * 1000L
-        var raw: String? = null
-        if (file.exists() && System.currentTimeMillis() - file.lastModified() < maxAge) {
-            raw = runCatching { file.readText() }.getOrNull()
+        val file = File(cacheDir, "${code}_${market.name}.json")
+        if (!forceRefresh && file.exists() && System.currentTimeMillis() - file.lastModified() < 60_000L) {
+            val cached = runCatching { parseYahoo(file.readText()) }.getOrDefault(emptyList())
+            if (cached.isNotEmpty()) return cached.sortedBy { it.time }.takeLast(320)
         }
-        if (raw == null) {
-            val suffix = if (stock.market == Market.TWSE) ".TW" else ".TWO"
-            val symbol = stock.code + suffix
-            val urls = listOf(
-                "https://query1.finance.yahoo.com/v8/finance/chart/$symbol?range=2y&interval=1d&events=history",
-                "https://query2.finance.yahoo.com/v8/finance/chart/$symbol?range=2y&interval=1d&events=history"
-            )
-            for (u in urls) {
-                raw = fetchText(u)
-                if (!raw.isNullOrBlank() && raw.contains("\"result\"")) break
-            }
-            if (!raw.isNullOrBlank()) runCatching { file.writeText(raw!!) }
+        val suffix = if (market == Market.TWSE) ".TW" else ".TWO"
+        for (host in listOf("query1.finance.yahoo.com", "query2.finance.yahoo.com")) {
+            if (Thread.currentThread().isInterrupted) return emptyList()
+            val raw = fetchText("https://$host/v8/finance/chart/$code$suffix?range=2y&interval=1d&events=history") ?: continue
+            val bars = parseYahoo(raw)
+            if (bars.isEmpty()) continue
+            // A refresh never reports stale disk content as newly retrieved data.
+            runCatching { synchronized(cacheDir.absolutePath.intern()) { file.writeText(raw) } }
+            return bars.sortedBy { it.time }.takeLast(320)
         }
-        val bars = parseYahoo(raw ?: return emptyList()).toMutableList()
-        return bars.sortedBy { it.time }.takeLast(320)
+        return emptyList()
     }
 
     private fun loadSectorMap(): MutableMap<String, Pair<String, StockSector>> {
@@ -188,7 +195,7 @@ class MarketDataProvider(private val context: Context) {
         c.readTimeout = 12_000
         c.setRequestProperty("User-Agent", ua)
         c.setRequestProperty("Accept", "application/json")
-        c.inputStream.bufferedReader().use { it.readText() }
+        try { c.inputStream.bufferedReader().use { it.readText() } } finally { c.disconnect() }
     }.getOrNull()
 
     private fun pick(o: JSONObject, vararg keys: String): String? {

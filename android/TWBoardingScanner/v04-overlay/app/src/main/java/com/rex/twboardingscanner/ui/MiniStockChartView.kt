@@ -5,72 +5,129 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.util.AttributeSet
+import android.view.MotionEvent
 import android.view.View
+import com.rex.twboardingscanner.domain.ChartPoint
+import com.rex.twboardingscanner.domain.ChartSeries
 import com.rex.twboardingscanner.domain.DailyBar
+import com.rex.twboardingscanner.domain.RuleMetrics
+import kotlin.math.abs
 import kotlin.math.max
 
-class MiniStockChartView @JvmOverloads constructor(
-    context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
-): View(context, attrs, defStyleAttr) {
-    private var bars: List<DailyBar> = emptyList()
+class MiniStockChartView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0): View(context, attrs, defStyleAttr) {
+    private var series = emptyList<ChartPoint>()
+    private var count = 32
+    private var selected = -1
+    var detailed = false
+    var onSelected: ((ChartPoint) -> Unit)? = null
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val grid = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#18334F"); strokeWidth = 1f }
-    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#8FAAC3"); textSize = 22f }
-
-    fun setBars(v: List<DailyBar>) { bars = v.takeLast(32); invalidate() }
-
+    private val grid = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(26,52,76) }
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(162,191,214) }
+    private val density = resources.displayMetrics.density
+    private val red = Color.rgb(255,73,108)
+    private val green = Color.rgb(47,209,138)
+    private fun dp(v: Float) = v * density
+    fun setBars(input: List<DailyBar>) {
+        series = ChartSeries.prepare(input)
+        selected = series.lastIndex
+        series.lastOrNull()?.let { onSelected?.invoke(it) }
+        invalidate()
+    }
+    fun setWindow(days: Int) { count = days.coerceAtLeast(10); selected = series.lastIndex; series.lastOrNull()?.let { onSelected?.invoke(it) }; invalidate() }
     override fun onDraw(c: Canvas) {
         super.onDraw(c)
-        c.drawColor(Color.parseColor("#071827"))
-        if (bars.size < 8) {
-            c.drawText("歷史資料累積中", 16f, height / 2f, text)
-            return
+        c.drawColor(Color.rgb(7,24,39))
+        textPaint.textSize = (if (detailed) 10 else 8) * resources.displayMetrics.scaledDensity
+        textPaint.textAlign = Paint.Align.LEFT
+        val points = series.takeLast(count)
+        if (points.isEmpty()) { c.drawText("尚無日線資料", dp(10f), height/2f, textPaint); return }
+        val left = dp(5f); val right = width - if (detailed) dp(53f) else dp(3f)
+        val h = height.toFloat(); val plotW = (right-left).coerceAtLeast(1f)
+        val title = dp(if (detailed) 19f else 13f)
+        val priceTop = title + dp(7f); val priceBottom = h*.47f
+        val volTop = h*.51f+title; val volBottom = h*.69f
+        val macdTop = h*.73f+title; val macdBottom = h - dp(if (detailed) 25f else 6f)
+        if (priceBottom <= priceTop || macdBottom <= macdTop) return
+        c.drawText("日 K",left,title,textPaint)
+        c.drawText("成交量（張）",left,volTop-dp(4f),textPaint)
+        c.drawText("MACD (12,26,9)",left,macdTop-dp(4f),textPaint)
+        val allPrice = points.flatMap { listOfNotNull(it.bar.high,it.bar.low,it.ma5,it.ma10,it.ma20) }
+        var maxP = allPrice.maxOrNull()!!; var minP = allPrice.minOrNull()!!
+        val padding = max((maxP-minP)*.05,.01); maxP += padding; minP -= padding
+        val range = maxP-minP
+        fun py(v: Double) = priceBottom-((v-minP)/range*(priceBottom-priceTop)).toFloat()
+        val maxV = max(1.0,points.maxOf { it.bar.volumeShares }.toDouble())
+        val maxM = max(.01,points.flatMap { listOfNotNull(it.dif,it.dea,it.histogram) }.maxOfOrNull { abs(it) } ?: .01)
+        val zero = (macdTop+macdBottom)/2
+        fun my(v: Double) = zero-(v/maxM*(macdBottom-macdTop)*.44).toFloat()
+        for (i in 0..3) {
+            val y = priceTop+(priceBottom-priceTop)*i/3
+            c.drawLine(left,y,right,y,grid)
+            if (detailed) c.drawText(String.format("%.2f",maxP-range*i/3),right+dp(3f),y+dp(3f),textPaint)
         }
-        val w = width.toFloat(); val h = height.toFloat()
-        val priceTop = 24f; val priceBottom = h * .56f
-        val volTop = h * .59f; val volBottom = h * .76f
-        val macdTop = h * .80f; val macdBottom = h - 10f
-        c.drawText("日K", 8f, 20f, text)
-        c.drawText("量", 8f, volTop - 3f, text)
-        c.drawText("MACD", 8f, macdTop - 3f, text)
-        for (i in 1..3) c.drawLine(0f, priceTop + (priceBottom-priceTop)*i/4, w, priceTop + (priceBottom-priceTop)*i/4, grid)
-        c.drawLine(0f, volBottom, w, volBottom, grid); c.drawLine(0f, macdTop, w, macdTop, grid)
-
-        val maxP = bars.maxOf { it.high }; val minP = bars.minOf { it.low }; val rangeP = max(maxP-minP, 0.01)
-        val maxV = max(bars.maxOf { it.volumeShares }.toDouble(), 1.0)
-        val step = w / bars.size
-        bars.forEachIndexed { i,b ->
-            val x = step * i + step/2
-            val up = b.close >= b.open
-            paint.color = if (up) Color.parseColor("#FF496C") else Color.parseColor("#2FD18A")
-            paint.strokeWidth = 2f
-            fun py(v:Double)=priceBottom-((v-minP)/rangeP*(priceBottom-priceTop)).toFloat()
-            c.drawLine(x, py(b.high), x, py(b.low), paint)
-            val y1=py(b.open); val y2=py(b.close)
-            c.drawRect(x-step*.27f, minOf(y1,y2), x+step*.27f, maxOf(y1,y2)+1f, paint)
-            val vh=((b.volumeShares/maxV)*(volBottom-volTop)).toFloat()
-            c.drawRect(x-step*.27f, volBottom-vh, x+step*.27f, volBottom, paint)
+        c.drawLine(left,volBottom,right,volBottom,grid)
+        c.drawLine(left,zero,right,zero,grid)
+        if (detailed) {
+            c.drawText(String.format("%.0f",maxV/1000),right+dp(3f),volTop+dp(9f),textPaint)
+            c.drawText(String.format("%.2f",maxM),right+dp(3f),macdTop+dp(9f),textPaint)
+            c.drawText("0",right+dp(3f),zero+dp(3f),textPaint)
+            c.drawText(String.format("%.2f",-maxM),right+dp(3f),macdBottom,textPaint)
         }
-
-        val closes=bars.map{it.close}; val e12=ema(closes,12); val e26=ema(closes,26)
-        val dif=closes.indices.map{e12[it]-e26[it]}; val sig=ema(dif,9); val hist=dif.indices.map{dif[it]-sig[it]}
-        val maxM=maxOf(0.01, (dif+sig+hist).maxOf{ kotlin.math.abs(it) })
-        fun my(v:Double)=((macdTop+macdBottom)/2 - v/maxM*(macdBottom-macdTop)*.44).toFloat()
-        paint.strokeWidth=2.2f
-        for(i in 1 until bars.size){
-            val x1=step*(i-1)+step/2; val x2=step*i+step/2
-            paint.color=Color.parseColor("#31D4E8"); c.drawLine(x1,my(dif[i-1]),x2,my(dif[i]),paint)
-            paint.color=Color.parseColor("#F0A642"); c.drawLine(x1,my(sig[i-1]),x2,my(sig[i]),paint)
+        val step = plotW/points.size
+        fun x(i: Int) = left+step*(i+.5f)
+        points.forEachIndexed { i,p ->
+            val b=p.bar; val xx=x(i)
+            paint.color=if(b.close>=b.open) red else green;paint.strokeWidth=dp(1f)
+            c.drawLine(xx,py(b.high),xx,py(b.low),paint)
+            val y1=py(b.open);val y2=py(b.close)
+            c.drawRect(xx-step*.3f,minOf(y1,y2),xx+step*.3f,maxOf(y1,y2)+dp(.6f),paint)
+            val vh=(b.volumeShares/maxV*(volBottom-volTop)).toFloat()
+            c.drawRect(xx-step*.3f,volBottom-vh,xx+step*.3f,volBottom,paint)
+            p.histogram?.let {
+                paint.color=if(it>=0) red else green
+                c.drawRect(xx-step*.27f,minOf(zero,my(it)),xx+step*.27f,maxOf(zero,my(it))+dp(.5f),paint)
+            }
         }
-        val zero=(macdTop+macdBottom)/2
-        hist.forEachIndexed{i,v->
-            paint.color=if(v>=0) Color.parseColor("#FF496C") else Color.parseColor("#2FD18A")
-            val x=step*i+step/2; c.drawRect(x-step*.22f, minOf(zero,my(v)), x+step*.22f, maxOf(zero,my(v)),paint)
+        fun line(color: Int, value: (ChartPoint)->Double?, y: (Double)->Float) {
+            paint.color=color;paint.strokeWidth=dp(if(detailed) 1.3f else .8f)
+            for(i in 1 until points.size) {
+                val a=value(points[i-1]);val b=value(points[i])
+                if(a!=null && b!=null)c.drawLine(x(i-1),y(a),x(i),y(b),paint)
+            }
+        }
+        line(Color.rgb(250,199,84),{it.ma5},::py)
+        line(Color.rgb(66,187,255),{it.ma10},::py)
+        line(Color.rgb(197,130,255),{it.ma20},::py)
+        line(Color.rgb(49,212,232),{it.dif},::my)
+        line(Color.rgb(240,166,66),{it.dea},::my)
+        if(points.none { it.dif!=null }) c.drawText("MACD 資料不足30日",left,zero,textPaint)
+        if(detailed) {
+            val from=series.size-points.size
+            if(selected in from until series.size) {
+                val xx=x(selected-from);paint.color=Color.argb(180,215,237,255);paint.strokeWidth=dp(.8f)
+                c.drawLine(xx,priceTop,xx,macdBottom,paint)
+            }
+            c.drawText(RuleMetrics.tradingDate(points.first().bar.time).toString(),left,h-dp(5f),textPaint)
+            textPaint.textAlign=Paint.Align.RIGHT
+            c.drawText(RuleMetrics.tradingDate(points.last().bar.time).toString(),right,h-dp(5f),textPaint)
+            textPaint.textAlign=Paint.Align.LEFT
         }
     }
-
-    private fun ema(v: List<Double>, n:Int):List<Double>{
-        if(v.isEmpty()) return emptyList(); val k=2.0/(n+1); var e=v.first(); val o=mutableListOf<Double>()
-        v.forEachIndexed{i,x-> e=if(i==0)x else x*k+e*(1-k); o+=e}; return o
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if(!detailed || series.isEmpty()) return super.onTouchEvent(event)
+        when(event.actionMasked) {
+            MotionEvent.ACTION_DOWN,MotionEvent.ACTION_MOVE -> {
+                parent?.requestDisallowInterceptTouchEvent(true)
+                val visible=minOf(count,series.size)
+                val plot=(width-dp(58f)).coerceAtLeast(1f)
+                val index=(((event.x-dp(5f))/plot)*visible).toInt().coerceIn(0,visible-1)
+                selected=series.size-visible+index
+                onSelected?.invoke(series[selected]);invalidate();return true
+            }
+            MotionEvent.ACTION_UP -> { parent?.requestDisallowInterceptTouchEvent(false); performClick(); return true }
+            MotionEvent.ACTION_CANCEL -> { parent?.requestDisallowInterceptTouchEvent(false); return true }
+        }
+        return true
     }
+    override fun performClick(): Boolean { super.performClick();return true }
 }

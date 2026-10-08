@@ -42,7 +42,10 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class MainActivity: AppCompatActivity() {
     private lateinit var b: ActivityMainBinding
-    private val adapter = SignalAdapter()
+    private var chartDialog: StockChartDialog? = null
+    private val adapter = SignalAdapter { result ->
+        openStockChart(result.code, result.name, result.snapshot.sourceStock?.market, result.snapshot.bars)
+    }
     private val engine = ScoringEngine()
     private val calculator = TechnicalCalculator()
     private lateinit var provider: MarketDataProvider
@@ -472,7 +475,7 @@ class MainActivity: AppCompatActivity() {
 
         val rv = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
-            adapter = HistoryAdapter().apply { submit(rows) }
+            adapter = HistoryAdapter { row -> openStockChart(row.code, row.name) }.apply { submit(rows) }
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 dp(520)
@@ -485,6 +488,11 @@ class MainActivity: AppCompatActivity() {
             .setView(rv)
             .setPositiveButton("關閉", null)
             .show()
+    }
+
+    private fun openStockChart(code: String, name: String, market: com.rex.twboardingscanner.domain.Market? = null, bars: List<DailyBar> = emptyList()) {
+        chartDialog?.dismiss()
+        chartDialog = StockChartDialog(this, provider, code, name, market, bars).also { it.show() }
     }
 
     private fun notifyNewSignal(r:SignalResult) {
@@ -524,6 +532,8 @@ class MainActivity: AppCompatActivity() {
     private fun dp(v:Int):Int = (v * resources.displayMetrics.density).toInt()
 
     override fun onDestroy() {
+        chartDialog?.dismiss()
+        chartDialog = null
         handler.removeCallbacksAndMessages(null)
         coordinator.shutdownNow()
         workers.shutdownNow()

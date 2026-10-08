@@ -13,7 +13,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class HistoryAdapter: RecyclerView.Adapter<HistoryAdapter.VH>() {
+class HistoryAdapter(private val onClick: (HistoryRow) -> Unit = {}): RecyclerView.Adapter<HistoryAdapter.VH>() {
     private val items = mutableListOf<HistoryRow>()
 
     fun submit(v:List<HistoryRow>) {
@@ -31,6 +31,10 @@ class HistoryAdapter: RecyclerView.Adapter<HistoryAdapter.VH>() {
 
     override fun onBindViewHolder(h:VH, pos:Int) {
         val r = items[pos]
+        h.b.root.isClickable = true
+        h.b.root.isFocusable = true
+        h.b.root.setOnClickListener { onClick(r) }
+        h.b.root.contentDescription = "${r.code} ${r.name} 歷史紀錄，點擊查詢最新日線圖表"
         val accent = when {
             r.radar.startsWith("A_") -> Color.parseColor("#FF496C")
             r.radar.startsWith("B_") -> Color.parseColor("#F6A623")
