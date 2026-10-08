@@ -24,23 +24,25 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android 35
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Install Android SDK components
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
       - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
 
-      - name: Extract project
+      - name: Extract project and apply latest patch
         run: |
           rm -rf _android_build
           mkdir -p _android_build
           unzip -q android/TWBoardingScanner/TWBoardingScanner_Android_v02_source.zip -d _android_build
-          ls -la _android_build/TWBoardingScanner_Android_v02
+          cd _android_build/TWBoardingScanner_Android_v02
+          patch -p1 < "$GITHUB_WORKSPACE/android/TWBoardingScanner/v03.patch"
+          grep -n "versionName" app/build.gradle.kts
+          grep -n "C｜長紅爆量" app/src/main/java/com/rex/twboardingscanner/ui/MainActivity.kt
 
       - name: Build debug APK
         working-directory: _android_build/TWBoardingScanner_Android_v02
@@ -66,5 +68,5 @@ jobs:
           gh release create latest-android TWBoardingScanner-latest.apk \
             --target "${GITHUB_SHA}" \
             --title "台股上車掃描器 Android 最新版" \
-            --notes "由 GitHub Actions 自動編譯。下載 TWBoardingScanner-latest.apk 後可直接安裝。" \
+            --notes "v0.3：新增 C 區『長紅爆量』掃描。由 GitHub Actions 自動編譯。" \
             --latest
