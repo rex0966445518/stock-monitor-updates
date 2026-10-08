@@ -39,6 +39,14 @@ p.write_text(s)
 # Scoring engine
 p = root/"app/src/main/java/com/rex/twboardingscanner/domain/ScoringEngine.kt"
 s = p.read_text()
+s = s.replace(
+    'return SignalResult(s.code, s.name, RadarType.A_EARLY_BREAKOUT, finalScore, light, reasons, blockers, s)',
+    'return SignalResult(s.code, s.name, s.sector, RadarType.A_EARLY_BREAKOUT, finalScore, light, reasons, blockers, s)'
+)
+s = s.replace(
+    'return SignalResult(s.code, s.name, RadarType.B_DEEP_REVERSAL, finalScore, light, reasons, blockers, s)',
+    'return SignalResult(s.code, s.name, s.sector, RadarType.B_DEEP_REVERSAL, finalScore, light, reasons, blockers, s)'
+)
 if 'fun evaluateC' not in s:
     insert = r'''
     fun evaluateC(s: StockSnapshot): SignalResult {
