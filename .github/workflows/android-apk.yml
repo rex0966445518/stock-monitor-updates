@@ -82,4 +82,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest-android --cleanup-tag -y || true
-          gh release create latest-android TWBoardingScanner-latest.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.1：使用固定 Beta 簽章，修正不同版本無法覆蓋安裝。若手機已有舊測試版，請先移除一次，再安裝此版本；之後更新可直接覆蓋。"             --latest
+          gh release create latest-android TWBoardingScanner-latest.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.2：全市場逐檔處理、掃描條件集中、日誌卡片化、搜尋歷史卡片化、過熱/漲停/EPS負值排除、AI分數環形視覺與勾選圖示。固定 Beta 簽章。"             --latest
