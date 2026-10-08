@@ -28,10 +28,11 @@ data class HistoryRow(
     val ma20Pass:Boolean,
     val rsiPass:Boolean,
     val volumePass:Boolean,
-    val epsPass:Boolean?
+    val epsPass:Boolean?,
+    val ruleReport:String = ""
 )
 
-class SignalHistoryDb(context: Context): SQLiteOpenHelper(context, "signals.db", null, 3) {
+class SignalHistoryDb(context: Context): SQLiteOpenHelper(context, "signals.db", null, 4) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE signal_history(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,6 +40,7 @@ class SignalHistoryDb(context: Context): SQLiteOpenHelper(context, "signals.db",
             price REAL, change_pct REAL, ts INTEGER, scan_date TEXT,
             rsi REAL, ma20 REAL, volume_ratio REAL, eps REAL,
             macd_pass INTEGER, ma20_pass INTEGER, rsi_pass INTEGER, volume_pass INTEGER, eps_pass INTEGER,
+            rule_report TEXT,
             UNIQUE(code,radar,light,reasons,scan_date)
         )""")
         db.execSQL("CREATE INDEX idx_signal_date ON signal_history(scan_date)")
@@ -59,19 +61,29 @@ class SignalHistoryDb(context: Context): SQLiteOpenHelper(context, "signals.db",
                 "ALTER TABLE signal_history ADD COLUMN eps_pass INTEGER"
             ).forEach { runCatching { db.execSQL(it) } }
         }
+        if (oldVersion < 4) db.execSQL("ALTER TABLE signal_history ADD COLUMN rule_report TEXT")
     }
 
     @Synchronized
     fun insertIfNew(r: SignalResult): Boolean {
         val s = r.snapshot
-        val reasons = r.reasons.joinToString("+")
-        val date = SimpleDateFormat("yyyy-MM-dd", Locale.TAIWAN).format(Date(s.timestamp))
+        val reasons = "v0.4.4｜日K " + r.snapshot.bars.lastOrNull()?.let { com.rex.twboardingscanner.domain.RuleMetrics.tradingDate(it.time) }.toString() + "｜" + r.reasons.joinToString("；")
+        val report = r.checks.filter { it.selected || it.extra }.joinToString("\n") { check ->
+            val state = when(check.state) {
+                com.rex.twboardingscanner.domain.CheckState.PASS -> "通過"
+                com.rex.twboardingscanner.domain.CheckState.FAIL -> "未通過"
+                com.rex.twboardingscanner.domain.CheckState.PENDING -> "待查核"
+            }
+            "${check.label}：$state${if (check.selected) "" else "（未啟用）"}"
+        }
+        val date = SimpleDateFormat("yyyy-MM-dd", Locale.TAIWAN).apply { timeZone = java.util.TimeZone.getTimeZone("Asia/Taipei") }.format(Date(s.timestamp))
         val vr = if (s.avg20VolumeLots > 0) s.volumeLots / s.avg20VolumeLots else null
-        val macd = s.difRising && (s.macdGoldenCross || s.macdTurnedPositive || s.macdRedExpanding || s.macdNegBarsShrinking)
+        val metrics = com.rex.twboardingscanner.domain.RuleMetrics(s)
+        val macd = metrics.macdUp == true
         val sql = """INSERT OR IGNORE INTO signal_history(
             code,name,sector,radar,light,score,reasons,price,change_pct,ts,scan_date,
-            rsi,ma20,volume_ratio,eps,macd_pass,ma20_pass,rsi_pass,volume_pass,eps_pass
-        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+            rsi,ma20,volume_ratio,eps,macd_pass,ma20_pass,rsi_pass,volume_pass,eps_pass,rule_report
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
 
         writableDatabase.compileStatement(sql).use { st ->
             st.bindString(1, r.code)
@@ -90,10 +102,11 @@ class SignalHistoryDb(context: Context): SQLiteOpenHelper(context, "signals.db",
             bindNullableDouble(st, 14, vr)
             bindNullableDouble(st, 15, s.epsTtm)
             st.bindLong(16, if (macd) 1 else 0)
-            st.bindLong(17, if (s.ma20?.let { s.price >= it } == true) 1 else 0)
+            st.bindLong(17, if (s.ma20?.let { s.price > it } == true) 1 else 0)
             st.bindLong(18, if ((s.rsi ?: 0.0) > 50) 1 else 0)
-            st.bindLong(19, if ((vr ?: 0.0) >= 1.2) 1 else 0)
-            if (s.epsTtm == null) st.bindNull(20) else st.bindLong(20, if (s.epsTtm > 0) 1 else 0)
+            st.bindLong(19, if (metrics.volumeAtLeast(if (r.radarType == com.rex.twboardingscanner.domain.RadarType.C_LONG_RED_VOLUME) 2.0 else 1.5) == true) 1 else 0)
+            if (metrics.earnings == null) st.bindNull(20) else st.bindLong(20, if (metrics.earnings == true) 1 else 0)
+            st.bindString(21, report)
             return st.executeInsert() != -1L
         }
     }
@@ -141,7 +154,8 @@ class SignalHistoryDb(context: Context): SQLiteOpenHelper(context, "signals.db",
                     b("ma20_pass"),
                     b("rsi_pass"),
                     b("volume_pass"),
-                    bn("eps_pass")
+                    bn("eps_pass"),
+                    c.getString(c.getColumnIndexOrThrow("rule_report")) ?: ""
                 )
             }
         }

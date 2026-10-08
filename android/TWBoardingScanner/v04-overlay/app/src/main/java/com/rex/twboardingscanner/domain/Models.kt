@@ -62,7 +62,10 @@ data class MarketStock(
     val changePct: Double,
     val volumeLots: Int,
     val epsTtm: Double?,
-    val revenueYoY: Double?
+    val revenueYoY: Double?,
+    val quarterlyEps: List<QuarterEps>? = null,
+    val foreignDaily: List<InstitutionDay>? = null,
+    val trustDaily: List<InstitutionDay>? = null
 )
 
 data class StockSnapshot(
@@ -106,7 +109,8 @@ data class StockSnapshot(
     val fiveDayGainPct: Double?,
     val distanceFromMa20Pct: Double?,
     val bars: List<DailyBar>,
-    val timestamp: Long
+    val timestamp: Long,
+    val sourceStock: MarketStock? = null
 )
 
 data class SignalResult(
@@ -118,5 +122,13 @@ data class SignalResult(
     val light: SignalLight,
     val reasons: List<String>,
     val blockers: List<String>,
-    val snapshot: StockSnapshot
+    val snapshot: StockSnapshot,
+    val checks: List<ConditionCheck> = emptyList(),
+    val technicalUpgrade: Boolean = false
 )
+
+// Optional evidence is never synthesized from a single reported EPS or partial flow series.
+data class QuarterEps(val year: Int, val quarter: Int, val eps: Double)
+data class InstitutionDay(val date: java.time.LocalDate, val netBuy: Long)
+enum class CheckState { PASS, FAIL, PENDING }
+data class ConditionCheck(val id: String, val label: String, val state: CheckState, val selected: Boolean, val extra: Boolean)

@@ -28,9 +28,9 @@ class MarketDataProvider(private val context: Context) {
     }
 
     fun loadHistory(stock: MarketStock): List<DailyBar> {
-        val cacheDir = File(context.cacheDir, "price_history").apply { mkdirs() }
+        val cacheDir = File(context.cacheDir, "price_history_v044").apply { mkdirs() }
         val file = File(cacheDir, "${stock.code}_${stock.market.name}.json")
-        val maxAge = 6 * 60 * 60 * 1000L
+        val maxAge = 60 * 1000L
         var raw: String? = null
         if (file.exists() && System.currentTimeMillis() - file.lastModified() < maxAge) {
             raw = runCatching { file.readText() }.getOrNull()
@@ -39,8 +39,8 @@ class MarketDataProvider(private val context: Context) {
             val suffix = if (stock.market == Market.TWSE) ".TW" else ".TWO"
             val symbol = stock.code + suffix
             val urls = listOf(
-                "https://query1.finance.yahoo.com/v8/finance/chart/$symbol?range=6mo&interval=1d&events=history",
-                "https://query2.finance.yahoo.com/v8/finance/chart/$symbol?range=6mo&interval=1d&events=history"
+                "https://query1.finance.yahoo.com/v8/finance/chart/$symbol?range=2y&interval=1d&events=history",
+                "https://query2.finance.yahoo.com/v8/finance/chart/$symbol?range=2y&interval=1d&events=history"
             )
             for (u in urls) {
                 raw = fetchText(u)
@@ -49,11 +49,7 @@ class MarketDataProvider(private val context: Context) {
             if (!raw.isNullOrBlank()) runCatching { file.writeText(raw!!) }
         }
         val bars = parseYahoo(raw ?: return emptyList()).toMutableList()
-        val latestTime = bars.lastOrNull()?.time ?: 0L
-        if (stock.close > 0 && (System.currentTimeMillis() - latestTime > 12 * 60 * 60 * 1000L || bars.isEmpty())) {
-            bars += DailyBar(System.currentTimeMillis(), stock.open, stock.high, stock.low, stock.close, stock.volumeLots.toLong() * 1000L)
-        }
-        return bars.sortedBy { it.time }.takeLast(130)
+        return bars.sortedBy { it.time }.takeLast(320)
     }
 
     private fun loadSectorMap(): MutableMap<String, Pair<String, StockSector>> {

@@ -8,6 +8,8 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.chip.Chip
 import com.rex.twboardingscanner.databinding.ItemStockSignalBinding
+import com.rex.twboardingscanner.domain.CheckState
+import com.rex.twboardingscanner.domain.RuleMetrics
 import com.rex.twboardingscanner.domain.RadarType
 import com.rex.twboardingscanner.domain.SignalLight
 import com.rex.twboardingscanner.domain.SignalResult
@@ -59,29 +61,38 @@ class SignalAdapter:RecyclerView.Adapter<SignalAdapter.VH>() {
         h.b.chartView.setBars(s.bars)
 
         h.b.indicatorChips.removeAllViews()
-        val macd = s.difRising && (s.macdGoldenCross || s.macdTurnedPositive || s.macdRedExpanding || s.macdNegBarsShrinking)
-        val vr = if (s.avg20VolumeLots > 0) s.volumeLots / s.avg20VolumeLots else 0.0
-        addCheck(h, "MACD轉強", macd)
-        addCheck(h, "站上20MA", s.ma20?.let { s.price >= it } == true)
-        addCheck(h, "RSI > 50", (s.rsi ?: 0.0) > 50)
-        addCheck(h, "量增", vr >= 1.2)
-        addCheck(h, "EPS", (s.epsTtm ?: Double.NEGATIVE_INFINITY) > 0)
-
-        h.b.trigger.text = if (r.reasons.isEmpty()) "尚未達主要觸發" else "觸發：${r.reasons.take(3).joinToString("＋")}"
+        r.checks.filter { it.selected || it.extra }.forEach { check ->
+            val short = mapOf(
+                "price" to "股價≥50", "volume" to "成交量≥500", "macd" to "MACD起轉",
+                "heat" to "未過熱", "converge" to "三線收斂", "ma5up" to "5日線翻揚",
+                "above3" to "站上三線", "rsi" to "RSI>50", "contract" to "整理量縮",
+                "box" to "突破箱頂", "burst" to "突破放量", "drawdown" to "深跌≥30%",
+                "floor" to "底部守住", "higherLow" to "低點墊高", "declineVolume" to "下跌量縮",
+                "ma5" to "站回5日線", "red" to "紅K", "gain" to "日漲≥3%", "body" to "實體≥3%",
+                "closeHigh" to "收在高檔", "extra_eps" to "EPS／營收", "extra_flow" to "法人",
+                "extra_risk" to "風險結構", "extra_high" to "避開高點", "extra_limit" to "避開漲停"
+            )[check.id] ?: check.label.substringBefore("：")
+            addCheck(h, short, check.state, check.selected)
+        }
+        val date = s.bars.lastOrNull()?.let { RuleMetrics.tradingDate(it.time).toString() } ?: "無資料"
+        val upgraded = if (r.technicalUpgrade) "｜技術升級" else ""
+        val mode = if (r.radarType == RadarType.C_LONG_RED_VOLUME) "最新日K（可能更新）" else "排除當日"
+        h.b.trigger.text = "日K $date｜$mode$upgraded\n所選條件通過率 ${r.score}%" +
+            if (r.radarType == RadarType.C_LONG_RED_VOLUME) "\n長紅爆量觀察訊號；尚無回測證明隔日續漲" else ""
 
 
     }
 
-    private fun addCheck(h:VH, label:String, pass:Boolean) {
+    private fun addCheck(h:VH, label:String, state:CheckState, selected:Boolean) {
 
         val chip = Chip(h.b.root.context).apply {
-            text = if (pass) "✓ $label" else "− $label"
+            text = when(state) { CheckState.PASS -> "✓ $label"; CheckState.FAIL -> "× $label"; CheckState.PENDING -> "? $label 待查核" } + if (selected) "" else "（未啟用）"
             textSize = 11f
             isClickable = false
             isCheckable = false
             contentDescription = label
-            chipBackgroundColor = ColorStateList.valueOf(Color.parseColor(if (pass) "#103A38" else "#13293F"))
-            setTextColor(Color.parseColor(if (pass) "#69F0C2" else "#8CA6C0"))
+            chipBackgroundColor = ColorStateList.valueOf(Color.parseColor(if (state == CheckState.PASS) "#103A38" else "#13293F"))
+            setTextColor(Color.parseColor(if (state == CheckState.PASS) "#69F0C2" else "#8CA6C0"))
             if (android.os.Build.VERSION.SDK_INT >= 26) tooltipText = label
         }
         h.b.indicatorChips.addView(chip)

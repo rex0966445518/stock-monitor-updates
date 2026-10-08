@@ -76,7 +76,7 @@ class MainActivity: AppCompatActivity() {
         b.recycler.layoutManager = LinearLayoutManager(this)
         b.recycler.adapter = adapter
 
-        listOf("今日新觸發", "A｜起漲", "B｜深跌", "C｜長紅爆量", "等待區", "已失效").forEach {
+        listOf("今日新觸發", "A｜起漲", "B｜深跌", "C｜長紅爆量", "待查核", "未通過").forEach {
             b.tabLayout.addTab(b.tabLayout.newTab().setText(it))
         }
         b.tabLayout.addOnTabSelectedListener(object: TabLayout.OnTabSelectedListener {
@@ -105,6 +105,7 @@ class MainActivity: AppCompatActivity() {
             return
         }
 
+        val scanDate = java.time.LocalDate.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI)
         val scanRules = radarSelections.mapValues { it.value.toSet() }
         val scanSectors = enabledSectors.toSet()
         isScanning = true
@@ -164,14 +165,19 @@ class MainActivity: AppCompatActivity() {
                             } else if (bars.size < 20) {
                                 insufficient.incrementAndGet()
                             } else {
-                                val snap = calculator.build(stock, bars)
                                 run {
                                     analyzed.incrementAndGet()
-                                    val r = listOf(
-                                        engine.evaluateA(snap, scanRules.getValue(RadarType.A_EARLY_BREAKOUT)),
-                                        engine.evaluateB(snap, scanRules.getValue(RadarType.B_DEEP_REVERSAL)),
-                                        engine.evaluateC(snap, scanRules.getValue(RadarType.C_LONG_RED_VOLUME))
-                                    )
+                                    val r = RadarType.entries.mapNotNull { type ->
+                                        val datedBars = calculator.barsForRadar(bars, type, scanDate)
+                                        if (datedBars.isEmpty()) null else {
+                                            val snap = calculator.build(stock, datedBars)
+                                            when(type) {
+                                                RadarType.A_EARLY_BREAKOUT -> engine.evaluateA(snap, scanRules.getValue(type))
+                                                RadarType.B_DEEP_REVERSAL -> engine.evaluateB(snap, scanRules.getValue(type))
+                                                RadarType.C_LONG_RED_VOLUME -> engine.evaluateC(snap, scanRules.getValue(type))
+                                            }
+                                        }
+                                    }
                                     results.addAll(r)
 
                                     r.filter { it.light != SignalLight.NONE }.forEach { sig ->
@@ -279,8 +285,8 @@ class MainActivity: AppCompatActivity() {
             1 -> latest.filter { it.radarType == RadarType.A_EARLY_BREAKOUT && it.light != SignalLight.NONE }
             2 -> latest.filter { it.radarType == RadarType.B_DEEP_REVERSAL && it.light != SignalLight.NONE }
             3 -> latest.filter { it.radarType == RadarType.C_LONG_RED_VOLUME && it.light != SignalLight.NONE }
-            4 -> latest.filter { it.score in 65..84 }
-            5 -> latest.filter { it.light == SignalLight.WEAKENING }
+            4 -> latest.filter { r -> r.checks.any { it.selected && it.state == com.rex.twboardingscanner.domain.CheckState.PENDING } }
+            5 -> latest.filter { r -> r.checks.any { it.selected && it.state == com.rex.twboardingscanner.domain.CheckState.FAIL } }
             else -> latest.filter { it.light != SignalLight.NONE }
         }.distinctBy { "${it.code}_${it.radarType}" }.sortedByDescending { it.score }
 
@@ -299,9 +305,14 @@ class MainActivity: AppCompatActivity() {
         }
         if (enabledSectors.isEmpty()) enabledSectors = StockSector.entries.toMutableSet()
 
+        // New definitions start with every base rule selected; old rule IDs never migrate.
+        prefs.edit().apply {
+            RadarType.entries.forEach { remove("rules_${it.name}") }
+            remove("avoid_hot"); remove("avoid_limit_up"); remove("avoid_negative_eps")
+        }.apply()
         RadarType.entries.forEach { type ->
             val rules = ScanConditions.forRadar(type)
-            val savedRules = prefs.getStringSet("rules_${type.name}", null)
+            val savedRules = prefs.getStringSet("rules_${ScanConditions.VERSION}_${type.name}", null)
             radarSelections[type] = savedRules?.intersect(rules.map { it.id }.toSet())
                 ?: rules.filter { it.defaultEnabled }.map { it.id }.toSet()
         }
@@ -378,10 +389,20 @@ class MainActivity: AppCompatActivity() {
             setPadding(dp(16), dp(8), dp(16), dp(8))
         }
         box.addView(TextView(this).apply {
-            text = "勾選條件全部滿足才會入選；未勾選不限制。\n資料不足不視為通過。法人資料目前尚未接入。\n產業為共同設定；歷史資料至少 A/B 35 日、C 20 日。\n分數是所有指標的符合比例，不是獲利機率，也不另設入選分數門檻。"
+            text = "勾選條件全部滿足才入選；未勾選不限制。基本條件預設全選，額外查核預設關閉。\nA/B 排除台灣當日日線；C 使用最新日 K。\nB 通過後若 RSI>50 且收盤>20日線，另標示技術升級；不辨識 W 底形狀。\n額外資料不足標示待查核，勾選後會阻擋入選。目前四季EPS與逐日法人尚未接入。分數為所選條件通過率。\n風險估算：前20日最低價為支撐，支撐下1%為失效價，前60日最高價為壓力；(壓力−現價)/(現價−失效價)≥2。\n漲停估算：前收盤×1.1，按台股跳動單位向下取整；非交易所公告漲停價。\nC 為觀察訊號，尚無回測證明隔天一定續漲。"
             setTextColor(Color.parseColor("#9FBAD0"))
         })
+        var extraHeadingShown = false
         val checks = rules.associate { rule ->
+            if (rule.extra && !extraHeadingShown) {
+                extraHeadingShown = true
+                box.addView(TextView(this).apply {
+                    text = "額外查核（選填）"
+                    textSize = 18f
+                    setTextColor(Color.parseColor("#42BBFF"))
+                    setPadding(0, dp(16), 0, dp(8))
+                })
+            }
             val cb = CheckBox(this).apply {
                 text = rule.label
                 setTextColor(Color.WHITE)
@@ -407,7 +428,7 @@ class MainActivity: AppCompatActivity() {
                     Toast.makeText(this, "請至少勾選一項條件", Toast.LENGTH_SHORT).show()
                 } else {
                     radarSelections[type] = selected
-                    prefs.edit().putStringSet("rules_${type.name}", selected).apply()
+                    prefs.edit().putStringSet("rules_${ScanConditions.VERSION}_${type.name}", selected).apply()
                     dialog.dismiss()
                     requestConfiguredScan()
                 }
@@ -470,7 +491,7 @@ class MainActivity: AppCompatActivity() {
         val n = NotificationCompat.Builder(this, "signals")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("${r.code} ${r.name} 新觸發")
-            .setContentText("${r.radarType.name}｜${r.score}%｜${r.reasons.take(2).joinToString("+")}")
+            .setContentText("${r.radarType.name}｜條件通過 ${r.score}%｜${r.reasons.take(2).joinToString("+")}")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .build()

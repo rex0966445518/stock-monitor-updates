@@ -54,13 +54,8 @@ class HistoryAdapter: RecyclerView.Adapter<HistoryAdapter.VH>() {
         h.b.scoreRing.setScore(r.score, accent)
 
         h.b.indicatorChips.removeAllViews()
-        addCheck(h, "MACD", r.macdPass)
-        addCheck(h, "MA20", r.ma20Pass)
-        addCheck(h, "RSI", r.rsiPass)
-        addCheck(h, "成交量", r.volumePass)
-        if (r.epsPass == true) addCheck(h, "EPS", true)
-
-        h.b.reasons.text = if (r.reasons.isBlank()) "無觸發說明" else r.reasons.replace("+", " · ")
+        h.b.reasons.text = if (r.ruleReport.isNotBlank()) r.reasons + "\n" + r.ruleReport
+            else "舊版掃描紀錄（不套用新規則）\n" + r.reasons.replace("+", " · ")
     }
 
     private fun addCheck(h:VH, label:String, pass:Boolean) {

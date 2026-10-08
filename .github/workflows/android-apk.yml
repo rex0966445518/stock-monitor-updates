@@ -48,7 +48,7 @@ jobs:
           chmod 600 "$HOME/.android/debug.keystore"
           keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | head -8
 
-      - name: Prepare v0.4.3 project
+      - name: Prepare v0.4.4 project
         run: |
           rm -rf _android_build
           mkdir -p _android_build
@@ -59,7 +59,7 @@ jobs:
 
       - name: Build APK
         working-directory: _android_build/TWBoardingScanner_Android_v02
-        run: gradle :app:assembleDebug --stacktrace
+        run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
 
       - name: Prepare and verify APK
         shell: bash
@@ -69,7 +69,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging TWBoardingScanner-latest.apk | head -8
           ls -lh TWBoardingScanner-latest.apk
           sha256sum TWBoardingScanner-latest.apk
-          cp TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.3.apk
+          cp TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.4.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -83,4 +83,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest-android --cleanup-tag -y || true
-          gh release create latest-android TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.3.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.3：深藍霓虹介面、A/B/C統計卡片、寬螢幕左右圖表卡片、帶名稱的合格指標。固定 Beta 簽章。"             --latest
+          gh release create latest-android TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.4.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.4：全新ABC精確規則、分區時點、B技術升級、額外查核及待查核狀態；舊規則設定已重置。固定 Beta 簽章。"             --latest
