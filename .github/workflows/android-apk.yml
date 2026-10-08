@@ -40,15 +40,14 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Extract v0.2 base project
+      - name: Prepare v0.4 project
         run: |
           rm -rf _android_build
           mkdir -p _android_build
           unzip -q android/TWBoardingScanner/TWBoardingScanner_Android_v02_source.zip -d _android_build
-          test -d _android_build/TWBoardingScanner_Android_v02
-
-      - name: Apply v0.3 changes
-        run: python3 android/TWBoardingScanner/apply_v03.py
+          cp -R android/TWBoardingScanner/v04-overlay/. _android_build/TWBoardingScanner_Android_v02/
+          rm -f _android_build/TWBoardingScanner_Android_v02/app/src/main/java/com/rex/twboardingscanner/data/DemoDataProvider.kt
+          grep -n "versionName" _android_build/TWBoardingScanner_Android_v02/app/build.gradle.kts
 
       - name: Build APK
         working-directory: _android_build/TWBoardingScanner_Android_v02
@@ -71,4 +70,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest-android --cleanup-tag -y || true
-          gh release create latest-android TWBoardingScanner-latest.apk --target "${GITHUB_SHA}" --title "台股上車掃描器 Android 最新版" --notes "v0.3 自動編譯 APK" --latest
+          gh release create latest-android TWBoardingScanner-latest.apk --target "${GITHUB_SHA}" --title "台股上車掃描器 Android 最新版" --notes "v0.4：全市場掃描、產業分類、進度ETA、K線/量/MACD圖、日曆日誌、股號搜尋、圖像化卡片。" --latest
