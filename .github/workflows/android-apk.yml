@@ -40,23 +40,35 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Prepare v0.4 project
+      - name: Install fixed beta debug keystore
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.android"
+          cp android/TWBoardingScanner/signing/debug.keystore "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
+          keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | head -8
+
+      - name: Prepare v0.4.1 project
         run: |
           rm -rf _android_build
           mkdir -p _android_build
           unzip -q android/TWBoardingScanner/TWBoardingScanner_Android_v02_source.zip -d _android_build
           cp -R android/TWBoardingScanner/v04-overlay/. _android_build/TWBoardingScanner_Android_v02/
           rm -f _android_build/TWBoardingScanner_Android_v02/app/src/main/java/com/rex/twboardingscanner/data/DemoDataProvider.kt
-          grep -n "versionName" _android_build/TWBoardingScanner_Android_v02/app/build.gradle.kts
+          grep -n "versionCode\|versionName" _android_build/TWBoardingScanner_Android_v02/app/build.gradle.kts
 
       - name: Build APK
         working-directory: _android_build/TWBoardingScanner_Android_v02
         run: gradle :app:assembleDebug --stacktrace
 
-      - name: Prepare APK
+      - name: Prepare and verify APK
+        shell: bash
         run: |
           cp _android_build/TWBoardingScanner_Android_v02/app/build/outputs/apk/debug/app-debug.apk TWBoardingScanner-latest.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs TWBoardingScanner-latest.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging TWBoardingScanner-latest.apk | head -8
           ls -lh TWBoardingScanner-latest.apk
+          sha256sum TWBoardingScanner-latest.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -70,4 +82,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest-android --cleanup-tag -y || true
-          gh release create latest-android TWBoardingScanner-latest.apk --target "${GITHUB_SHA}" --title "台股上車掃描器 Android 最新版" --notes "v0.4：全市場掃描、產業分類、進度ETA、K線/量/MACD圖、日曆日誌、股號搜尋、圖像化卡片。" --latest
+          gh release create latest-android TWBoardingScanner-latest.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.1：使用固定 Beta 簽章，修正不同版本無法覆蓋安裝。若手機已有舊測試版，請先移除一次，再安裝此版本；之後更新可直接覆蓋。"             --latest
