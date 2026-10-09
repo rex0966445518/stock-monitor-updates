@@ -26,17 +26,17 @@ internal class PosterExport(private val activity:AppCompatActivity) {
     private val directory=activity.registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if(uri!=null) save(uri)
     }
-    fun generate(scanning:Boolean, load:(String)->Map<RadarType,List<PosterStock>>) {
+    fun generate(scanning:Boolean, groups:Map<RadarType,List<PosterStock>>, done:Int,total:Int) {
         if(busy) { toast("海報處理中，請稍候");return }
         busy=true;toast("正在製作 A／B／C 三張海報…")
         val now=ZonedDateTime.now(RuleMetrics.TAIPEI);val day=now.toLocalDate().toString()
         val folder=File(activity.cacheDir,"posters/${System.currentTimeMillis()}")
         executor.submit {
             val result=runCatching {
-                check(folder.mkdirs());val groups=load(day)
+                check(folder.mkdirs())
                 RadarType.entries.mapIndexed { index,radar ->
                     File(folder,"台股掃描_${day}_${('A'.code+index).toChar()}.png").also {
-                        ScanPoster.write(it,radar,groups.getValue(radar),day,now.format(DateTimeFormatter.ofPattern("HH:mm")),scanning)
+                        ScanPoster.write(it,radar,groups.getValue(radar),day,now.format(DateTimeFormatter.ofPattern("HH:mm")),scanning,RadarType.entries.map { groups.getValue(it).size },done,total)
                     }
                 }
             }

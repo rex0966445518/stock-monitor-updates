@@ -116,7 +116,7 @@ class MainActivity: AppCompatActivity() {
         b.refreshButton.text="導出海報"
         b.refreshButton.setOnClickListener {
             val snapshot=latest.toList()
-            posterExport.generate(isScanning) { day -> ScanPoster.collect(day,history.queryByDate(day),snapshot) }
+            posterExport.generate(isScanning,ScanPoster.collect(snapshot),b.scanProgress.progress,b.scanProgress.max)
         }
         b.logButton.setOnClickListener { showLogDatePicker() }
         b.searchButton.setOnClickListener { searchHistory() }
@@ -134,6 +134,10 @@ class MainActivity: AppCompatActivity() {
         val scanRules = radarSelections.mapValues { it.value.toSet() }
         val scanSectors = enabledSectors.toSet()
         isScanning = true
+        latest = emptyList()
+        b.scanProgress.progress = 0
+        b.scanProgress.max = 0
+        render()
         b.scanProgress.isIndeterminate = true
         b.progressTitle.text = "準備全市場資料…"
         b.progressCount.text = "正在取得上市櫃清單"

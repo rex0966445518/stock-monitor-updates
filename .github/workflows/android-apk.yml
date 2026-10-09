@@ -48,7 +48,7 @@ jobs:
           chmod 600 "$HOME/.android/debug.keystore"
           keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | head -8
 
-      - name: Prepare v0.4.9 project
+      - name: Prepare v0.4.10 project
         run: |
           rm -rf _android_build
           mkdir -p _android_build
@@ -77,7 +77,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging TWBoardingScanner-latest.apk | head -8
           ls -lh TWBoardingScanner-latest.apk
           sha256sum TWBoardingScanner-latest.apk
-          cp TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.9.apk
+          cp TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.10.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -91,4 +91,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest-android --cleanup-tag -y || true
-          gh release create latest-android TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.9.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.9：修正上市櫃官方產業代碼分類與各分類股數；首頁新增導出海報，一次製作今日A/B/C三張PNG，可預覽、儲存下載及分享。依今日曾入選紀錄去重，保留行情日期與成交量；空結果亦可匯出。固定Beta簽章。"             --latest
+          gh release create latest-android TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.10.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.10：海報只使用當前掃描清單，不混入歷史紀錄；重掃時清空舊結果。依參考圖重做霓虹海報，包含ABC徽章、條件通過率、條件標籤、真實日K/成交量/MACD及最新量能數據。"             --latest
