@@ -41,6 +41,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class MainActivity: AppCompatActivity() {
     private lateinit var b: ActivityMainBinding
+    private lateinit var paperLoop: com.rex.twboardingscanner.paper.PaperLoop
     private lateinit var posterExport: PosterExport
     private var chartDialog: StockChartDialog? = null
     private val adapter = SignalAdapter(onClick = { result ->
@@ -114,8 +115,15 @@ class MainActivity: AppCompatActivity() {
             if (action == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) { searchHistory(); true } else false
         }
 
+        b.paperButton.setOnClickListener { startActivity(android.content.Intent(this,PaperTradingActivity::class.java)) }
+        paperLoop=com.rex.twboardingscanner.paper.PaperLoop(this)
+        if(runCatching { com.rex.twboardingscanner.paper.PaperRepository(this).read().enabled }.getOrDefault(false))
+            com.rex.twboardingscanner.paper.PaperWorker.schedule(this)
         startFullScan()
     }
+
+    override fun onResume() { super.onResume();if(::paperLoop.isInitialized)paperLoop.start() }
+    override fun onPause() { if(::paperLoop.isInitialized)paperLoop.stop();super.onPause() }
 
     private fun startFullScan() {
         if (isScanning) {
@@ -244,6 +252,8 @@ class MainActivity: AppCompatActivity() {
             latch.await()
             val copy = synchronized(results) { results.toList() }
             latest = copy
+            runCatching { com.rex.twboardingscanner.paper.PaperRepository(this).publish(copy) }
+                .onFailure { runOnUiThread { Toast.makeText(this,"模擬候選清單儲存失敗，請檢查儲存空間",Toast.LENGTH_LONG).show() } }
 
             runOnUiThread {
                 isScanning = false

@@ -9,8 +9,8 @@ android {
         applicationId = "com.rex.twboardingscanner"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "0.4.12"
+        versionCode = 17
+        versionName = "0.4.13"
     }
     testOptions { unitTests.isIncludeAndroidResources = true }
     buildFeatures { viewBinding = true }
@@ -21,6 +21,7 @@ android {
     kotlinOptions { jvmTarget = "17" }
 }
 dependencies {
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("org.jsoup:jsoup:1.18.3")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")
