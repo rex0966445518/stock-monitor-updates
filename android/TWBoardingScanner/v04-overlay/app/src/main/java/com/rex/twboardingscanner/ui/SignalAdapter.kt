@@ -68,11 +68,10 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
         h.b.chartView.setBars(s.bars)
         VolumeStrip.bind(h.b.volumeSummary, h.b.recentVolumes, s.bars)
 
-        h.b.financialSummary.text = s.sourceStock?.financials?.summary(RuleMetrics(s).today)
-            ?: "財務資料待查核｜EPS、營業現金流、本業獲利"
+        h.b.financialPanel.bind(s.sourceStock?.financials,RuleMetrics(s).today)
         h.b.financialButton.setOnClickListener { onFinancial(r) }
         h.b.indicatorChips.removeAllViews()
-        r.checks.filter { it.selected || it.extra }.forEach { check ->
+        r.checks.filter { it.selected }.forEach { check ->
             val short = mapOf(
                 "price" to "股價≥50", "volume" to "成交量≥500", "macd" to "MACD起轉",
                 "heat" to "未過熱", "converge" to "三線收斂", "ma5up" to "5日線翻揚",
@@ -88,8 +87,9 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
         val date = s.bars.lastOrNull()?.let { RuleMetrics.tradingDate(it.time).toString() } ?: "無資料"
         val upgraded = if (r.technicalUpgrade) "｜技術升級" else ""
         val mode = if (r.radarType == RadarType.C_LONG_RED_VOLUME) "最新日K（可能更新）" else "排除當日"
-        h.b.trigger.text = "日K $date｜$mode$upgraded\n所選條件通過率 ${r.score}%｜點擊看完整圖表" +
-            if (r.radarType == RadarType.C_LONG_RED_VOLUME) "\n長紅爆量觀察訊號；尚無回測證明隔日續漲" else ""
+        h.b.trigger.text = "$date · $mode$upgraded" +
+            if(r.radarType==RadarType.C_LONG_RED_VOLUME) "\n長紅爆量觀察訊號 · 無隔日續漲保證" else ""
+
 
 
     }
@@ -101,6 +101,8 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
             textSize = 11f
             isClickable = false
             isCheckable = false
+            chipMinHeight = 28 * h.b.root.resources.displayMetrics.density
+            setEnsureMinTouchTargetSize(false)
             contentDescription = label
             chipBackgroundColor = ColorStateList.valueOf(Color.parseColor(if (state == CheckState.PASS) "#103A38" else "#13293F"))
             setTextColor(Color.parseColor(if (state == CheckState.PASS) "#69F0C2" else "#8CA6C0"))

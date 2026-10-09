@@ -54,12 +54,7 @@ class ScoreRingView @JvmOverloads constructor(
         arc.color = accent
         c.drawArc(rect, -90f, 360f * score / 100f, false, arc)
         c.drawText(score.toString(), width / 2f, height / 2f + 6f * density, number)
-        val g = when {
-            score >= 85 -> "A"
-            score >= 75 -> "A-"
-            score >= 65 -> "B"
-            else -> "觀察"
-        }
+        val g = "通過率"
         c.drawText(g, width / 2f, height / 2f + 20f * density, grade)
     }
 }

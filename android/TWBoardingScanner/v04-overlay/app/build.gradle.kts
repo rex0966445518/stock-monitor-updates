@@ -9,9 +9,10 @@ android {
         applicationId = "com.rex.twboardingscanner"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
-        versionName = "0.4.7"
+        versionCode = 12
+        versionName = "0.4.8"
     }
+    testOptions { unitTests.isIncludeAndroidResources = true }
     buildFeatures { viewBinding = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -22,6 +23,7 @@ android {
 dependencies {
     implementation("org.jsoup:jsoup:1.18.3")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")

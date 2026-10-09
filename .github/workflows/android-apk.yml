@@ -48,7 +48,7 @@ jobs:
           chmod 600 "$HOME/.android/debug.keystore"
           keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | head -8
 
-      - name: Prepare v0.4.7 project
+      - name: Prepare v0.4.8 project
         run: |
           rm -rf _android_build
           mkdir -p _android_build
@@ -61,6 +61,14 @@ jobs:
         working-directory: _android_build/TWBoardingScanner_Android_v02
         run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
 
+      - name: Upload UI previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UI-previews
+          path: _android_build/TWBoardingScanner_Android_v02/app/build/ui-previews/*.png
+          if-no-files-found: ignore
+
       - name: Prepare and verify APK
         shell: bash
         run: |
@@ -69,7 +77,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging TWBoardingScanner-latest.apk | head -8
           ls -lh TWBoardingScanner-latest.apk
           sha256sum TWBoardingScanner-latest.apk
-          cp TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.7.apk
+          cp TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.8.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -83,4 +91,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest-android --cleanup-tag -y || true
-          gh release create latest-android TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.7.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.7：ABC新增近四季EPS、獲利成長、三/五年成長、本業獲利及營業現金流勾選條件；加入HiStock表格讀取、財務查核面板與來源連結。來源拒絕連線或資料不足標示待查核，勾選後不入選。開發環境實測HiStock回傳403，尚未驗證手機端成功讀取。固定Beta簽章。"             --latest
+          gh release create latest-android TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.8.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.8：重做財務查核與卡片量能/基本面排版；深藍霓虹數據卡、四季EPS長條圖、五日成交量圖、逐項查核狀態及可展開說明。修正頂部系統列遮擋與C類標頭換行。資料不足仍標示待查核，條件計算不變。固定Beta簽章。"             --latest

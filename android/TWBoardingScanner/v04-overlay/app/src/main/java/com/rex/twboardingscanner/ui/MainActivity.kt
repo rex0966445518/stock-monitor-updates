@@ -47,7 +47,6 @@ class MainActivity: AppCompatActivity() {
         openStockChart(result.code, result.name, result.snapshot.sourceStock?.market, result.snapshot.bars)
     }, onFinancial = { result -> showFinancialReport(result) })
     private lateinit var financialProvider: com.rex.twboardingscanner.data.FinancialDataProvider
-    private val financialWorker = Executors.newSingleThreadExecutor()
     private val engine = ScoringEngine()
     private val calculator = TechnicalCalculator()
     private lateinit var provider: MarketDataProvider
@@ -71,6 +70,11 @@ class MainActivity: AppCompatActivity() {
         super.onCreate(savedInstanceState)
         b = ActivityMainBinding.inflate(layoutInflater)
         setContentView(b.root)
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(b.root) { view,insets ->
+            val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            view.setPadding(dp(10)+bars.left,dp(6)+bars.top,dp(10)+bars.right,dp(6)+bars.bottom)
+            insets
+        }
 
         provider = MarketDataProvider(this)
         financialProvider = com.rex.twboardingscanner.data.FinancialDataProvider(this)
@@ -306,7 +310,7 @@ class MainActivity: AppCompatActivity() {
 
         b.summaryA.text = "A 起漲\n${latest.count { it.radarType == RadarType.A_EARLY_BREAKOUT && it.light != SignalLight.NONE }}"
         b.summaryB.text = "B 反轉\n${latest.count { it.radarType == RadarType.B_DEEP_REVERSAL && it.light != SignalLight.NONE }}"
-        b.summaryC.text = "C 長紅爆量\n${latest.count { it.radarType == RadarType.C_LONG_RED_VOLUME && it.light != SignalLight.NONE }}"
+        b.summaryC.text = "C 爆量\n${latest.count { it.radarType == RadarType.C_LONG_RED_VOLUME && it.light != SignalLight.NONE }}"
         adapter.submit(filtered)
     }
 
@@ -391,42 +395,10 @@ class MainActivity: AppCompatActivity() {
         } else startFullScan()
     }
 
+    private var financialDialog: FinancialDialog? = null
     private fun showFinancialReport(result: SignalResult) {
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16),dp(8),dp(16),dp(8)) }
-        val info = TextView(this).apply { textSize = 14f; setTextColor(Color.WHITE); setTextIsSelectable(true) }
-        val today = java.time.LocalDate.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI)
-        fun display(report: com.rex.twboardingscanner.domain.FinancialReport?) {
-            info.text = (report?.summary(today) ?: "財務資料尚未查核，按下方按鈕讀取。") +
-                (report?.let { "\n查核／快取時間：" + java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.TAIWAN).apply { timeZone = java.util.TimeZone.getTimeZone("Asia/Taipei") }.format(java.util.Date(it.fetchedAt)) } ?: "") +
-                "\n\n資料來源：HiStock。快取24小時；查核結果不代表未來獲利。\n現金流原站未明確標示單季／累計及單位，本版只判斷最新列示值正負，不計算全年或自由現金流。\n勾選而缺資料會阻擋入選。財務查核後請重新掃描，才會更新選股清單。"
-        }
-        display(result.snapshot.sourceStock?.financials)
-        box.addView(info)
-        listOf("每股盈餘", "現金流量表", "利潤比率").forEach { topic ->
-            box.addView(android.widget.Button(this).apply {
-                text = "HiStock｜$topic"
-                setOnClickListener { runCatching { startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
-                    android.net.Uri.parse(com.rex.twboardingscanner.data.FinancialDataProvider.url(result.code,topic)))) }
-                    .onFailure { Toast.makeText(this@MainActivity,"無法開啟瀏覽器",Toast.LENGTH_SHORT).show() } }
-            })
-        }
-        val dialog = MaterialAlertDialogBuilder(this).setTitle("${result.code} ${result.name}｜財務查核")
-            .setView(ScrollView(this).apply { addView(box) }).setNegativeButton("關閉",null)
-            .setPositiveButton("讀取財報",null).create()
-        var job: java.util.concurrent.Future<*>? = null
-        dialog.setOnDismissListener { job?.cancel(true) }
-        dialog.setOnShowListener {
-            val button = dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
-            button.setOnClickListener {
-                button.isEnabled = false
-                info.text = "正在查核 HiStock 財報…"
-                job = financialWorker.submit {
-                    val report = financialProvider.load(result.code)
-                    runOnUiThread { if (!isFinishing && !isDestroyed && dialog.isShowing) { display(report); button.isEnabled = true } }
-                }
-            }
-        }
-        dialog.show()
+        financialDialog?.dismiss()
+        financialDialog=FinancialDialog(this,financialProvider,result.code,result.name,result.snapshot.sourceStock?.financials).also { it.show() }
     }
 
     private fun showRadarConditions(type: RadarType) {
@@ -586,7 +558,7 @@ class MainActivity: AppCompatActivity() {
         handler.removeCallbacksAndMessages(null)
         coordinator.shutdownNow()
         workers.shutdownNow()
-        financialWorker.shutdownNow()
+        financialDialog?.dismiss()
         history.close()
         super.onDestroy()
     }

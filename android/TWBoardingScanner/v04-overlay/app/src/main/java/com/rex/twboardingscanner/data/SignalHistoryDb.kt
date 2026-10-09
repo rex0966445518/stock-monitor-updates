@@ -71,7 +71,7 @@ class SignalHistoryDb(context: Context): SQLiteOpenHelper(context, "signals.db",
     @Synchronized
     fun insertIfNew(r: SignalResult): Boolean {
         val s = r.snapshot
-        val reasons = "v0.4.7｜日K " + r.snapshot.bars.lastOrNull()?.let { com.rex.twboardingscanner.domain.RuleMetrics.tradingDate(it.time) }.toString() + "｜" + r.reasons.joinToString("；")
+        val reasons = "v0.4.8｜日K " + r.snapshot.bars.lastOrNull()?.let { com.rex.twboardingscanner.domain.RuleMetrics.tradingDate(it.time) }.toString() + "｜" + r.reasons.joinToString("；")
         val report = (s.sourceStock?.financials?.summary(com.rex.twboardingscanner.domain.RuleMetrics(s).today)?.plus("\n") ?: "") + r.checks.filter { it.selected || it.extra }.joinToString("\n") { check ->
             val state = when(check.state) {
                 com.rex.twboardingscanner.domain.CheckState.PASS -> "通過"
