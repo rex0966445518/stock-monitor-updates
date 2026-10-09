@@ -106,7 +106,9 @@ class BacktestJournalTest {
         val box=find(dialog.window!!.decorView){it is android.widget.CheckBox&&it.text.toString().startsWith("MACD 起轉")} as android.widget.CheckBox
         assertTrue(box.isChecked);box.performClick();assertFalse(box.isChecked)
         capture(dialog.window!!.decorView,"backtest-rule-picker-360")
-        dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick()
+        val apply=find(dialog.window!!.decorView){it is TextView&&it.text.toString()=="套用"}!!
+        val visible=android.graphics.Rect();assertTrue("套用必須出現在可視區",apply.getGlobalVisibleRect(visible));assertTrue(visible.height()>=80)
+        apply.performClick()
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
         val selected=BtSettingsCodec.decode(BacktestStore(app).configuration()!!).rules[RadarType.A_EARLY_BREAKOUT]!!
         assertFalse("macd" in selected);assertTrue("price" in selected)
