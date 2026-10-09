@@ -9,7 +9,7 @@ import kotlin.math.*
 internal class NeonPoster(private val radar:RadarType,private val stocks:List<PosterStock>,
     private val day:String,private val time:String,private val scanning:Boolean,
     private val counts:List<Int>,private val done:Int,private val total:Int) {
-    val height=maxOf(1540,890+stocks.size*300)
+    val height=maxOf(1540,890+stocks.size*350)
     private val p=Paint(Paint.ANTI_ALIAS_FLAG)
     private val white=Color.rgb(235,245,255);private val muted=Color.rgb(150,181,209)
     private val pink=Color.rgb(255,75,121);private val blue=Color.rgb(52,171,255)
@@ -76,14 +76,14 @@ internal class NeonPoster(private val radar:RadarType,private val stocks:List<Po
             panel(c,32f,645f,1016f,54f,accent)
             text(c,"◆  $letter 區｜$title  ·  符合條件的股票（${stocks.size}）",52f,681f,27f,white,true)
         }
-        val first=((top-719)/300).coerceAtLeast(0);val last=((top+band-701)/300).coerceAtMost(stocks.lastIndex)
-        if(last>=first) for(i in first..last) card(c,stocks[i],charts[i],720f+i*300)
+        val first=((top-719)/350).coerceAtLeast(0);val last=((top+band-701)/350).coerceAtMost(stocks.lastIndex)
+        if(last>=first) for(i in first..last) card(c,stocks[i],charts[i],720f+i*350)
         if(stocks.isEmpty() && top+band>740 && top<1250){panel(c,32f,730f,1016f,470f,accent,true);badge(c,540f,858f,58f);text(c,"本輪目前沒有符合條件的股票",260f,987f,36f,white,true);text(c,if(scanning)"掃描仍在進行，稍後可再次匯出" else "調整條件並重新掃描後，可匯出新結果",270f,1042f,27f,muted)}
         val footer=height-144f
         if(top+band>footer-15){panel(c,32f,footer,1016f,110f,blue);text(c,"最新結果快照  ·  $day $time",55f,footer+34,23f,white,true);text(c,"A/B 排除當日日K；C 使用最新日K。數值依卡片行情日期。",55f,footer+68,21f,muted);text(c,"條件通過率非投資評級；觀察訊號不保證後續漲幅。",55f,footer+96,20f,muted)}
     }
     private fun card(c:Canvas,s:PosterStock,points:List<ChartPoint>,y:Float) {
-        panel(c,32f,y,1016f,282f,accent,true);badge(c,82f,y+53,34f)
+        panel(c,32f,y,1016f,332f,accent,true);badge(c,82f,y+53,34f)
         text(c,"${s.code}  ${s.name}",131f,y+53,31f,white,true,350f)
         text(c,s.sector,132f,y+84,19f,muted,maxWidth=325f)
         val col=if(s.change>=0)pink else mint
@@ -106,6 +106,13 @@ internal class NeonPoster(private val radar:RadarType,private val stocks:List<Po
         text(c,"${selected.count{it.state==CheckState.PASS}} / ${selected.size} 項通過",444f,y+246,19f,mint,maxWidth=175f)
         text(c,"日K $date",53f,y+270,17f,muted)
         chart(c,points,647f,y+13,384f,254f)
+        val auction=s.auction
+        val auctionColor=when(auction?.direction){AuctionDirection.UP->pink;AuctionDirection.DOWN->mint;else->muted}
+        line(c,53f,y+280,1027f,y+280,Color.rgb(26,62,88))
+        text(c,"${auction?.time?.take(5)?:"13:30"} 收盤撮合",53f,y+312,23f,muted)
+        text(c,auction?.display?:"待查核",287f,y+315,32f,auctionColor,true,325f)
+        text(c,auction?.date?:"",657f,y+309,19f,muted)
+        text(c,"相對收盤前成交價",821f,y+309,17f,muted,maxWidth=211f)
     }
     private fun chart(c:Canvas,points:List<ChartPoint>,x:Float,y:Float,w:Float,h:Float) {
         panel(c,x,y,w,h,Color.rgb(36,80,128));if(points.isEmpty()){text(c,"日K資料待查核",x+55,y+135,23f,muted);return}

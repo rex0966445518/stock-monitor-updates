@@ -48,6 +48,7 @@ class MainActivity: AppCompatActivity() {
         openStockChart(result.code, result.name, result.snapshot.sourceStock?.market, result.snapshot.bars)
     }, onFinancial = { result -> showFinancialReport(result) })
     private lateinit var financialProvider: com.rex.twboardingscanner.data.FinancialDataProvider
+    private val auctionProvider = com.rex.twboardingscanner.data.ClosingAuctionProvider()
     private val engine = ScoringEngine()
     private val calculator = TechnicalCalculator()
     private lateinit var provider: MarketDataProvider
@@ -213,7 +214,7 @@ class MainActivity: AppCompatActivity() {
                                     val r = if (candidate) {
                                         val report = financialProvider.load(stock.code)
                                         evaluate(stock.copy(financials = report, quarterlyEps = report.eps,
-                                            epsTtm = report.ttm(scanDate)))
+                                            epsTtm = report.ttm(scanDate), closingAuction = auctionProvider.load(stock.code, stock.market)))
                                     } else initial
                                     results.addAll(r)
 

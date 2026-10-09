@@ -68,6 +68,7 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
         h.b.chartView.setBars(s.bars)
         VolumeStrip.bind(h.b.volumeSummary, h.b.recentVolumes, s.bars)
 
+        h.b.closingAuction.bind(s.sourceStock?.closingAuction)
         h.b.financialPanel.bind(s.sourceStock?.financials,RuleMetrics(s).today)
         h.b.financialButton.setOnClickListener { onFinancial(r) }
         h.b.indicatorChips.removeAllViews()

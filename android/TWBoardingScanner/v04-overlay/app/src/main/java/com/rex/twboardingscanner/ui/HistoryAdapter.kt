@@ -63,6 +63,7 @@ class HistoryAdapter(private val onClick: (HistoryRow) -> Unit = {}): RecyclerVi
         h.b.chartView.setOnClickListener { onClick(r) }
         VolumeStrip.bind(h.b.volumeSummary, h.b.recentVolumes, r.chartBars)
 
+        h.b.closingAuction.bind(r.closingAuction)
         h.b.indicatorChips.removeAllViews()
         h.b.reasons.text = if (r.ruleReport.isNotBlank()) r.reasons + "\n" + r.ruleReport
             else "舊版掃描紀錄（不套用新規則）\n" + r.reasons.replace("+", " · ")

@@ -10,14 +10,14 @@ import java.util.zip.DeflaterOutputStream
 
 internal data class PosterStock(val code:String,val name:String,val sector:String,val radar:RadarType,
     val price:Double,val change:Double,val timestamp:Long,val bars:List<DailyBar>,
-    val score:Int=0,val checks:List<ConditionCheck> = emptyList())
+    val score:Int=0,val checks:List<ConditionCheck> = emptyList(), val auction:ClosingAuction?=null)
 internal object ScanPoster {
     // The live list is the only source. Never merge persisted scan history into an export.
     fun collect(live:List<SignalResult>):Map<RadarType,List<PosterStock>> {
         val current=live.sortedByDescending { it.snapshot.timestamp }.distinctBy { it.radarType to it.code }
             .filter { it.light!=SignalLight.NONE }.sortedByDescending { it.score }
             .map { PosterStock(it.code,it.name,it.sector.label,it.radarType,it.snapshot.price,it.snapshot.changePct,
-                it.snapshot.timestamp,it.snapshot.bars.toList(),it.score,it.checks.toList()) }
+                it.snapshot.timestamp,it.snapshot.bars.toList(),it.score,it.checks.toList(),it.snapshot.sourceStock?.closingAuction) }
         return RadarType.entries.associateWith { radar -> current.filter { it.radar==radar } }
     }
     // PNG rows are streamed from small bands, so a large result set does not allocate a giant bitmap.

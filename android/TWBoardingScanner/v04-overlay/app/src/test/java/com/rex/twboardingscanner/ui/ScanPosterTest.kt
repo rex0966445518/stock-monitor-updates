@@ -49,18 +49,18 @@ class ScanPosterTest {
         val bars=(0..89).map { i -> val close=80.0+i*.29+kotlin.math.sin(i*.7)*1.4
             DailyBar(day.minusDays((89-i).toLong()).atStartOfDay(RuleMetrics.TAIPEI).toInstant().toEpochMilli(),close-.6,close+1.1,close-1.5,close,800000L+i*19000) }
         val checks=listOf("macd" to "MACD起轉","heat" to "未過熱","converge" to "三線收斂","ma5up" to "5日線翻揚","above3" to "站上三線","rsi" to "RSI>50").map {ConditionCheck(it.first,it.second,CheckState.PASS,true,false)}
-        val stock=PosterStock("1234","版面測試公司", "半導體",RadarType.A_EARLY_BREAKOUT,104.5,3.42,0,bars,100,checks)
+        val stock=PosterStock("1234","版面測試公司", "半導體",RadarType.A_EARLY_BREAKOUT,104.5,3.42,0,bars,100,checks,ClosingAuction("2026-10-08","13:30:00",268,105.0,106.0,"紅綠依收盤前成交價"))
         RadarType.entries.forEachIndexed { i,type ->
             val list=if(i==2) emptyList() else List(i+3) {stock.copy(code="${1234+it}")}
             val file=File(folder,"poster-${('A'.code+i).toChar()}.png")
             ScanPoster.write(file,type,list,"2026-10-09","12:30",false,listOf(3,4,0),1950,1950)
             val decoded=BitmapFactory.decodeFile(file.path)
             assertNotNull(decoded);assertEquals(1080,decoded.width)
-            assertEquals(maxOf(1540,890+300*list.size),decoded.height);decoded.recycle()
+            assertEquals(maxOf(1540,890+350*list.size),decoded.height);decoded.recycle()
         }
         val file=File.createTempFile("poster-many",".png")
         ScanPoster.write(file,RadarType.A_EARLY_BREAKOUT,List(100){stock},"2026-10-09","12:30",true)
         val bounds=BitmapFactory.Options().apply{inJustDecodeBounds=true};BitmapFactory.decodeFile(file.path,bounds)
-        assertEquals(30890,bounds.outHeight);file.delete()
+        assertEquals(35890,bounds.outHeight);file.delete()
     }
 }

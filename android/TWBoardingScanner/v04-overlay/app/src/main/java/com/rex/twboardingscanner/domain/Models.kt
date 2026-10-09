@@ -85,7 +85,8 @@ data class MarketStock(
     val quarterlyEps: List<QuarterEps>? = null,
     val foreignDaily: List<InstitutionDay>? = null,
     val trustDaily: List<InstitutionDay>? = null,
-    val financials: FinancialReport? = null
+    val financials: FinancialReport? = null,
+    val closingAuction: ClosingAuction? = null
 )
 
 data class StockSnapshot(
