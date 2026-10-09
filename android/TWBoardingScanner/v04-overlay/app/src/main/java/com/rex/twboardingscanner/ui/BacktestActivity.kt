@@ -202,7 +202,7 @@ class BacktestActivity:AppCompatActivity(){
     }
     internal fun showResult(data:JSONObject){
         results.removeAllViews();val s=data.getJSONObject("settings");val r=data.getJSONObject("run");val pnl=r.getDouble("profit");val hasRebate=data.optInt("strategyVersion",1)>=3;val legacy=data.optInt("strategyVersion",1)<2
-        val curve=BacktestDailyLedger.rows(data);val holdings=r.getJSONArray("holdings");val trades=r.getJSONArray("trades")
+        val curve=BacktestDailyLedger.rows(data);val holdings=r.getJSONArray("holdings");val trades=BacktestTradeLedger.rows(r.getJSONArray("trades"));val tradesByDay=BacktestTradeLedger.byDate(trades)
         val panel=NeonUi.vertical(this).apply{background=NeonUi.panel(this@BacktestActivity,tint(pnl));setPadding(dp(14),dp(14),dp(14),dp(14))}
         panel.addView(label(if(legacy)"舊版開盤策略報告" else "截止日總損益",16f,NeonUi.ink,true))
         panel.addView(label(signed(pnl)+" 元",34f,tint(pnl),true))
@@ -225,19 +225,31 @@ class BacktestActivity:AppCompatActivity(){
         if(hasRebate){results.addView(BacktestRebatePanel(this,r));results.addView(NeonUi.gap(this,12))}
         results.addView(label("每日買賣紀錄",17f,NeonUi.ink,true))
         results.addView(label("金額單位：元。淨利為當日賣出的已實現損益；留倉金額為未賣股票的含費成本。",11f))
-        for(i in maxOf(0,curve.length()-30) until curve.length()){
-            results.addView(BacktestDailyCard(this,curve.getJSONObject(i)));results.addView(NeonUi.gap(this,8))
+        results.addView(label("點買入／賣出展開個股。日漲跌＝收盤對前收；個股淨利已扣費稅，折讓金另列。",11f))
+        val dailyHost=NeonUi.vertical(this);results.addView(dailyHost)
+        var pageEnd=curve.length()
+        fun dailyPage(){
+            dailyHost.removeAllViews();val first=maxOf(0,pageEnd-30)
+            if(curve.length()>30){
+                dailyHost.addView(label("第 ${first+1}～$pageEnd 天／共 ${curve.length()} 個交易日",11f))
+                dailyHost.addView(NeonUi.row(this,listOf(
+                    NeonUi.button(this,"更早 30 天"){pageEnd=first;dailyPage()}.apply{isEnabled=first>0},
+                    NeonUi.button(this,"較新 30 天"){pageEnd=minOf(curve.length(),pageEnd+30);dailyPage()}.apply{isEnabled=pageEnd<curve.length()}
+                )))
+            }
+            for(i in first until pageEnd){val day=curve.getJSONObject(i);dailyHost.addView(BacktestDailyCard(this,day,tradesByDay[day.getString("date")].orEmpty()));dailyHost.addView(NeonUi.gap(this,8))}
         }
+        dailyPage()
         results.addView(NeonUi.gap(this,8));results.addView(label("成交明細 · 最近 30 筆",17f,NeonUi.ink,true))
         for(i in (trades.length()-1) downTo maxOf(0,trades.length()-30)){
-            val t=trades.getJSONObject(i);val sell=t.getString("side")=="SELL"
-            results.addView(label("${t.getString("date")} ${t.optString("time","時間未記錄")} · ${if(sell)"賣" else "買"} 1 張\n${t.getString("code")} ${t.getString("name")} · ${t.getDouble("price")} 元 · 成交 ${money(t.optDouble("turnover",t.getDouble("price")*t.optInt("shares",1000)))} 元\n${t.optString("timeKind","舊版報告")} · ${if(sell)"淨利 ${signed(t.getDouble("pnl"))}" else "目標 ${t.optDouble("target")} 元"}\n${t.optString("reason")}",12f,if(sell)NeonUi.cyan else NeonUi.ink));results.addView(NeonUi.gap(this,8))
+            val t=trades.getJSONObject(i)
+            results.addView(label(t.getString("date"),13f,NeonUi.ink,true));results.addView(BacktestTradeCard(this,t));results.addView(NeonUi.gap(this,8))
         }
         results.addView(label("截止日留倉 · ${holdings.length()} 張",17f,NeonUi.ink,true))
         for(i in 0 until minOf(30,holdings.length())){
             val h=holdings.getJSONObject(i);results.addView(label("${h.getString("code")} ${h.getString("name")} · 1 張\n買入 ${h.optString("entryDate","舊版未記錄")} ${h.optString("entryTime")} · 目標 ${h.optDouble("target")} 元\n最新估值 ${h.getString("markDate")} / ${h.getDouble("mark")} 元 · ${signed(h.optDouble("unrealized",0.0))}",12f));results.addView(NeonUi.gap(this,8))
         }
-        results.addView(label("畫面只列最近 30 個交易日／30 筆成交／30 張持倉，完整資料皆可匯出。",11f))
+        results.addView(label("每日紀錄可翻頁，展開後可載入該日所有成交；下方摘要列最近 30 筆成交／30 張持倉。完整資料可匯出。",11f))
         results.addView(NeonUi.button(this,"匯出完整報告與每日買賣明細",NeonUi.mint){export(data)})
         results.addView(NeonUi.button(this,"查看未買入與資料排除原因"){
             val a=data.getJSONArray("excluded");val skipped=r.optJSONArray("skipped")?:org.json.JSONArray()
@@ -266,12 +278,12 @@ class BacktestActivity:AppCompatActivity(){
         val files=mutableListOf(File(dir,"回測報告_$id.json").apply{writeText(enriched.toString(2))})
         fun csv(name:String,array:org.json.JSONArray,fields:List<String>,header:String){
             val lines=mutableListOf(header)
-            for(i in 0 until array.length()){val row=array.getJSONObject(i);lines.add(fields.joinToString(","){"\""+row.optString(it,"").replace("\"","\"\"")+"\""})}
+            for(i in 0 until array.length()){val row=array.getJSONObject(i);lines.add(fields.joinToString(","){"\""+(if(row.isNull(it))"" else row.optString(it,"")).replace("\"","\"\"")+"\""})}
             files.add(File(dir,"${name}_$id.csv").apply{writeText("\uFEFF"+lines.joinToString("\r\n"))})
         }
         val run=enriched.optJSONObject("run")
         if(run!=null){
-        csv("回測交易",run.getJSONArray("trades"),listOf("date","time","timeKind","lotId","signalDate","dataDate","code","name","radar","side","shares","price","target","turnover","rebateMonth","fee","tax","pnl","reason"),"交易日期,時間或時段,時間性質,張數批次,篩選日期,日線資料截止日,股號,名稱,區域,方向,股數,成交價,本筆出場目標,成交金額,折讓歸屬月份,手續費,交易稅,已實現淨利,理由")
+        csv("回測交易",run.getJSONArray("trades"),BacktestTradeLedger.csvFields,BacktestTradeLedger.csvHeader)
         run.optJSONArray("rebateMonths")?.let{csv("每月折讓金",it,listOf("month","buyTrades","sellTrades","buyAmount","sellAmount","turnover","rate","amount"),"月份,買入筆數,賣出筆數,買入成交額,賣出成交額,買賣總成交額,適用折讓率,估計應收折讓金")}
         csv("每日總覽",run.getJSONArray("curve"),BacktestDailyLedger.csvFields,BacktestDailyLedger.csvHeader)
         csv("截止日留倉",run.getJSONArray("holdings"),listOf("lotId","code","name","shares","entryDate","entryTime","entry","cost","target","markDate","mark","unrealized"),"批次,股號,名稱,股數,買入日期,買入時間,買入價,含費總成本,淨利3%目標,估值日期,估值價格,未實現損益")

@@ -7,7 +7,7 @@ import kotlin.math.abs
 /** Read-time enrichment only. Never rewrite archived reports or fetch today's prices. */
 object BacktestDailyLedger {
     val csvFields=listOf("date","selected","buys","sells","skipped","realized","holdingCost","holdingLots","holdingValue","dayProfit","cash","dividendAccrued","rebateChange","rebateAccrued","equity","staleLots","accountingSource","accountingNote")
-    const val csvHeader="日期,入選檔數,買入張數,賣出張數,未買次數,當日已實現淨利,收盤留倉成本含買入費,收盤留倉張數,留倉估值扣估計賣費稅,當日總損益含留倉及股息,可用資金,累計應收股息,當日折讓金變動,累計應收折讓金,淨資產,沿用舊價張數,數值來源,補算說明"
+    const val csvHeader="日期,入選檔數,買入張數,賣出張數,未買次數,當日已實現淨利,收盤留倉成本含買入費,收盤留倉張數,留倉估值扣估計賣費稅,當日總損益含留倉股息及折讓,可用資金,累計應收股息,當日折讓金變動,累計應收折讓金,淨資產,沿用舊價張數,數值來源,補算說明"
     private fun number(o:JSONObject,key:String):Double?=if(!o.has(key)||o.isNull(key))null else o.optDouble(key,Double.NaN).takeIf{it.isFinite()}
     fun rows(report:JSONObject):JSONArray {
         val run=report.optJSONObject("run")?:return JSONArray()
@@ -75,5 +75,5 @@ object BacktestDailyLedger {
         }
         return out
     }
-    fun enrich(report:JSONObject)=JSONObject(report.toString()).apply{optJSONObject("run")?.put("curve",rows(report))}
+    fun enrich(report:JSONObject)=JSONObject(report.toString()).apply{optJSONObject("run")?.let{run->run.put("curve",rows(report));run.optJSONArray("trades")?.let{run.put("trades",BacktestTradeLedger.rows(it))}}}
 }
