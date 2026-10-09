@@ -123,7 +123,7 @@ class BacktestStore(private val c:Context){
         for(i in 0 until holdings.length()){val h=holdings.getJSONObject(i);h.getString("code");h.getString("name");h.getString("markDate");require(h.getDouble("mark").isFinite())}
         val digest=java.security.MessageDigest.getInstance("SHA-256").digest(raw.toString().toByteArray(Charsets.UTF_8)).joinToString(""){"%02x".format(it)}
         journal.listFiles()?.mapNotNull(::read)?.firstOrNull{it.optString("importDigest")==digest}?.let{return@synchronized it.getString("id")}
-        val id="import-"+java.util.UUID.randomUUID().toString()
+        val id=java.util.UUID.randomUUID().toString()+"-import"
         data.put("originalId",data.optString("id")).put("id",id).put("state","DONE").put("importDigest",digest).put("importedAt",System.currentTimeMillis())
         if(!data.has("excluded"))data.put("excluded",JSONArray())
         if(!data.has("note"))data.put("note","使用者匯入的歷史回測紀錄；保留原始策略與績效。")

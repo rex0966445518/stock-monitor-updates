@@ -123,7 +123,7 @@ class BacktestJournalTest {
     @Test fun importedReportIsArchivedWithoutChangingCurrentSettingsOrResults(){
         val store=BacktestStore(app);val s=settings();store.begin("original",s);store.save("original",result(s))
         val raw=store.log("original")!!;raw.put("id","../../unsafe");val before=raw.toString()
-        val id=store.importReport(raw);assertTrue(id.startsWith("import-"));assertEquals(before,raw.toString())
+        val id=store.importReport(raw);assertTrue(id.endsWith("-import"));assertEquals(before,raw.toString())
         assertEquals(id,store.importReport(raw));assertEquals(2,store.history().size)
         assertEquals("original",store.active());assertEquals("original",store.resultId());assertEquals(s,BtSettingsCodec.decode(store.configuration()!!))
         val imported=store.log(id)!!;assertEquals(raw.getJSONObject("run").toString(),imported.getJSONObject("run").toString());assertEquals(raw.getJSONObject("settings").toString(),imported.getJSONObject("settings").toString())
