@@ -172,8 +172,13 @@ class BtRobotTest {
         val snapshot=ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
         capture(snapshot.window!!.decorView,"snapshot-apply-360.png",1450)
         val action=find(snapshot.window!!.decorView){it.tag=="apply-snapshot-rules"}!!
-        val rect=android.graphics.Rect();assertTrue(action.getGlobalVisibleRect(rect));assertTrue(rect.height()>=80)
-        assertTrue(rect.bottom<=snapshot.window!!.decorView.height)
+        // The screenshot lays out its own canvas; Robolectric's native window frame is not resized with it.
+        // Verify the actual rendered descendant bounds rather than that stale external window clip.
+        val decor=snapshot.window!!.decorView as ViewGroup
+        val rect=android.graphics.Rect(0,0,action.width,action.height)
+        decor.offsetDescendantRectToMyCoords(action,rect)
+        assertTrue("button height $rect",rect.height()>=80)
+        assertTrue("button clipped $rect",rect.top>=0&&rect.left>=0&&rect.bottom<=decor.height&&rect.right<=decor.width)
         snapshot.dismiss();ctl.pause().stop().destroy()
     }
     private fun find(v:View,p:(View)->Boolean):View?{if(p(v))return v;if(v is ViewGroup)for(i in 0 until v.childCount)find(v.getChildAt(i),p)?.let{return it};return null}
