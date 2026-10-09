@@ -23,15 +23,21 @@ object BtRobotSpace {
     }
     data class Candidate(val key:String,val cursor:BigInteger)
     /** Best-first one-bit neighbours, then an odd affine permutation visits every bit mask once. */
-    fun next(base:String,best:String?,cursor:BigInteger,seed:BigInteger,seen:(String)->Boolean):Candidate? {
+    fun required(key:String)=BigInteger(key,16).also{rules(key)}
+    fun total(required:String)=BigInteger.ONE.shiftLeft(slots.size-BtRobotSpace.required(required).bitCount())
+    fun includes(key:String,required:String)=BigInteger(key,16).and(BtRobotSpace.required(required))==BtRobotSpace.required(required)
+    fun next(base:String,best:String?,cursor:BigInteger,seed:BigInteger,required:String="0",seen:(String)->Boolean):Candidate? {
+        val fixed=BtRobotSpace.required(required);val free=slots.indices.filterNot{fixed.testBit(it)};val total=total(required)
+        fun lock(k:String)=BigInteger(k,16).or(fixed).toString(16)
+        fun expand(n:BigInteger)=free.foldIndexed(fixed){i,mask,bit->if(n.testBit(i))mask.setBit(bit)else mask}.toString(16)
         require(cursor.signum()>=0&&cursor<=total)
         val defaults=key(defaultBtRules())
         val starting=listOf(base,defaults)+RadarType.entries.map{type->key(RadarType.entries.associateWith{if(it==type)defaultBtRules().getValue(it)else emptySet()})}+listOf("0")
-        for(k in starting)if(!seen(k))return Candidate(k,cursor)
-        for(center in listOfNotNull(best,base).distinct())for(i in slots.indices){val k=BigInteger(center,16).flipBit(i).toString(16);if(!seen(k))return Candidate(k,cursor)}
+        for(k in starting.map(::lock).distinct())if(!seen(k))return Candidate(k,cursor)
+        for(center in listOfNotNull(best,base).distinct())for(i in free){val k=lock(BigInteger(center,16).flipBit(i).toString(16));if(!seen(k))return Candidate(k,cursor)}
         var n=cursor
         val step=seed.shiftLeft(1).or(BigInteger.ONE).mod(total) // odd => bijection modulo a power of two
-        while(n<total){val k=n.multiply(step).add(seed).mod(total).toString(16);n+=BigInteger.ONE;if(!seen(k))return Candidate(k,n)}
+        while(n<total){val k=expand(n.multiply(step).add(seed).mod(total));n+=BigInteger.ONE;if(!seen(k))return Candidate(k,n)}
         return null
     }
 }

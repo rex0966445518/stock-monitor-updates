@@ -47,7 +47,7 @@ internal class NeonPoster(private val radar:RadarType,private val stocks:List<Po
             panel(c,32f,38f,128f,120f,pink,true)
             line(c,54f,124f,81f,90f,pink,10f);line(c,81f,90f,99f,108f,pink,10f);line(c,99f,108f,136f,64f,pink,10f)
             line(c,111f,68f,136f,64f,pink,8f);line(c,136f,64f,132f,90f,pink,8f)
-            text(c,"台股上車掃描器",185f,96f,53f,white,true)
+            text(c,"AI-離職神器",185f,96f,53f,white,true)
             text(c,"讓數據，幫你看見下一個機會",187f,141f,25f,muted)
             text(c,"最新掃描快照",824f,63f,20f,blue)
             text(c,day,824f,97f,24f,white,true)

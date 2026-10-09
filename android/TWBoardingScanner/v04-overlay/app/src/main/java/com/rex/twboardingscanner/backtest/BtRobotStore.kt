@@ -13,32 +13,33 @@ import java.util.zip.GZIPOutputStream
 
 /** Transactions commit a completed trial, its best score and search cursor together. */
 class BtRobotStore(private val c:Context){
-    private class Db(c:Context):SQLiteOpenHelper(c,"backtest-robot.db",null,1){
+    private class Db(c:Context):SQLiteOpenHelper(c,"backtest-robot.db",null,2){
         override fun onCreate(db:SQLiteDatabase){
             db.execSQL("CREATE TABLE sessions(id TEXT PRIMARY KEY, created INTEGER NOT NULL, json TEXT NOT NULL)")
-            db.execSQL("CREATE TABLE trials(n INTEGER PRIMARY KEY AUTOINCREMENT, session TEXT NOT NULL, key TEXT NOT NULL, summary TEXT NOT NULL, report BLOB NOT NULL, UNIQUE(session,key))")
+            db.execSQL("CREATE TABLE trials(n INTEGER PRIMARY KEY AUTOINCREMENT, session TEXT NOT NULL, key TEXT NOT NULL, summary TEXT NOT NULL, report BLOB NOT NULL, cleared INTEGER NOT NULL DEFAULT 0, UNIQUE(session,key))")
             db.execSQL("CREATE INDEX trial_session ON trials(session,n)")
         }
-        override fun onUpgrade(db:SQLiteDatabase,old:Int,new:Int){error("不支援的機器人資料版本")}
+        override fun onUpgrade(db:SQLiteDatabase,old:Int,new:Int){if(old<2)db.execSQL("ALTER TABLE trials ADD COLUMN cleared INTEGER NOT NULL DEFAULT 0")}
     }
     companion object { private val lock=Any();private var helper:Db?=null
         private fun database(c:Context)=synchronized(lock){(helper?:Db(c.applicationContext).also{helper=it}).writableDatabase}
     }
     private val db get()=database(c)
     private val prefs=c.getSharedPreferences("backtest_robot",0)
+    fun conditionFile(id:String)=File(dataset(id).parentFile,"$id.conditions.gz")
     fun active()=prefs.getString("active","").orEmpty()
     fun dataset(id:String):File {require(id.matches(Regex("[A-Za-z0-9-]+")));return File(c.filesDir,"robot-data/$id.bin.gz")}
     fun session(id:String=active()):JSONObject?=synchronized(lock){db.rawQuery("SELECT json FROM sessions WHERE id=?",arrayOf(id)).use{if(it.moveToFirst())JSONObject(it.getString(0))else null}}
     private fun putSession(o:JSONObject){check(db.update("sessions",ContentValues().apply{put("json",o.toString())},"id=?",arrayOf(o.getString("id")))==1)}
     fun sessions():List<JSONObject> = synchronized(lock){val out=mutableListOf<JSONObject>();db.rawQuery("SELECT json FROM sessions ORDER BY created DESC",null).use{while(it.moveToNext())out+=JSONObject(it.getString(0))};out}
-    fun create(s:BtSettings):String=synchronized(lock){
-        BtRobotSpace.validate(s)
+    fun create(s:BtSettings,required:String="0"):String=synchronized(lock){
+        BtRobotSpace.validate(s);BtRobotSpace.required(required)
         session()?.let{if(it.optString("state")=="RUNNING")putSession(it.put("state","PAUSED").put("token","").put("message","建立新測試；原進度已保存"))}
         val id=UUID.randomUUID().toString()
         val o=JSONObject().put("id",id).put("created",System.currentTimeMillis()).put("state","PAUSED").put("token","")
             .put("settings",BtSettingsCodec.encode(s)).put("tested",0).put("bestKey","").put("bestSeq",0).put("ack",0)
             .put("seed",BigInteger(80,java.security.SecureRandom()).toString()).put("cursor","0").put("message","按開始測試啟動")
-            .put("appVersion",c.packageManager.getPackageInfo(c.packageName,0).versionName).put("searchVersion",1)
+            .put("appVersion",c.packageManager.getPackageInfo(c.packageName,0).versionName).put("searchVersion",1).put("required",required).put("engineVersion",BtRobotCheckpoint.ENGINE).put("cleared",0)
         check(db.insertOrThrow("sessions",null,ContentValues().apply{put("id",id);put("created",o.getLong("created"));put("json",o.toString())})>0)
         check(prefs.edit().putString("active",id).commit());id
     }
@@ -47,12 +48,12 @@ class BtRobotStore(private val c:Context){
         val o=session(id)?:error("找不到測試紀錄")
         require(o.getString("state")!="DONE"){"此測試已完成"}
         BtRobotSpace.validate(BtSettingsCodec.decode(o.getJSONObject("settings")))
-        val token=UUID.randomUUID().toString();putSession(o.put("state","RUNNING").put("token",token).put("message","排入測試工作…"));token
+        val token=UUID.randomUUID().toString();putSession(o.put("state","RUNNING").put("token",token).put("message","排入測試工作…").put("updatedAt",System.currentTimeMillis()));token
     }
-    fun current(id:String,token:String)=synchronized(lock){session(id)?.let{it.optString("token")==token&&token.isNotEmpty()&&it.optString("state")=="RUNNING"}?:false}
+    fun current(id:String,token:String)=synchronized(lock){session(id)?.let{it.optString("token")==token&&token.isNotEmpty()&&it.optString("state") in setOf("RUNNING","RETRY")}?:false}
     fun pause(id:String)=synchronized(lock){session(id)?.let{if(it.optString("state")!="DONE")putSession(it.put("state","PAUSED").put("token","").put("message","已暫停；完成組合及歷史資料保留"))}}
     fun status(id:String,token:String,message:String,state:String="RUNNING")=synchronized(lock){
-        if(current(id,token))putSession(session(id)!!.put("message",message).put("state",state))
+        if(current(id,token))putSession(session(id)!!.put("message",message).put("state",state).put("updatedAt",System.currentTimeMillis()))
     }
     fun coverage(id:String,token:String,loaded:Int,requested:Int,digest:String)=synchronized(lock){
         if(current(id,token))putSession(session(id)!!.put("loaded",loaded).put("requested",requested).put("datasetSha256",digest))
@@ -60,14 +61,38 @@ class BtRobotStore(private val c:Context){
     fun seen(id:String,key:String)=synchronized(lock){db.rawQuery("SELECT 1 FROM trials WHERE session=? AND key=? LIMIT 1",arrayOf(id,key)).use{it.moveToFirst()}}
     fun next(id:String):BtRobotSpace.Candidate?=synchronized(lock){
         val s=session(id)?:error("找不到測試紀錄")
-        BtRobotSpace.next(BtRobotSpace.key(BtSettingsCodec.decode(s.getJSONObject("settings")).rules),s.optString("bestKey").ifBlank{null},BigInteger(s.getString("cursor")),BigInteger(s.getString("seed"))){seen(id,it)}
+        BtRobotSpace.next(BtRobotSpace.key(BtSettingsCodec.decode(s.getJSONObject("settings")).rules),s.optString("bestKey").ifBlank{null},BigInteger(s.getString("cursor")),BigInteger(s.getString("seed")),s.optString("required","0")){seen(id,it)}
     }
-    fun remaining(id:String)=BtRobotSpace.total-BigInteger.valueOf(session(id)?.optLong("tested")?:0L)
+    fun remaining(id:String):BigInteger {val s=session(id);return BtRobotSpace.total(s?.optString("required","0")?:"0")-BigInteger.valueOf(s?.optLong("tested")?:0L)}
+    fun retained(id:String)=synchronized(lock){db.rawQuery("SELECT COUNT(*) FROM trials WHERE session=? AND cleared=0",arrayOf(id)).use{it.moveToFirst();it.getLong(0)}}
+    fun clearZero(id:String):Int=synchronized(lock){
+        val s=session(id)?:return@synchronized 0;var removed=0
+        db.beginTransaction()
+        try{
+            db.rawQuery("SELECT key,summary FROM trials WHERE session=? AND cleared=0",arrayOf(id)).use{rows->while(rows.moveToNext()){
+                val r=JSONObject(rows.getString(1))
+                if(kotlin.math.abs(r.getDouble("profit"))<0.005){
+                    db.update("trials",ContentValues().apply{put("cleared",1);put("report",ByteArray(0))},"session=? AND key=?",arrayOf(id,rows.getString(0)));removed++
+                }
+            }}
+            s.put("cleared",s.optLong("cleared")+removed)
+            // The tested ledger remains intact, so cleaned keys can never be scheduled again.
+            val best=s.optString("bestKey")
+            if(best.isNotEmpty()&&report(id,best)==null){
+                s.put("bestKey","").put("bestSeq",0);s.remove("bestProfit")
+                db.rawQuery("SELECT summary FROM trials WHERE session=? AND cleared=0",arrayOf(id)).use{rows->while(rows.moveToNext()){
+                    val r=JSONObject(rows.getString(0));if(!s.has("bestProfit")||r.getDouble("profit")>s.getDouble("bestProfit"))s.put("bestKey",r.getString("key")).put("bestProfit",r.getDouble("profit")).put("bestSeq",r.getLong("seq"))
+                }}
+            }
+            putSession(s);db.setTransactionSuccessful()
+        }finally{db.endTransaction()};removed
+    }
+    internal fun <T> locked(action:(SQLiteDatabase)->T):T=synchronized(lock){action(db)}
     fun commit(id:String,token:String,candidate:BtRobotSpace.Candidate,result:BtResult,started:Long):Boolean=synchronized(lock){
         if(!current(id,token)||seen(id,candidate.key))return@synchronized false
         BtRobotSpace.validate(result.settings);require(BtRobotSpace.key(result.settings.rules)==candidate.key)
         require(result.run.profit.isFinite())
-        val s=session(id)!!;val finished=System.currentTimeMillis();val seq=s.getLong("tested")+1
+        val s=session(id)!!;require(BtRobotSpace.includes(candidate.key,s.optString("required","0")));val finished=System.currentTimeMillis();val seq=s.getLong("tested")+1
         val report=JSONObject().put("id",UUID.nameUUIDFromBytes("$id:${candidate.key}".toByteArray(Charsets.UTF_8)).toString())
             .put("journalVersion",1).put("strategyVersion",result.settings.strategyVersion).put("robotSession",id).put("robotSequence",seq)
             .put("state","DONE").put("appVersion",s.getString("appVersion"))
@@ -83,7 +108,7 @@ class BtRobotStore(private val c:Context){
         try{
             db.insertOrThrow("trials",null,ContentValues().apply{put("session",id);put("key",candidate.key);put("summary",summary.toString());put("report",bytes)})
             if(better)s.put("bestKey",candidate.key).put("bestProfit",result.run.profit).put("bestSeq",seq)
-            s.put("tested",seq).put("cursor",candidate.cursor.toString()).put("message","已完成第 $seq 組；持續搜尋更高收益")
+            s.put("updatedAt",finished).put("tested",seq).put("cursor",candidate.cursor.toString()).put("message","已完成第 $seq 組；持續搜尋更高收益")
             putSession(s);db.setTransactionSuccessful()
         }finally{db.endTransaction()}
         better
@@ -91,10 +116,10 @@ class BtRobotStore(private val c:Context){
     fun acknowledge(id:String,seq:Long)=synchronized(lock){session(id)?.let{putSession(it.put("ack",maxOf(it.optLong("ack"),seq)))}}
     fun trials(id:String,limit:Int=20,offset:Int=0):List<JSONObject> = synchronized(lock){
         require(limit in 1..1000&&offset>=0);val out=mutableListOf<JSONObject>()
-        db.rawQuery("SELECT summary FROM trials WHERE session=? ORDER BY n DESC LIMIT ? OFFSET ?",arrayOf(id,limit.toString(),offset.toString())).use{while(it.moveToNext())out+=JSONObject(it.getString(0))};out
+        db.rawQuery("SELECT summary FROM trials WHERE session=? AND cleared=0 ORDER BY n DESC LIMIT ? OFFSET ?",arrayOf(id,limit.toString(),offset.toString())).use{while(it.moveToNext())out+=JSONObject(it.getString(0))};out
     }
     fun report(id:String,key:String):JSONObject?=synchronized(lock){
-        db.rawQuery("SELECT report FROM trials WHERE session=? AND key=?",arrayOf(id,key)).use{cursor->
+        db.rawQuery("SELECT report FROM trials WHERE session=? AND key=? AND cleared=0",arrayOf(id,key)).use{cursor->
             if(!cursor.moveToFirst())null else GZIPInputStream(ByteArrayInputStream(cursor.getBlob(0))).bufferedReader().use{JSONObject(it.readText())}
         }
     }

@@ -1,5 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="10dp" android:background="@drawable/radar_background">
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="6dp" android:text="AI-離職神器" android:textSize="17sp" android:textStyle="bold" android:textColor="#68E6CA" />
 
     <LinearLayout android:layout_width="match_parent" android:layout_height="48dp" android:gravity="center_vertical" android:layout_marginBottom="4dp">
         <androidx.appcompat.widget.AppCompatEditText android:id="@+id/searchInput" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:background="@drawable/search_panel" android:paddingHorizontal="14dp" android:hint="輸入股號" android:inputType="number" android:singleLine="true" android:textSize="14sp" android:textColor="#EBF5FF" android:textColorHint="#87A6C1" android:imeOptions="actionSearch" />

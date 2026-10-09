@@ -22,18 +22,21 @@ class BtRobotActivity:AppCompatActivity(){
     private lateinit var pauseButton:com.google.android.material.button.MaterialButton
     private lateinit var bestButton:com.google.android.material.button.MaterialButton
     private lateinit var records:LinearLayout
+    private lateinit var requiredButton:com.google.android.material.button.MaterialButton
+    private lateinit var spaceLabel:TextView
+    private var busy=false;private var recovering=false;private var exportId=""
     private var stamp="";private var lastId="";private var page=0
     private var visible=false
     private var alert:androidx.appcompat.app.AlertDialog?=null
     private val handler=Handler(Looper.getMainLooper())
-    private val poll=object:Runnable{override fun run(){render();handler.postDelayed(this,2000)}}
+    private val poll=object:Runnable{override fun run(){render();recover();handler.postDelayed(this,2000)}}
     private fun label(s:String,size:Float=13f,color:Int=NeonUi.muted,bold:Boolean=false)=NeonUi.label(this,s,size,color,bold)
     private fun signed(v:Double)=String.format(Locale.TAIWAN,"%+,.0f",v)
     private fun num(v:Any)=java.text.DecimalFormat("#,###").format(v)
     private fun color(v:Double)=if(v>=0)NeonUi.pink else NeonUi.mint
     private fun panel(accent:Int)=NeonUi.vertical(this).apply{background=NeonUi.panel(this@BtRobotActivity,accent);setPadding(NeonUi.dp(context,12),NeonUi.dp(context,12),NeonUi.dp(context,12),NeonUi.dp(context,12))}
     override fun onCreate(savedInstanceState:Bundle?){
-        super.onCreate(savedInstanceState);store=BtRobotStore(this)
+        super.onCreate(savedInstanceState);store=BtRobotStore(this);exportId=savedInstanceState?.getString("exportId").orEmpty()
         val root=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(context,14),NeonUi.dp(context,12),NeonUi.dp(context,14),NeonUi.dp(context,24))}
         val scroll=ScrollView(this).apply{setBackgroundColor(Color.rgb(4,17,30));addView(root)};setContentView(scroll)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
@@ -55,20 +58,26 @@ class BtRobotActivity:AppCompatActivity(){
         coverage=label("首次取得日線後，固定保存本次資料",11f);progress.addView(NeonUi.gap(this,8));progress.addView(coverage)
         root.addView(progress);root.addView(NeonUi.gap(this,10))
         startButton=NeonUi.button(this,"開始測試",NeonUi.mint){startTesting()}
-        pauseButton=NeonUi.button(this,"暫停",NeonUi.amber){BtRobotWorker.pause(this,store.active());render()}
+        pauseButton=NeonUi.button(this,"暫停",NeonUi.amber){if(!busy)BtRobotWorker.pause(this,store.active());render()}
         root.addView(NeonUi.row(this,listOf(startButton,pauseButton)))
         root.addView(NeonUi.gap(this,6))
-        bestButton=NeonUi.button(this,"目前最佳 · 條件與套用",NeonUi.pink){store.session()?.let{showBestRules(it)}};root.addView(bestButton)
+        bestButton=NeonUi.button(this,"目前最佳 · 條件與套用",NeonUi.pink){if(!busy)store.session()?.let{showBestRules(it)}};root.addView(bestButton)
         root.addView(NeonUi.gap(this,6))
         root.addView(NeonUi.row(this,listOf(NeonUi.button(this,"未測組合"){untested()},NeonUi.button(this,"測試紀錄"){sessions()})))
+        root.addView(NeonUi.gap(this,6))
+        requiredButton=NeonUi.button(this,"必選條件",NeonUi.cyan){if(!busy)BtRobotRulesDialog.show(this,required()){applyRequired(it)}};requiredButton.tag="robot-required";root.addView(requiredButton)
+        root.addView(NeonUi.gap(this,6))
+        root.addView(NeonUi.button(this,"一鍵清除零收益",NeonUi.amber){clearZeros()}.apply{tag="robot-clear-zero"})
+        root.addView(NeonUi.gap(this,6))
+        root.addView(NeonUi.row(this,listOf(NeonUi.button(this,"匯出結果／斷點"){exportCheckpoint()},NeonUi.button(this,"匯入並續跑"){importCheckpoint()})))
         root.addView(NeonUi.gap(this,6));root.addView(NeonUi.button(this,"建立新測試",NeonUi.amber){
-            MaterialAlertDialogBuilder(this).setTitle("建立新的測試批次").setMessage("會暂停目前批次並保留所有紀錄；新批次沿用目前回測的 ABC 與產業，重新取得歷史資料。")
-                .setNegativeButton("取消",null).setPositiveButton("建立"){_,_->BtRobotWorker.pause(this,store.active());store.create(base());stamp="";render()}.show()
+            if(!busy)MaterialAlertDialogBuilder(this).setTitle("建立新的測試批次").setMessage("會暂停目前批次並保留所有紀錄；新批次沿用目前回測的 ABC 與產業及必選條件，重新取得歷史資料。")
+                .setNegativeButton("取消",null).setPositiveButton("建立"){_,_->BtRobotWorker.pause(this,store.active());store.create(base(),required());stamp="";render()}.show()
         })
         root.addView(NeonUi.gap(this,10))
-        root.addView(label("${BtRobotSpace.slots.size} 個獨立開關，共 ${num(BtRobotSpace.total)} 種排列（含全部關閉）。先測基準與最佳組合附近，再探索其他組合；可暫停續跑。",12f))
+        spaceLabel=label("",12f);root.addView(spaceLabel)
         root.addView(label("目前已測最佳 ≠ 全組合最高。固定區間反覆調整可能過度擬合，不代表未來獲利；總損益含留倉、股息與估計折讓金。",12f,NeonUi.amber))
-        root.addView(label("勾選財報／法人但缺歷史證據時不通過。系統限制背景執行時可返回此頁重試；每個完成組合都已保存。",11f))
+        root.addView(label("勾選財報／法人但缺歷史證據時不通過。意外中斷 10 秒後自動續跑，手動暫停不自啟。歷史條件首次預算完成後保存，續跑直接讀取。Android 省電／背景限制可能延後啟動；每組完成即保存。",11f))
         root.addView(NeonUi.gap(this,16));root.addView(label("已測試組合",19f,NeonUi.ink,true))
         records=NeonUi.vertical(this);root.addView(records);render()
     }
@@ -80,19 +89,24 @@ class BtRobotActivity:AppCompatActivity(){
         return BtRobotSpace.settings(saved.rules,saved.sectors.ifEmpty{StockSector.entries.toSet()})
     }
     private fun startTesting(){
+        if(busy)return
         startButton.isEnabled=false
         Thread{
-            val result=runCatching{val id=store.active().ifBlank{store.create(base())};BtRobotWorker.start(this,id)}
+            val result=runCatching{val id=store.active().ifBlank{store.create(base(),required())};BtRobotWorker.start(this,id)}
             runOnUiThread{if(!isFinishing&&!isDestroyed){result.onFailure{Toast.makeText(this,"無法開始：${it.message}",Toast.LENGTH_LONG).show()};render()}}
         }.start()
     }
     internal fun render(){
+        if(busy)return
         val s=store.session();val id=s?.optString("id").orEmpty()
         if(lastId!=id){lastId=id;page=0;stamp=""}
-        val tested=s?.optLong("tested")?:0L;val remaining=BtRobotSpace.total-BigInteger.valueOf(tested)
-        val running=s?.optString("state")=="RUNNING"
+        val tested=s?.optLong("tested")?:0L;val total=BtRobotSpace.total(required());val remaining=total-BigInteger.valueOf(tested)
+        val fixed=BtRobotSpace.required(required()).bitCount()
+        requiredButton.text="必選條件 · 鎖定 $fixed 項"
+        spaceLabel.text="必選 $fixed 項 · 自由 ${65-fixed} 項 · 共 ${num(total)} 種組合。先測基準與最佳附近，再探索其他組合。已清理的組合仍標記為測過。"
+        val running=s?.optString("state") in setOf("RUNNING","RETRY")
         status.text=s?.optString("message")?:"按開始測試，自動尋找更高收益組合"
-        counts.text="已測試 ${num(tested)} 組\n未測試 ${num(remaining)} 組"
+        counts.text="已測試 ${num(tested)} 組\n未測試 ${num(remaining)} 組\n已清理 ${num(s?.optLong("cleared")?:0L)} 組零收益"
         val key=s?.optString("bestKey").orEmpty()
         best.text=if(key.isEmpty())"目前已測最佳：—" else "目前已測最佳\n${signed(s!!.getDouble("bestProfit"))} 元"
         if(key.isNotEmpty())best.setTextColor(color(s!!.getDouble("bestProfit")))
@@ -101,8 +115,8 @@ class BtRobotActivity:AppCompatActivity(){
             "批次 ${id.take(8)} · "+(if(s.has("loaded"))"資料 ${s.getInt("loaded")} / ${s.getInt("requested")} 檔"else"資料尚未備妥")+"\n產業："+settings.sectors.sortedBy{it.ordinal}.joinToString("、"){it.label}
         }
         startButton.text=when{running->"測試進行中…";s?.optString("state")=="DONE"->"全部測試完成";tested>0->"繼續／重試";else->"開始測試"}
-        startButton.isEnabled=!running&&s?.optString("state")!="DONE";pauseButton.isEnabled=running;bestButton.isEnabled=key.isNotEmpty()
-        val signature="$id-$tested-$page"
+        startButton.isEnabled=!busy&&!running&&s?.optString("state")!="DONE";pauseButton.isEnabled=running;bestButton.isEnabled=key.isNotEmpty()
+        val signature="$id-$tested-${s?.optLong("cleared")?:0}-$page"
         if(stamp!=signature){stamp=signature;renderTrials(id)}
         if(visible&&s!=null&&key.isNotEmpty()&&s.optLong("bestSeq")>s.optLong("ack")&&alert?.isShowing!=true){
             val seq=s.getLong("bestSeq");store.acknowledge(id,seq)
@@ -128,18 +142,19 @@ class BtRobotActivity:AppCompatActivity(){
             box.addView(NeonUi.row(this,listOf(NeonUi.button(this,"條件快照"){store.session(id)?.let{BtSnapshotDialog.show(this,BtSettingsCodec.encode(settings(it,key)),"第 ${r.getLong("seq")} 組")}},NeonUi.button(this,"完整日誌"){openReport(id,key)})))
             records.addView(NeonUi.gap(this,8));records.addView(box)
         }
-        if(rows.isEmpty())records.addView(label("尚未完成任何組合；載入資料不計入已測數。",12f))
-        val total=store.session(id)?.optLong("tested")?:0
+        if(rows.isEmpty())records.addView(label("目前沒有保留的結果；載入資料不計入已測數，清理不會重置已測進度。",12f))
+        val total=store.retained(id)
         val previous=NeonUi.button(this,"上一頁"){page--;stamp="";render()}.apply{isEnabled=page>0}
         val next=NeonUi.button(this,"下一頁"){page++;stamp="";render()}.apply{isEnabled=total>(page+1L)*20}
         records.addView(NeonUi.gap(this,8));records.addView(label("第 ${page+1} 頁 · 共 $total 組完整紀錄",12f));records.addView(NeonUi.row(this,listOf(previous,next)))
     }
     private fun untested(){
+        if(busy)return
         val s=store.session();if(s==null){Toast.makeText(this,"請先開始或建立測試批次",Toast.LENGTH_SHORT).show();return}
         val id=s.getString("id");val content=NeonUi.vertical(this);val preview=mutableSetOf<String>()
         var cursor=BigInteger(s.getString("cursor"))
         repeat(10){
-            val candidate=BtRobotSpace.next(BtRobotSpace.key(BtSettingsCodec.decode(s.getJSONObject("settings")).rules),s.optString("bestKey").ifBlank{null},cursor,BigInteger(s.getString("seed"))){it in preview||store.seen(id,it)}
+            val candidate=BtRobotSpace.next(BtRobotSpace.key(BtSettingsCodec.decode(s.getJSONObject("settings")).rules),s.optString("bestKey").ifBlank{null},cursor,BigInteger(s.getString("seed")),s.optString("required","0")){it in preview||store.seen(id,it)}
             if(candidate!=null){
                 preview+=candidate.key;cursor=candidate.cursor
                 content.addView(NeonUi.button(this,BtRobotSpace.rules(candidate.key).entries.joinToString(" · "){"${it.key.name.take(1)} ${it.value.size} 項"}){BtSnapshotDialog.show(this,BtSettingsCodec.encode(settings(s,candidate.key)),"尚未測試 · 候選規則")})
@@ -149,7 +164,68 @@ class BtRobotActivity:AppCompatActivity(){
         val wrap=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(context,16),NeonUi.dp(context,10),NeonUi.dp(context,16),NeonUi.dp(context,10));addView(label("未測試 ${num(store.remaining(id))} 組\n以下預覽最多 10 組；找到新最佳後順序會調整。",12f,NeonUi.ink));addView(content)}
         MaterialAlertDialogBuilder(this).setTitle("未測試組合").setView(ScrollView(this).apply{addView(wrap)}).setPositiveButton("關閉",null).show()
     }
+    private fun required()=store.session()?.optString("required","0")?:getSharedPreferences("backtest_robot",0).getString("requiredDraft","0").orEmpty()
+    internal fun applyRequired(key:String){
+        BtRobotSpace.required(key)
+        if(key==required())return
+        val old=store.active();val previous=store.session()
+        val settings=previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()
+        runTask("正在保存必選條件並沿用快取…"){
+            if(old.isNotBlank())BtRobotWorker.pause(this,old)
+            val id=store.create(settings,key)
+            if(old.isNotBlank())BtRobotCheckpoint.cloneData(store,old,id)
+            getSharedPreferences("backtest_robot",0).edit().putString("requiredDraft",key).commit()
+            "必選條件已保存；按開始測試，新批次沿用原歷史快取"
+        }
+    }
+    private fun clearZeros(){
+        val id=store.active();if(id.isBlank()||busy)return
+        runTask("正在清理零收益結果…"){
+            val count=store.clearZero(id)
+            "已清除 $count 組零收益；已測標記保留，不會重測"
+        }
+    }
+    private fun runTask(message:String,task:()->String){
+        if(busy)return;busy=true;status.text=message;startButton.isEnabled=false
+        Thread{val result=runCatching(task);runOnUiThread{busy=false;if(!isFinishing&&!isDestroyed){page=0;stamp="";render();Toast.makeText(this,result.getOrElse{"操作未完成：${it.message}"},Toast.LENGTH_LONG).show()}}}.start()
+    }
+    private fun exportCheckpoint(){
+        if(busy)return
+        exportId=store.active();if(exportId.isBlank()){Toast.makeText(this,"請先建立測試",Toast.LENGTH_SHORT).show();return}
+        @Suppress("DEPRECATION")
+        startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/zip").putExtra(Intent.EXTRA_TITLE,"AI-離職神器-機器人-${exportId.take(8)}-${System.currentTimeMillis()}.zip"),731)
+    }
+    private fun importCheckpoint(){
+        if(busy)return
+        @Suppress("DEPRECATION")
+        startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"),732)
+    }
+    override fun onSaveInstanceState(outState:Bundle){outState.putString("exportId",exportId);super.onSaveInstanceState(outState)}
+    @Deprecated("Activity result compatibility")
+    override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){
+        super.onActivityResult(requestCode,resultCode,data);val uri=data?.data?:return
+        if(resultCode!=RESULT_OK)return
+        if(requestCode==731){val id=exportId;runTask("暫停並匯出結果、斷點及快取…"){
+            BtRobotWorker.pause(this,id)
+            val temp=java.io.File(cacheDir,"robot-${java.util.UUID.randomUUID()}.zip")
+            try{BtRobotCheckpoint.export(this,id,temp);contentResolver.openOutputStream(uri,"wt")!!.use{out->temp.inputStream().use{it.copyTo(out)}}}finally{temp.delete()}
+            "已匯出 ZIP：含 CSV 結果、完整報告、斷點與歷史快取；可按繼續測試"
+        }}else if(requestCode==732)runTask("正在校驗並匯入測試斷點…"){
+            val old=store.active();val id=contentResolver.openInputStream(uri)!!.use{BtRobotCheckpoint.restore(this,it)}
+            if(old.isNotBlank())BtRobotWorker.pause(this,old)
+            BtRobotWorker.start(this,id)
+            "已匯入獨立批次並接續未測組合"
+        }
+    }
+    private fun recover(){
+        if(recovering||busy)return
+        val s=store.session()?:return
+        if(s.optString("state") !in setOf("RUNNING","RETRY"))return
+        recovering=true
+        Thread{runCatching{BtRobotWorker.recover(this,s.getString("id"),s.optString("token"))};runOnUiThread{recovering=false}}.start()
+    }
     private fun sessions(){
+        if(busy)return
         val sessions=store.sessions();if(sessions.isEmpty()){Toast.makeText(this,"尚無測試紀錄",Toast.LENGTH_SHORT).show();return}
         val names=sessions.map{ "${BacktestJournalUi.time(it.getLong("created"))} · ${it.getLong("tested")} 組\n"+if(it.has("bestProfit"))"已測最佳 ${signed(it.getDouble("bestProfit"))} 元"else"尚無結果"}
         MaterialAlertDialogBuilder(this).setTitle("選擇測試批次").setItems(names.toTypedArray()){_,i->

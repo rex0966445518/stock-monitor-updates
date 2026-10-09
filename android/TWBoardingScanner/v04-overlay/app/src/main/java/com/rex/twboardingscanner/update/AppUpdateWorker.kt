@@ -51,7 +51,7 @@ class AppUpdateWorker(c:Context,p:WorkerParameters):Worker(c,p){
         val manager=applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(NotificationChannel("app_updates","軟件更新",NotificationManager.IMPORTANCE_LOW))
         val pending=PendingIntent.getActivity(applicationContext,4210,Intent(applicationContext,AppUpdateActivity::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val n=NotificationCompat.Builder(applicationContext,"app_updates").setSmallIcon(android.R.drawable.stat_sys_download).setContentTitle("台股上車掃描器更新中").setContentText("點擊查看下載進度").setContentIntent(pending).setOngoing(true).build()
+        val n=NotificationCompat.Builder(applicationContext,"app_updates").setSmallIcon(android.R.drawable.stat_sys_download).setContentTitle("AI-離職神器更新中").setContentText("點擊查看下載進度").setContentIntent(pending).setOngoing(true).build()
         return if(Build.VERSION.SDK_INT>=29)ForegroundInfo(4210,n,ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)else ForegroundInfo(4210,n)
     }
 }

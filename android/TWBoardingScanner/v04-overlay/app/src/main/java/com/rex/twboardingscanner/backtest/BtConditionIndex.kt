@@ -2,6 +2,9 @@ package com.rex.twboardingscanner.backtest
 
 import com.rex.twboardingscanner.domain.*
 import java.time.LocalDate
+import java.io.*
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 import kotlin.math.max
 
 /** Evaluate historical facts once. Every candidate then selects subsets of the same facts. */
@@ -27,7 +30,33 @@ class BtConditionIndex private constructor(val series:List<BtSeries>,private val
         }
         return BtPrepared(series,signals,days,missing)
     }
+    fun save(file:File,fingerprint:String){
+        file.parentFile?.mkdirs();val tmp=File(file.path+".tmp")
+        DataOutputStream(BufferedOutputStream(GZIPOutputStream(tmp.outputStream()))).use{out->
+            out.writeUTF("BTINDEX1");out.writeUTF(fingerprint);out.writeInt(records.size)
+            records.forEach{r->out.writeUTF(r.code);out.writeLong(r.day.toEpochDay());repeat(3){i->out.writeLong(r.dataDates[i]?.toEpochDay()?:Long.MIN_VALUE);out.writeLong(r.passed[i]);out.writeLong(r.pending[i])}}
+            out.writeInt(days.size);days.forEach{out.writeLong(it.toEpochDay())}
+        }
+        RandomAccessFile(tmp,"rw").use{it.fd.sync()};check(tmp.renameTo(file)){"歷史條件快取無法保存"}
+    }
     companion object {
+        fun fingerprint(digest:String,settings:BtSettings)="$digest:${settings.start}:${settings.end}:${ScanConditions.VERSION}:"+BtRobotSpace.slots.joinToString(","){"${it.first.name}/${it.second}"}
+        fun read(file:File,series:List<BtSeries>,fingerprint:String):BtConditionIndex=DataInputStream(BufferedInputStream(GZIPInputStream(file.inputStream()))).use{input->
+            require(input.readUTF()=="BTINDEX1"&&input.readUTF()==fingerprint){"歷史條件快取版本或行情不符"}
+            val count=input.readInt();require(count in 0..1000000)
+            val codes=series.map{it.code}.toSet()
+            val records=List(count){
+                val code=input.readUTF();require(code in codes);val day=LocalDate.ofEpochDay(input.readLong())
+                val dates=arrayOfNulls<LocalDate>(3);val passed=LongArray(3);val pending=LongArray(3)
+                repeat(3){i->val date=input.readLong();dates[i]=if(date==Long.MIN_VALUE)null else LocalDate.ofEpochDay(date);passed[i]=input.readLong();pending[i]=input.readLong()
+                    val allowed=(1L shl ScanConditions.forRadar(RadarType.entries[i]).size)-1
+                    require((passed[i] and allowed)==passed[i]&&(pending[i] and allowed)==pending[i]&&(passed[i] and pending[i])==0L)
+                };Record(code,day,dates,passed,pending)
+            }
+            val n=input.readInt();require(n in 0..5000);val days=List(n){LocalDate.ofEpochDay(input.readLong())}
+            require(days==days.distinct().sorted()&&input.read()==-1){"歷史條件快取不完整"}
+            BtConditionIndex(series,records,days)
+        }
         fun build(series:List<BtSeries>,settings:BtSettings,progress:(String)->Unit={},cancel:()->Boolean={false}):BtConditionIndex {
             val records=mutableListOf<Record>();val calc=TechnicalCalculator()
             val options=RadarType.entries.map{ScanConditions.forRadar(it)}
