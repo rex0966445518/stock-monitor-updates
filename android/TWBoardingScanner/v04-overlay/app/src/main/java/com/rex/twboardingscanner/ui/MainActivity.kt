@@ -75,7 +75,6 @@ class MainActivity: AppCompatActivity() {
             "本次可掃描 ${sectorCounts.values.sum()} 檔 · 已選 ${openSectorBoxes?.filterValues { it.isChecked }?.keys?.sumOf { sectorCounts[it] ?: 0 } ?: 0} 檔\n按官方產業別合併顯示；電腦／資訊／雲端不等同純 AI 題材。"
     }
     private val radarSelections = mutableMapOf<RadarType, Set<String>>()
-    private var rescanPending = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -120,7 +119,13 @@ class MainActivity: AppCompatActivity() {
         paperLoop=com.rex.twboardingscanner.paper.PaperLoop(this)
         if(runCatching { com.rex.twboardingscanner.paper.PaperRepository(this).read().enabled }.getOrDefault(false))
             com.rex.twboardingscanner.paper.PaperWorker.schedule(this)
-        startFullScan()
+        b.startScanButton.setOnClickListener { startFullScan() }
+        b.updateButton.setOnClickListener { startActivity(android.content.Intent(this,AppUpdateActivity::class.java).putExtra("startUpdate",true)) }
+        b.progressTitle.text="尚未開始掃描"
+        b.progressCount.text="設定好條件後，請按「開始掃描」"
+        b.etaText.text="待命中"
+        b.scanProgress.isIndeterminate=false
+        render()
     }
 
     override fun onResume() { super.onResume();if(::paperLoop.isInitialized)paperLoop.start() }
@@ -136,6 +141,7 @@ class MainActivity: AppCompatActivity() {
         val scanRules = radarSelections.mapValues { it.value.toSet() }
         val scanSectors = enabledSectors.toSet()
         isScanning = true
+        b.startScanButton.isEnabled=false;b.startScanButton.text="掃描中…"
         latest = emptyList()
         b.scanProgress.progress = 0
         b.scanProgress.max = 0
@@ -154,6 +160,7 @@ class MainActivity: AppCompatActivity() {
             if (universe.isEmpty()) {
                 runOnUiThread {
                     isScanning = false
+                    b.startScanButton.isEnabled=true;b.startScanButton.text="開始掃描"
                     b.scanProgress.isIndeterminate = false
                     b.progressCount.text = "無法取得上市櫃資料，請檢查網路"
                 }
@@ -258,6 +265,7 @@ class MainActivity: AppCompatActivity() {
 
             runOnUiThread {
                 isScanning = false
+                b.startScanButton.isEnabled=true;b.startScanButton.text="開始掃描"
                 b.scanProgress.progress = total
                 b.progressTitle.text = "全市場掃描完成"
                 b.progressCount.text = "已處理 ${total} / ${total} 檔（100%）"
@@ -265,10 +273,7 @@ class MainActivity: AppCompatActivity() {
                 b.progressStats.text = "已分析 ${analyzed.get()}｜排除 ${excluded.get()}｜資料不足 ${insufficient.get()}｜失敗 ${failed.get()}"
                 render()
                 handler.removeCallbacksAndMessages(null)
-                if (rescanPending) {
-                    rescanPending = false
-                    startFullScan()
-                } else handler.postDelayed({ startFullScan() }, 15 * 60 * 1000L)
+
             }
         }
     }
@@ -374,7 +379,7 @@ class MainActivity: AppCompatActivity() {
             .setView(scroll)
             .setNeutralButton("產業全選",null)
             .setNegativeButton("取消", null)
-            .setPositiveButton("套用並重新掃描") { _, _ ->
+            .setPositiveButton("儲存條件") { _, _ ->
                 val chosen = sectorBoxes.filterValues { it.isChecked }.keys.toMutableSet()
                 enabledSectors = if (chosen.isEmpty()) StockSector.entries.toMutableSet() else chosen
                 saveScanSettings()
@@ -384,13 +389,14 @@ class MainActivity: AppCompatActivity() {
         sectorDialog.setOnDismissListener { openSectorBoxes=null;sectorCountNote=null }
         sectorDialog.setOnShowListener { sectorDialog.getButton(android.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener { sectorBoxes.values.forEach { it.isChecked=true } } }
         sectorDialog.show()
+        if(sectorCounts.isEmpty()&&!isScanning)coordinator.submit {
+            val universe=provider.loadUniverse { }
+            runOnUiThread { if(!isFinishing&&!isDestroyed){sectorCounts=universe.groupingBy { it.sector }.eachCount();refreshSectorCounts();if(universe.isEmpty())sectorCountNote?.text="分類暫時無法取得，請稍後重試"} }
+        }
     }
 
     private fun requestConfiguredScan() {
-        if (isScanning) {
-            rescanPending = true
-            Toast.makeText(this, "條件已儲存；本輪完成後自動依新條件重掃", Toast.LENGTH_LONG).show()
-        } else startFullScan()
+        Toast.makeText(this, "條件已儲存；請按「開始掃描」套用新條件", Toast.LENGTH_LONG).show()
     }
 
     private var financialDialog: FinancialDialog? = null
@@ -439,7 +445,7 @@ class MainActivity: AppCompatActivity() {
             .setTitle(title).setView(scroll)
             .setNeutralButton("恢復預設", null)
             .setNegativeButton("取消", null)
-            .setPositiveButton("儲存並掃描", null).create()
+            .setPositiveButton("儲存條件", null).create()
         dialog.setOnShowListener {
             dialog.getButton(android.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
                 rules.forEach { checks.getValue(it.id).isChecked = it.defaultEnabled }
