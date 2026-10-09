@@ -111,7 +111,7 @@ class BacktestJournalActivity:AppCompatActivity(){
             val rules=s.optJSONObject("rules")
             panel.addView(NeonUi.label(this,if(rules==null)"舊版條件未完整記錄" else RadarType.entries.joinToString(" · "){"${it.name.take(1)} ${rules.optJSONArray(it.name)?.length()?:0} 項"},12f,NeonUi.cyan))
             panel.addView(NeonUi.gap(this,8))
-            panel.addView(NeonUi.row(this,listOf(NeonUi.button(this,"條件快照"){MaterialAlertDialogBuilder(this).setTitle("回測條件 · ${id.take(8)}").setMessage(BacktestJournalUi.describe(s)).setPositiveButton("關閉",null).show()},NeonUi.button(this,"檢閱日誌",color){startActivity(Intent(this,BacktestActivity::class.java).putExtra("journalId",id))})))
+            panel.addView(NeonUi.row(this,listOf(NeonUi.button(this,"條件快照"){BtSnapshotDialog.show(this,s,"回測條件 · ${id.take(8)}")},NeonUi.button(this,"檢閱日誌",color){startActivity(Intent(this,BacktestActivity::class.java).putExtra("journalId",id))})))
             entries.addView(panel);entries.addView(NeonUi.gap(this,10))
         }
         if(shown<rows.size)entries.addView(NeonUi.button(this,"載入更多（已顯示 $shown / ${rows.size}）"){shown+=20;renderPage()})

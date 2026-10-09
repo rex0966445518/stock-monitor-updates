@@ -43,6 +43,7 @@ data class BtRun(val capital:Double,var cash:Double=capital,var dividendAccrued:
     val drawdown:Double get(){var peak=capital;var dd=0.0;curve.forEach{peak=max(peak,it.equity);dd=max(dd,(peak-it.equity)/peak*100)};return dd}
 }
 data class BtPrepared(val series:List<BtSeries>,val signals:Map<LocalDate,List<BtSignal>>,val days:List<LocalDate>,val pendingChecks:Int=0)
+data class BtExecutionIndex(val bars:Map<String,Map<LocalDate,DailyBar>>,val meta:Map<String,BtSeries>,val previous:Map<String,Map<LocalDate,Double>>)
 data class BtResult(val settings:BtSettings,val run:BtRun,val requested:Int,val loaded:Int,val excluded:List<String>,val note:String,val pendingChecks:Int=0)
 
 object BacktestEngine {
@@ -91,12 +92,15 @@ object BacktestEngine {
         while(PaperEngine.execution(quote,false)+1e-8<target)quote=ceilPrice(quote+tick(quote))
         return quote
     }
-    fun run(prepared:BtPrepared,settings:BtSettings,progress:(String)->Unit={},cancel:()->Boolean={false}):BtRun {
+    fun executionIndex(series:List<BtSeries>)=BtExecutionIndex(
+        series.associate{it.code to it.bars.associateBy(::date)},series.associateBy{it.code},
+        series.associate{s->s.code to s.bars.sortedBy{it.time}.distinctBy(::date).zipWithNext().associate{(prior,current)->date(current) to prior.close}})
+    fun run(prepared:BtPrepared,settings:BtSettings,progress:(String)->Unit={},cancel:()->Boolean={false},execution:BtExecutionIndex?=null):BtRun {
         require(settings.capital.isFinite()&&settings.capital>0)
         settings.validateTrading()
         val dates=prepared.days.filter{it>=settings.start&&it<=settings.end};require(dates.isNotEmpty()){ "所選區間沒有有效交易日" }
-        val indexed=prepared.series.associate{it.code to it.bars.associateBy(::date)};val meta=prepared.series.associateBy{it.code}
-        val previous=prepared.series.associate{s->s.code to s.bars.sortedBy{it.time}.distinctBy(::date).zipWithNext().associate{(prior,current)->date(current) to prior.close}}
+        val ex=execution?:executionIndex(prepared.series)
+        val indexed=ex.bars;val meta=ex.meta;val previous=ex.previous
         val result=BtRun(settings.capital,strategyVersion=settings.strategyVersion)
         dates.forEachIndexed{index,day->check(!cancel()){ "已取消回測" };advance(result,day,prepared.signals[day].orEmpty(),indexed,meta,previous,settings);progress("尾盤買入／淨利 ${btPercent(settings.targetNetPct)}% 賣出 ${index+1}/${dates.size} · $day")}
         return result

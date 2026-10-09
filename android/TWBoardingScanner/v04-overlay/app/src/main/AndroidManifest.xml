@@ -8,6 +8,7 @@
  <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.posters" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/poster_paths"/></provider>
  <service android:name="androidx.work.impl.foreground.SystemForegroundService" android:foregroundServiceType="dataSync" tools:node="merge"/>
  <activity android:name=".ui.AppUpdateActivity" android:exported="false"/>
+ <activity android:name=".ui.BtRobotActivity" android:exported="false"/>
  <activity android:name=".ui.BacktestJournalActivity" android:exported="false"/>
  <activity android:name=".ui.BacktestActivity" android:exported="false"/>
  <activity android:name=".ui.PaperTradingActivity" android:exported="false"/>

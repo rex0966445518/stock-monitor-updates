@@ -33,6 +33,7 @@ class BacktestActivity:AppCompatActivity(){
     private lateinit var runButton:com.google.android.material.button.MaterialButton
     private var displayed=""
     private var viewingLog=false
+    private var appliedRevision=""
     private var btRules:Map<RadarType,Set<String>> = emptyMap()
     private var btSectors:Set<StockSector> = emptySet()
     private lateinit var sectorButton:com.google.android.material.button.MaterialButton
@@ -46,6 +47,8 @@ class BacktestActivity:AppCompatActivity(){
     private fun tint(v:Double)=if(v>=0)NeonUi.pink else NeonUi.mint
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState);store=BacktestStore(this)
+        appliedRevision=getSharedPreferences("scanner_filters",0).getString(BtRuleApply.REVISION,"").orEmpty()
+        intent.getStringExtra("robotSession")?.let { id -> viewingLog=true;openRobotReport(id,intent.getStringExtra("robotKey").orEmpty());return }
         val logId=intent.getStringExtra("journalId")
         if(logId!=null){viewingLog=true;openJournal(logId);return}
         val config=store.configuration()
@@ -58,6 +61,8 @@ class BacktestActivity:AppCompatActivity(){
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
         root.addView(NeonUi.row(this,listOf(label("歷史回測",25f,NeonUi.ink,true),NeonUi.button(this,"返回"){finish()})))
         root.addView(label("每日篩選 → 尾盤買一張 → 達獲利目標賣出",12f,NeonUi.mint));root.addView(NeonUi.gap(this,12))
+        root.addView(NeonUi.button(this,"自動測試機器人",NeonUi.amber){startActivity(Intent(this,BtRobotActivity::class.java))})
+        root.addView(NeonUi.gap(this,8))
         root.addView(tradingControls())
         root.addView(NeonUi.gap(this,12))
         startButton=NeonUi.button(this,"起始 $start"){pick(true)};endButton=NeonUi.button(this,"結束 $end"){pick(false)}
@@ -117,8 +122,8 @@ class BacktestActivity:AppCompatActivity(){
         if(!limitOk||!targetOk)return null
         lastLimit=limit!!;lastTarget=target!!;return limit to target
     }
-    override fun onResume(){super.onResume();if(!viewingLog)handler.post(refresh)}
-    override fun onPause(){handler.removeCallbacks(refresh);if(!viewingLog&&::codes.isInitialized&&readTrading(false)!=null)store.saveDraft(draft());super.onPause()}
+    override fun onResume(){super.onResume();if(!viewingLog){reloadApplied();handler.post(refresh)}}
+    override fun onPause(){handler.removeCallbacks(refresh);if(!viewingLog&&::codes.isInitialized){reloadApplied();if(readTrading(false)!=null)store.saveDraft(draft())};super.onPause()}
     private fun pick(first:Boolean){val d=if(first)start else end;val dialog=DatePickerDialog(this,{_,y,m,day->val date=LocalDate.of(y,m+1,day);if(first){start=date;startButton.text="起始 $start"}else{end=date;endButton.text="結束 $end"}},d.year,d.monthValue-1,d.dayOfMonth);dialog.datePicker.minDate=LocalDate.of(2016,1,1).atStartOfDay(RuleMetrics.TAIPEI).toInstant().toEpochMilli();dialog.datePicker.maxDate=today.minusDays(1).atStartOfDay(RuleMetrics.TAIPEI).toInstant().toEpochMilli();dialog.show()}
     private fun launch(){
         val cash=capital.text.toString().toDoubleOrNull();val raw=codes.text.toString().trim()
@@ -208,7 +213,36 @@ class BacktestActivity:AppCompatActivity(){
         results.removeAllViews()
         results.addView(NeonUi.row(this,listOf(NeonUi.tile(this,"目前總損益","0 元","等待新的回測結果",NeonUi.cyan),NeonUi.tile(this,"目前持倉／成交","0 / 0","歷史紀錄請至回測日誌",NeonUi.cyan))))
     }
-    private fun showRules(settings:JSONObject){MaterialAlertDialogBuilder(this).setTitle("回測條件快照").setMessage(BacktestJournalUi.describe(settings)).setPositiveButton("關閉",null).show()}
+    private fun showRules(settings:JSONObject){BtSnapshotDialog.show(this,settings,afterApply={if(!viewingLog)reloadApplied()})}
+    private fun reloadApplied(){
+        val revision=getSharedPreferences("scanner_filters",0).getString(BtRuleApply.REVISION,"").orEmpty()
+        if(revision==appliedRevision||!::codes.isInitialized)return
+        val saved=runCatching{BtSettingsCodec.decode(store.configuration()!!)}.getOrNull()?:return
+        appliedRevision=revision;start=saved.start;end=saved.end;btRules=saved.rules;btSectors=saved.sectors
+        startButton.text="起始 $start";endButton.text="結束 $end";capital.setText(saved.capital.toLong().toString());codes.setText(saved.codes)
+        lastLimit=saved.maxHoldingStocks?:25;lastTarget=saved.targetNetPct
+        maxHoldings.setText(lastLimit.toString());profitTarget.setText(btPercent(saved.targetNetPct))
+        refreshRuleButtons();refreshSectorButton();store.saveDraft(saved)
+    }
+    private fun openRobotReport(id:String,key:String){
+        val root=NeonUi.vertical(this).apply{setPadding(dp(14),dp(12),dp(14),dp(24))}
+        val scroll=ScrollView(this).apply{setBackgroundColor(Color.rgb(4,17,30));addView(root)};setContentView(scroll)
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
+        root.addView(NeonUi.row(this,listOf(label("機器人測試詳情",22f,NeonUi.ink,true),NeonUi.button(this,"返回"){finish()})))
+        val loading=label("讀取組合紀錄…",13f);root.addView(loading)
+        results=NeonUi.vertical(this);root.addView(results)
+        Thread{
+            val report=runCatching{BtRobotStore(this).report(id,key)}
+            runOnUiThread{if(!isFinishing&&!isDestroyed){
+                root.removeView(loading)
+                report.fold({data->
+                    if(data==null){results.addView(label("找不到此組合紀錄",14f));return@fold}
+                    root.addView(NeonUi.row(this,listOf(NeonUi.button(this,"條件快照"){showRules(data.getJSONObject("settings"))},NeonUi.button(this,"匯出日誌"){export(data)})),1)
+                    showResult(data)
+                },{results.addView(label("讀取失敗：${it.message}",14f))})
+            }}
+        }.start()
+    }
     private fun openJournal(id:String){
         val root=NeonUi.vertical(this).apply{setPadding(dp(14),dp(12),dp(14),dp(24))}
         val scroll=ScrollView(this).apply{setBackgroundColor(Color.rgb(4,17,30));addView(root)};setContentView(scroll)

@@ -131,7 +131,7 @@ class BacktestStore(private val c:Context){
         if(!data.has("loaded"))data.put("loaded",0)
         write(reportFile(id),data);write(journalFile(id),summary(data));id
     }
-    private fun runJson(r:BtRun):JSONObject=JSONObject().put("profit",r.profit).put("equity",r.equity).put("cash",r.cash).put("realized",r.realized).put("unrealized",r.unrealized).put("dividend",r.dividendAccrued).put("rebateAccrued",r.rebateAccrued)
+    internal fun runJson(r:BtRun):JSONObject=JSONObject().put("profit",r.profit).put("equity",r.equity).put("cash",r.cash).put("realized",r.realized).put("unrealized",r.unrealized).put("dividend",r.dividendAccrued).put("rebateAccrued",r.rebateAccrued)
         .put("rebateMonths",JSONArray(r.rebateMonths.values.map{JSONObject().put("month",it.month).put("buyAmount",it.buyAmount).put("sellAmount",it.sellAmount).put("buyTrades",it.buyTrades).put("sellTrades",it.sellTrades).put("turnover",it.turnover).put("rate",it.rate).put("amount",it.amount)})).put("drawdown",r.drawdown).put("winRate",r.winRate?:JSONObject.NULL).put("buys",r.buys)
         .put("closed",r.closed.size).put("holdings",JSONArray(r.holdings.map{JSONObject().put("code",it.code).put("name",it.name).put("radar",it.radar).put("markDate",it.markDate.toString()).put("mark",it.mark).put("cost",it.cost).put("entry",it.entry).put("entryDate",it.entryDate.toString()).put("entryTime","13:30（收盤模型）").put("lotId",it.lotId).put("target",it.target).put("shares",1000).put("unrealized",com.rex.twboardingscanner.paper.PaperEngine.netSell(it.mark)-it.cost)}))
         .put("curve",JSONArray(r.curve.map{JSONObject().put("date",it.date.toString()).put("equity",it.equity).put("selected",it.selected).put("buys",it.buys).put("sells",it.sells).put("skipped",it.skipped)

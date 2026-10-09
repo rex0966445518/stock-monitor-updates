@@ -128,7 +128,7 @@ class MainActivity: AppCompatActivity() {
         render()
     }
 
-    override fun onResume() { super.onResume();if(::paperLoop.isInitialized)paperLoop.start() }
+    override fun onResume() { super.onResume();loadScanSettings();if(::paperLoop.isInitialized)paperLoop.start() }
     override fun onPause() { if(::paperLoop.isInitialized)paperLoop.stop();super.onPause() }
 
     private fun startFullScan() {
