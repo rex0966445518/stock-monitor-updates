@@ -123,8 +123,10 @@ class BacktestActivity:AppCompatActivity(){
             .setNegativeButton("取消",null).setPositiveButton("套用"){_,_->applyRules(type,options.filterIndexed{i,_->boxes[i].isChecked}.map{it.id}.toSet())}.show()
     }
     internal fun clearCurrent(){
+        val wasRunning=store.state()=="RUNNING"
         runCatching{store.saveDraft(draft());store.resetCurrent()}.onSuccess{
-            WorkManager.getInstance(this).cancelUniqueWork("historical-backtest")
+            // The run ID is already invalidated, so even a late worker cannot restore it.
+            if(wasRunning)runCatching{WorkManager.getInstance(this).cancelUniqueWork("historical-backtest")}
             displayed="";refreshStatus()
             Toast.makeText(this,"已歸零，歷史日誌仍保留",Toast.LENGTH_SHORT).show()
         }.onFailure{Toast.makeText(this,"歸零失敗：${it.message}",Toast.LENGTH_LONG).show()}

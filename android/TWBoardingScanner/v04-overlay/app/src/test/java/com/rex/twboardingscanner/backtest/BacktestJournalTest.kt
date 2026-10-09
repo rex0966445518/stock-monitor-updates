@@ -107,6 +107,7 @@ class BacktestJournalTest {
         assertTrue(box.isChecked);box.performClick()
         capture(dialog.window!!.decorView,"backtest-rule-picker-360")
         dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick()
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
         val selected=BtSettingsCodec.decode(BacktestStore(app).configuration()!!).rules[RadarType.A_EARLY_BREAKOUT]!!
         assertFalse("macd" in selected);assertTrue("price" in selected)
         assertFalse(app.getSharedPreferences("scanner_filters",0).contains("rules_${ScanConditions.VERSION}_${RadarType.A_EARLY_BREAKOUT.name}"))

@@ -69,6 +69,14 @@ jobs:
           path: _android_build/TWBoardingScanner_Android_v02/app/build/ui-previews/*.png
           if-no-files-found: ignore
 
+      - name: Upload failed test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Test-diagnostics
+          path: _android_build/TWBoardingScanner_Android_v02/app/build/test-results/testDebugUnitTest/*.xml
+          if-no-files-found: ignore
+
       - name: Prepare and verify APK
         shell: bash
         run: |
