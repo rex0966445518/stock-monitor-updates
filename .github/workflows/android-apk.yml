@@ -48,7 +48,7 @@ jobs:
           chmod 600 "$HOME/.android/debug.keystore"
           keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | head -8
 
-      - name: Prepare v0.4.13 project
+      - name: Prepare v0.4.14 project
         run: |
           rm -rf _android_build
           mkdir -p _android_build
@@ -77,7 +77,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging TWBoardingScanner-latest.apk | head -8
           ls -lh TWBoardingScanner-latest.apk
           sha256sum TWBoardingScanner-latest.apk
-          cp TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.13.apk
+          cp TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.14.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -91,4 +91,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest-android --cleanup-tag -y || true
-          gh release create latest-android TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.13.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.13：新增自買自投模擬平台、ABC候選池、每筆1000股、09:00至13:20交易限制、成本與滑價、停損停利、資產曲線、持股與交易CSV，支援背景週期檢查。"             --latest
+          gh release create latest-android TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.14.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.14：新增可選日期的歷史日線回測、每日ABC技術篩選、次日開盤1000股交易、60日訓練20日驗證的9組自動優化、樣本外損益、回撤、資料涵蓋率及報告CSV匯出。"             --latest

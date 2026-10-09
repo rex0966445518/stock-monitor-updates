@@ -115,6 +115,7 @@ class MainActivity: AppCompatActivity() {
             if (action == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) { searchHistory(); true } else false
         }
 
+        b.backtestButton.setOnClickListener { startActivity(android.content.Intent(this,BacktestActivity::class.java)) }
         b.paperButton.setOnClickListener { startActivity(android.content.Intent(this,PaperTradingActivity::class.java)) }
         paperLoop=com.rex.twboardingscanner.paper.PaperLoop(this)
         if(runCatching { com.rex.twboardingscanner.paper.PaperRepository(this).read().enabled }.getOrDefault(false))

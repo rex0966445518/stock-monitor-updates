@@ -42,6 +42,7 @@ class PaperTradingActivity:AppCompatActivity() {
         val y=scroll.scrollY;content.removeAllViews()
         content.addView(NeonUi.row(this,listOf(label("自買自投",25f,NeonUi.ink,true),NeonUi.button(this,"返回掃描"){finish()})))
         content.addView(label("模擬資金・不連接券商",12f,NeonUi.mint));space()
+        content.addView(NeonUi.button(this,"歷史回測與自動優化",NeonUi.amber){startActivity(Intent(this,BacktestActivity::class.java))});space()
         val b=runCatching{repo.read()}.getOrElse{content.addView(label("帳本無法讀取，已停止操作：${it.message}",14f,NeonUi.pink));return}
         val equity=PaperEngine.equity(b);val pnl=equity-b.capital
         val header=panel(NeonUi.mint)

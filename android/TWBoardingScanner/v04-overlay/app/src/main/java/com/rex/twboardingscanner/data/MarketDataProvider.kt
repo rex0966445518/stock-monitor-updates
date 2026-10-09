@@ -27,6 +27,13 @@ class MarketDataProvider(private val context: Context) {
         return result.distinctBy { it.code }.sortedBy { it.code }
     }
 
+    fun loadBacktestUniverse(): List<MarketStock> {
+        val sectors=loadSectorMap();val result=mutableListOf<MarketStock>()
+        loadTwseQuotes(sectors,emptyMap(),emptyMap(),result)
+        loadTpexQuotes(sectors,emptyMap(),emptyMap(),result)
+        return result.distinctBy{it.code}.sortedBy{it.code}
+    }
+
     fun loadHistory(stock: MarketStock): List<DailyBar> = loadSymbolHistory(stock.code, stock.market, false)
 
     fun loadChartHistory(code: String, market: Market? = null): List<DailyBar> {
