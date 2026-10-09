@@ -7,7 +7,7 @@ enum class Market { TWSE, TPEX }
 enum class StockSector(val label: String) {
     SEMICONDUCTOR("半導體"),
     ELECTRONICS("電子零組件"),
-    AI_SERVER("AI／伺服器"),
+    AI_SERVER("電腦／資訊／雲端"),
     OPTOELECTRONICS("光電"),
     COMMUNICATION("通訊網路"),
     ELECTROMECHANICAL("電機機械"),
@@ -17,15 +17,33 @@ enum class StockSector(val label: String) {
     SHIPPING("航運"),
     CONSTRUCTION("建材營造"),
     TOURISM_RETAIL("觀光／零售"),
-    OTHER("其他");
+    OTHER("其他"),
+    UNKNOWN("待分類");
 
     companion object {
         fun fromIndustry(raw: String): StockSector {
             val s = raw.trim()
+            val code = s.toIntOrNull()
+            if (code != null) return when(code) {
+                24 -> SEMICONDUCTOR
+                28,29,31 -> ELECTRONICS
+                25,30,36 -> AI_SERVER
+                26 -> OPTOELECTRONICS
+                27 -> COMMUNICATION
+                5,6 -> ELECTROMECHANICAL
+                1,2,3,4,7,8,9,10,11,12,21,23,33,35 -> TRADITIONAL
+                17 -> FINANCE
+                22 -> BIOTECH
+                15 -> SHIPPING
+                14 -> CONSTRUCTION
+                16,18,32,34,37,38 -> TOURISM_RETAIL
+                19,20,91 -> OTHER
+                else -> UNKNOWN
+            }
             return when {
                 s.contains("半導體") -> SEMICONDUCTOR
-                s.contains("電子零組件") || s.contains("其他電子") -> ELECTRONICS
-                s.contains("電腦") || s.contains("資訊服務") -> AI_SERVER
+                s.contains("電子零組件") || s.contains("其他電子") || s.contains("電子通路") -> ELECTRONICS
+                s.contains("電腦") || s.contains("資訊服務") || s.contains("數位雲端") -> AI_SERVER
                 s.contains("光電") -> OPTOELECTRONICS
                 s.contains("通信") || s.contains("通訊") -> COMMUNICATION
                 s.contains("電機") || s.contains("電器") -> ELECTROMECHANICAL
@@ -33,9 +51,10 @@ enum class StockSector(val label: String) {
                 s.contains("生技") || s.contains("醫療") -> BIOTECH
                 s.contains("航運") -> SHIPPING
                 s.contains("建材") || s.contains("營造") -> CONSTRUCTION
-                s.contains("觀光") || s.contains("百貨") || s.contains("貿易") || s.contains("居家生活") -> TOURISM_RETAIL
-                listOf("水泥", "食品", "塑膠", "紡織", "化學", "化工", "玻璃", "造紙", "鋼鐵", "橡膠", "汽車", "油電燃氣").any { s.contains(it) } -> TRADITIONAL
-                else -> OTHER
+                s.contains("觀光") || s.contains("百貨") || s.contains("貿易") || s.contains("居家生活") || s.contains("運動休閒") || s.contains("文化創意") || s.contains("電子商務") -> TOURISM_RETAIL
+                listOf("水泥", "食品", "塑膠", "紡織", "化學", "化工", "玻璃", "造紙", "鋼鐵", "橡膠", "汽車", "油電燃氣", "農業科技", "綠能環保").any { s.contains(it) } -> TRADITIONAL
+                s.contains("其他") || s.contains("綜合") || s.contains("存託憑證") -> OTHER
+                else -> UNKNOWN
             }
         }
     }

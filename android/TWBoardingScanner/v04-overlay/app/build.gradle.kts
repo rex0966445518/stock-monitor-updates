@@ -9,8 +9,8 @@ android {
         applicationId = "com.rex.twboardingscanner"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
-        versionName = "0.4.8"
+        versionCode = 13
+        versionName = "0.4.9"
     }
     testOptions { unitTests.isIncludeAndroidResources = true }
     buildFeatures { viewBinding = true }

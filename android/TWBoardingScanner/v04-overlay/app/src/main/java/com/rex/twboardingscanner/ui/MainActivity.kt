@@ -42,6 +42,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class MainActivity: AppCompatActivity() {
     private lateinit var b: ActivityMainBinding
+    private lateinit var posterExport: PosterExport
     private var chartDialog: StockChartDialog? = null
     private val adapter = SignalAdapter(onClick = { result ->
         openStockChart(result.code, result.name, result.snapshot.sourceStock?.market, result.snapshot.bars)
@@ -63,6 +64,15 @@ class MainActivity: AppCompatActivity() {
     private val prefs by lazy { getSharedPreferences("scanner_filters", MODE_PRIVATE) }
     private var enabledSectors: MutableSet<StockSector> = mutableSetOf()
     private var sectorCounts: Map<StockSector, Int> = emptyMap()
+    private var openSectorBoxes: Map<StockSector, CheckBox>? = null
+    private var sectorCountNote: TextView? = null
+    private fun refreshSectorCounts() {
+        openSectorBoxes?.forEach { (sector,box) ->
+            box.text="${sector.label}（${if(sectorCounts.isEmpty()) "載入中" else "${sectorCounts[sector] ?: 0} 檔"}）"
+        }
+        sectorCountNote?.text=if(sectorCounts.isEmpty()) "正在取得分類，尚未載入的股數不會顯示為 0。" else
+            "本次可掃描 ${sectorCounts.values.sum()} 檔 · 已選 ${openSectorBoxes?.filterValues { it.isChecked }?.keys?.sumOf { sectorCounts[it] ?: 0 } ?: 0} 檔\n按官方產業別合併顯示；電腦／資訊／雲端不等同純 AI 題材。"
+    }
     private val radarSelections = mutableMapOf<RadarType, Set<String>>()
     private var rescanPending = false
 
@@ -102,7 +112,12 @@ class MainActivity: AppCompatActivity() {
         b.conditionBButton.setOnClickListener { showRadarConditions(RadarType.B_DEEP_REVERSAL) }
         b.conditionCButton.setOnClickListener { showRadarConditions(RadarType.C_LONG_RED_VOLUME) }
         b.scanConditionButton.setOnClickListener { showScanConditionsDialog() }
-        b.refreshButton.setOnClickListener { startFullScan() }
+        posterExport=PosterExport(this)
+        b.refreshButton.text="導出海報"
+        b.refreshButton.setOnClickListener {
+            val snapshot=latest.toList()
+            posterExport.generate(isScanning) { day -> ScanPoster.collect(day,history.queryByDate(day),snapshot) }
+        }
         b.logButton.setOnClickListener { showLogDatePicker() }
         b.searchButton.setOnClickListener { searchHistory() }
 
@@ -139,7 +154,7 @@ class MainActivity: AppCompatActivity() {
                 return@submit
             }
 
-            sectorCounts = universe.groupingBy { it.sector }.eachCount()
+            runOnUiThread { sectorCounts = universe.groupingBy { it.sector }.eachCount(); refreshSectorCounts() }
 
             val total = universe.size
             val done = AtomicInteger(0)
@@ -321,6 +336,7 @@ class MainActivity: AppCompatActivity() {
         } else {
             saved.mapNotNull { runCatching { StockSector.valueOf(it) }.getOrNull() }.toMutableSet()
         }
+        if(saved != null && StockSector.entries.filter { it != StockSector.UNKNOWN }.all { it.name in saved }) enabledSectors.add(StockSector.UNKNOWN)
         if (enabledSectors.isEmpty()) enabledSectors = StockSector.entries.toMutableSet()
 
         // New definitions start with every base rule selected; old rule IDs never migrate.
@@ -360,24 +376,26 @@ class MainActivity: AppCompatActivity() {
         }
 
         heading("產業篩選")
+        sectorCountNote=TextView(this).apply { setTextColor(Color.parseColor("#88AEC8"));textSize=12f }
+        box.addView(sectorCountNote)
         val sectorBoxes = linkedMapOf<StockSector, CheckBox>()
         StockSector.entries.forEach { sector ->
             val cb = CheckBox(this).apply {
-                text = "${sector.label}（${sectorCounts[sector] ?: 0}）"
+                text = sector.label
                 setTextColor(Color.WHITE)
                 isChecked = sector in enabledSectors
+                setOnCheckedChangeListener { _,_ -> refreshSectorCounts() }
             }
             sectorBoxes[sector] = cb
             box.addView(cb)
         }
 
-        MaterialAlertDialogBuilder(this)
+        openSectorBoxes=sectorBoxes
+        refreshSectorCounts()
+        val sectorDialog=MaterialAlertDialogBuilder(this)
             .setTitle("共同產業篩選")
             .setView(scroll)
-            .setNeutralButton("產業全選") { _, _ ->
-                enabledSectors = StockSector.entries.toMutableSet()
-                saveScanSettings()
-            }
+            .setNeutralButton("產業全選",null)
             .setNegativeButton("取消", null)
             .setPositiveButton("套用並重新掃描") { _, _ ->
                 val chosen = sectorBoxes.filterValues { it.isChecked }.keys.toMutableSet()
@@ -385,7 +403,10 @@ class MainActivity: AppCompatActivity() {
                 saveScanSettings()
                 requestConfiguredScan()
             }
-            .show()
+            .create()
+        sectorDialog.setOnDismissListener { openSectorBoxes=null;sectorCountNote=null }
+        sectorDialog.setOnShowListener { sectorDialog.getButton(android.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener { sectorBoxes.values.forEach { it.isChecked=true } } }
+        sectorDialog.show()
     }
 
     private fun requestConfiguredScan() {
@@ -559,6 +580,7 @@ class MainActivity: AppCompatActivity() {
         coordinator.shutdownNow()
         workers.shutdownNow()
         financialDialog?.dismiss()
+        posterExport.close()
         history.close()
         super.onDestroy()
     }

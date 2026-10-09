@@ -71,8 +71,9 @@ class MarketDataProvider(private val context: Context) {
                 val o = arr.optJSONObject(i) ?: continue
                 val code = pick(o, "公司代號", "公司代碼", "Code", "SecuritiesCompanyCode") ?: continue
                 if (!code.matches(Regex("\\d{4}"))) continue
-                val name = pick(o, "公司簡稱", "公司名稱", "Name", "CompanyName") ?: code
-                val industry = pickContains(o, listOf("產業別", "產業", "Industry")) ?: ""
+                val name = pick(o, "公司簡稱", "CompanyAbbreviation", "公司名稱", "Name", "CompanyName") ?: code
+                val industry = pick(o, "產業別", "SecuritiesIndustryCode", "IndustryCode", "Industry")
+                    ?: pickContains(o, listOf("產業別", "產業", "Industry")) ?: ""
                 map[code] = name to StockSector.fromIndustry(industry)
             }
         }
