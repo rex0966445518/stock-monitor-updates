@@ -48,7 +48,7 @@ jobs:
           chmod 600 "$HOME/.android/debug.keystore"
           keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | head -8
 
-      - name: Prepare v0.4.16 project
+      - name: Prepare v0.4.17 project
         run: |
           rm -rf _android_build
           mkdir -p _android_build
@@ -85,7 +85,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging TWBoardingScanner-latest.apk | head -8
           ls -lh TWBoardingScanner-latest.apk
           sha256sum TWBoardingScanner-latest.apk
-          cp TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.16.apk
+          cp TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.17.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -99,4 +99,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest-android --cleanup-tag -y || true
-          gh release create latest-android TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.16.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.16：歷史回測新增清除歸零、獨立回測日誌與ABC條件勾選。每次保存日期、本金、產業、條件文字快照、成交與損益；歸零保留日誌，停止與失敗亦保留紀錄。回測條件不影響主頁。"             --latest
+          gh release create latest-android TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.17.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.17：每日買賣紀錄新增已實現淨利、留倉成本與估值、每日總損益，並加入CSV匯出及舊日誌補算。歷史回測新增獨立產業多選，支援半導體、傳產等類別，條件隨日誌保存。加入月成交折讓金並計入總損益，持有超過5個日曆日可扣費稅後保本出場；舊日誌保留原策略。"             --latest

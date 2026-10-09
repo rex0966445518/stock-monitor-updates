@@ -25,20 +25,22 @@ object BtSettingsCodec {
         if(saved!=null&&allSectors.filter{it!=com.rex.twboardingscanner.domain.StockSector.UNKNOWN}.all{it.name in saved})sectors.add(com.rex.twboardingscanner.domain.StockSector.UNKNOWN)
         return BtSettings(start,end,capital,codes,rules.mapValues{it.value.toSet()},sectors.ifEmpty{allSectors}.toSet())
     }
-    fun encode(s:BtSettings)=JSONObject().put("strategyVersion",2).put("rulesVersion",com.rex.twboardingscanner.domain.ScanConditions.VERSION)
+    fun encode(s:BtSettings)=JSONObject().put("strategyVersion",s.strategyVersion).put("rulesVersion",com.rex.twboardingscanner.domain.ScanConditions.VERSION)
         .put("start",s.start.toString()).put("end",s.end.toString()).put("capital",s.capital).put("codes",s.codes)
         .put("targetNetPct",3).put("rules",JSONObject().apply{s.rules.forEach{(type,ids)->put(type.name,JSONArray(ids.sorted()))}})
         .put("sectors",JSONArray(s.sectors.map{it.name}.sorted()))
         .put("sectorLabels",JSONArray(s.sectors.sortedBy{it.ordinal}.map{it.label}))
         .put("ruleLabels",JSONObject().apply{s.rules.forEach{(type,ids)->put(type.name,JSONArray(com.rex.twboardingscanner.domain.ScanConditions.forRadar(type).filter{it.id in ids}.map{it.label}))}})
-        .put("strategyLabel","尾盤各買 1,000 股；隔日起扣買賣費稅淨利 ≥ 3% 才賣出；未達標續抱，截止日保留持倉。")
+        .put("rebateModel",if(s.strategyVersion>=3)JSONObject().put("threshold",50000000).put("lowRate",0.0005).put("highRate",0.001).put("basis","每曆月買賣成交總額；超過門檻全月適用高率；未滿月依截止日累計估計，不加入可用資金")else JSONObject.NULL)
+        .put("breakEvenAfterCalendarDays",if(s.strategyVersion>=3)5 else JSONObject.NULL)
+        .put("strategyLabel",if(s.strategyVersion>=3)"尾盤各買 1,000 股；隔日起淨利 3% 賣出；持有超過 5 個日曆日改以扣費稅保本出場，虧損續抱。每月買賣合計超過 5,000 萬折讓 0.1%，否則 0.05%；估計應收折讓金納入總損益但不再投資。" else "尾盤各買 1,000 股；隔日起扣買賣費稅淨利 ≥ 3% 才賣出；未達標續抱，截止日保留持倉。")
         .put("costModel",JSONObject().put("buyFeeRate",0.001425).put("sellFeeRate",0.001425).put("minimumFee",20).put("sellTaxRate",0.003).put("slippageRate",0.001))
     fun decode(o:JSONObject):BtSettings {
-        require(o.getInt("strategyVersion")==2&&o.getString("rulesVersion")==com.rex.twboardingscanner.domain.ScanConditions.VERSION){"回測條件版本已變更，請重新開始"}
+        require(o.getInt("strategyVersion") in 2..3&&o.getString("rulesVersion")==com.rex.twboardingscanner.domain.ScanConditions.VERSION){"回測條件版本已變更，請重新開始"}
         val rules=com.rex.twboardingscanner.domain.RadarType.entries.associateWith{type->val a=o.getJSONObject("rules").getJSONArray(type.name);(0 until a.length()).map{a.getString(it)}.toSet()}
         rules.forEach{(type,ids)->require(ids.all{id->com.rex.twboardingscanner.domain.ScanConditions.forRadar(type).any{it.id==id}})}
         val a=o.getJSONArray("sectors");val sectors=(0 until a.length()).map{com.rex.twboardingscanner.domain.StockSector.valueOf(a.getString(it))}.toSet()
-        return BtSettings(LocalDate.parse(o.getString("start")),LocalDate.parse(o.getString("end")),o.getDouble("capital"),o.getString("codes"),rules,sectors)
+        return BtSettings(LocalDate.parse(o.getString("start")),LocalDate.parse(o.getString("end")),o.getDouble("capital"),o.getString("codes"),rules,sectors,o.getInt("strategyVersion"))
     }
 }
 
@@ -59,7 +61,7 @@ class BacktestWorker(c:Context,p:WorkerParameters):Worker(c,p){
             val prepared=BacktestEngine.prepare(data.series,s,progress,cancel)
             val run=BacktestEngine.run(prepared,s,progress,cancel)
             check(!cancel()){ "已取消回測" }
-            val note="現存上市櫃與目前產業分類，存在樣本／存活偏差；拆併股原始價未核對者排除。已勾 EPS／財報／法人缺少歷史證據時視為待查核，不可入選。A/B 排除當日日線，C 包含當日；C 完整收盤訊號與同收盤成交屬理想化假設，可能高估績效。日線不提供精確盤中成交時刻；13:30／09:00 皆為模型時間，觸價只記錄時段。股息列應收，不再投資；未達淨利 3% 的張數留倉估值，不強制賣出。"
+            val note="現存上市櫃與目前產業分類，存在樣本／存活偏差；拆併股原始價未核對者排除。已勾 EPS／財報／法人缺少歷史證據時視為待查核，不可入選。A/B 排除當日日線，C 包含當日；C 完整收盤訊號與同收盤成交屬理想化假設，可能高估績效。日線不提供精確盤中成交時刻；13:30／09:00 皆為模型時間，觸價只記錄時段。"+if(s.strategyVersion>=3)"股息與折讓金列應收，不再投資；持有超過 5 個日曆日可扣費稅保本賣出，仍虧損則續抱；截止日不強制平倉。"else"舊策略：股息列應收，不再投資；未達淨利 3% 續抱，截止日不強制平倉。"
             check(store.save(runId,BtResult(s,run,data.requested,data.series.size,data.excluded,note,prepared.pendingChecks))){"此回測已停止或歸零"};Result.success()
         }catch(e:Exception){store.update(runId,if(isStopped)"已取消；未完成結果不列為績效" else "回測中止：${e.message}",if(isStopped)"CANCELED" else "ERROR");Result.failure()}
     }

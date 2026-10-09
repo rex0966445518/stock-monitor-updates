@@ -40,7 +40,7 @@ class BacktestStore(private val c:Context){
         require(valid(id)&&!journalFile(id).exists()&&!reportFile(id).exists()){"回測日誌編號已存在"}
         endCurrent("已被新的回測取代；未完成結果不列為績效")
         val settings=BtSettingsCodec.encode(s)
-        val entry=JSONObject().put("id",id).put("journalVersion",1).put("strategyVersion",2)
+        val entry=JSONObject().put("id",id).put("journalVersion",1).put("strategyVersion",s.strategyVersion)
             .put("appVersion",appVersion()).put("startedAt",System.currentTimeMillis())
             .put("finishedAt",0).put("state","RUNNING").put("message","排入工作，等待網路…").put("settings",settings)
         write(journalFile(id),entry)
@@ -64,7 +64,7 @@ class BacktestStore(private val c:Context){
         if(active()!=id||state()!="RUNNING"||!valid(id)||reportFile(id).exists())return@synchronized false
         val entry=currentEntry(id)
         val settings=entry.optJSONObject("settings")?:BtSettingsCodec.encode(result.settings)
-        val o=JSONObject(entry.toString()).put("strategyVersion",2).put("state","DONE")
+        val o=JSONObject(entry.toString()).put("strategyVersion",settings.optInt("strategyVersion",2)).put("state","DONE")
             .put("finishedAt",System.currentTimeMillis()).put("message","回測完成，結果已保存")
             .put("settings",settings).put("requested",result.requested).put("loaded",result.loaded)
             .put("excluded",JSONArray(result.excluded)).put("note",result.note).put("pendingChecks",result.pendingChecks).put("run",runJson(result.run))
@@ -108,9 +108,13 @@ class BacktestStore(private val c:Context){
             report
         }else entry
     }
-    private fun runJson(r:BtRun):JSONObject=JSONObject().put("profit",r.profit).put("equity",r.equity).put("cash",r.cash).put("realized",r.realized).put("unrealized",r.unrealized).put("dividend",r.dividendAccrued).put("drawdown",r.drawdown).put("winRate",r.winRate?:JSONObject.NULL).put("buys",r.buys)
+    private fun runJson(r:BtRun):JSONObject=JSONObject().put("profit",r.profit).put("equity",r.equity).put("cash",r.cash).put("realized",r.realized).put("unrealized",r.unrealized).put("dividend",r.dividendAccrued).put("rebateAccrued",r.rebateAccrued)
+        .put("rebateMonths",JSONArray(r.rebateMonths.values.map{JSONObject().put("month",it.month).put("buyAmount",it.buyAmount).put("sellAmount",it.sellAmount).put("buyTrades",it.buyTrades).put("sellTrades",it.sellTrades).put("turnover",it.turnover).put("rate",it.rate).put("amount",it.amount)})).put("drawdown",r.drawdown).put("winRate",r.winRate?:JSONObject.NULL).put("buys",r.buys)
         .put("closed",r.closed.size).put("holdings",JSONArray(r.holdings.map{JSONObject().put("code",it.code).put("name",it.name).put("radar",it.radar).put("markDate",it.markDate.toString()).put("mark",it.mark).put("cost",it.cost).put("entry",it.entry).put("entryDate",it.entryDate.toString()).put("entryTime","13:30（收盤模型）").put("lotId",it.lotId).put("target",it.target).put("shares",1000).put("unrealized",com.rex.twboardingscanner.paper.PaperEngine.netSell(it.mark)-it.cost)}))
-        .put("curve",JSONArray(r.curve.map{JSONObject().put("date",it.date.toString()).put("equity",it.equity).put("selected",it.selected).put("buys",it.buys).put("sells",it.sells).put("skipped",it.skipped)}))
+        .put("curve",JSONArray(r.curve.map{JSONObject().put("date",it.date.toString()).put("equity",it.equity).put("selected",it.selected).put("buys",it.buys).put("sells",it.sells).put("skipped",it.skipped)
+            .put("dailyAccountingVersion",1).put("realized",it.realized?:JSONObject.NULL).put("holdingCost",it.holdingCost?:JSONObject.NULL)
+            .put("holdingValue",it.holdingValue?:JSONObject.NULL).put("holdingLots",it.holdingLots?:JSONObject.NULL).put("cash",it.cash?:JSONObject.NULL)
+            .put("dividendAccrued",it.dividendAccrued?:JSONObject.NULL).put("dayProfit",it.dayProfit?:JSONObject.NULL).put("staleLots",it.staleLots?:JSONObject.NULL).put("rebateAccrued",it.rebateAccrued?:JSONObject.NULL).put("rebateChange",it.rebateChange?:JSONObject.NULL)}))
         .put("skipped",JSONArray(r.skipped.map{JSONObject().put("date",it.date.toString()).put("code",it.code).put("reason",it.reason)}))
-        .put("trades",JSONArray(r.trades.map{JSONObject().put("date",it.date.toString()).put("time",it.time).put("timeKind",it.timeKind).put("signalDate",it.signalDate.toString()).put("dataDate",it.dataDate.toString()).put("lotId",it.lotId).put("target",it.target).put("code",it.code).put("name",it.name).put("radar",it.radar).put("side",it.side).put("shares",it.shares).put("price",it.price).put("fee",it.fee).put("tax",it.tax).put("pnl",it.pnl).put("reason",it.reason)}))
+        .put("trades",JSONArray(r.trades.map{JSONObject().put("date",it.date.toString()).put("time",it.time).put("timeKind",it.timeKind).put("signalDate",it.signalDate.toString()).put("dataDate",it.dataDate.toString()).put("lotId",it.lotId).put("target",it.target).put("code",it.code).put("name",it.name).put("radar",it.radar).put("side",it.side).put("shares",it.shares).put("price",it.price).put("turnover",it.price*it.shares).put("rebateMonth",it.date.toString().take(7)).put("fee",it.fee).put("tax",it.tax).put("pnl",it.pnl).put("reason",it.reason)}))
 }

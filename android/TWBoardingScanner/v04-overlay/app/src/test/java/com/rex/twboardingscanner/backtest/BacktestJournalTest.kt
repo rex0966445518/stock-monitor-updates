@@ -120,6 +120,49 @@ class BacktestJournalTest {
         assertFalse(app.getSharedPreferences("scanner_filters",0).contains("rules_${ScanConditions.VERSION}_${RadarType.A_EARLY_BREAKOUT.name}"))
         ctl.pause().stop().destroy()
     }
+    private fun findText(v:View,text:String,prefix:Boolean=false):View?{
+        if(v is TextView&&(if(prefix)v.text.toString().startsWith(text) else v.text.toString()==text))return v
+        if(v is ViewGroup)for(i in 0 until v.childCount){val found=findText(v.getChildAt(i),text,prefix);if(found!=null)return found}
+        return null
+    }
+    @Test fun industryCheckboxesPersistIndependentlyAndFreezeIntoEachRun(){
+        val live=app.getSharedPreferences("scanner_filters",0);live.edit().putStringSet("enabled_sectors",setOf(StockSector.FINANCE.name)).commit()
+        val ctl=Robolectric.buildActivity(BacktestActivity::class.java).setup();val activity=ctl.get()
+        findText(activity.window.decorView,"產業類型",true)!!.performClick()
+        val dialog=org.robolectric.shadows.ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
+        val view=dialog.window!!.decorView
+        findText(view,"全不選")!!.performClick()
+        findText(view,"半導體")!!.performClick();findText(view,"傳產")!!.performClick()
+        capture(view,"backtest-sector-picker-360")
+        val apply=findText(view,"套用")!!;val bounds=android.graphics.Rect(0,0,apply.width,apply.height)
+        (view as ViewGroup).offsetDescendantRectToMyCoords(apply,bounds);assertTrue(bounds.top>=0&&bounds.bottom<=view.height)
+        apply.performClick();org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        val store=BacktestStore(app);val selected=BtSettingsCodec.decode(store.configuration()!!)
+        assertEquals(setOf(StockSector.SEMICONDUCTOR,StockSector.TRADITIONAL),selected.sectors)
+        assertEquals(setOf(StockSector.FINANCE.name),live.getStringSet("enabled_sectors",null))
+        store.begin("industry-frozen",selected);activity.applySectors(setOf(StockSector.SHIPPING))
+        assertEquals(selected.sectors,BtSettingsCodec.decode(store.log("industry-frozen")!!.getJSONObject("settings")).sectors)
+        store.resetCurrent();activity.applySectors(emptySet())
+        findText(activity.window.decorView,"開始自動回測")!!.performClick()
+        assertEquals("",store.active());assertEquals("請至少選擇一個產業類型",org.robolectric.shadows.ShadowToast.getTextOfLatestToast())
+        activity.applySectors(selected.sectors);ctl.pause().stop().destroy()
+        val reopened=Robolectric.buildActivity(BacktestActivity::class.java).setup()
+        assertTrue((findText(reopened.get().window.decorView,"產業類型",true) as TextView).text.contains("半導體、傳產"))
+        reopened.pause().stop().destroy()
+    }
+    @Test fun dailyAndMonthlyMoneyCardsFitSmallPhones(){
+        val ctl=Robolectric.buildActivity(BacktestActivity::class.java).setup();val a=ctl.get()
+        fun root()=NeonUi.vertical(a).apply{setPadding(28,24,28,24);setBackgroundColor(android.graphics.Color.rgb(4,17,30))}
+        val daily=root();daily.addView(NeonUi.label(a,"每日買賣紀錄",24f,NeonUi.ink,true));daily.addView(NeonUi.label(a,"單位：元 · 費稅已計入",12f));daily.addView(NeonUi.gap(a,12))
+        val row=JSONObject().put("date","2025-08-04").put("selected",9).put("buys",9).put("sells",4).put("skipped",0).put("realized",12453.0).put("holdingCost",2856700.0).put("holdingValue",2838951.0).put("holdingLots",13).put("dayProfit",-4598.0).put("rebateChange",885.43)
+        daily.addView(BacktestDailyCard(a,row));daily.addView(NeonUi.gap(a,12))
+        val old=JSONObject(row.toString()).put("date","2025-08-05").put("holdingCost",98567000.0).put("realized",112453.0).put("dayProfit",55498.0).put("holdingValue",JSONObject.NULL).put("accountingNote","缺逐日應收款資料，無法還原留倉估值")
+        daily.addView(BacktestDailyCard(a,old));capture(daily,"backtest-daily-money-360")
+        val months=org.json.JSONArray().put(JSONObject().put("month","2025-08").put("buyTrades",105).put("sellTrades",80).put("buyAmount",28400000.0).put("sellAmount",22600000.0).put("turnover",51000000.0).put("rate",.001).put("amount",51000.0))
+        months.put(JSONObject().put("month","2025-09").put("buyTrades",8).put("sellTrades",6).put("buyAmount",1300000.0).put("sellAmount",700000.0).put("turnover",2000000.0).put("rate",.0005).put("amount",1000.0))
+        val monthly=root();monthly.addView(BacktestRebatePanel(a,JSONObject().put("rebateAccrued",52000.0).put("rebateMonths",months)))
+        capture(monthly,"backtest-rebate-monthly-360");ctl.pause().stop().destroy()
+    }
     private fun capture(view:View,name:String){
         view.measure(View.MeasureSpec.makeMeasureSpec(720,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(1600,View.MeasureSpec.EXACTLY));view.layout(0,0,720,1600)
         fun check(v:View){if(v is TextView&&v.layout!=null&&v.text.isNotEmpty())assertTrue("clipped: ${v.text}",v.layout.height<=v.height-v.compoundPaddingTop-v.compoundPaddingBottom+2);if(v is ViewGroup)for(i in 0 until v.childCount)check(v.getChildAt(i))}

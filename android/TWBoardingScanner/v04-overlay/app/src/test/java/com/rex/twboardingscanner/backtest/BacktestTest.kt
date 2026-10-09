@@ -54,7 +54,7 @@ class BacktestTest {
         assertEquals(p.days[1],sell.date);assertEquals("09:00–13:30",sell.time);assertTrue(sell.timeKind.contains("未知"))
         assertEquals(buy.lotId,sell.lotId);assertEquals(1000,sell.shares)
         assertTrue(sell.pnl>=(buy.price*1000+buy.fee)*.03-1e-8)
-        assertEquals(sell.pnl,r.profit,.001);assertTrue(r.holdings.isEmpty())
+        assertEquals(sell.pnl+r.rebateAccrued,r.profit,.001);assertTrue(r.holdings.isEmpty())
     }
     @Test fun openingGapUsesOpeningModelRatherThanFakeIntradayTime(){
         val p=prepared(2);val series=p.series.map{s->s.copy(bars=listOf(s.bars[0],bar(p.days[1],108.0,107.0,109.0)))}
@@ -65,7 +65,7 @@ class BacktestTest {
         val p=prepared(20);val series=p.series.map{s->s.copy(bars=s.bars.mapIndexed{i,b->when{ i==19->bar(p.days[i],150.0,150.0,155.0);i>=2->bar(p.days[i],60.0,60.0,61.0);else->b}})}
         val r=BacktestEngine.run(p.copy(series=series),BtSettings(p.days.first(),p.days[18]))
         assertEquals(1,r.buys);assertTrue(r.closed.isEmpty());assertEquals(1,r.holdings.size)
-        assertTrue(r.unrealized<0);assertEquals(0.0,r.realized,.001);assertEquals(r.realized+r.unrealized+r.dividendAccrued,r.profit,.001)
+        assertTrue(r.unrealized<0);assertEquals(0.0,r.realized,.001);assertEquals(r.realized+r.unrealized+r.dividendAccrued+r.rebateAccrued,r.profit,.001)
     }
     @Test fun sameStockMayAccumulateAcrossDaysButAbcDuplicatesOnlyBuyOnceDaily(){
         val p=prepared(3,signalEveryDay=true);val duplicated=p.copy(signals=p.signals.mapValues{(day,signals)->signals+BtSignal("1234","B",day.minusDays(1))+BtSignal("1234","C",day)})
@@ -84,7 +84,7 @@ class BacktestTest {
         val r=BacktestEngine.run(p.copy(series=listOf(s),signals=p.signals.filterKeys{it<p.days[2]}),BtSettings(p.days.first(),p.days.last()))
         assertEquals(1,r.closed.size);assertEquals("${p.days[1]}-1234",r.closed.single().lotId)
         assertEquals(1,r.holdings.size);assertEquals(p.days[0],r.holdings.single().entryDate);assertEquals(4000.0,r.dividendAccrued,.001)
-        assertEquals(r.realized+r.unrealized+r.dividendAccrued,r.profit,.001)
+        assertEquals(r.realized+r.unrealized+r.dividendAccrued+r.rebateAccrued,r.profit,.001)
     }
     @Test fun actualSelectedConditionsAreFrozenAndMissingFinancialsBlock(){
         val app=RuntimeEnvironment.getApplication();val prefs=app.getSharedPreferences("scanner_filters",0);prefs.edit().clear().commit()
@@ -123,7 +123,7 @@ class BacktestTest {
         val p=prepared(count=7);val settings=BtSettings(p.days.first(),p.days.last());val run=BacktestEngine.run(p,settings)
         val context=RuntimeEnvironment.getApplication();val store=BacktestStore(context);store.begin("ui-test-v2",settings)
         store.save("ui-test-v2",BtResult(settings,run,7,7,emptyList(),"版面測試 · 同收盤模型與日線時間限制"))
-        val json=store.result()!!;assertEquals(2,json.getInt("strategyVersion"));assertEquals("13:30",json.getJSONObject("run").getJSONArray("trades").getJSONObject(0).getString("time"))
+        val json=store.result()!!;assertEquals(3,json.getInt("strategyVersion"));assertEquals("13:30",json.getJSONObject("run").getJSONArray("trades").getJSONObject(0).getString("time"))
         assertEquals(run.profit,json.getJSONObject("run").getDouble("profit"),.001)
         val ctl=Robolectric.buildActivity(BacktestActivity::class.java).setup();val v=ctl.get().window.decorView
         v.measure(View.MeasureSpec.makeMeasureSpec(720,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(1600,View.MeasureSpec.EXACTLY));v.layout(0,0,720,1600)
