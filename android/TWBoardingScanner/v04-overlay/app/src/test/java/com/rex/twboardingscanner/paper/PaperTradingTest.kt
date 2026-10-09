@@ -90,7 +90,7 @@ class PaperTradingTest {
         assertThrows(Exception::class.java){repo.decode("{bad}")}
     }
     @Test fun simulatorScreenRendersOnSmallPhone(){
-        val app=RuntimeEnvironment.getApplication<android.app.Application>();val repo=PaperRepository(app)
+        val app=RuntimeEnvironment.getApplication();val repo=PaperRepository(app)
         val b=book();PaperEngine.step(b,mapOf("1234" to q()),at("09:05:00"));b.enabled=false
         app.getSharedPreferences("paper_trading_v1",0).edit().putString("book",repo.encode(b)).commit()
         val controller=Robolectric.buildActivity(PaperTradingActivity::class.java).setup();val view=controller.get().window.decorView
