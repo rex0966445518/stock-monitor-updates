@@ -68,7 +68,9 @@ class BtRobotStore(private val c:Context){
         BtRobotSpace.validate(result.settings);require(BtRobotSpace.key(result.settings.rules)==candidate.key)
         require(result.run.profit.isFinite())
         val s=session(id)!!;val finished=System.currentTimeMillis();val seq=s.getLong("tested")+1
-        val report=JSONObject().put("id","robot-$id-$seq").put("state","DONE").put("appVersion",s.getString("appVersion"))
+        val report=JSONObject().put("id",UUID.nameUUIDFromBytes("$id:${candidate.key}".toByteArray(Charsets.UTF_8)).toString())
+            .put("journalVersion",1).put("strategyVersion",result.settings.strategyVersion).put("robotSession",id).put("robotSequence",seq)
+            .put("state","DONE").put("appVersion",s.getString("appVersion"))
             .put("startedAt",started).put("finishedAt",finished).put("settings",BtSettingsCodec.encode(result.settings))
             .put("requested",result.requested).put("loaded",result.loaded).put("excluded",org.json.JSONArray(result.excluded))
             .put("pendingChecks",result.pendingChecks).put("note",result.note).put("run",BacktestStore(c).runJson(result.run))

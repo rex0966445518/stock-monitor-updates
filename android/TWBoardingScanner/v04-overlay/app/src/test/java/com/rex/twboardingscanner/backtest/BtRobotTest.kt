@@ -124,8 +124,15 @@ class BtRobotTest {
         assertEquals(2L,reopened.session(id)!!.getLong("tested"));assertEquals(BtRobotSpace.total-BigInteger.valueOf(2),reopened.remaining(id))
         assertEquals(5000.0,reopened.session(id)!!.getDouble("bestProfit"),0.0)
         val restored=reopened.report(id,first.key)!!
+        assertEquals(4,restored.getInt("strategyVersion"));assertEquals(1,restored.getInt("robotSequence"))
+        assertNotEquals(restored.getString("id"),reopened.report(id,second.key)!!.getString("id"))
         assertEquals(settings,BtSettingsCodec.decode(restored.getJSONObject("settings")));assertEquals(-20000.0,restored.getJSONObject("run").getDouble("profit"),0.0)
         assertEquals(1,reopened.trials(id,1,1).size)
+        val viewer=Robolectric.buildActivity(BacktestActivity::class.java).setup()
+        viewer.get().showResult(restored)
+        assertNotNull(find(viewer.get().window.decorView){it is TextView&&it.text.toString()=="截止日總損益"})
+        assertNotNull(find(viewer.get().window.decorView){it is TextView&&it.text.toString().contains("總損益＝已實現＋未實現＋應收股息＋估計應收折讓金")})
+        viewer.pause().stop().destroy()
         val newId=store.create(s);assertNotEquals(newId,id);assertEquals(2L,store.session(id)!!.getLong("tested"));assertEquals(0L,store.session(newId)!!.getLong("tested"))
     }
     @Test fun historicalDatasetSurvivesResumeWithoutNetworkOrDateChanges(){
