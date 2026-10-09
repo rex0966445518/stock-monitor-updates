@@ -75,5 +75,9 @@ object BacktestDailyLedger {
         }
         return out
     }
-    fun enrich(report:JSONObject)=JSONObject(report.toString()).apply{optJSONObject("run")?.let{run->run.put("curve",rows(report));run.optJSONArray("trades")?.let{run.put("trades",BacktestTradeLedger.rows(it))}}}
+    fun enrich(report:JSONObject)=JSONObject(report.toString()).apply{optJSONObject("run")?.let{run->
+        run.put("curve",rows(report))
+        run.optJSONArray("trades")?.let{run.put("trades",BacktestTradeLedger.rows(it))}
+        run.optJSONArray("holdings")?.let{run.put("holdings",BacktestHoldingLedger.rows(it))}
+    }}
 }

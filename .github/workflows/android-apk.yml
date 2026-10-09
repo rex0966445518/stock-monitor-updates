@@ -48,7 +48,7 @@ jobs:
           chmod 600 "$HOME/.android/debug.keystore"
           keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | head -8
 
-      - name: Prepare v0.4.19 project
+      - name: Prepare v0.4.20 project
         run: |
           rm -rf _android_build
           mkdir -p _android_build
@@ -90,8 +90,8 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging TWBoardingScanner-latest.apk | head -8
           ls -lh TWBoardingScanner-latest.apk
           sha256sum TWBoardingScanner-latest.apk
-          cp TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.19.apk
-          zip -q TWBoardingScanner-v0.4.19.zip TWBoardingScanner-v0.4.19.apk
+          cp TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.20.apk
+          zip -q TWBoardingScanner-v0.4.20.zip TWBoardingScanner-v0.4.20.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -105,4 +105,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest-android --cleanup-tag -y || true
-          gh release create latest-android TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.19.apk TWBoardingScanner-v0.4.19.zip             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.19：歷史回測新增可自填最高持倉檔數（預設25）及扣費稅後獲利賣出百分比（預設3%）。持倉按不同股號計算，先賣再買，滿額未買原因逐筆記錄；條件快照、日誌及完整報告保存每次設定。保留超過5個日曆日保本出場與折讓金規則。可覆蓋更新固定簽章的v0.4.17以後版本。"             --latest
+          gh release create latest-android TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.20.apk TWBoardingScanner-v0.4.20.zip             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.20：點擊已實現獲利／未實現損益可展開所有已賣出及留倉批次清單，顯示股名股號、買入成交價、賣出成交價或截止日現價、漲跌金額與百分比、淨損益及日期。清單可繼續載入全部明細；舊日誌直接支援，缺資料明確標示，歷史估值不混用今日價格。完整匯出同步補齊欄位。"             --latest

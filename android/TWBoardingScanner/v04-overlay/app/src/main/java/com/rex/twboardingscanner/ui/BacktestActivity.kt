@@ -250,7 +250,7 @@ class BacktestActivity:AppCompatActivity(){
         if(!viewingLog&&data.getString("id")!=store.active())results.addView(label("以下為上次已完成報告，本次尚無新結果。",12f,NeonUi.amber))
         results.addView(panel);results.addView(NeonUi.gap(this,8))
         val realized=r.getDouble("realized");val unrealized=r.optDouble("unrealized",pnl-realized-r.getDouble("dividend")-r.optDouble("rebateAccrued",0.0))
-        results.addView(NeonUi.row(this,listOf(NeonUi.tile(this,"已實現獲利",signed(realized),"已賣出 ${r.getInt("closed")} 張",tint(realized)),NeonUi.tile(this,"未實現損益",signed(unrealized),"持倉 ${holdings.length()} 張",tint(unrealized)))))
+        results.addView(BacktestProfitPanel(this,trades,holdings,realized,unrealized,r.getInt("closed"),curve.getJSONObject(curve.length()-1).getString("date")))
         results.addView(label("應收股息 ${money(r.getDouble("dividend"))} · 可用資金 ${money(r.getDouble("cash"))}",12f))
         results.addView(label("累計買入 ${r.optInt("buys",trades.length()-r.getInt("closed"))} 張 · 累計賣出 ${r.getInt("closed")} 張",13f,NeonUi.ink,true))
         results.addView(label("最大回撤 ${String.format(Locale.US,"%.2f%%",r.getDouble("drawdown"))} · 依每日含留倉的淨資產",12f,NeonUi.amber))
@@ -324,7 +324,7 @@ class BacktestActivity:AppCompatActivity(){
         csv("回測交易",run.getJSONArray("trades"),BacktestTradeLedger.csvFields,BacktestTradeLedger.csvHeader)
         run.optJSONArray("rebateMonths")?.let{csv("每月折讓金",it,listOf("month","buyTrades","sellTrades","buyAmount","sellAmount","turnover","rate","amount"),"月份,買入筆數,賣出筆數,買入成交額,賣出成交額,買賣總成交額,適用折讓率,估計應收折讓金")}
         csv("每日總覽",run.getJSONArray("curve"),BacktestDailyLedger.csvFields,BacktestDailyLedger.csvHeader)
-        csv("截止日留倉",run.getJSONArray("holdings"),listOf("lotId","code","name","shares","entryDate","entryTime","entry","cost","target","markDate","mark","unrealized"),"批次,股號,名稱,股數,買入日期,買入時間,買入價,含費總成本,初始獲利目標價,估值日期,估值價格,未實現損益")
+        csv("截止日留倉",run.getJSONArray("holdings"),BacktestHoldingLedger.csvFields,BacktestHoldingLedger.csvHeader)
         }
         val uris=ArrayList(files.map{FileProvider.getUriForFile(this,"$packageName.posters",it)})
         startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND_MULTIPLE).setType("*/*").putParcelableArrayListExtra(Intent.EXTRA_STREAM,uris).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),"儲存回測報告"))

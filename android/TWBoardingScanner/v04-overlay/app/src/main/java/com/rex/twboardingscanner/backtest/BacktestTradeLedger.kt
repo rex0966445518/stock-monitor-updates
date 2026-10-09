@@ -5,8 +5,8 @@ import org.json.JSONObject
 
 /** Enrich saved fills by lot, without fetching prices or changing historical performance. */
 object BacktestTradeLedger {
-    val csvFields=listOf("date","time","timeKind","lotId","signalDate","dataDate","code","name","radar","side","shares","price","buyDate","buyTime","buyTimeKind","buyPrice","buyFee","buyCost","costPerShare","sellPrice","netProfit","netProfitPct","profitState","costSource","dayClose","previousClose","dayChange","dayChangePct","tradePriceChange","tradePriceChangePct","target","turnover","rebateMonth","fee","tax","pnl","reason")
-    const val csvHeader="交易日期,時間或時段,時間性質,批次,篩選日期,日線截止日,股號,股名,區域,方向,股數,本筆成交價,原買入日期,原買入時間,原買入時間性質,買入成交價每股,買入手續費,含費總成本,含費成本每股,賣出成交價每股,已實現淨利扣費稅不含折讓,淨利率百分比,利潤狀態,成本來源,當日收盤價,前交易日收盤價,當日漲跌金額,當日漲跌幅百分比,買賣價差每股未扣費稅,買賣價差百分比未扣費稅,出場目標,成交金額,折讓歸屬月份,本筆手續費,本筆交易稅,原始損益欄位,理由"
+    val csvFields=listOf("date","time","timeKind","lotId","signalDate","dataDate","code","name","radar","side","shares","price","buyDate","buyTime","buyTimeKind","buyPrice","buyFee","buyCost","costPerShare","sellPrice","netProfit","netProfitPct","profitState","costSource","dayClose","previousClose","dayChange","dayChangePct","tradePriceChange","tradePriceChangePct","target","turnover","rebateMonth","fee","tax","pnl","reason","sellChange","sellChangePct")
+    const val csvHeader="交易日期,時間或時段,時間性質,批次,篩選日期,日線截止日,股號,股名,區域,方向,股數,本筆成交價,原買入日期,原買入時間,原買入時間性質,買入成交價每股,買入手續費,含費總成本,含費成本每股,賣出成交價每股,已實現淨利扣費稅不含折讓,淨利率百分比,利潤狀態,成本來源,當日收盤價,前交易日收盤價,當日漲跌金額,當日漲跌幅百分比,買賣價差每股未扣費稅,買賣價差百分比未扣費稅,出場目標,成交金額,折讓歸屬月份,本筆手續費,本筆交易稅,原始損益欄位,理由,賣出價相對前收漲跌金額,賣出價相對前收漲跌百分比"
     private fun n(o:JSONObject,k:String):Double?=if(!o.has(k)||o.isNull(k))null else o.optDouble(k,Double.NaN).takeIf{it.isFinite()}
     private fun s(o:JSONObject,k:String)=if(o.isNull(k))"" else o.optString(k)
     fun rows(raw:JSONArray):JSONArray {
@@ -46,6 +46,8 @@ object BacktestTradeLedger {
             val change=if(close!=null&&previous!=null)close-previous else null
             val spread=if(side=="SELL"&&price!=null&&buyPrice!=null)price-buyPrice else null
             put("dayChange",change);put("dayChangePct",if(change!=null&&previous!=null)change/previous*100 else null)
+            val sellChange=if(side=="SELL"&&price!=null&&previous!=null)price-previous else null
+            put("sellChange",sellChange);put("sellChangePct",if(sellChange!=null&&previous!=null)sellChange/previous*100 else null)
             put("tradePriceChange",spread);put("tradePriceChangePct",if(spread!=null&&buyPrice!=null)spread/buyPrice*100 else null)
             put("rebateMonth",date.take(7));put("tradeDetailsVersion",1)
             if(side=="BUY")candidates.add(t) else if(match!=null)candidates.remove(match)
