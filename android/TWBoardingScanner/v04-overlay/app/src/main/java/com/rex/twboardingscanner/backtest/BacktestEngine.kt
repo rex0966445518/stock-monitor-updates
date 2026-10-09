@@ -8,7 +8,16 @@ import java.time.temporal.ChronoUnit
 import kotlin.math.*
 
 fun defaultBtRules()=RadarType.entries.associateWith{type->ScanConditions.forRadar(type).filter{it.defaultEnabled}.map{it.id}.toSet()}
-data class BtSettings(val start:LocalDate,val end:LocalDate,val capital:Double=3000000.0,val codes:String="",val rules:Map<RadarType,Set<String>> = defaultBtRules(),val sectors:Set<StockSector> = StockSector.entries.toSet(),val strategyVersion:Int=3)
+fun btPercent(value:Double)=java.math.BigDecimal.valueOf(value).stripTrailingZeros().toPlainString()
+data class BtSettings(val start:LocalDate,val end:LocalDate,val capital:Double=3000000.0,val codes:String="",val rules:Map<RadarType,Set<String>> = defaultBtRules(),val sectors:Set<StockSector> = StockSector.entries.toSet(),val strategyVersion:Int=4,
+    val maxHoldingStocks:Int?=if(strategyVersion>=4)25 else null,val targetNetPct:Double=3.0){
+    fun validateTrading(){
+        require(strategyVersion in 2..4)
+        if(strategyVersion>=4)require(maxHoldingStocks!=null&&maxHoldingStocks>0){"最高持倉請填 1 以上的整數"}
+        else require(maxHoldingStocks==null&&targetNetPct==3.0){"舊策略必須保留原持倉及獲利規則"}
+        require(targetNetPct.isFinite()&&targetNetPct in 0.01..1000.0){"獲利賣出請填 0.01～1000%"}
+    }
+}
 data class BtSeries(val code:String,val name:String,val market:Market,val bars:List<DailyBar>,val dividends:Map<LocalDate,Double> = emptyMap())
 data class BtSignal(val code:String,val radar:String,val dataDate:LocalDate?=null)
 data class BtTrade(val date:LocalDate,val signalDate:LocalDate,val code:String,val name:String,val radar:String,val side:String,val price:Double,val fee:Double,val tax:Double,val pnl:Double,val reason:String,val shares:Int=1000,val time:String="",val timeKind:String="",val lotId:String="",val target:Double=0.0,val dataDate:LocalDate=signalDate,val dayClose:Double?=null,val previousClose:Double?=null)
@@ -69,9 +78,10 @@ object BacktestEngine {
     }
     private fun tick(p:Double)=when{p<10->.01;p<50->.05;p<100->.1;p<500->.5;p<1000->1.0;else->5.0}
     private fun ceilPrice(p:Double)=round(ceil(p/tick(p)-1e-9)*tick(p)*100)/100
-    /** Smallest permitted fill whose proceeds, after sell fees/tax, earn 3% on total buy cost. */
+    /** Smallest permitted fill earning the requested net fraction on total buy cost. */
     fun targetPrice(cost:Double,netPct:Double=0.03):Double {
         require(cost.isFinite()&&cost>0)
+        require(netPct.isFinite()&&netPct>=0&&netPct<=10)
         var price=ceilPrice(cost*(1+netPct)/1000/(1-PaperEngine.FEE_RATE-PaperEngine.TAX_RATE))
         while(PaperEngine.netSell(price)+1e-8<cost*(1+netPct))price=ceilPrice(price+tick(price))
         return price
@@ -83,14 +93,16 @@ object BacktestEngine {
     }
     fun run(prepared:BtPrepared,settings:BtSettings,progress:(String)->Unit={},cancel:()->Boolean={false}):BtRun {
         require(settings.capital.isFinite()&&settings.capital>0)
+        settings.validateTrading()
         val dates=prepared.days.filter{it>=settings.start&&it<=settings.end};require(dates.isNotEmpty()){ "所選區間沒有有效交易日" }
         val indexed=prepared.series.associate{it.code to it.bars.associateBy(::date)};val meta=prepared.series.associateBy{it.code}
         val previous=prepared.series.associate{s->s.code to s.bars.sortedBy{it.time}.distinctBy(::date).zipWithNext().associate{(prior,current)->date(current) to prior.close}}
         val result=BtRun(settings.capital,strategyVersion=settings.strategyVersion)
-        dates.forEachIndexed{index,day->check(!cancel()){ "已取消回測" };advance(result,day,prepared.signals[day].orEmpty(),indexed,meta,previous);progress("尾盤買入／淨利 3% 賣出 ${index+1}/${dates.size} · $day")}
+        dates.forEachIndexed{index,day->check(!cancel()){ "已取消回測" };advance(result,day,prepared.signals[day].orEmpty(),indexed,meta,previous,settings);progress("尾盤買入／淨利 ${btPercent(settings.targetNetPct)}% 賣出 ${index+1}/${dates.size} · $day")}
         return result
     }
-    internal fun advance(b:BtRun,day:LocalDate,signals:List<BtSignal>,bars:Map<String,Map<LocalDate,DailyBar>>,meta:Map<String,BtSeries>,previous:Map<String,Map<LocalDate,Double>>){
+    internal fun advance(b:BtRun,day:LocalDate,signals:List<BtSignal>,bars:Map<String,Map<LocalDate,DailyBar>>,meta:Map<String,BtSeries>,previous:Map<String,Map<LocalDate,Double>>,settings:BtSettings){
+        val targetFraction=settings.targetNetPct/100.0
         val previousEquity=b.equity;val previousRebate=b.rebateAccrued
         val tradesBefore=b.trades.size;val skippedBefore=b.skipped.size
         val usedShares=mutableMapOf<String,Long>()
@@ -102,7 +114,7 @@ object BacktestEngine {
             val bar=bars[p.code]?.get(day)?:return@forEach
             if(bar.volumeShares-(usedShares[p.code]?:0)<1000)return@forEach
             // From day 6 onward, the standing exit is break-even. Do not inspect the
-            // day's future high to choose a better 3% fill over an earlier break-even fill.
+            // day's future high to choose a better target fill over an earlier break-even fill.
             val aged=b.strategyVersion>=3&&ChronoUnit.DAYS.between(p.entryDate,day)>5
             val activeTarget=if(aged)targetPrice(p.cost,0.0)else p.target
             val trigger=triggerPrice(activeTarget)
@@ -110,8 +122,8 @@ object BacktestEngine {
             val atOpen=bar.open+1e-8>=trigger
             val px=if(atOpen)PaperEngine.execution(bar.open,false) else activeTarget
             val amount=px*1000;val fee=PaperEngine.fee(amount);val tax=PaperEngine.tax(amount);val net=amount-fee-tax
-            if(net+1e-8<p.cost*(if(aged)1.0 else 1.03))return@forEach
-            val reason=if(net+1e-8>=p.cost*1.03)"扣除買賣費稅後獲利至少 3%" else "持有超過 5 個日曆日，扣費稅後保本出場"
+            if(net+1e-8<p.cost*(if(aged)1.0 else 1+targetFraction))return@forEach
+            val reason=if(net+1e-8>=p.cost*(1+targetFraction))"扣除買賣費稅後獲利至少 ${btPercent(settings.targetNetPct)}%" else "持有超過 5 個日曆日，扣費稅後保本出場"
             b.cash+=net;b.holdings.remove(p);usedShares[p.code]=(usedShares[p.code]?:0)+1000
             b.trades.add(BtTrade(day,p.signalDate,p.code,p.name,p.radar,"SELL",px,fee,tax,net-p.cost,reason,time=if(atOpen)"09:00" else "09:00–13:30",timeKind=if(atOpen)"開盤價模擬，非逐筆時間" else "盤中觸價，確切時間未知",lotId=p.lotId,target=activeTarget,dataDate=p.dataDate,dayClose=bar.close,previousClose=previous[p.code]?.get(day)))
         }
@@ -120,6 +132,7 @@ object BacktestEngine {
             if(b.trades.any{it.lotId==lotId&&it.side=="BUY"})return@forEach
             val bar=bars[code]?.get(day)
             val reason=when{
+                settings.maxHoldingStocks!=null&&b.holdings.none{it.code==code}&&b.holdings.map{it.code}.distinct().size>=settings.maxHoldingStocks->"已達最高持倉 ${settings.maxHoldingStocks} 檔，未買入新股"
                 bar==null->"缺少當日收盤價"
                 bar.volumeShares-(usedShares[code]?:0)<1000->"日成交量不足模擬一張"
                 else->null
@@ -129,7 +142,7 @@ object BacktestEngine {
             if(cost>b.cash){b.skipped.add(BtSkipped(day,code,"可用資金不足一張含手續費"));return@forEach}
             val radar=matched.flatMap{it.radar.split('/')}.distinct().sorted().joinToString("/")
             val dataDate=matched.mapNotNull{it.dataDate}.maxOrNull()?:day
-            val name=meta[code]?.name?:code;val target=targetPrice(cost);b.cash-=cost;usedShares[code]=(usedShares[code]?:0)+1000
+            val name=meta[code]?.name?:code;val target=targetPrice(cost,targetFraction);b.cash-=cost;usedShares[code]=(usedShares[code]?:0)+1000
             b.holdings.add(BtHolding(code,name,radar,px,cost,day,day,bar.close,day,lotId,target,dataDate))
             b.trades.add(BtTrade(day,day,code,name,radar,"BUY",px,fee,0.0,0.0,"當日入選，收盤各買一張",time="13:30",timeKind="收盤價模擬時間，非逐筆成交",lotId=lotId,target=target,dataDate=dataDate,dayClose=bar.close,previousClose=previous[code]?.get(day)))
         }

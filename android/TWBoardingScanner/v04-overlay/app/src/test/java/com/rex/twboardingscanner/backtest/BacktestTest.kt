@@ -123,7 +123,7 @@ class BacktestTest {
         val p=prepared(count=7);val settings=BtSettings(p.days.first(),p.days.last());val run=BacktestEngine.run(p,settings)
         val context=RuntimeEnvironment.getApplication();val store=BacktestStore(context);store.begin("ui-test-v2",settings)
         store.save("ui-test-v2",BtResult(settings,run,7,7,emptyList(),"版面測試 · 同收盤模型與日線時間限制"))
-        val json=store.result()!!;assertEquals(3,json.getInt("strategyVersion"));assertEquals("13:30",json.getJSONObject("run").getJSONArray("trades").getJSONObject(0).getString("time"))
+        val json=store.result()!!;assertEquals(4,json.getInt("strategyVersion"));assertEquals("13:30",json.getJSONObject("run").getJSONArray("trades").getJSONObject(0).getString("time"))
         assertEquals(run.profit,json.getJSONObject("run").getDouble("profit"),.001)
         val ctl=Robolectric.buildActivity(BacktestActivity::class.java).setup();val v=ctl.get().window.decorView
         v.measure(View.MeasureSpec.makeMeasureSpec(720,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(1600,View.MeasureSpec.EXACTLY));v.layout(0,0,720,1600)

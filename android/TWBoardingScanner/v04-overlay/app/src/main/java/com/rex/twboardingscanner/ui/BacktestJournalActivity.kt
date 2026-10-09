@@ -21,12 +21,21 @@ internal object BacktestJournalUi {
     fun time(value:Long)=if(value>0)formatter.format(Instant.ofEpochMilli(value)) else "舊版未記錄"
     fun state(value:String)=when(value){"DONE"->"已完成";"RUNNING"->"執行中";"CANCELED"->"已停止";"ERROR"->"失敗";else->"未完成"}
     private fun strings(a:JSONArray?)=if(a==null)emptyList() else (0 until a.length()).map{a.getString(it)}
+    fun tradingSummary(s:JSONObject):String {
+        val version=s.optInt("strategyVersion",1)
+        if(version<2)return "交易限制依原始舊版報告"
+        val limit=if(version>=4&&!s.isNull("maxHoldingStocks"))"最高持倉 ${s.optInt("maxHoldingStocks")} 檔" else if(version<4)"持倉檔數不限" else "持倉上限未記錄"
+        val target=s.optDouble("targetNetPct",if(version<4)3.0 else Double.NaN)
+        val profit=if(target.isFinite())"獲利賣出 ${com.rex.twboardingscanner.backtest.btPercent(target)}%（扣費稅）" else "獲利目標未記錄"
+        return "$limit · $profit"
+    }
     fun describe(s:JSONObject):String {
         val rules=s.optJSONObject("rules");val labels=s.optJSONObject("ruleLabels")
         val sectors=strings(s.optJSONArray("sectorLabels")).ifEmpty{strings(s.optJSONArray("sectors")).map{name->StockSector.entries.firstOrNull{it.name==name}?.label?:name}}
         val intro="回測 ${s.optString("start","未記錄")} → ${s.optString("end","未記錄")}\n"+
             "初始本金 ${String.format(Locale.TAIWAN,"%,.0f",s.optDouble("capital",0.0))} 元\n"+
             "股票 ${s.optString("codes").ifBlank{"全部"}}\n產業 ${sectors.joinToString("、").ifBlank{"舊版未記錄"}}\n"+
+            "${tradingSummary(s)}\n"+
             "${s.optString("strategyLabel","舊版策略，請參考原始報告")}\n"+
             "條件版本 ${s.optString("rulesVersion","舊版未記錄")}"
         if(rules==null)return intro+"\n\n舊版沒有完整 ABC 勾選快照。"
@@ -98,6 +107,7 @@ class BacktestJournalActivity:AppCompatActivity(){
             panel.addView(NeonUi.label(this,if(complete)String.format(Locale.TAIWAN,"%+,.0f 元",pnl) else "尚無完成績效",28f,color,true))
             if(complete)panel.addView(NeonUi.label(this,"買入 ${row.optInt("buys")} 張 · 賣出 ${row.optInt("closed")} 張 · 留倉 ${row.optInt("holdings")} 張",11f))
             panel.addView(NeonUi.label(this,"本金 ${String.format(Locale.TAIWAN,"%,.0f",s.optDouble("capital",0.0))} 元",12f))
+            panel.addView(NeonUi.label(this,BacktestJournalUi.tradingSummary(s),12f,NeonUi.cyan))
             val rules=s.optJSONObject("rules")
             panel.addView(NeonUi.label(this,if(rules==null)"舊版條件未完整記錄" else RadarType.entries.joinToString(" · "){"${it.name.take(1)} ${rules.optJSONArray(it.name)?.length()?:0} 項"},12f,NeonUi.cyan))
             panel.addView(NeonUi.gap(this,8))
