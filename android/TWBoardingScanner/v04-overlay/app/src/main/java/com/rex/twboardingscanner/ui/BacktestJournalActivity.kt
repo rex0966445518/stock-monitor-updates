@@ -52,14 +52,37 @@ class BacktestJournalActivity:AppCompatActivity(){
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
         root.addView(NeonUi.row(this,listOf(NeonUi.label(this,"回測日誌",24f,NeonUi.ink,true),NeonUi.button(this,"返回"){finish()})))
         root.addView(NeonUi.label(this,"每次獨立保存 · 條件快照 · 完整買賣紀錄",12f,NeonUi.cyan))
+        root.addView(NeonUi.button(this,"匯入回測日誌 JSON"){
+            @Suppress("DEPRECATION")
+            startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"),704)
+        })
         root.addView(NeonUi.gap(this,10))
         status=NeonUi.label(this,"讀取日誌中…",12f);root.addView(status)
         entries=NeonUi.vertical(this);root.addView(entries)
     }
-    override fun onResume(){super.onResume();Thread{
+    override fun onResume(){super.onResume();reload()}
+    private fun reload(){Thread{
         val loaded=runCatching{BacktestStore(this).history()}
         runOnUiThread{if(!isFinishing&&!isDestroyed)loaded.fold({renderEntries(it)},{status.text="日誌讀取失敗：${it.message}"})}
     }.start()}
+    @Deprecated("Activity result compatibility")
+    override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){
+        super.onActivityResult(requestCode,resultCode,data)
+        val uri=data?.data?:return
+        if(requestCode!=704||resultCode!=RESULT_OK)return
+        status.text="正在匯入日誌…"
+        Thread{
+            val result=runCatching{
+                val text=contentResolver.openInputStream(uri)!!.use{input->
+                    val out=java.io.ByteArrayOutputStream();val buffer=ByteArray(8192)
+                    while(true){val n=input.read(buffer);if(n<0)break;require(out.size()+n<=32*1024*1024){"JSON 超過 32 MB"};out.write(buffer,0,n)}
+                    out.toString("UTF-8").removePrefix("\uFEFF")
+                }
+                BacktestStore(this).importReport(JSONObject(text))
+            }
+            runOnUiThread{if(!isFinishing&&!isDestroyed)result.fold({reload();android.widget.Toast.makeText(this,"已匯入獨立日誌，原始績效保留",android.widget.Toast.LENGTH_LONG).show()},{status.text="匯入失敗：請選擇匯出的完整回測報告 JSON。${it.message}"})}
+        }.start()
+    }
     internal fun renderEntries(data:List<JSONObject>){rows=data;shown=20;renderPage()}
     private fun renderPage(){
         entries.removeAllViews();status.text="共 ${rows.size} 次回測 · 新到舊排列"

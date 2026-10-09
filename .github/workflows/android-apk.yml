@@ -54,6 +54,8 @@ jobs:
           mkdir -p _android_build
           unzip -q android/TWBoardingScanner/TWBoardingScanner_Android_v02_source.zip -d _android_build
           cp -R android/TWBoardingScanner/v04-overlay/. _android_build/TWBoardingScanner_Android_v02/
+          mkdir -p _android_build/TWBoardingScanner_Android_v02/signing
+          cp android/TWBoardingScanner/signing/debug.keystore _android_build/TWBoardingScanner_Android_v02/signing/debug.keystore
           rm -f _android_build/TWBoardingScanner_Android_v02/app/src/main/java/com/rex/twboardingscanner/data/DemoDataProvider.kt
           grep -n "versionCode\|versionName" _android_build/TWBoardingScanner_Android_v02/app/build.gradle.kts
 
@@ -82,6 +84,9 @@ jobs:
         run: |
           cp _android_build/TWBoardingScanner_Android_v02/app/build/outputs/apk/debug/app-debug.apk TWBoardingScanner-latest.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs TWBoardingScanner-latest.apk
+          EXPECTED_CERT="60704cfc2efe84748087d8beaf66be317e6ad1b273030c7c08ac27773d6582fe"
+          ACTUAL_CERT=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs TWBoardingScanner-latest.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          test "$ACTUAL_CERT" = "$EXPECTED_CERT"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging TWBoardingScanner-latest.apk | head -8
           ls -lh TWBoardingScanner-latest.apk
           sha256sum TWBoardingScanner-latest.apk
@@ -99,4 +104,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest-android --cleanup-tag -y || true
-          gh release create latest-android TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.17.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.17：每日買賣紀錄新增已實現淨利、留倉成本與估值、每日總損益，並加入CSV匯出及舊日誌補算。歷史回測新增獨立產業多選，支援半導體、傳產等類別，條件隨日誌保存。加入月成交折讓金並計入總損益，持有超過5個日曆日可扣費稅後保本出場；舊日誌保留原策略。"             --latest
+          gh release create latest-android TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.17.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.17：每日買賣紀錄新增已實現淨利、留倉成本與估值、每日總損益，並加入CSV匯出及舊日誌補算。歷史回測新增獨立產業多選，支援半導體、傳產等類別，條件隨日誌保存。加入月成交折讓金並計入總損益，持有超過5個日曆日可扣費稅後保本出場；舊日誌保留原策略。修正簽章路徑並提供回測JSON匯入；舊版簽章不同，重新安裝前請先匯出日誌。"             --latest

@@ -12,6 +12,12 @@ android {
         versionCode = 21
         versionName = "0.4.17"
     }
+    signingConfigs.getByName("debug") {
+        storeFile = rootProject.file("signing/debug.keystore")
+        storePassword = "android"
+        keyAlias = "androiddebugkey"
+        keyPassword = "android"
+    }
     testOptions { unitTests.isIncludeAndroidResources = true }
     buildFeatures { viewBinding = true }
     compileOptions {

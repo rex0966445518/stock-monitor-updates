@@ -120,6 +120,16 @@ class BacktestJournalTest {
         assertFalse(app.getSharedPreferences("scanner_filters",0).contains("rules_${ScanConditions.VERSION}_${RadarType.A_EARLY_BREAKOUT.name}"))
         ctl.pause().stop().destroy()
     }
+    @Test fun importedReportIsArchivedWithoutChangingCurrentSettingsOrResults(){
+        val store=BacktestStore(app);val s=settings();store.begin("original",s);store.save("original",result(s))
+        val raw=store.log("original")!!;raw.put("id","../../unsafe");val before=raw.toString()
+        val id=store.importReport(raw);assertTrue(id.startsWith("import-"));assertEquals(before,raw.toString())
+        assertEquals(id,store.importReport(raw));assertEquals(2,store.history().size)
+        assertEquals("original",store.active());assertEquals("original",store.resultId());assertEquals(s,BtSettingsCodec.decode(store.configuration()!!))
+        val imported=store.log(id)!!;assertEquals(raw.getJSONObject("run").toString(),imported.getJSONObject("run").toString());assertEquals(raw.getJSONObject("settings").toString(),imported.getJSONObject("settings").toString())
+        assertThrows(Exception::class.java){store.importReport(JSONObject().put("settings",JSONObject()))}
+        assertEquals(2,store.history().size)
+    }
     private fun findText(v:View,text:String,prefix:Boolean=false):View?{
         if(v is TextView&&(if(prefix)v.text.toString().startsWith(text) else v.text.toString()==text))return v
         if(v is ViewGroup)for(i in 0 until v.childCount){val found=findText(v.getChildAt(i),text,prefix);if(found!=null)return found}

@@ -75,7 +75,7 @@ class BacktestStore(private val c:Context){
     }
     private fun summary(o:JSONObject):JSONObject {
         val entry=JSONObject()
-        listOf("id","journalVersion","strategyVersion","appVersion","startedAt","finishedAt","state","message","settings","legacyImported","requested","loaded").forEach{key->if(o.has(key))entry.put(key,o.get(key))}
+        listOf("id","journalVersion","strategyVersion","appVersion","startedAt","finishedAt","state","message","settings","legacyImported","requested","loaded","importDigest","importedAt","originalId").forEach{key->if(o.has(key))entry.put(key,o.get(key))}
         val run=o.optJSONObject("run")
         if(run!=null)entry.put("profit",run.getDouble("profit")).put("closed",run.getInt("closed"))
             .put("buys",run.optInt("buys",(run.optJSONArray("trades")?.length()?:0)-run.getInt("closed")))
@@ -107,6 +107,29 @@ class BacktestStore(private val c:Context){
             if(entry!=null)listOf("startedAt","finishedAt","legacyImported","state","appVersion").forEach{key->if(!report.has(key)&&entry.has(key))report.put(key,entry.get(key))}
             report
         }else entry
+    }
+    /** Restore a user-exported completed report as a separate archive; never activate a worker. */
+    fun importReport(raw:JSONObject):String=synchronized(lock){
+        val data=JSONObject(raw.toString());val settings=data.getJSONObject("settings");val run=data.getJSONObject("run")
+        require(settings.getDouble("capital").isFinite()&&settings.getDouble("capital")>0){"本金無效"}
+        java.time.LocalDate.parse(settings.getString("start"));java.time.LocalDate.parse(settings.getString("end"))
+        listOf("profit","equity","cash","realized","dividend","drawdown").forEach{require(run.getDouble(it).isFinite()){"報告金額無效"}}
+        require(run.getInt("closed")>=0)
+        val curve=run.getJSONArray("curve");require(curve.length() in 1..1000){"每日紀錄無效"}
+        for(i in 0 until curve.length()){val day=curve.getJSONObject(i);java.time.LocalDate.parse(day.getString("date"));require(day.getDouble("equity").isFinite())}
+        val trades=run.getJSONArray("trades")
+        for(i in 0 until trades.length()){val trade=trades.getJSONObject(i);java.time.LocalDate.parse(trade.getString("date"));require(trade.getString("side") in listOf("BUY","SELL"));require(trade.getDouble("price").isFinite()&&trade.getDouble("pnl").isFinite());trade.getString("code");trade.getString("name")}
+        val holdings=run.getJSONArray("holdings")
+        for(i in 0 until holdings.length()){val h=holdings.getJSONObject(i);h.getString("code");h.getString("name");h.getString("markDate");require(h.getDouble("mark").isFinite())}
+        val digest=java.security.MessageDigest.getInstance("SHA-256").digest(raw.toString().toByteArray(Charsets.UTF_8)).joinToString(""){"%02x".format(it)}
+        journal.listFiles()?.mapNotNull(::read)?.firstOrNull{it.optString("importDigest")==digest}?.let{return@synchronized it.getString("id")}
+        val id="import-"+java.util.UUID.randomUUID().toString()
+        data.put("originalId",data.optString("id")).put("id",id).put("state","DONE").put("importDigest",digest).put("importedAt",System.currentTimeMillis())
+        if(!data.has("excluded"))data.put("excluded",JSONArray())
+        if(!data.has("note"))data.put("note","使用者匯入的歷史回測紀錄；保留原始策略與績效。")
+        if(!data.has("requested"))data.put("requested",0)
+        if(!data.has("loaded"))data.put("loaded",0)
+        write(reportFile(id),data);write(journalFile(id),summary(data));id
     }
     private fun runJson(r:BtRun):JSONObject=JSONObject().put("profit",r.profit).put("equity",r.equity).put("cash",r.cash).put("realized",r.realized).put("unrealized",r.unrealized).put("dividend",r.dividendAccrued).put("rebateAccrued",r.rebateAccrued)
         .put("rebateMonths",JSONArray(r.rebateMonths.values.map{JSONObject().put("month",it.month).put("buyAmount",it.buyAmount).put("sellAmount",it.sellAmount).put("buyTrades",it.buyTrades).put("sellTrades",it.sellTrades).put("turnover",it.turnover).put("rate",it.rate).put("amount",it.amount)})).put("drawdown",r.drawdown).put("winRate",r.winRate?:JSONObject.NULL).put("buys",r.buys)
