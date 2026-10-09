@@ -143,6 +143,7 @@ class BtRobotCheckpointTest {
         (find(dialog.window!!.decorView){it.tag=="required-C_LONG_RED_VOLUME-red"} as CheckBox).performClick()
         capture(dialog.window!!.decorView,"robot-required-360.png",1450)
         dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).performClick()
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
         val rules=BtRobotSpace.rules(selected);assertEquals(setOf("price","volume"),rules[RadarType.A_EARLY_BREAKOUT]);assertEquals(setOf("red"),rules[RadarType.C_LONG_RED_VOLUME]);assertTrue(rules[RadarType.B_DEEP_REVERSAL]!!.isEmpty())
         capture(a.window.decorView.findViewById(android.R.id.content),"robot-tools-360.png",2200)
         assertEquals("AI-離職神器",app.applicationInfo.loadLabel(app.packageManager).toString())
