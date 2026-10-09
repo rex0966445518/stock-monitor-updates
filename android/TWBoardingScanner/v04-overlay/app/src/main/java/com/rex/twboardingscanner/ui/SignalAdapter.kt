@@ -14,7 +14,7 @@ import com.rex.twboardingscanner.domain.RadarType
 import com.rex.twboardingscanner.domain.SignalLight
 import com.rex.twboardingscanner.domain.SignalResult
 
-class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}):RecyclerView.Adapter<SignalAdapter.VH>() {
+class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private val onFinancial: (SignalResult) -> Unit = {}):RecyclerView.Adapter<SignalAdapter.VH>() {
     private val items = mutableListOf<SignalResult>()
 
     fun submit(list:List<SignalResult>) {
@@ -68,6 +68,9 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}):RecyclerVi
         h.b.chartView.setBars(s.bars)
         VolumeStrip.bind(h.b.volumeSummary, h.b.recentVolumes, s.bars)
 
+        h.b.financialSummary.text = s.sourceStock?.financials?.summary(RuleMetrics(s).today)
+            ?: "財務資料待查核｜EPS、營業現金流、本業獲利"
+        h.b.financialButton.setOnClickListener { onFinancial(r) }
         h.b.indicatorChips.removeAllViews()
         r.checks.filter { it.selected || it.extra }.forEach { check ->
             val short = mapOf(

@@ -49,6 +49,13 @@ object ScanConditions {
         }
         return basic + specific + listOf(
             ScanCondition("extra_eps", "EPS／營收：連續四季 EPS 均 > 0，且營收年增率 ≥ 0", true) { it.earnings },
+            ScanCondition("fin_ttm", "近四季獲利：四個連續單季 EPS 合計 > 0", true) { it.financial?.ttm(it.today)?.let { v -> v > 0 } },
+            ScanCondition("fin_positive", "穩定獲利：連續四季 EPS 每季均 > 0", true) { it.financial?.fourPositive(it.today) },
+            ScanCondition("fin_growth", "EPS 成長：近四季合計 > 前四季合計，且前四季合計 > 0", true) { it.financial?.growth(it.today) },
+            ScanCondition("fin_year3", "三年成長：最近三個完整年度 EPS 均 > 0 且逐年增加", true) { it.financial?.stableYears(3, it.today) },
+            ScanCondition("fin_year5", "五年成長：最近五個完整年度 EPS 均 > 0 且逐年增加", true) { it.financial?.stableYears(5, it.today) },
+            ScanCondition("fin_margin", "本業獲利：最新列示期間營業利益率 > 0（不代表無業外收益）", true) { it.financial?.latest(it.financial.operatingMargin, it.today)?.value?.let { v -> v > 0 } },
+            ScanCondition("fin_cash", "營業現金流：最新列示期間 > 0（原站期間口徑未明，不跨季加總）", true) { it.financial?.latest(it.financial.operatingCash, it.today)?.value?.let { v -> v > 0 } },
             ScanCondition("extra_flow", "法人：外資或投信近 5 日累計買超，且至少 3 日買超", true) { it.institutions },
             ScanCondition("extra_risk", "風險結構：報酬風險比 ≥ 2", true) { it.rewardRisk?.let { v -> v >= 2.0 - 1e-9 } },
             ScanCondition("extra_high", "避開高點：排除現價 ≥ 近 30 日最高價的 95%", true) { it.belowHigh },
@@ -58,6 +65,8 @@ object ScanConditions {
 }
 
 class RuleMetrics(val s: StockSnapshot) {
+    val today: LocalDate = java.time.Instant.ofEpochMilli(s.timestamp).atZone(TAIPEI).toLocalDate()
+    val financial = s.sourceStock?.financials
     val bars = s.bars
     val last = bars.lastOrNull()
     private val previous = bars.dropLast(1)
@@ -103,6 +112,11 @@ class RuleMetrics(val s: StockSnapshot) {
     val bodyGain: Double? get() = last?.open?.takeIf { it > 0 }?.let { (last!!.close / it - 1) * 100 }
     val closeHigh: Boolean? get() = last?.let { if (it.high <= it.low) null else (it.close - it.low) / (it.high - it.low) >= 0.75 - 1e-12 }
     val earnings: Boolean? get() {
+        if (financial != null) {
+            val positive = financial.fourPositive(today) ?: return null
+            val revenue = s.sourceStock?.revenueYoY?.takeIf { it.isFinite() } ?: return null
+            return positive && revenue >= 0
+        }
         val q = s.sourceStock?.quarterlyEps?.sortedBy { it.year * 4 + it.quarter }?.takeLast(4) ?: return null
         val revenue = s.sourceStock?.revenueYoY ?: return null
         if (q.size != 4 || q.any { it.quarter !in 1..4 || !it.eps.isFinite() } || !revenue.isFinite()) return null

@@ -19,7 +19,7 @@ class ScanRulesTest {
         val c = ScanConditions.forRadar(RadarType.C_LONG_RED_VOLUME)
         assertEquals(11, a.count { !it.extra }); assertEquals(11, b.count { !it.extra }); assertEquals(7, c.count { !it.extra })
         for (list in listOf(a,b,c)) {
-            assertEquals(5, list.count { it.extra }); assertTrue(list.all { it.defaultEnabled == !it.extra })
+            assertEquals(12, list.count { it.extra }); assertTrue(list.all { it.defaultEnabled == !it.extra })
             assertEquals(list.size, list.map { it.id }.distinct().size)
         }
         assertFalse(c.any { it.id == "macd" || it.id == "heat" })

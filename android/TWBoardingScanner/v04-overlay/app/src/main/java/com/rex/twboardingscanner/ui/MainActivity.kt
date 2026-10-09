@@ -43,9 +43,11 @@ import java.util.concurrent.atomic.AtomicInteger
 class MainActivity: AppCompatActivity() {
     private lateinit var b: ActivityMainBinding
     private var chartDialog: StockChartDialog? = null
-    private val adapter = SignalAdapter { result ->
+    private val adapter = SignalAdapter(onClick = { result ->
         openStockChart(result.code, result.name, result.snapshot.sourceStock?.market, result.snapshot.bars)
-    }
+    }, onFinancial = { result -> showFinancialReport(result) })
+    private lateinit var financialProvider: com.rex.twboardingscanner.data.FinancialDataProvider
+    private val financialWorker = Executors.newSingleThreadExecutor()
     private val engine = ScoringEngine()
     private val calculator = TechnicalCalculator()
     private lateinit var provider: MarketDataProvider
@@ -71,6 +73,7 @@ class MainActivity: AppCompatActivity() {
         setContentView(b.root)
 
         provider = MarketDataProvider(this)
+        financialProvider = com.rex.twboardingscanner.data.FinancialDataProvider(this)
         history = SignalHistoryDb(this)
         createNotificationChannel()
         askNotificationPermission()
@@ -170,10 +173,10 @@ class MainActivity: AppCompatActivity() {
                             } else {
                                 run {
                                     analyzed.incrementAndGet()
-                                    val r = RadarType.entries.mapNotNull { type ->
+                                    fun evaluate(stockToUse: com.rex.twboardingscanner.domain.MarketStock) = RadarType.entries.mapNotNull { type ->
                                         val datedBars = calculator.barsForRadar(bars, type, scanDate)
                                         if (datedBars.isEmpty()) null else {
-                                            val snap = calculator.build(stock, datedBars)
+                                            val snap = calculator.build(stockToUse, datedBars)
                                             when(type) {
                                                 RadarType.A_EARLY_BREAKOUT -> engine.evaluateA(snap, scanRules.getValue(type))
                                                 RadarType.B_DEEP_REVERSAL -> engine.evaluateB(snap, scanRules.getValue(type))
@@ -181,6 +184,14 @@ class MainActivity: AppCompatActivity() {
                                             }
                                         }
                                     }
+                                    val initial = evaluate(stock)
+                                    // Fetch financial tables only for candidates that pass selected technical rules.
+                                    val candidate = initial.any { result -> result.checks.filter { it.selected && !it.extra }.all { it.state == com.rex.twboardingscanner.domain.CheckState.PASS } }
+                                    val r = if (candidate) {
+                                        val report = financialProvider.load(stock.code)
+                                        evaluate(stock.copy(financials = report, quarterlyEps = report.eps,
+                                            epsTtm = report.ttm(scanDate)))
+                                    } else initial
                                     results.addAll(r)
 
                                     r.filter { it.light != SignalLight.NONE }.forEach { sig ->
@@ -380,6 +391,44 @@ class MainActivity: AppCompatActivity() {
         } else startFullScan()
     }
 
+    private fun showFinancialReport(result: SignalResult) {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16),dp(8),dp(16),dp(8)) }
+        val info = TextView(this).apply { textSize = 14f; setTextColor(Color.WHITE); setTextIsSelectable(true) }
+        val today = java.time.LocalDate.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI)
+        fun display(report: com.rex.twboardingscanner.domain.FinancialReport?) {
+            info.text = (report?.summary(today) ?: "財務資料尚未查核，按下方按鈕讀取。") +
+                (report?.let { "\n查核／快取時間：" + java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.TAIWAN).apply { timeZone = java.util.TimeZone.getTimeZone("Asia/Taipei") }.format(java.util.Date(it.fetchedAt)) } ?: "") +
+                "\n\n資料來源：HiStock。快取24小時；查核結果不代表未來獲利。\n現金流原站未明確標示單季／累計及單位，本版只判斷最新列示值正負，不計算全年或自由現金流。\n勾選而缺資料會阻擋入選。財務查核後請重新掃描，才會更新選股清單。"
+        }
+        display(result.snapshot.sourceStock?.financials)
+        box.addView(info)
+        listOf("每股盈餘", "現金流量表", "利潤比率").forEach { topic ->
+            box.addView(android.widget.Button(this).apply {
+                text = "HiStock｜$topic"
+                setOnClickListener { runCatching { startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse(com.rex.twboardingscanner.data.FinancialDataProvider.url(result.code,topic)))) }
+                    .onFailure { Toast.makeText(this@MainActivity,"無法開啟瀏覽器",Toast.LENGTH_SHORT).show() } }
+            })
+        }
+        val dialog = MaterialAlertDialogBuilder(this).setTitle("${result.code} ${result.name}｜財務查核")
+            .setView(ScrollView(this).apply { addView(box) }).setNegativeButton("關閉",null)
+            .setPositiveButton("讀取財報",null).create()
+        var job: java.util.concurrent.Future<*>? = null
+        dialog.setOnDismissListener { job?.cancel(true) }
+        dialog.setOnShowListener {
+            val button = dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
+            button.setOnClickListener {
+                button.isEnabled = false
+                info.text = "正在查核 HiStock 財報…"
+                job = financialWorker.submit {
+                    val report = financialProvider.load(result.code)
+                    runOnUiThread { if (!isFinishing && !isDestroyed && dialog.isShowing) { display(report); button.isEnabled = true } }
+                }
+            }
+        }
+        dialog.show()
+    }
+
     private fun showRadarConditions(type: RadarType) {
         val title = when (type) {
             RadarType.A_EARLY_BREAKOUT -> "A｜起漲掃描條件"
@@ -392,7 +441,7 @@ class MainActivity: AppCompatActivity() {
             setPadding(dp(16), dp(8), dp(16), dp(8))
         }
         box.addView(TextView(this).apply {
-            text = "勾選條件全部滿足才入選；未勾選不限制。基本條件預設全選，額外查核預設關閉。\nA/B 排除台灣當日日線；C 使用最新日 K。\nB 通過後若 RSI>50 且收盤>20日線，另標示技術升級；不辨識 W 底形狀。\n額外資料不足標示待查核，勾選後會阻擋入選。目前四季EPS與逐日法人尚未接入。分數為所選條件通過率。\n風險估算：前20日最低價為支撐，支撐下1%為失效價，前60日最高價為壓力；(壓力−現價)/(現價−失效價)≥2。\n漲停估算：前收盤×1.1，按台股跳動單位向下取整；非交易所公告漲停價。\nC 為觀察訊號，尚無回測證明隔天一定續漲。"
+            text = "勾選條件全部滿足才入選；未勾選不限制。基本條件預設全選，額外查核預設關閉。\nA/B 排除台灣當日日線；C 使用最新日 K。\nB 通過後若 RSI>50 且收盤>20日線，另標示技術升級；不辨識 W 底形狀。\n額外資料不足標示待查核，勾選後會阻擋入選。HiStock 財報會查核技術候選股，快取24小時；HTTP403/429、格式變更、資料過期均待查核。逐日法人尚未接入。分數為所選條件通過率，不是公司評級。\n財務條件共用於ABC、可各自勾選；EPS為正不代表現金流為正。產業EPS範圍不是通用及格線，未設成硬門檻。\n現金流使用原站最新列示期間，不跨季加總；金融業現金流需另行解讀。營業利益率為正不能排除一次性業外收益。\n風險估算：前20日最低價為支撐，支撐下1%為失效價，前60日最高價為壓力；(壓力−現價)/(現價−失效價)≥2。\n漲停估算：前收盤×1.1，按台股跳動單位向下取整；非交易所公告漲停價。\nC 為觀察訊號，尚無回測證明隔天一定續漲。"
             setTextColor(Color.parseColor("#9FBAD0"))
         })
         var extraHeadingShown = false
@@ -537,6 +586,7 @@ class MainActivity: AppCompatActivity() {
         handler.removeCallbacksAndMessages(null)
         coordinator.shutdownNow()
         workers.shutdownNow()
+        financialWorker.shutdownNow()
         history.close()
         super.onDestroy()
     }

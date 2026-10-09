@@ -48,7 +48,7 @@ jobs:
           chmod 600 "$HOME/.android/debug.keystore"
           keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | head -8
 
-      - name: Prepare v0.4.6 project
+      - name: Prepare v0.4.7 project
         run: |
           rm -rf _android_build
           mkdir -p _android_build
@@ -69,7 +69,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging TWBoardingScanner-latest.apk | head -8
           ls -lh TWBoardingScanner-latest.apk
           sha256sum TWBoardingScanner-latest.apk
-          cp TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.6.apk
+          cp TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.7.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -83,4 +83,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest-android --cleanup-tag -y || true
-          gh release create latest-android TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.6.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.6：卡片直接顯示完整寬度日K、成交量、MACD，加入最新成交張數、較前日增減、20日均量倍數及近5日數據；新日誌保存圖表。點擊仍可放大。固定 Beta 簽章。"             --latest
+          gh release create latest-android TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.7.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.7：ABC新增近四季EPS、獲利成長、三/五年成長、本業獲利及營業現金流勾選條件；加入HiStock表格讀取、財務查核面板與來源連結。來源拒絕連線或資料不足標示待查核，勾選後不入選。開發環境實測HiStock回傳403，尚未驗證手機端成功讀取。固定Beta簽章。"             --latest
