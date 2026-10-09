@@ -53,6 +53,26 @@ class FinancialLayoutTest {
         }
         if(view is ViewGroup)for(i in 0 until view.childCount)assertLabelsFit(view.getChildAt(i))
     }
+    @Test fun mainScreenFiltersFitAndRespondToSelection() {
+        val c=ContextThemeWrapper(RuntimeEnvironment.getApplication(),R.style.Theme_TWBoardingScanner)
+        val b=com.rex.twboardingscanner.databinding.ActivityMainBinding.inflate(android.view.LayoutInflater.from(c))
+        b.progressTitle.text="全市場掃描完成"
+        b.progressCount.text="已處理 1950 / 1950 檔（100%）"
+        b.etaText.text="掃描完成"
+        b.progressStats.text="已分析 1950｜排除 0｜資料不足 0｜失敗 0"
+        b.scanProgress.max=1950;b.scanProgress.progress=1950
+        b.resultFilters.update(listOf(8,0,4,125,5400),0)
+        var selected=-1
+        b.resultFilters.onSelected={selected=it;b.resultFilters.update(listOf(8,0,4,125,5400),it)}
+        val firstRow=b.resultFilters.getChildAt(0) as ViewGroup
+        firstRow.getChildAt(2).performClick()
+        assertEquals(2,selected);assertTrue(firstRow.getChildAt(2).isSelected)
+        assertFalse(firstRow.getChildAt(0).isSelected)
+        measure(b.root,NeonUi.dp(c,360),NeonUi.dp(c,800));assertLabelsFit(b.root)
+        screenshot(b.root,"main-screen-360")
+        RuntimeEnvironment.setFontScale(1.3f)
+        measure(b.root,NeonUi.dp(c,360),NeonUi.dp(c,800));assertLabelsFit(b.root)
+    }
     @Test fun compactCardAndExpandedPanelRenderWithoutClippedText() {
         val c=ContextThemeWrapper(RuntimeEnvironment.getApplication(),R.style.Theme_TWBoardingScanner)
         val width=NeonUi.dp(c,336)

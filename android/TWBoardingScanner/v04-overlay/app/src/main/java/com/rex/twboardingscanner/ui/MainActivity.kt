@@ -20,7 +20,6 @@ import androidx.core.app.NotificationCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.tabs.TabLayout
 import com.rex.twboardingscanner.data.HistoryRow
 import com.rex.twboardingscanner.data.MarketDataProvider
 import com.rex.twboardingscanner.data.SignalHistoryDb
@@ -97,17 +96,7 @@ class MainActivity: AppCompatActivity() {
         b.recycler.layoutManager = LinearLayoutManager(this)
         b.recycler.adapter = adapter
 
-        listOf("今日新觸發", "A｜起漲", "B｜深跌", "C｜長紅爆量", "待查核", "未通過").forEach {
-            b.tabLayout.addTab(b.tabLayout.newTab().setText(it))
-        }
-        b.tabLayout.addOnTabSelectedListener(object: TabLayout.OnTabSelectedListener {
-            override fun onTabSelected(tab: TabLayout.Tab?) {
-                selectedTab = tab?.position ?: 0
-                render()
-            }
-            override fun onTabUnselected(tab: TabLayout.Tab?) {}
-            override fun onTabReselected(tab: TabLayout.Tab?) {}
-        })
+        b.resultFilters.onSelected = { index -> selectedTab = index; render() }
 
         b.conditionAButton.setOnClickListener { showRadarConditions(RadarType.A_EARLY_BREAKOUT) }
         b.conditionBButton.setOnClickListener { showRadarConditions(RadarType.B_DEEP_REVERSAL) }
@@ -121,6 +110,9 @@ class MainActivity: AppCompatActivity() {
         }
         b.logButton.setOnClickListener { showLogDatePicker() }
         b.searchButton.setOnClickListener { searchHistory() }
+        b.searchInput.setOnEditorActionListener { _, action, _ ->
+            if (action == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) { searchHistory(); true } else false
+        }
 
         startFullScan()
     }
@@ -177,7 +169,6 @@ class MainActivity: AppCompatActivity() {
                 b.scanProgress.max = total
                 b.scanProgress.progress = 0
                 b.progressTitle.text = "全市場逐檔掃描中"
-                b.statusText.text = "全市場 ${total} 檔｜每一檔都會回報處理狀態"
             }
 
             universe.forEach { stock ->
@@ -259,11 +250,8 @@ class MainActivity: AppCompatActivity() {
                 b.scanProgress.progress = total
                 b.progressTitle.text = "全市場掃描完成"
                 b.progressCount.text = "已處理 ${total} / ${total} 檔（100%）"
-                b.etaText.text = "新觸發 ${newCount.get()} 檔"
-                updateSummary(
-                    total, copy, newCount.get(),
-                    analyzed.get(), excluded.get(), insufficient.get(), failed.get()
-                )
+                b.etaText.text = "掃描完成"
+                b.progressStats.text = "已分析 ${analyzed.get()}｜排除 ${excluded.get()}｜資料不足 ${insufficient.get()}｜失敗 ${failed.get()}"
                 render()
                 handler.removeCallbacksAndMessages(null)
                 if (rescanPending) {
@@ -301,37 +289,10 @@ class MainActivity: AppCompatActivity() {
         }
     }
 
-    private fun updateSummary(
-        universe:Int,
-        all:List<SignalResult>,
-        newTriggers:Int,
-        analyzed:Int,
-        excluded:Int,
-        insufficient:Int,
-        failed:Int
-    ) {
-        val a = all.count { it.radarType == RadarType.A_EARLY_BREAKOUT && it.light != SignalLight.NONE }
-        val bb = all.count { it.radarType == RadarType.B_DEEP_REVERSAL && it.light != SignalLight.NONE }
-        val c = all.count { it.radarType == RadarType.C_LONG_RED_VOLUME && it.light != SignalLight.NONE }
-        b.statusText.text =
-            "全市場 ${universe}｜已分析 ${analyzed}｜排除 ${excluded}｜不足 ${insufficient}｜失敗 ${failed}\nA ${a}｜B ${bb}｜C ${c}｜新觸發 ${newTriggers}"
-        b.progressStats.text = "已分析 ${analyzed}｜排除 ${excluded}｜資料不足 ${insufficient}｜失敗 ${failed}"
-    }
-
     private fun render() {
-        val filtered = when(selectedTab) {
-            1 -> latest.filter { it.radarType == RadarType.A_EARLY_BREAKOUT && it.light != SignalLight.NONE }
-            2 -> latest.filter { it.radarType == RadarType.B_DEEP_REVERSAL && it.light != SignalLight.NONE }
-            3 -> latest.filter { it.radarType == RadarType.C_LONG_RED_VOLUME && it.light != SignalLight.NONE }
-            4 -> latest.filter { r -> r.checks.any { it.selected && it.state == com.rex.twboardingscanner.domain.CheckState.PENDING } }
-            5 -> latest.filter { r -> r.checks.any { it.selected && it.state == com.rex.twboardingscanner.domain.CheckState.FAIL } }
-            else -> latest.filter { it.light != SignalLight.NONE }
-        }.distinctBy { "${it.code}_${it.radarType}" }.sortedByDescending { it.score }
-
-        b.summaryA.text = "A 起漲\n${latest.count { it.radarType == RadarType.A_EARLY_BREAKOUT && it.light != SignalLight.NONE }}"
-        b.summaryB.text = "B 反轉\n${latest.count { it.radarType == RadarType.B_DEEP_REVERSAL && it.light != SignalLight.NONE }}"
-        b.summaryC.text = "C 爆量\n${latest.count { it.radarType == RadarType.C_LONG_RED_VOLUME && it.light != SignalLight.NONE }}"
-        adapter.submit(filtered)
+        val groups = (0..4).map { ResultFilters.select(latest, it) }
+        b.resultFilters.update(groups.map { it.size }, selectedTab)
+        adapter.submit(groups[selectedTab])
     }
 
     private fun loadScanSettings() {

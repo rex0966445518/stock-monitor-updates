@@ -48,7 +48,7 @@ jobs:
           chmod 600 "$HOME/.android/debug.keystore"
           keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | head -8
 
-      - name: Prepare v0.4.11 project
+      - name: Prepare v0.4.12 project
         run: |
           rm -rf _android_build
           mkdir -p _android_build
@@ -77,7 +77,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging TWBoardingScanner-latest.apk | head -8
           ls -lh TWBoardingScanner-latest.apk
           sha256sum TWBoardingScanner-latest.apk
-          cp TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.11.apk
+          cp TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.12.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -91,4 +91,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest-android --cleanup-tag -y || true
-          gh release create latest-android TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.11.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.11：卡片新增放大的13:30收盤撮合量，採證交所最後一筆成交，紅綠依收盤價與收盤前成交價比較；缺資料顯示待查核。支援13:33延後撮合、交易日期、日誌保存及海報同步顯示。"             --latest
+          gh release create latest-android TWBoardingScanner-latest.apk TWBoardingScanner-v0.4.12.apk             --target "${GITHUB_SHA}"             --title "台股上車掃描器 Android 最新版"             --notes "v0.4.12：整合掃描統計、移除頂部無功能摘要及今日新觸發分頁；新增含數量的雙排分類按鈕，縮小搜尋列。"             --latest
