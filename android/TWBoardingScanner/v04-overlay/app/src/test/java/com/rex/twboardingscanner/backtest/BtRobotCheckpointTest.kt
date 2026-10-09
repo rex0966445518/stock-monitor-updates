@@ -72,6 +72,16 @@ class BtRobotCheckpointTest {
         assertEquals(remaining,store.remaining(id));assertEquals(next,store.next(id));assertEquals(900.0,store.session(id)!!.getDouble("bestProfit"),0.0)
         store.pause(id)
     }
+    @Test fun cleanupCrossesManyDatabasePagesWithoutSkippingZeroRows(){
+        val store=BtRobotStore(app);val id=store.create(BtRobotSpace.settings())
+        store.locked{db->db.beginTransaction();try{
+            repeat(1205){i->db.insertOrThrow("trials",null,android.content.ContentValues().apply{
+                put("session",id);put("key",i.toString(16));put("summary",JSONObject().put("profit",if(i==600)1.0 else 0.0).toString());put("report",ByteArray(8))
+            })}
+            val s=store.session(id)!!.put("tested",1205);db.update("sessions",android.content.ContentValues().apply{put("json",s.toString())},"id=?",arrayOf(id));db.setTransactionSuccessful()
+        }finally{db.endTransaction()}}
+        assertEquals(1204,store.clearZero(id));assertEquals(1L,store.retained(id));assertEquals(1205L,store.session(id)!!.getLong("tested"));assertTrue(store.seen(id,1204.toString(16)))
+    }
     @Test fun cleanedZeroBestFallsBackToRetainedBestAndNoTrialsAreRepeated(){
         val store=BtRobotStore(app);val id=store.create(BtRobotSpace.settings());val token=store.resume(id)
         val zero=add(store,id,token,0.0);val neg=add(store,id,token,-50.0);store.clearZero(id)

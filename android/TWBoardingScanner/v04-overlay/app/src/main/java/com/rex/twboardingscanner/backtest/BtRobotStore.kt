@@ -34,7 +34,7 @@ class BtRobotStore(private val c:Context){
     fun sessions():List<JSONObject> = synchronized(lock){val out=mutableListOf<JSONObject>();db.rawQuery("SELECT json FROM sessions ORDER BY created DESC",null).use{while(it.moveToNext())out+=JSONObject(it.getString(0))};out}
     fun create(s:BtSettings,required:String="0"):String=synchronized(lock){
         BtRobotSpace.validate(s);BtRobotSpace.required(required)
-        session()?.let{if(it.optString("state")=="RUNNING")putSession(it.put("state","PAUSED").put("token","").put("message","建立新測試；原進度已保存"))}
+        session()?.let{if(it.optString("state") in setOf("RUNNING","RETRY"))putSession(it.put("state","PAUSED").put("token","").put("message","建立新測試；原進度已保存"))}
         val id=UUID.randomUUID().toString()
         val o=JSONObject().put("id",id).put("created",System.currentTimeMillis()).put("state","PAUSED").put("token","")
             .put("settings",BtSettingsCodec.encode(s)).put("tested",0).put("bestKey","").put("bestSeq",0).put("ack",0)
@@ -69,12 +69,18 @@ class BtRobotStore(private val c:Context){
         val s=session(id)?:return@synchronized 0;var removed=0
         db.beginTransaction()
         try{
-            db.rawQuery("SELECT key,summary FROM trials WHERE session=? AND cleared=0",arrayOf(id)).use{rows->while(rows.moveToNext()){
-                val r=JSONObject(rows.getString(1))
-                if(kotlin.math.abs(r.getDouble("profit"))<0.005){
-                    db.update("trials",ContentValues().apply{put("cleared",1);put("report",ByteArray(0))},"session=? AND key=?",arrayOf(id,rows.getString(0)));removed++
+            var after=0L
+            while(true){
+                // Read each bounded page before changing it: Android may refill a CursorWindow by
+                // rerunning its query, which must not skip rows removed from the cleared=0 filter.
+                val page=mutableListOf<Triple<Long,String,Double>>()
+                db.rawQuery("SELECT n,key,summary FROM trials WHERE session=? AND cleared=0 AND n>? ORDER BY n LIMIT 500",arrayOf(id,after.toString())).use{rows->while(rows.moveToNext())page+=Triple(rows.getLong(0),rows.getString(1),JSONObject(rows.getString(2)).getDouble("profit"))}
+                if(page.isEmpty())break
+                after=page.last().first
+                page.filter{kotlin.math.abs(it.third)<0.005}.forEach{row->
+                    db.update("trials",ContentValues().apply{put("cleared",1);put("report",ByteArray(0))},"session=? AND key=?",arrayOf(id,row.second));removed++
                 }
-            }}
+            }
             s.put("cleared",s.optLong("cleared")+removed)
             // The tested ledger remains intact, so cleaned keys can never be scheduled again.
             val best=s.optString("bestKey")
