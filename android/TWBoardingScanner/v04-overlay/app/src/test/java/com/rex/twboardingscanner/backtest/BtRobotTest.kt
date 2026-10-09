@@ -138,8 +138,9 @@ class BtRobotTest {
         val settings=BtSettings(LocalDate.of(2025,8,1),LocalDate.of(2025,8,31),5000000.0,maxHoldingStocks=22,targetNetPct=4.0)
         BtSnapshotDialog.show(a,BtSettingsCodec.encode(settings))
         val dialog=ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
-        assertEquals("套用規則",dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).text.toString())
-        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).performClick()
+        val apply=find(dialog.window!!.decorView){it.tag=="apply-snapshot-rules"} as TextView
+        assertEquals("套用規則",apply.text.toString())
+        apply.performClick()
         ctl.pause().resume()
         assertEquals("22",(find(a.window.decorView){it.tag=="max-holding-stocks"} as EditText).text.toString())
         assertEquals("4",(find(a.window.decorView){it.tag=="target-net-pct"} as EditText).text.toString())
@@ -163,6 +164,9 @@ class BtRobotTest {
         BtSnapshotDialog.show(a,BtSettingsCodec.encode(s),"目前已測最佳 · 條件快照")
         val snapshot=ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
         capture(snapshot.window!!.decorView,"snapshot-apply-360.png",1450)
+        val action=find(snapshot.window!!.decorView){it.tag=="apply-snapshot-rules"}!!
+        val rect=android.graphics.Rect();assertTrue(action.getGlobalVisibleRect(rect));assertTrue(rect.height()>=80)
+        assertTrue(rect.bottom<=snapshot.window!!.decorView.height)
         snapshot.dismiss();ctl.pause().stop().destroy()
     }
     private fun find(v:View,p:(View)->Boolean):View?{if(p(v))return v;if(v is ViewGroup)for(i in 0 until v.childCount)find(v.getChildAt(i),p)?.let{return it};return null}

@@ -1,6 +1,8 @@
 package com.rex.twboardingscanner.ui
 
 import android.content.Context
+import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.Toast
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.rex.twboardingscanner.backtest.BtRuleApply
@@ -9,15 +11,23 @@ import org.json.JSONObject
 internal object BtSnapshotDialog {
     fun show(c:Context,snapshot:JSONObject,title:String="回測條件快照",afterApply:()->Unit={}) {
         val frozen=JSONObject(snapshot.toString())
-        val dialog=MaterialAlertDialogBuilder(c).setTitle(title)
-            .setMessage(BacktestJournalUi.describe(frozen)+"\n\n套用規則：ABC 與產業會同步主頁；日期、本金、股號、持倉及獲利目標會帶入下次回測。套用後不會自動掃描或改寫歷史結果。")
-            .setNegativeButton("關閉",null).setPositiveButton("套用規則",null).create()
-        dialog.show()
-        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener{
+        lateinit var dialog:androidx.appcompat.app.AlertDialog
+        val root=NeonUi.vertical(c).apply{setPadding(NeonUi.dp(c,14),NeonUi.dp(c,16),NeonUi.dp(c,14),NeonUi.dp(c,14))}
+        root.addView(NeonUi.label(c,title,20f,NeonUi.ink,true));root.addView(NeonUi.gap(c,12))
+        val height=minOf(430,(c.resources.displayMetrics.heightPixels/c.resources.displayMetrics.density).toInt()-290).coerceAtLeast(120)
+        val message=NeonUi.label(c,BacktestJournalUi.describe(frozen),13f,NeonUi.ink).apply{setLineSpacing(NeonUi.dp(c,3).toFloat(),1f)}
+        root.addView(ScrollView(c).apply{isFillViewport=false;addView(message)},LinearLayout.LayoutParams(-1,NeonUi.dp(c,height)))
+        root.addView(NeonUi.gap(c,12))
+        root.addView(NeonUi.label(c,"ABC／產業同步主頁，其餘設定帶入下次回測。套用後不自動執行，原始日誌保留。",11f,NeonUi.cyan))
+        root.addView(NeonUi.gap(c,10))
+        val apply=NeonUi.button(c,"套用規則",NeonUi.mint){
             runCatching{BtRuleApply.apply(c,frozen)}.onSuccess{
                 Toast.makeText(c,"規則已套用到主頁與歷史回測；按開始才執行",Toast.LENGTH_LONG).show()
                 afterApply();dialog.dismiss()
             }.onFailure{Toast.makeText(c,"未套用：${it.message}",Toast.LENGTH_LONG).show()}
-        }
+        }.apply{tag="apply-snapshot-rules"}
+        root.addView(NeonUi.row(c,listOf(NeonUi.button(c,"關閉",NeonUi.muted){dialog.dismiss()},apply)))
+        dialog=MaterialAlertDialogBuilder(c).setBackground(NeonUi.panel(c,NeonUi.cyan)).setView(root).create()
+        dialog.show()
     }
 }
