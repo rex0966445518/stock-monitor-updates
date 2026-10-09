@@ -26,16 +26,16 @@ internal class NeonPoster(private val radar:RadarType,private val stocks:List<Po
     }
     private fun panel(c:Canvas,x:Float,y:Float,w:Float,h:Float,color:Int=blue,glow:Boolean=false) {
         val r=RectF(x,y,x+w,y+h)
-        p.style=Paint.Style.FILL;p.shader=LinearGradient(x,y,x+w,y+h,intArrayOf(Color.rgb(9,35,61),Color.rgb(3,19,36),Color.rgb(8,32,53)),null,Shader.TileMode.CLAMP)
+        p.style=Paint.Style.FILL;p.color=Color.WHITE;p.shader=LinearGradient(x,y,x+w,y+h,intArrayOf(Color.rgb(9,35,61),Color.rgb(3,19,36),Color.rgb(8,32,53)),null,Shader.TileMode.CLAMP)
         c.drawRoundRect(r,20f,20f,p);p.shader=null
         if(glow){p.style=Paint.Style.STROKE;for(i in 9 downTo 1){p.strokeWidth=i*2f;p.color=Color.argb(12,color shr 16 and 255,color shr 8 and 255,color and 255);c.drawRoundRect(r,20f,20f,p)}}
-        p.style=Paint.Style.STROKE;p.strokeWidth=if(glow)2f else 1f
+        p.style=Paint.Style.STROKE;p.color=Color.WHITE;p.strokeWidth=if(glow)2f else 1f
         p.shader=LinearGradient(x,y,x+w,y+h,intArrayOf(color,Color.rgb(34,65,107),blue),null,Shader.TileMode.CLAMP);c.drawRoundRect(r,20f,20f,p);p.shader=null;p.style=Paint.Style.FILL
     }
     private fun line(c:Canvas,x:Float,y:Float,xx:Float,yy:Float,color:Int,width:Float=1f){p.shader=null;p.style=Paint.Style.STROKE;p.color=color;p.strokeWidth=width;c.drawLine(x,y,xx,yy,p);p.style=Paint.Style.FILL}
     private fun badge(c:Canvas,x:Float,y:Float,size:Float) {
         val path=Path();for(i in 0..5){val angle=(i*60-30)*PI/180;val xx=x+cos(angle).toFloat()*size;val yy=y+sin(angle).toFloat()*size;if(i==0)path.moveTo(xx,yy)else path.lineTo(xx,yy)};path.close()
-        p.shader=RadialGradient(x,y,size,accent,Color.rgb(8,23,46),Shader.TileMode.CLAMP);c.drawPath(path,p);p.shader=null;p.style=Paint.Style.STROKE;p.strokeWidth=2f;p.color=accent;p.setShadowLayer(15f,0f,0f,accent);c.drawPath(path,p);p.clearShadowLayer();p.style=Paint.Style.FILL
+        p.color=Color.WHITE;p.shader=RadialGradient(x,y,size,accent,Color.rgb(8,23,46),Shader.TileMode.CLAMP);c.drawPath(path,p);p.shader=null;p.style=Paint.Style.STROKE;p.strokeWidth=2f;p.color=accent;p.setShadowLayer(15f,0f,0f,accent);c.drawPath(path,p);p.clearShadowLayer();p.style=Paint.Style.FILL
         text(c,letter,x-size*.36f,y+size*.38f,size*1.2f,white,true)
     }
     fun draw(c:Canvas,top:Int,band:Int) {
