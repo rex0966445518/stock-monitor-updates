@@ -107,7 +107,12 @@ class BacktestJournalTest {
         assertTrue(box.isChecked);box.performClick();assertFalse(box.isChecked)
         capture(dialog.window!!.decorView,"backtest-rule-picker-360")
         val apply=find(dialog.window!!.decorView){it is TextView&&it.text.toString()=="套用"}!!
-        val visible=android.graphics.Rect();assertTrue("套用必須出現在可視區",apply.getGlobalVisibleRect(visible));assertTrue(visible.height()>=80)
+        // The preview is explicitly measured; use its canvas rather than the shadow WindowManager bounds.
+        val decor=dialog.window!!.decorView as ViewGroup
+        val visible=android.graphics.Rect(0,0,apply.width,apply.height);decor.offsetDescendantRectToMyCoords(apply,visible)
+        assertEquals(View.VISIBLE,apply.visibility)
+        assertTrue("套用必須出現在預覽可視區：$visible",visible.top>=0&&visible.bottom<=decor.height&&visible.left>=0&&visible.right<=decor.width)
+        assertTrue("套用按鈕需保留觸控高度",visible.height()>=80)
         apply.performClick()
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
         val selected=BtSettingsCodec.decode(BacktestStore(app).configuration()!!).rules[RadarType.A_EARLY_BREAKOUT]!!
