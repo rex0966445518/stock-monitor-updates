@@ -18,10 +18,10 @@ class BacktestData(private val context:Context) {
         require(universe.isNotEmpty()){ "無法取得股票名單，請稍後重試" }
         val codes=settings.codes.split(Regex("[,，\\s]+" )).filter{it.isNotBlank()}.toSet()
         if(codes.isEmpty())require(Market.entries.all{m->universe.any{it.market==m}}){"上市／上櫃名單不完整，請稍後重試"}
-        val selected=universe.filter{codes.isEmpty()||it.code in codes}
-        require(selected.isNotEmpty()){ "輸入股號不在目前上市櫃名單內" }
+        val selected=universe.filter{it.sector in settings.sectors&&(codes.isEmpty()||it.code in codes)}
+        require(selected.isNotEmpty()){ "目前產業設定與股號範圍內沒有股票" }
         val excluded=mutableListOf<String>();val loaded=mutableListOf<BtSeries>()
-        codes.filter{c->selected.none{it.code==c}}.forEach{excluded.add("$it：不在目前名單（可能已下市或股號無效）")}
+        codes.filter{c->selected.none{it.code==c}}.forEach{excluded.add("$it：不在目前產業範圍／現存名單")}
         val pool=Executors.newFixedThreadPool(4)
         try {
             val completion=ExecutorCompletionService<Pair<BtSeries?,String?>>(pool)
@@ -48,7 +48,7 @@ class BacktestData(private val context:Context) {
         val raw=if(cache.exists())cache.readText() else {
             val start=from.atStartOfDay(RuleMetrics.TAIPEI).toEpochSecond();val end=today.plusDays(1).atStartOfDay(RuleMetrics.TAIPEI).toEpochSecond()
             val c=URL("https://query1.finance.yahoo.com/v8/finance/chart/$symbol?period1=$start&period2=$end&interval=1d&events=div%2Csplits").openConnection() as HttpURLConnection
-            val text=try{c.connectTimeout=8000;c.readTimeout=12000;c.setRequestProperty("User-Agent","Mozilla/5.0 TWBoardingScanner/0.4.14");require(c.responseCode==200){"行情來源 HTTP ${c.responseCode}"};c.inputStream.bufferedReader().use{it.readText()}}finally{c.disconnect()}
+            val text=try{c.connectTimeout=8000;c.readTimeout=12000;c.setRequestProperty("User-Agent","Mozilla/5.0 TWBoardingScanner/0.4.15");require(c.responseCode==200){"行情來源 HTTP ${c.responseCode}"};c.inputStream.bufferedReader().use{it.readText()}}finally{c.disconnect()}
             parse(text,symbol,stock.name,stock.market,from,settings.end) // invalid/partial responses never enter cache
             val temp=File(cache.path+".${java.util.UUID.randomUUID()}.tmp");temp.writeText(text);check(temp.renameTo(cache));text
         }
