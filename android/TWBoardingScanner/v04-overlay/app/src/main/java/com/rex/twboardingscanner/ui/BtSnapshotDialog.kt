@@ -14,7 +14,7 @@ internal object BtSnapshotDialog {
         lateinit var dialog:androidx.appcompat.app.AlertDialog
         val root=NeonUi.vertical(c).apply{setPadding(NeonUi.dp(c,14),NeonUi.dp(c,16),NeonUi.dp(c,14),NeonUi.dp(c,14))}
         root.addView(NeonUi.label(c,title,20f,NeonUi.ink,true));root.addView(NeonUi.gap(c,12))
-        val height=minOf(430,(c.resources.displayMetrics.heightPixels/c.resources.displayMetrics.density).toInt()-290).coerceAtLeast(120)
+        val height=minOf(320,(c.resources.displayMetrics.heightPixels/c.resources.displayMetrics.density).toInt()-420).coerceAtLeast(80)
         val message=NeonUi.label(c,BacktestJournalUi.describe(frozen),13f,NeonUi.ink).apply{setLineSpacing(NeonUi.dp(c,3).toFloat(),1f)}
         root.addView(ScrollView(c).apply{isFillViewport=false;addView(message)},LinearLayout.LayoutParams(-1,NeonUi.dp(c,height)))
         root.addView(NeonUi.gap(c,12))
@@ -26,7 +26,7 @@ internal object BtSnapshotDialog {
                 afterApply();dialog.dismiss()
             }.onFailure{Toast.makeText(c,"未套用：${it.message}",Toast.LENGTH_LONG).show()}
         }.apply{tag="apply-snapshot-rules"}
-        root.addView(NeonUi.row(c,listOf(NeonUi.button(c,"關閉",NeonUi.muted){dialog.dismiss()},apply)))
+        root.addView(NeonUi.row(c,listOf(NeonUi.button(c,"關閉",NeonUi.muted){dialog.dismiss()},apply)),LinearLayout.LayoutParams(-1,NeonUi.dp(c,52)))
         dialog=MaterialAlertDialogBuilder(c).setBackground(NeonUi.panel(c,NeonUi.cyan)).setView(root).create()
         dialog.show()
     }
