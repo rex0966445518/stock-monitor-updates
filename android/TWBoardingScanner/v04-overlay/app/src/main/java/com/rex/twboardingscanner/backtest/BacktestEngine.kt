@@ -131,9 +131,10 @@ object BacktestEngine {
             b.cash+=net;b.holdings.remove(p);usedShares[p.code]=(usedShares[p.code]?:0)+1000
             b.trades.add(BtTrade(day,p.signalDate,p.code,p.name,p.radar,"SELL",px,fee,tax,net-p.cost,reason,time=if(atOpen)"09:00" else "09:00–13:30",timeKind=if(atOpen)"開盤價模擬，非逐筆時間" else "盤中觸價，確切時間未知",lotId=p.lotId,target=activeTarget,dataDate=p.dataDate,dayClose=bar.close,previousClose=previous[p.code]?.get(day)))
         }
+        val boughtLots=b.trades.asSequence().filter{it.side=="BUY"}.map{it.lotId}.toHashSet()
         signals.groupBy{it.code}.toSortedMap().forEach{(code,matched)->
             val lotId="$day-$code"
-            if(b.trades.any{it.lotId==lotId&&it.side=="BUY"})return@forEach
+            if(lotId in boughtLots)return@forEach
             val bar=bars[code]?.get(day)
             val reason=when{
                 settings.maxHoldingStocks!=null&&b.holdings.none{it.code==code}&&b.holdings.map{it.code}.distinct().size>=settings.maxHoldingStocks->"已達最高持倉 ${settings.maxHoldingStocks} 檔，未買入新股"

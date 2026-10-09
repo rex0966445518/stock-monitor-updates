@@ -157,6 +157,7 @@ class BtRobotTest {
         val dialog=ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
         assertTrue(store.session(id)!!.getLong("ack")>0)
         dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEGATIVE).performClick()
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
         a.render();assertFalse(dialog.isShowing)
         capture(a.window.decorView.findViewById(android.R.id.content),"robot-dashboard-360.png",1600)
         BtSnapshotDialog.show(a,BtSettingsCodec.encode(s),"目前已測最佳 · 條件快照")
