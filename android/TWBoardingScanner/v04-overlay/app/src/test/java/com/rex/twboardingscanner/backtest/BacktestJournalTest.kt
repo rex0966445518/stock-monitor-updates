@@ -104,7 +104,7 @@ class BacktestJournalTest {
         find(activity.window.decorView){it is TextView&&it.text.toString().startsWith("A 條件")}!!.performClick()
         val dialog=org.robolectric.shadows.ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
         val box=find(dialog.window!!.decorView){it is android.widget.CheckBox&&it.text.toString().startsWith("MACD 起轉")} as android.widget.CheckBox
-        assertTrue(box.isChecked);box.performClick()
+        assertTrue(box.isChecked);box.performClick();assertFalse(box.isChecked)
         capture(dialog.window!!.decorView,"backtest-rule-picker-360")
         dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick()
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
@@ -116,7 +116,9 @@ class BacktestJournalTest {
     private fun capture(view:View,name:String){
         view.measure(View.MeasureSpec.makeMeasureSpec(720,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(1600,View.MeasureSpec.EXACTLY));view.layout(0,0,720,1600)
         fun check(v:View){if(v is TextView&&v.layout!=null&&v.text.isNotEmpty())assertTrue("clipped: ${v.text}",v.layout.height<=v.height-v.compoundPaddingTop-v.compoundPaddingBottom+2);if(v is ViewGroup)for(i in 0 until v.childCount)check(v.getChildAt(i))}
-        check(view);val image=Bitmap.createBitmap(720,1600,Bitmap.Config.ARGB_8888);view.draw(Canvas(image))
+        check(view)
+        fun settle(v:View){v.jumpDrawablesToCurrentState();if(v is ViewGroup)for(i in 0 until v.childCount)settle(v.getChildAt(i))};settle(view)
+        val image=Bitmap.createBitmap(720,1600,Bitmap.Config.ARGB_8888);view.draw(Canvas(image))
         val f=File("build/ui-previews/$name.png");f.parentFile.mkdirs();f.outputStream().use{image.compress(Bitmap.CompressFormat.PNG,100,it)};image.recycle()
     }
 }

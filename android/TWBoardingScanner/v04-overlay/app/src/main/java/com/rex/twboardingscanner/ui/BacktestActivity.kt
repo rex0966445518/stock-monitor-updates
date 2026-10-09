@@ -118,9 +118,14 @@ class BacktestActivity:AppCompatActivity(){
             }
         }
         content.addView(NeonUi.row(this,listOf(NeonUi.button(this,"全不選"){boxes.forEach{it.isChecked=false}},NeonUi.button(this,"恢復基本條件"){boxes.forEachIndexed{i,box->box.isChecked=options[i].defaultEnabled}})))
-        MaterialAlertDialogBuilder(this).setTitle("${type.name.take(1)} 區回測條件")
-            .setView(ScrollView(this).apply{addView(content)})
+        val height=minOf(420,(resources.displayMetrics.heightPixels/resources.displayMetrics.density).toInt()-240).coerceAtLeast(140)
+        val viewport=NeonUi.vertical(this).apply{addView(ScrollView(this@BacktestActivity).apply{addView(content)},LinearLayout.LayoutParams(-1,dp(height)))}
+        val dialog=MaterialAlertDialogBuilder(this).setBackground(NeonUi.panel(this,NeonUi.cyan))
+            .setCustomTitle(label("${type.name.take(1)} 區回測條件",20f,NeonUi.ink,true).apply{setPadding(dp(20),dp(20),dp(20),dp(10))})
+            .setView(viewport)
             .setNegativeButton("取消",null).setPositiveButton("套用"){_,_->applyRules(type,options.filterIndexed{i,_->boxes[i].isChecked}.map{it.id}.toSet())}.show()
+        dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setTextColor(NeonUi.mint)
+        dialog.getButton(android.content.DialogInterface.BUTTON_NEGATIVE).setTextColor(NeonUi.muted)
     }
     internal fun clearCurrent(){
         val wasRunning=store.state()=="RUNNING"
