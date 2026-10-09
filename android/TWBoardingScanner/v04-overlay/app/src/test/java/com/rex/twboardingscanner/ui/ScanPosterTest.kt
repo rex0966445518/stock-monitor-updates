@@ -28,7 +28,7 @@ class ScanPosterTest {
     }
     @Test fun exportKeepsTodayLatestPerRadarAndProducesThreeGroups() {
         val today=LocalDate.now(RuleMetrics.TAIPEI)
-        val stock=MarketStock("1234","測試公司",Market.TWSE,StockSector.SEMICONDUCTOR,100.0,106.0,99.0,104.0,4.0,2000)
+        val stock=MarketStock("1234","測試公司",Market.TWSE,StockSector.SEMICONDUCTOR,100.0,106.0,99.0,104.0,4.0,2000,null,null)
         val bars=(0..30).map {DailyBar(today.minusDays((31-it).toLong()).atStartOfDay(RuleMetrics.TAIPEI).toInstant().toEpochMilli(),100.0,106.0,99.0,104.0,2000000)}
         val snap=TechnicalCalculator().build(stock,bars)
         val signal=ScoringEngine().evaluateA(snap,setOf("price","volume"))
