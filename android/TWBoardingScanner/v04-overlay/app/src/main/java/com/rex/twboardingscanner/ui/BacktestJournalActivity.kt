@@ -38,6 +38,7 @@ internal object BacktestJournalUi {
             "${tradingSummary(s)}\n"+
             com.rex.twboardingscanner.domain.StockPolicy.read(s.optJSONObject("stockPolicy")).let{p->p.summary()+"\n禁股："+p.banned.sorted().joinToString("、").ifBlank{"無"}+"\n放行："+p.overrides.entries.joinToString("；"){"${it.key.label} ${it.value.sorted().joinToString("、")}"}.ifBlank{"無"}+"\n"}+
             "${s.optString("strategyLabel","舊版策略，請參考原始報告")}\n"+
+            com.rex.twboardingscanner.domain.ExitRules.summary(com.rex.twboardingscanner.domain.ExitRules.read(s.optJSONArray("exitRules")))+"\n"+
             "條件版本 ${s.optString("rulesVersion","舊版未記錄")}"
         if(rules==null)return intro+"\n\n舊版沒有完整 ABC 勾選快照。"
         val body=RadarType.entries.joinToString("\n\n"){type->
@@ -57,10 +58,10 @@ class BacktestJournalActivity:AppCompatActivity(){
     private var shown=20
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState)
-        val root=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(this@BacktestJournalActivity,14),NeonUi.dp(this@BacktestJournalActivity,12),NeonUi.dp(this@BacktestJournalActivity,14),NeonUi.dp(this@BacktestJournalActivity,24))}
-        val scroll=ScrollView(this).apply{setBackgroundColor(Color.rgb(4,17,30));addView(root)};setContentView(scroll)
+        val root=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(this@BacktestJournalActivity,16),NeonUi.dp(this@BacktestJournalActivity,16),NeonUi.dp(this@BacktestJournalActivity,16),NeonUi.dp(this@BacktestJournalActivity,28))}
+        val scroll=ScrollView(this).apply{setBackgroundColor(NeonUi.canvas);addView(root)};setContentView(scroll)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
-        root.addView(NeonUi.row(this,listOf(NeonUi.label(this,"回測日誌",24f,NeonUi.ink,true),NeonUi.button(this,"返回"){finish()})))
+        root.addView(NeonUi.header(this,"回測日誌","STRATEGY ARCHIVE"){finish()})
         root.addView(NeonUi.label(this,"每次獨立保存 · 條件快照 · 完整買賣紀錄",12f,NeonUi.cyan))
         root.addView(NeonUi.button(this,"匯入回測日誌 JSON"){
             @Suppress("DEPRECATION")
@@ -68,7 +69,7 @@ class BacktestJournalActivity:AppCompatActivity(){
         })
         root.addView(NeonUi.gap(this,10))
         status=NeonUi.label(this,"讀取日誌中…",12f);root.addView(status)
-        entries=NeonUi.vertical(this);root.addView(entries)
+        root.addView(NeonUi.gap(this,12));entries=NeonUi.vertical(this);root.addView(entries)
     }
     override fun onResume(){super.onResume();reload()}
     private fun reload(){Thread{
@@ -96,7 +97,7 @@ class BacktestJournalActivity:AppCompatActivity(){
     internal fun renderEntries(data:List<JSONObject>){rows=data;shown=20;renderPage()}
     private fun renderPage(){
         entries.removeAllViews();status.text="共 ${rows.size} 次回測 · 新到舊排列"
-        if(rows.isEmpty()){entries.addView(NeonUi.label(this,"尚無日誌。開始一次回測後，就會自動保存條件與執行狀態。",14f,NeonUi.ink));return}
+        if(rows.isEmpty()){entries.addView(NeonUi.empty(this,"尚無回測紀錄","開始一次回測後，條件快照、執行狀態與交易結果會自動保存在這裡。"));return}
         rows.take(shown).forEach{row->
             val id=row.getString("id");val s=row.optJSONObject("settings")?:JSONObject();val complete=row.optString("state")=="DONE"
             val pnl=row.optDouble("profit",0.0);val color=if(!complete)NeonUi.amber else if(pnl>=0)NeonUi.pink else NeonUi.mint

@@ -18,7 +18,7 @@ internal object BtSnapshotDialog {
         val message=NeonUi.label(c,BacktestJournalUi.describe(frozen),13f,NeonUi.ink).apply{setLineSpacing(NeonUi.dp(c,3).toFloat(),1f)}
         root.addView(ScrollView(c).apply{isFillViewport=false;addView(message)},LinearLayout.LayoutParams(-1,NeonUi.dp(c,height)))
         root.addView(NeonUi.gap(c,12))
-        root.addView(NeonUi.label(c,"ABC／產業同步主頁，交易設定帶入下次回測。禁股／限價保留目前名單，請至名單管理修改。套用後不自動執行。",11f,NeonUi.cyan))
+        root.addView(NeonUi.label(c,"ABC／產業／下車條件同步主頁，交易設定帶入下次回測。禁股／限價保留目前名單，請至名單管理修改。套用後不自動執行。",11f,NeonUi.cyan))
         root.addView(NeonUi.gap(c,10))
         val apply=NeonUi.button(c,"套用規則",NeonUi.mint){
             runCatching{BtRuleApply.apply(c,frozen)}.onSuccess{

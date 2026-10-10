@@ -127,7 +127,7 @@ class BacktestTest {
         assertEquals(run.profit,json.getJSONObject("run").getDouble("profit"),.001)
         val ctl=Robolectric.buildActivity(BacktestActivity::class.java).setup();val v=ctl.get().window.decorView
         v.measure(View.MeasureSpec.makeMeasureSpec(720,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(1600,View.MeasureSpec.EXACTLY));v.layout(0,0,720,1600)
-        fun check(view:View){if(view is TextView&&view.layout!=null&&view.text.isNotEmpty())assertTrue("clipped: ${view.text}",view.layout.height<=view.height-view.compoundPaddingTop-view.compoundPaddingBottom+2);if(view is ViewGroup)for(i in 0 until view.childCount)check(view.getChildAt(i))}
+        fun check(view:View){if(view.visibility!=View.VISIBLE)return;if(view is TextView&&view.layout!=null&&view.text.isNotEmpty())assertTrue("clipped: ${view.text}",view.layout.height<=view.height-view.compoundPaddingTop-view.compoundPaddingBottom+2);if(view is ViewGroup)for(i in 0 until view.childCount)check(view.getChildAt(i))}
         check(v)
         fun screenshot(name:String){val b=Bitmap.createBitmap(720,1600,Bitmap.Config.ARGB_8888);v.draw(Canvas(b));val f=File("build/ui-previews/$name.png");f.parentFile.mkdirs();f.outputStream().use{b.compress(Bitmap.CompressFormat.PNG,100,it)};b.recycle()}
         screenshot("backtest-v2-360")

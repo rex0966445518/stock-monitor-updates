@@ -84,7 +84,7 @@ class MainActivity: AppCompatActivity() {
         setContentView(b.root)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(b.root) { view,insets ->
             val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-            view.setPadding(dp(10)+bars.left,dp(6)+bars.top,dp(10)+bars.right,dp(6)+bars.bottom)
+            view.setPadding(dp(16)+bars.left,dp(12)+bars.top,dp(16)+bars.right,dp(6)+bars.bottom)
             insets
         }
 
@@ -98,6 +98,8 @@ class MainActivity: AppCompatActivity() {
         b.recycler.layoutManager = LinearLayoutManager(this)
         b.recycler.adapter = adapter
 
+        b.settingsButton.setOnClickListener { showSettings() }
+        b.robotButton.setOnClickListener { startActivity(android.content.Intent(this,BtRobotActivity::class.java)) }
         b.resultFilters.onSelected = { index -> selectedTab = index; render() }
 
         b.conditionAButton.setOnClickListener { showRadarConditions(RadarType.A_EARLY_BREAKOUT) }
@@ -112,6 +114,14 @@ class MainActivity: AppCompatActivity() {
         }
         b.logButton.setOnClickListener { showLogDatePicker() }
         b.searchButton.setOnClickListener { StockToolsActivity.open(this,"SEARCH") }
+        b.exitRulesButton.setOnClickListener {
+            val store=com.rex.twboardingscanner.data.ExitRuleStore(this)
+            ExitRulesEditor.show(this,"主篩查器",store.read(com.rex.twboardingscanner.domain.StockScope.SCANNER)){rules->
+                store.save(com.rex.twboardingscanner.domain.StockScope.SCANNER,rules)
+                b.exitRulesButton.text="下車賣出條件 · ${rules.count{it.active}} / 5 組"
+            }
+        }
+        b.exitRulesButton.text="下車賣出條件 · ${com.rex.twboardingscanner.data.ExitRuleStore(this).read(com.rex.twboardingscanner.domain.StockScope.SCANNER).count{it.active}} / 5 組"
         b.banButton.setOnClickListener { StockToolsActivity.open(this,"BAN") }
         b.limitButton.setOnClickListener { StockToolsActivity.open(this,"LIMIT") }
         b.versionText.text="v${packageManager.getPackageInfo(packageName,0).versionName} · 作者：雷允澤"
@@ -134,7 +144,26 @@ class MainActivity: AppCompatActivity() {
         render()
     }
 
-    override fun onResume() { super.onResume();loadScanSettings();if(::paperLoop.isInitialized){paperLoop.start();render();if(latest.isNotEmpty())coordinator.submit{runCatching{publishLists()}}} }
+    private fun showSettings() {
+        val panel=b.settingsPanel
+        (panel.parent as? ViewGroup)?.removeView(panel)
+        panel.visibility=android.view.View.VISIBLE
+        val body=NeonUi.vertical(this)
+        body.addView(NeonUi.label(this,"條件與工具",23f,NeonUi.ink,true).apply{setPadding(dp(16),dp(12),dp(16),dp(4))})
+        body.addView(NeonUi.label(this,"入場、下車與股票管理集中設定",12f).apply{setPadding(dp(16),0,dp(16),dp(8))})
+        body.addView(ScrollView(this).apply{addView(panel)},LinearLayout.LayoutParams(-1,0,1f))
+        val dialog=com.google.android.material.bottomsheet.BottomSheetDialog(this)
+        body.addView(NeonUi.button(this,"完成設定"){dialog.dismiss()}.apply{NeonUi.primaryStyle(this)},LinearLayout.LayoutParams(-1,-2).apply{setMargins(dp(16),dp(8),dp(16),dp(16))})
+        dialog.setContentView(body)
+        body.layoutParams.height=(resources.displayMetrics.heightPixels*.85).toInt()
+        dialog.setOnDismissListener {
+            (panel.parent as? ViewGroup)?.removeView(panel);panel.visibility=android.view.View.GONE;b.root.addView(panel)
+        }
+        dialog.show()
+        dialog.behavior.state=com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+    }
+
+    override fun onResume() { super.onResume();loadScanSettings();b.exitRulesButton.text="下車賣出條件 · ${com.rex.twboardingscanner.data.ExitRuleStore(this).read(com.rex.twboardingscanner.domain.StockScope.SCANNER).count{it.active}} / 5 組";if(::paperLoop.isInitialized){paperLoop.start();render();if(latest.isNotEmpty())coordinator.submit{runCatching{publishLists()}}} }
     override fun onPause() { if(::paperLoop.isInitialized)paperLoop.stop();super.onPause() }
 
     private fun startFullScan() {
@@ -334,6 +363,9 @@ class MainActivity: AppCompatActivity() {
         val groups = (0..4).map { ResultFilters.select(admitted(), it) }
         b.resultFilters.update(groups.map { it.size }, selectedTab)
         adapter.submit(groups[selectedTab])
+        b.emptyState.visibility=if(groups[selectedTab].isEmpty())android.view.View.VISIBLE else android.view.View.GONE
+        (b.emptyState.getChildAt(0) as TextView).text=if(isScanning)"正在整理市場訊號" else if(latestScanAt>0)"此分類暫無結果" else "等待市場訊號"
+        (b.emptyState.getChildAt(1) as TextView).text=if(isScanning)"掃描結果會陸續顯示，請稍候。" else if(latestScanAt>0)"可切換上方分類，或調整條件重新掃描。" else "設定掃描條件，再開始全市場掃描。\n結果會依 A／B／C 分類呈現。"
     }
 
     private fun loadScanSettings() {

@@ -21,8 +21,8 @@ class PaperTradingActivity:AppCompatActivity() {
     private var error:String?=null
     override fun onCreate(savedInstanceState:Bundle?) {
         super.onCreate(savedInstanceState);repo=PaperRepository(this)
-        scroll=ScrollView(this).apply{setBackgroundColor(Color.rgb(4,17,30));isFillViewport=true}
-        content=NeonUi.vertical(this).apply{setPadding(dp(14),dp(12),dp(14),dp(20))}
+        scroll=ScrollView(this).apply{setBackgroundColor(NeonUi.canvas);isFillViewport=true}
+        content=NeonUi.vertical(this).apply{setPadding(dp(16),dp(16),dp(16),dp(28))}
         scroll.addView(content);setContentView(scroll)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->
             val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
@@ -40,16 +40,16 @@ class PaperTradingActivity:AppCompatActivity() {
     private fun panel(accent:Int=NeonUi.blue)=NeonUi.vertical(this).apply{background=NeonUi.panel(this@PaperTradingActivity,accent);setPadding(dp(14),dp(14),dp(14),dp(14))}
     private fun render(){
         val y=scroll.scrollY;content.removeAllViews()
-        content.addView(NeonUi.row(this,listOf(label("自買自投",25f,NeonUi.ink,true),NeonUi.button(this,"返回掃描"){finish()})))
+        content.addView(NeonUi.header(this,"自買自投","PAPER PORTFOLIO"){finish()})
         content.addView(label("模擬資金・不連接券商",12f,NeonUi.mint));space()
-        content.addView(NeonUi.button(this,"歷史回測：尾盤買入／3% 出場",NeonUi.amber){startActivity(Intent(this,BacktestActivity::class.java))});space()
+
         val b=runCatching{repo.read()}.getOrElse{content.addView(label("帳本無法讀取，已停止操作：${it.message}",14f,NeonUi.pink));return}
         val equity=PaperEngine.equity(b);val pnl=equity-b.capital
         val header=panel(NeonUi.mint)
         header.addView(label(if(b.enabled)"● 自動策略已啟動" else "○ 自動策略已暫停",13f,if(b.enabled)NeonUi.mint else NeonUi.amber,true))
         header.addView(label(error?.let{"更新失敗：$it"}?:b.status,12f,NeonUi.ink))
         header.addView(label("台北時間 09:00–13:20  ·  最後檢查 ${stamp(b.lastRun)}",11f))
-        content.addView(header);space()
+
         val hero=panel(color(pnl))
         hero.addView(label("累計淨損益  TWD",12f))
         hero.addView(label(signed(pnl),36f,color(pnl),true))
@@ -57,6 +57,7 @@ class PaperTradingActivity:AppCompatActivity() {
         hero.addView(NeonUi.gap(this,10))
         hero.addView(NeonUi.row(this,listOf(NeonUi.tile(this,"淨資產",money(equity),"初始 ${money(b.capital)}",NeonUi.ink),NeonUi.tile(this,"可用資金",money(b.cash),"每筆固定 1,000 股",NeonUi.cyan))))
         content.addView(hero);space()
+        content.addView(header);space()
         val sells=b.trades.filter{it.side=="SELL"};val wins=sells.count{it.realized>0}
         content.addView(NeonUi.row(this,listOf(
             NeonUi.tile(this,"已實現",signed(PaperEngine.realized(b)),"平倉 ${sells.size} 筆",color(PaperEngine.realized(b))),
@@ -64,14 +65,15 @@ class PaperTradingActivity:AppCompatActivity() {
         space(6)
         content.addView(label("平倉勝率 ${if(sells.isEmpty())"—" else "${wins*100/sells.size}%"}  ·  獲利 $wins / ${sells.size} 筆  ·  成交費稅 ${money(b.trades.sumOf{it.fee+it.tax})} 元",12f))
         space()
-        content.addView(NeonUi.row(this,listOf(NeonUi.button(this,if(b.enabled)"暫停策略" else "啟動策略",NeonUi.mint){toggle(b)},NeonUi.button(this,"交易明細 CSV",NeonUi.cyan){export(b)})))
+        val actions=NeonUi.row(this,listOf(NeonUi.primary(this,if(b.enabled)"暫停策略" else "啟動策略"){toggle(b)},NeonUi.button(this,"交易明細 CSV",NeonUi.muted){export(b)}))
+        content.addView(actions,content.indexOfChild(header)+1)
         space()
         content.addView(label("資產走勢",17f,NeonUi.ink,true));space(6)
         content.addView(PaperEquityView(this,b.capital,b.days.map{it.equity}),LinearLayout.LayoutParams(-1,dp(140)))
         content.addView(label(if(b.days.isEmpty())"尚無交易時段紀錄，啟動後逐日累積。" else "${b.days.first().date} → ${b.days.last().date} · 每日最後一次有效檢查的淨資產",11f))
         space()
         content.addView(label("模擬持股  ${b.positions.size}",17f,NeonUi.ink,true));space(6)
-        if(b.positions.isEmpty())content.addView(label("目前空手 · 等待符合規則的入場機會",13f))
+        if(b.positions.isEmpty())content.addView(NeonUi.empty(this,"目前空手","啟動策略並完成主頁掃描後，等待符合規則的入場機會。"))
         b.positions.forEach {p->
             val gain=PaperEngine.netSell(p.mark)-p.cost
             val card=panel(color(gain))
@@ -82,13 +84,13 @@ class PaperTradingActivity:AppCompatActivity() {
             content.addView(card);space(6)
         }
         space()
-        content.addView(label("最新候選池  ${b.candidates.size} 檔",17f,NeonUi.ink,true))
+        val candidatesTitle=label("最新候選池  ${b.candidates.size} 檔",17f,NeonUi.ink,true);content.addView(candidatesTitle)
         content.addView(label("完成掃描 ${stamp(b.candidateAt)} · A ${b.candidates.count{it.radar=="A"}} / B ${b.candidates.count{it.radar=="B"}} / C ${b.candidates.count{it.radar=="C"}}",11f))
         val candidates=panel()
         candidates.addView(label(if(b.candidates.isEmpty())"請回主頁完成 ABC 掃描；未通過與待查核不會進場。" else b.candidates.take(12).joinToString("\n"){"${it.radar}  ${it.code} ${it.name}  ·  ${it.score}%"},13f,NeonUi.ink))
         if(b.candidates.size>12)candidates.addView(label("另有 ${b.candidates.size-12} 檔；每輪依通過率、股號排序檢查前 60 檔。",11f))
-        content.addView(candidates);space()
-        content.addView(label("交易紀錄  ${b.trades.size} 筆",17f,NeonUi.ink,true));space(6)
+        content.addView(candidates);NeonUi.group(content,candidatesTitle,candidates,"候選股票 · ${b.candidates.size} 檔","依最近一次完成的掃描建立","paper-candidates");space()
+        val tradesTitle=label("交易紀錄  ${b.trades.size} 筆",17f,NeonUi.ink,true);content.addView(tradesTitle);space(6)
         if(b.trades.isEmpty())content.addView(label("尚無成交。休市、過期或缺少報價時不產生模擬交易。",13f))
         b.trades.asReversed().take(50).forEach{t->
             val card=panel(if(t.side=="BUY")NeonUi.pink else NeonUi.cyan)
@@ -101,6 +103,8 @@ class PaperTradingActivity:AppCompatActivity() {
         }
         if(b.trades.size>50)content.addView(label("顯示最近 50 筆；CSV 包含完整成交紀錄。"))
         space()
+        NeonUi.group(content,tradesTitle,content.getChildAt(content.childCount-1),"交易紀錄 · ${b.trades.size} 筆","逐筆成交、費稅與出場理由","paper-trades")
+        content.addView(NeonUi.button(this,"前往歷史回測",NeonUi.blue){startActivity(Intent(this,BacktestActivity::class.java))})
         content.addView(NeonUi.button(this,"查看自動策略與成交規則",NeonUi.amber){rules()})
         content.addView(label("前景每 30 秒；背景約每 15 分鐘（省電可能延後）。強制停止／離線期間不交易、不補單。持股估值會顯示原始報價時間。",11f))
         scroll.post{scroll.scrollTo(0,y)}
@@ -146,8 +150,8 @@ internal class PaperEquityView(c:android.content.Context,private val capital:Dou
     override fun onDraw(canvas:Canvas){super.onDraw(canvas)
         val pad=NeonUi.dp(context,14).toFloat();val pts=listOf(capital)+values
         val low=(pts.minOrNull()?:capital)*.999;val high=(pts.maxOrNull()?:capital)*1.001
-        paint.color=Color.rgb(12,32,50);canvas.drawRoundRect(0f,0f,width.toFloat(),height.toFloat(),pad,pad,paint)
-        paint.color=Color.rgb(35,62,82);paint.strokeWidth=1f
+        paint.color=NeonUi.surface;canvas.drawRoundRect(0f,0f,width.toFloat(),height.toFloat(),pad,pad,paint)
+        paint.color=NeonUi.border;paint.strokeWidth=1f
         for(i in 1..3)canvas.drawLine(pad,height*i/4f,width-pad,height*i/4f,paint)
         val path=Path();pts.forEachIndexed{i,v->val x=pad+i*(width-2*pad)/(pts.size-1).coerceAtLeast(1);val y=height-pad-((v-low)/(high-low)*(height-2*pad)).toFloat();if(i==0)path.moveTo(x,y)else path.lineTo(x,y)}
         paint.style=Paint.Style.STROKE;paint.strokeWidth=NeonUi.dp(context,2).toFloat();paint.color=NeonUi.mint;canvas.drawPath(path,paint);paint.style=Paint.Style.FILL

@@ -16,6 +16,8 @@ object BtRuleApply {
         require(s.sectors.isNotEmpty()){ "快照沒有產業範圍" }
         require(s.codes.split(Regex("[,，\\s]+")).filter{it.isNotBlank()}.all{it.matches(Regex("[1-9][0-9]{3}"))}){"快照股號格式無效"}
         check(BacktestStore(c).saveDraft(s)){"無法儲存回測設定"}
+        com.rex.twboardingscanner.data.ExitRuleStore(c).save(StockScope.SCANNER,s.exitRules)
+        com.rex.twboardingscanner.data.ExitRuleStore(c).save(StockScope.BACKTEST,s.exitRules)
         val edit=c.getSharedPreferences("scanner_filters",0).edit()
         s.rules.forEach{(type,ids)->edit.putStringSet("rules_${ScanConditions.VERSION}_${type.name}",ids.toSet())}
         check(edit.putStringSet("enabled_sectors",s.sectors.map{it.name}.toSet()).putString(REVISION,java.util.UUID.randomUUID().toString()).commit()){"無法儲存主頁條件"}

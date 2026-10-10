@@ -39,13 +39,13 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
         h.b.chartView.setOnClickListener { onClick(r) }
         h.b.root.contentDescription = "${r.code} ${r.name}，點擊查看日K、成交量與MACD"
         val accent = when(r.radarType) {
-            RadarType.A_EARLY_BREAKOUT -> Color.parseColor("#FF496C")
-            RadarType.B_DEEP_REVERSAL -> Color.parseColor("#F6A623")
-            RadarType.C_LONG_RED_VOLUME -> Color.parseColor("#36A3FF")
+            RadarType.A_EARLY_BREAKOUT -> NeonUi.pink
+            RadarType.B_DEEP_REVERSAL -> NeonUi.amber
+            RadarType.C_LONG_RED_VOLUME -> NeonUi.cyan
         }
 
-        h.b.root.strokeColor = accent
-        h.b.root.strokeWidth = (2 * h.b.root.resources.displayMetrics.density).toInt()
+        h.b.root.strokeColor = NeonUi.border
+        h.b.root.strokeWidth = (1 * h.b.root.resources.displayMetrics.density).toInt()
         h.b.root.animate().cancel()
         h.b.root.alpha = 1f
         h.b.badge.text = when(r.radarType) {
@@ -53,15 +53,16 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
             RadarType.B_DEEP_REVERSAL -> "B 反轉"
             RadarType.C_LONG_RED_VOLUME -> "C 長紅爆量"
         }
+        h.b.badge.setTextColor(accent)
         h.b.badge.background = GradientDrawable().apply {
             cornerRadius = 20f
-            setColor(accent)
+            setColor(Color.argb(35,Color.red(accent),Color.green(accent),Color.blue(accent)))
         }
 
         h.b.codeName.text = "${s.code}  ${s.name}"
         h.b.sector.text = s.sector.label
         h.b.price.text = String.format("%,.2f  %+.2f%%", s.price, s.changePct)
-        h.b.price.setTextColor(if (s.changePct >= 0) Color.parseColor("#FF496C") else Color.parseColor("#2FD18A"))
+        h.b.price.setTextColor(if (s.changePct >= 0) NeonUi.pink else NeonUi.mint)
         h.b.scoreRing.setScore(r.score, accent)
         h.b.chartView.showAxes = true
         h.b.chartView.setWindow(60)

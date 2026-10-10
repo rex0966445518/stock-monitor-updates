@@ -175,7 +175,7 @@ class BacktestJournalTest {
     }
     private fun capture(view:View,name:String){
         view.measure(View.MeasureSpec.makeMeasureSpec(720,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(1600,View.MeasureSpec.EXACTLY));view.layout(0,0,720,1600)
-        fun check(v:View){if(v is TextView&&v.layout!=null&&v.text.isNotEmpty())assertTrue("clipped: ${v.text}",v.layout.height<=v.height-v.compoundPaddingTop-v.compoundPaddingBottom+2);if(v is ViewGroup)for(i in 0 until v.childCount)check(v.getChildAt(i))}
+        fun check(v:View){if(v.visibility!=View.VISIBLE)return;if(v is TextView&&v.layout!=null&&v.text.isNotEmpty())assertTrue("clipped: ${v.text}",v.layout.height<=v.height-v.compoundPaddingTop-v.compoundPaddingBottom+2);if(v is ViewGroup)for(i in 0 until v.childCount)check(v.getChildAt(i))}
         check(view)
         fun settle(v:View){v.jumpDrawablesToCurrentState();if(v is ViewGroup)for(i in 0 until v.childCount)settle(v.getChildAt(i))};settle(view)
         val image=Bitmap.createBitmap(720,1600,Bitmap.Config.ARGB_8888);view.draw(Canvas(image))

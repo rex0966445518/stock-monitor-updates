@@ -133,20 +133,23 @@ class AppUpdateTest {
         assertNotNull(find(a.window.decorView){it is TextView&&it.text.toString()=="尚未開始掃描"})
         val scan=find(a.window.decorView){it is TextView&&it.text.toString()=="開始掃描"}!!
         assertTrue(scan.hasOnClickListeners());assertTrue(scan.isEnabled)
-        assertNotNull(find(a.window.decorView){it is TextView&&it.text.toString()=="一鍵更新"})
+        assertNotNull(a.findViewById<View>(com.rex.twboardingscanner.R.id.settingsButton))
         capture(a.window.decorView,"main-manual-scan-update-360")
         ctl.pause().resume();shadowOf(android.os.Looper.getMainLooper()).idle()
         assertNotNull(find(a.window.decorView){it is TextView&&it.text.toString()=="尚未開始掃描"})
         // Saving changed ABC conditions must not start a scan either.
-        find(a.window.decorView){it is TextView&&it.text.toString()=="A 掃描條件"}!!.performClick()
+        a.findViewById<View>(com.rex.twboardingscanner.R.id.settingsButton).performClick()
+        val sheet=org.robolectric.shadows.ShadowDialog.getLatestDialog()
+        assertNotNull(sheet.findViewById<View>(com.rex.twboardingscanner.R.id.updateButton))
+        sheet.findViewById<View>(com.rex.twboardingscanner.R.id.conditionAButton).performClick()
         val dialog=org.robolectric.shadows.ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
-        dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick()
+        dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick();sheet.dismiss()
         assertNotNull(find(a.window.decorView){it is TextView&&it.text.toString()=="尚未開始掃描"})
         ctl.pause().stop().destroy()
     }
     private fun capture(v:View,name:String){
         v.measure(View.MeasureSpec.makeMeasureSpec(720,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(1600,View.MeasureSpec.EXACTLY));v.layout(0,0,720,1600)
-        fun check(w:View){if(w is TextView&&w.layout!=null&&w.text.isNotEmpty())assertTrue("clipped: ${w.text}",w.layout.height<=w.height-w.compoundPaddingTop-w.compoundPaddingBottom+2);w.jumpDrawablesToCurrentState();if(w is ViewGroup)for(i in 0 until w.childCount)check(w.getChildAt(i))}
+        fun check(w:View){if(w.visibility!=View.VISIBLE)return;if(w is TextView&&w.layout!=null&&w.text.isNotEmpty())assertTrue("clipped: ${w.text}",w.layout.height<=w.height-w.compoundPaddingTop-w.compoundPaddingBottom+2);w.jumpDrawablesToCurrentState();if(w is ViewGroup)for(i in 0 until w.childCount)check(w.getChildAt(i))}
         check(v);val image=Bitmap.createBitmap(720,1600,Bitmap.Config.ARGB_8888);v.draw(Canvas(image))
         val file=File("build/ui-previews/$name.png");file.parentFile.mkdirs();file.outputStream().use{image.compress(Bitmap.CompressFormat.PNG,100,it)};image.recycle()
     }

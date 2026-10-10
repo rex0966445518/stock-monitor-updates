@@ -36,25 +36,26 @@ class HistoryAdapter(private val onClick: (HistoryRow) -> Unit = {}): RecyclerVi
         h.b.root.setOnClickListener { onClick(r) }
         h.b.root.contentDescription = "${r.code} ${r.name} 歷史紀錄，點擊查詢最新日線圖表"
         val accent = when {
-            r.radar.startsWith("A_") -> Color.parseColor("#FF496C")
-            r.radar.startsWith("B_") -> Color.parseColor("#F6A623")
-            else -> Color.parseColor("#36A3FF")
+            r.radar.startsWith("A_") -> NeonUi.pink
+            r.radar.startsWith("B_") -> NeonUi.amber
+            else -> NeonUi.cyan
         }
 
-        h.b.root.strokeColor = accent
+        h.b.root.strokeColor = NeonUi.border
         h.b.badge.text = when {
             r.radar.startsWith("A_") -> "A"
             r.radar.startsWith("B_") -> "B"
             else -> "C"
         }
+        h.b.badge.setTextColor(accent)
         h.b.badge.background = GradientDrawable().apply {
             cornerRadius = 22f
-            setColor(accent)
+            setColor(Color.argb(35,Color.red(accent),Color.green(accent),Color.blue(accent)))
         }
         h.b.codeName.text = "${r.code}  ${r.name}"
         h.b.meta.text = "${r.sector}  ·  ${SimpleDateFormat("MM/dd HH:mm", Locale.TAIWAN).format(Date(r.ts))}"
         h.b.price.text = String.format("%,.2f  %+.2f%%", r.price, r.changePct)
-        h.b.price.setTextColor(if (r.changePct >= 0) Color.parseColor("#FF496C") else Color.parseColor("#2FD18A"))
+        h.b.price.setTextColor(if (r.changePct >= 0) NeonUi.pink else NeonUi.mint)
         h.b.scoreRing.setScore(r.score, accent)
         h.b.chartView.showAxes = true
         h.b.chartView.setWindow(60)

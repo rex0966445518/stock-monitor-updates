@@ -33,10 +33,14 @@ class PaperRepository(context:Context) {
         if(!b.enabled||!PaperEngine.session(now)){return synchronized(lock){val current=read();PaperEngine.step(current,emptyMap(),now);save(current);current}}
         val eligible=b.candidates.filter{now-it.observedAt in 1..7*86400000L}.sortedWith(compareByDescending<PaperCandidate>{it.score}.thenBy{it.code}).take(60)
         val symbols=(b.positions.map{it.code to it.exchange}+eligible.map{it.code to it.exchange}).distinct()
+        val exitRules=com.rex.twboardingscanner.data.ExitRuleStore(app).read(StockScope.SCANNER)
+        val histories=if(exitRules.any{it.active})b.positions.associate{p->p.code to runCatching{
+            com.rex.twboardingscanner.data.MarketDataProvider(app).loadChartHistory(p.code,if(p.exchange=="tse")Market.TWSE else Market.TPEX)
+        }.getOrDefault(emptyList())}else emptyMap()
         val quotes=runCatching{if(symbols.isEmpty())emptyMap() else PaperQuoteProvider().load(symbols)}.getOrDefault(emptyMap())
         // Use time AFTER the network request: a delayed request must not cross the 13:20 cutoff.
         return synchronized(lock) {
-            val current=read();now=System.currentTimeMillis();PaperEngine.step(current,quotes,now,com.rex.twboardingscanner.data.StockPolicyStore(app).read())
+            val current=read();now=System.currentTimeMillis();PaperEngine.step(current,quotes,now,com.rex.twboardingscanner.data.StockPolicyStore(app).read(),com.rex.twboardingscanner.data.ExitRuleStore(app).read(StockScope.SCANNER),histories)
             if(symbols.isEmpty()&&current.enabled&&PaperEngine.session(now))current.status="尚無有效候選股 · 請先完成 ABC 全市場掃描"
             save(current);current
         }

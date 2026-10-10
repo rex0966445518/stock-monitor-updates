@@ -1,9 +1,40 @@
 <resources>
     <style name="Theme.TWBoardingScanner" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:statusBarColor">#061321</item>
-        <item name="android:navigationBarColor">#061321</item>
-        <item name="colorPrimary">#FF496C</item>
-        <item name="colorSecondary">#36A3FF</item>
+        <item name="android:windowBackground">#080E19</item>
+        <item name="android:statusBarColor">#080E19</item>
+        <item name="android:navigationBarColor">#080E19</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="colorPrimary">#6FDAEB</item>
+        <item name="colorPrimaryVariant">#243346</item>
+        <item name="colorSecondary">#96A7E6</item>
+        <item name="colorSurface">#101A2A</item>
+        <item name="colorOnSurface">#EBF1FA</item>
+        <item name="android:colorBackground">#080E19</item>
+        <item name="android:textColorPrimary">#EBF1FA</item>
+        <item name="android:textColorSecondary">#94A4B9</item>
+        <item name="android:colorAccent">#6FDAEB</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.Scanner.Dialog</item>
+    </style>
+    <style name="ThemeOverlay.Scanner.Dialog" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
+        <item name="colorSurface">#101A2A</item>
+        <item name="colorOnSurface">#EBF1FA</item>
+        <item name="android:textColorPrimary">#EBF1FA</item>
+        <item name="android:textColorSecondary">#94A4B9</item>
+        <item name="colorPrimary">#6FDAEB</item>
+        <item name="shapeAppearanceMediumComponent">@style/Shape.Scanner.Dialog</item>
+    </style>
+    <style name="Shape.Scanner.Dialog" parent="ShapeAppearance.MaterialComponents.MediumComponent"><item name="cornerSize">24dp</item></style>
+    <style name="Widget.Scanner.Button" parent="Widget.MaterialComponents.Button.OutlinedButton">
+        <item name="android:minHeight">52dp</item><item name="android:minWidth">0dp</item>
+        <item name="android:textSize">13sp</item><item name="android:textAllCaps">false</item>
+        <item name="android:paddingLeft">8dp</item><item name="android:paddingRight">8dp</item>
+        <item name="android:insetTop">3dp</item><item name="android:insetBottom">3dp</item>
+        <item name="cornerRadius">14dp</item><item name="strokeWidth">1dp</item>
+        <item name="strokeColor">#243346</item><item name="backgroundTint">#101A2A</item><item name="android:textColor">#D4DEEB</item>
+    </style>
+    <style name="Widget.Scanner.Primary" parent="Widget.Scanner.Button">
+        <item name="backgroundTint">#6FDAEB</item><item name="android:textColor">#080E19</item><item name="strokeWidth">0dp</item><item name="android:fontFamily">sans-serif-medium</item>
     </style>
 </resources>

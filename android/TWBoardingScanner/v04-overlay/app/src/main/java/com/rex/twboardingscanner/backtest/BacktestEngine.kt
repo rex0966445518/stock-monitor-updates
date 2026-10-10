@@ -11,9 +11,10 @@ fun defaultBtRules()=RadarType.entries.associateWith{type->ScanConditions.forRad
 fun btPercent(value:Double)=java.math.BigDecimal.valueOf(value).stripTrailingZeros().toPlainString()
 data class BtSettings(val start:LocalDate,val end:LocalDate,val capital:Double=3000000.0,val codes:String="",val rules:Map<RadarType,Set<String>> = defaultBtRules(),val sectors:Set<StockSector> = StockSector.entries.toSet(),val strategyVersion:Int=4,
     val maxHoldingStocks:Int?=if(strategyVersion>=4)25 else null,val targetNetPct:Double=3.0,
-    val stockPolicy:StockPolicy=StockPolicy(),val stockScope:StockScope=StockScope.BACKTEST){
+    val stockPolicy:StockPolicy=StockPolicy(),val stockScope:StockScope=StockScope.BACKTEST,val exitRules:List<ExitRule> = emptyList()){
     fun validateTrading(){
         stockPolicy.validate()
+        ExitRules.validate(exitRules)
         require(strategyVersion in 2..4)
         if(strategyVersion>=4)require(maxHoldingStocks!=null&&maxHoldingStocks>0){"最高持倉請填 1 以上的整數"}
         else require(maxHoldingStocks==null&&targetNetPct==3.0){"舊策略必須保留原持倉及獲利規則"}
@@ -120,6 +121,22 @@ object BacktestEngine {
             if(day<=p.entryDate)return@forEach
             val bar=bars[p.code]?.get(day)?:return@forEach
             if(bar.volumeShares-(usedShares[p.code]?:0)<1000)return@forEach
+            if(settings.exitRules.any{it.active}) {
+                val known=meta[p.code]?.bars.orEmpty().filter{date(it)<day}.sortedBy{it.time}.distinctBy(::date)
+                val signal=known.lastOrNull()
+                if(signal!=null&&date(signal)>=p.entryDate) {
+                    val pnlPct=(PaperEngine.netSell(signal.close)/p.cost-1)*100
+                    val matched=ExitRules.match(settings.exitRules,p.entryDate,date(signal),pnlPct,known)
+                    if(matched!=null&&bar.open.isFinite()&&bar.open>0) {
+                        val px=PaperEngine.execution(bar.open,false);val amount=px*1000
+                        val fee=PaperEngine.fee(amount);val tax=PaperEngine.tax(amount);val net=amount-fee-tax
+                        b.cash+=net;b.holdings.remove(p);usedShares[p.code]=(usedShares[p.code]?:0)+1000
+                        val reason="下車條件 ${matched+1}：${settings.exitRules[matched].description()}；訊號 ${date(signal)}，淨損益 ${btPercent(pnlPct)}%"
+                        b.trades.add(BtTrade(day,p.signalDate,p.code,p.name,p.radar,"SELL",px,fee,tax,net-p.cost,reason,time="09:00",timeKind="前一完整日線判斷；下一可交易日開盤價模擬",lotId=p.lotId,target=0.0,dataDate=date(signal),dayClose=bar.close,previousClose=previous[p.code]?.get(day)))
+                        return@forEach
+                    }
+                }
+            }
             // From day 6 onward, the standing exit is break-even. Do not inspect the
             // day's future high to choose a better target fill over an earlier break-even fill.
             val aged=b.strategyVersion>=3&&ChronoUnit.DAYS.between(p.entryDate,day)>5

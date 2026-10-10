@@ -31,7 +31,7 @@ object PaperEngine {
         val slipped=price*(if(buy)1+SLIPPAGE else 1-SLIPPAGE);val step=tick(slipped)
         return round((if(buy)ceil(slipped/step-1e-8) else floor(slipped/step+1e-8))*step*100)/100
     }
-    fun step(b:PaperBook,quotes:Map<String,PaperQuote>,now:Long,policy:com.rex.twboardingscanner.domain.StockPolicy=com.rex.twboardingscanner.domain.StockPolicy()) {
+    fun step(b:PaperBook,quotes:Map<String,PaperQuote>,now:Long,policy:com.rex.twboardingscanner.domain.StockPolicy=com.rex.twboardingscanner.domain.StockPolicy(),exitRules:List<com.rex.twboardingscanner.domain.ExitRule> = emptyList(),histories:Map<String,List<com.rex.twboardingscanner.domain.DailyBar>> = emptyMap()) {
         b.lastRun=now
         if(!b.enabled){b.status="已暫停 · 不新增或賣出";return}
         if(!session(now)){b.status=if(b.positions.isEmpty())"休市／時段外 · 等待下次開盤" else "時段外停止交易 · ${b.positions.size} 檔保留至下次交易時段";return}
@@ -44,7 +44,11 @@ object PaperEngine {
             p.mark=q.last;p.markAt=q.at;p.peak=max(p.peak,q.last)
             // Never buy and sell against the same tick, including after a retry/restart.
             if(q.at<=p.boughtAt)return@forEach
+            val known=histories[p.code].orEmpty().filter{com.rex.twboardingscanner.domain.RuleMetrics.tradingDate(it.time)<local(now).toLocalDate()}.sortedBy{it.time}
+            val signal=known.lastOrNull()
+            val exitIndex=signal?.let{com.rex.twboardingscanner.domain.ExitRules.match(exitRules,local(p.boughtAt).toLocalDate(),com.rex.twboardingscanner.domain.RuleMetrics.tradingDate(it.time),(netSell(it.close)/p.cost-1)*100,known)}
             val reason=when {
+                exitIndex!=null->"下車條件 ${exitIndex+1}：${exitRules[exitIndex].description()}；訊號 ${com.rex.twboardingscanner.domain.RuleMetrics.tradingDate(signal!!.time)}"
                 flatten->"13:15 收束平倉"
                 q.last<=p.entry*.97->"觸及停損 −3%"
                 q.last>=p.entry*1.06->"觸及停利 +6%"

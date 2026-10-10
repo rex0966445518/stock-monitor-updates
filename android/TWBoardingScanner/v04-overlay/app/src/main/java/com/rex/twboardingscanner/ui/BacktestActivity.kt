@@ -28,6 +28,8 @@ class BacktestActivity:AppCompatActivity(){
     private lateinit var endButton:com.google.android.material.button.MaterialButton
     private lateinit var capital:EditText;private lateinit var codes:EditText
     private lateinit var maxHoldings:EditText;private lateinit var profitTarget:EditText
+    private var exitRules:List<ExitRule> = emptyList()
+    private lateinit var exitButton:com.google.android.material.button.MaterialButton
     private var lastLimit=25;private var lastTarget=3.0
     private lateinit var status:TextView;private lateinit var results:LinearLayout
     private lateinit var runButton:com.google.android.material.button.MaterialButton
@@ -53,54 +55,73 @@ class BacktestActivity:AppCompatActivity(){
         if(logId!=null){viewingLog=true;openJournal(logId);return}
         val config=store.configuration()
         val saved=runCatching{BtSettingsCodec.decode(config!!)}.getOrElse{BtSettingsCodec.capture(this,start,end,3000000.0,"")}
-        btRules=saved.rules;btSectors=saved.sectors
+        btRules=saved.rules;btSectors=saved.sectors;exitRules=saved.exitRules
         lastLimit=saved.maxHoldingStocks?:25;lastTarget=saved.targetNetPct
         start=runCatching{LocalDate.parse(config?.getString("start"))}.getOrDefault(start);end=runCatching{LocalDate.parse(config?.getString("end"))}.getOrDefault(end)
-        val root=NeonUi.vertical(this).apply{setPadding(dp(14),dp(12),dp(14),dp(24))}
-        val scroll=ScrollView(this).apply{setBackgroundColor(Color.rgb(4,17,30));addView(root)};setContentView(scroll)
+        val root=NeonUi.vertical(this).apply{setPadding(dp(16),dp(16),dp(16),dp(28))}
+        val scroll=ScrollView(this).apply{setBackgroundColor(NeonUi.canvas);addView(root)};setContentView(scroll)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
-        root.addView(NeonUi.row(this,listOf(label("歷史回測",25f,NeonUi.ink,true),NeonUi.button(this,"返回"){finish()})))
-        root.addView(label("每日篩選 → 尾盤買一張 → 達獲利目標賣出",12f,NeonUi.mint));root.addView(NeonUi.gap(this,12))
-        root.addView(NeonUi.row(this,listOf(NeonUi.button(this,"禁股名單",NeonUi.pink){StockToolsActivity.open(this,"BAN",StockScope.BACKTEST)},NeonUi.button(this,"限價名單",NeonUi.amber){StockToolsActivity.open(this,"LIMIT",StockScope.BACKTEST)},NeonUi.button(this,"搜尋股票"){StockToolsActivity.open(this,"SEARCH",StockScope.BACKTEST)})))
-        root.addView(NeonUi.gap(this,8))
-        root.addView(NeonUi.button(this,"自動測試機器人",NeonUi.amber){startActivity(Intent(this,BtRobotActivity::class.java))})
-        root.addView(NeonUi.gap(this,8))
-        root.addView(tradingControls())
+        root.addView(NeonUi.header(this,"歷史回測","STRATEGY LAB","以歷史資料驗證入場與出場策略"){finish()})
+        root.addView(NeonUi.row(this,listOf(
+            NeonUi.button(this,"自動測試機器人",NeonUi.blue){startActivity(Intent(this,BtRobotActivity::class.java))},
+            NeonUi.button(this,"回測日誌"){startActivity(Intent(this,BacktestJournalActivity::class.java))})))
         root.addView(NeonUi.gap(this,12))
+        val execution=NeonUi.section(this,"回測控制","開始時保存本次條件；執行中修改供下次使用。")
+        status=label("準備中",13f,NeonUi.ink);execution.addView(status);execution.addView(NeonUi.gap(this,10))
+        runButton=NeonUi.primary(this,"開始自動回測"){launch()}
+        execution.addView(runButton)
+        execution.addView(NeonUi.row(this,listOf(
+            NeonUi.button(this,"停止回測",NeonUi.muted){store.update(store.active(),"使用者停止回測；未完成結果不列為績效","CANCELED");WorkManager.getInstance(this).cancelUniqueWork("historical-backtest");refreshStatus()},
+            NeonUi.button(this,"清除歸零",NeonUi.muted){clearCurrent()})))
+        root.addView(execution);root.addView(NeonUi.gap(this,16))
+
+        val period=NeonUi.vertical(this)
         startButton=NeonUi.button(this,"起始 $start"){pick(true)};endButton=NeonUi.button(this,"結束 $end"){pick(false)}
-        root.addView(startButton);root.addView(NeonUi.gap(this,6));root.addView(endButton)
-        root.addView(label("2016 年至昨日；單次最多 2 年，可選單日。",11f))
-        capital=EditText(this).apply{setText((config?.optDouble("capital",3000000.0)?:3000000.0).toLong().toString());hint="初始模擬本金";inputType=android.text.InputType.TYPE_CLASS_NUMBER;setTextColor(NeonUi.ink)}
-        root.addView(label("模擬本金 TWD",12f));root.addView(capital)
-        codes=EditText(this).apply{setText(config?.optString("codes")?:"");hint="全部股票（或輸入 2330, 3661…）";setTextColor(NeonUi.ink);setHintTextColor(NeonUi.muted)}
-        root.addView(label("留空掃描現存上市櫃；全市場首次下載較久。",12f));root.addView(codes)
+        period.addView(startButton);period.addView(endButton)
+        period.addView(label("2016 年至昨日；最多 2 年，可選單日。",11f));period.addView(NeonUi.gap(this,12))
+        capital=NeonUi.field(EditText(this).apply{setText((config?.optDouble("capital",3000000.0)?:3000000.0).toLong().toString());hint="初始模擬本金";contentDescription="模擬本金 TWD";inputType=android.text.InputType.TYPE_CLASS_NUMBER})
+        period.addView(label("模擬本金 TWD",12f));period.addView(capital)
+        root.addView(period);NeonUi.group(root,period,period,"01  期間與本金","日期範圍、初始模擬資金","backtest-period")
+
+        val trading=NeonUi.vertical(this)
+        trading.addView(tradingControls())
+        exitButton=NeonUi.button(this,"下車賣出條件 · ${exitRules.count{it.active}} / 5 組",NeonUi.amber){
+            ExitRulesEditor.show(this,"歷史回測",exitRules){rules->
+                exitRules=rules;check(store.saveDraft(draft())){"無法儲存回測條件"}
+                com.rex.twboardingscanner.data.ExitRuleStore(this).save(StockScope.BACKTEST,rules)
+                exitButton.text="下車賣出條件 · ${rules.count{it.active}} / 5 組"
+            }
+        }.apply{tag="backtest-exit-rules"}
+        trading.addView(exitButton)
+        root.addView(trading);NeonUi.group(root,trading,trading,"02  交易與下車條件","持倉上限、獲利目標、5 組認賠條件","backtest-trading")
+
+        val universe=NeonUi.vertical(this)
+        universe.addView(label("股票代號",12f))
+        codes=NeonUi.field(EditText(this).apply{setText(config?.optString("codes")?:"");hint="全部股票，或 2330, 3661…";contentDescription="回測股票代號"})
+        universe.addView(codes);universe.addView(label("留空掃描現存上市櫃；首次下載需較長時間。",11f))
+        sectorButton=NeonUi.button(this,""){editSectors()};refreshSectorButton();universe.addView(sectorButton)
+        universe.addView(NeonUi.gap(this,12));universe.addView(label("回測專用 ABC 條件",15f,NeonUi.ink,true))
+        universe.addView(NeonUi.row(this,RadarType.entries.map{type->NeonUi.button(this,"",when(type){RadarType.A_EARLY_BREAKOUT->NeonUi.pink;RadarType.B_DEEP_REVERSAL->NeonUi.amber;else->NeonUi.cyan}){editRules(type)}.also{ruleButtons[type]=it}}))
+        refreshRuleButtons()
+        universe.addView(label("首次沿用主頁，之後獨立保存回測設定。",11f))
+        universe.addView(NeonUi.button(this,"查看完整回測條件"){if(readTrading(true)!=null)showRules(BtSettingsCodec.encode(draft()))})
+        universe.addView(NeonUi.gap(this,8))
+        universe.addView(NeonUi.row(this,listOf(NeonUi.button(this,"禁股名單",NeonUi.muted){StockToolsActivity.open(this,"BAN",StockScope.BACKTEST)},NeonUi.button(this,"限價名單",NeonUi.muted){StockToolsActivity.open(this,"LIMIT",StockScope.BACKTEST)})))
+        universe.addView(NeonUi.button(this,"搜尋股票"){StockToolsActivity.open(this,"SEARCH",StockScope.BACKTEST)})
+        root.addView(universe);NeonUi.group(root,universe,universe,"03  股票與入場篩選","股票範圍、產業、ABC 與管理名單","backtest-universe")
         val watcher=object:android.text.TextWatcher{
             override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}
             override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){}
             override fun afterTextChanged(s:android.text.Editable?){if(readTrading(false)!=null)store.saveDraft(draft())}
         }
         maxHoldings.addTextChangedListener(watcher);profitTarget.addTextChangedListener(watcher)
-        sectorButton=NeonUi.button(this,""){editSectors()};refreshSectorButton();root.addView(sectorButton)
-        root.addView(label("產業可複選；第一次沿用主頁，之後保留回測專用設定。",11f))
-        root.addView(NeonUi.gap(this,8))
-        root.addView(label("回測專用 ABC 條件",15f,NeonUi.ink,true))
-        root.addView(NeonUi.row(this,RadarType.entries.map{type->NeonUi.button(this,"",when(type){RadarType.A_EARLY_BREAKOUT->NeonUi.pink;RadarType.B_DEEP_REVERSAL->NeonUi.amber;else->NeonUi.cyan}){editRules(type)}.also{ruleButtons[type]=it}}))
-        refreshRuleButtons()
-        root.addView(label("點 A／B／C 自行勾選；不影響主頁。首次沿用主頁條件，之後保留上次回測設定。",11f))
-        root.addView(NeonUi.button(this,"查看完整回測條件"){if(readTrading(true)!=null)showRules(BtSettingsCodec.encode(draft()))})
-        root.addView(label("開始時保存 ABC、產業、持倉上限及獲利目標；執行中修改僅供下次回測。",11f))
-        runButton=NeonUi.button(this,"開始自動回測",NeonUi.mint){launch()};root.addView(runButton)
-        root.addView(NeonUi.button(this,"停止本次回測",NeonUi.amber){store.update(store.active(),"使用者停止回測；未完成結果不列為績效","CANCELED");WorkManager.getInstance(this).cancelUniqueWork("historical-backtest");refreshStatus()})
-        root.addView(NeonUi.gap(this,8))
-        root.addView(NeonUi.row(this,listOf(NeonUi.button(this,"清除歸零",NeonUi.amber){clearCurrent()},NeonUi.button(this,"回測日誌"){startActivity(Intent(this,BacktestJournalActivity::class.java))})))
-        root.addView(label("歸零損益、持倉與成交；保留條件設定及歷史日誌。",11f))
-        status=label("準備中",13f,NeonUi.ink);root.addView(status);root.addView(NeonUi.gap(this,14))
+        root.addView(NeonUi.gap(this,8));root.addView(label("績效與交易明細",19f,NeonUi.ink,true));root.addView(NeonUi.gap(this,12))
         results=NeonUi.vertical(this);root.addView(results)
-        root.addView(NeonUi.button(this,"查看模型假設與規則"){assumptions()});refreshStatus()
+        root.addView(NeonUi.gap(this,16));root.addView(NeonUi.button(this,"模型假設與成交規則",NeonUi.muted){assumptions()});refreshStatus()
     }
     private fun tradingControls():LinearLayout {
         val panel=NeonUi.vertical(this).apply{tag="backtest-trading-controls";background=NeonUi.panel(this@BacktestActivity,NeonUi.cyan);setPadding(dp(12),dp(12),dp(12),dp(12))}
-        panel.addView(label("交易設定",17f,NeonUi.ink,true));panel.addView(NeonUi.gap(this,8))
+        panel.background=null;panel.setPadding(0,0,0,0)
         fun field(title:String,value:String,unit:String,tagName:String,color:Int,decimal:Boolean):Pair<LinearLayout,EditText>{
             val box=NeonUi.vertical(this).apply{background=NeonUi.panel(this@BacktestActivity,color);setPadding(dp(10),dp(10),dp(10),dp(10))}
             box.addView(label(title,13f,NeonUi.ink,true))
@@ -110,9 +131,10 @@ class BacktestActivity:AppCompatActivity(){
         val limit=field("最高持倉檔數",lastLimit.toString(),"檔 · 1 以上整數","max-holding-stocks",NeonUi.cyan,false);maxHoldings=limit.second
         val target=field("獲利賣出",btPercent(lastTarget),"% · 扣除買賣費稅","target-net-pct",NeonUi.pink,true);profitTarget=target.second
         panel.addView(NeonUi.row(this,listOf(limit.first,target.first)));panel.addView(NeonUi.gap(this,8))
-        panel.addView(label("按不同股號計算持倉。滿額暫停新增股票，賣出清空該股後釋出名額；同股隔日再入選仍可加買一張，受可用資金限制。",12f))
-        panel.addView(label("各張獨立計算淨利，最早隔日賣出。超過 5 個日曆日改掛扣費稅保本價，仍虧損則續抱。",12f))
+        val notesStart=label("按不同股號計算持倉。滿額暫停新增股票，賣出清空該股後釋出名額；同股隔日再入選仍可加買一張，受可用資金限制。",12f);panel.addView(notesStart)
+        panel.addView(label("各張獨立計算淨利，最早隔日賣出。超過 5 個日曆日改掛扣費稅保本價，仍虧損則續抱；另有下車條件時可認賠出場。",12f))
         panel.addView(NeonUi.button(this,"折讓金 · 月成交 0.05%／0.1%"){rebateRules()})
+        NeonUi.group(panel,notesStart,panel.getChildAt(panel.childCount-1),"持倉與折讓金說明",key="backtest-explanation")
         return panel
     }
     private fun readTrading(showErrors:Boolean):Pair<Int,Double>? {
@@ -121,7 +143,7 @@ class BacktestActivity:AppCompatActivity(){
         val limitOk=limit!=null&&limit>0
         val targetOk=target!=null&&target.isFinite()&&target in 0.01..1000.0
         if(showErrors){maxHoldings.error=if(limitOk)null else "請填 1 以上整數（最多 2147483647）";profitTarget.error=if(targetOk)null else "請填 0.01～1000%"}
-        if(!limitOk||!targetOk)return null
+        if(!limitOk||!targetOk){if(showErrors)NeonUi.reveal(if(!limitOk)maxHoldings else profitTarget);return null}
         lastLimit=limit!!;lastTarget=target!!;return limit to target
     }
     override fun onResume(){super.onResume();if(!viewingLog){reloadApplied();handler.post(refresh)}}
@@ -130,10 +152,10 @@ class BacktestActivity:AppCompatActivity(){
     private fun launch(){
         val cash=capital.text.toString().toDoubleOrNull();val raw=codes.text.toString().trim()
         if(start>end||start<LocalDate.of(2016,1,1)||end>=today||ChronoUnit.DAYS.between(start,end)>730){Toast.makeText(this,"請選擇有效日期，區間最多 2 年",Toast.LENGTH_LONG).show();return}
-        if(cash==null||!cash.isFinite()||cash !in 50000.0..100000000.0){capital.error="本金限 50,000～100,000,000";return}
+        if(cash==null||!cash.isFinite()||cash !in 50000.0..100000000.0){capital.error="本金限 50,000～100,000,000";NeonUi.reveal(capital);return}
         val trading=readTrading(true)?:return
-        if(raw.split(Regex("[,，\\s]+" )).filter{it.isNotBlank()}.any{!it.matches(Regex("[1-9][0-9]{3}"))}){codes.error="請輸入四碼股票代號，以逗號分隔";return}
-        val id=UUID.randomUUID().toString();val s=BtSettingsCodec.capture(this,start,end,cash,raw).copy(rules=btRules.mapValues{it.value.toSet()},sectors=btSectors.toSet(),maxHoldingStocks=trading.first,targetNetPct=trading.second)
+        if(raw.split(Regex("[,，\\s]+" )).filter{it.isNotBlank()}.any{!it.matches(Regex("[1-9][0-9]{3}"))}){codes.error="請輸入四碼股票代號，以逗號分隔";NeonUi.reveal(codes);return}
+        val id=UUID.randomUUID().toString();val s=BtSettingsCodec.capture(this,start,end,cash,raw).copy(rules=btRules.mapValues{it.value.toSet()},sectors=btSectors.toSet(),maxHoldingStocks=trading.first,targetNetPct=trading.second,exitRules=exitRules)
         if(s.sectors.isEmpty()){Toast.makeText(this,"請至少選擇一個產業類型",Toast.LENGTH_LONG).show();return}
         if(s.rules.values.all{it.isEmpty()}){Toast.makeText(this,"請至少勾選一區的掃描條件",Toast.LENGTH_LONG).show();return}
         val data=workDataOf("id" to id)
@@ -152,7 +174,7 @@ class BacktestActivity:AppCompatActivity(){
     }
     private fun draft():BtSettings {
         readTrading(false)
-        return BtSettingsCodec.capture(this,start,end,capital.text.toString().toDoubleOrNull()?.takeIf{it.isFinite()&&it>0}?:3000000.0,codes.text.toString().trim()).copy(rules=btRules.mapValues{it.value.toSet()},sectors=btSectors.toSet(),maxHoldingStocks=lastLimit,targetNetPct=lastTarget)
+        return BtSettingsCodec.capture(this,start,end,capital.text.toString().toDoubleOrNull()?.takeIf{it.isFinite()&&it>0}?:3000000.0,codes.text.toString().trim()).copy(rules=btRules.mapValues{it.value.toSet()},sectors=btSectors.toSet(),maxHoldingStocks=lastLimit,targetNetPct=lastTarget,exitRules=exitRules)
     }
     private fun refreshRuleButtons(){ruleButtons.forEach{(type,button)->button.text="${type.name.take(1)} 條件 (${btRules[type].orEmpty().size})"}}
     internal fun applyRules(type:RadarType,selected:Set<String>){
@@ -220,17 +242,18 @@ class BacktestActivity:AppCompatActivity(){
         val revision=getSharedPreferences("scanner_filters",0).getString(BtRuleApply.REVISION,"").orEmpty()
         if(revision==appliedRevision||!::codes.isInitialized)return
         val saved=runCatching{BtSettingsCodec.decode(store.configuration()!!)}.getOrNull()?:return
-        appliedRevision=revision;start=saved.start;end=saved.end;btRules=saved.rules;btSectors=saved.sectors
+        appliedRevision=revision;start=saved.start;end=saved.end;btRules=saved.rules;btSectors=saved.sectors;exitRules=saved.exitRules
         startButton.text="起始 $start";endButton.text="結束 $end";capital.setText(saved.capital.toLong().toString());codes.setText(saved.codes)
         lastLimit=saved.maxHoldingStocks?:25;lastTarget=saved.targetNetPct
         maxHoldings.setText(lastLimit.toString());profitTarget.setText(btPercent(saved.targetNetPct))
+        exitButton.text="下車賣出條件 · ${exitRules.count{it.active}} / 5 組"
         refreshRuleButtons();refreshSectorButton();store.saveDraft(saved)
     }
     private fun openRobotReport(id:String,key:String){
-        val root=NeonUi.vertical(this).apply{setPadding(dp(14),dp(12),dp(14),dp(24))}
-        val scroll=ScrollView(this).apply{setBackgroundColor(Color.rgb(4,17,30));addView(root)};setContentView(scroll)
+        val root=NeonUi.vertical(this).apply{setPadding(dp(16),dp(16),dp(16),dp(28))}
+        val scroll=ScrollView(this).apply{setBackgroundColor(NeonUi.canvas);addView(root)};setContentView(scroll)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
-        root.addView(NeonUi.row(this,listOf(label("機器人測試詳情",22f,NeonUi.ink,true),NeonUi.button(this,"返回"){finish()})))
+        root.addView(NeonUi.header(this,"機器人測試詳情","ROBOT REPORT"){finish()})
         val loading=label("讀取組合紀錄…",13f);root.addView(loading)
         results=NeonUi.vertical(this);root.addView(results)
         Thread{
@@ -246,10 +269,10 @@ class BacktestActivity:AppCompatActivity(){
         }.start()
     }
     private fun openJournal(id:String){
-        val root=NeonUi.vertical(this).apply{setPadding(dp(14),dp(12),dp(14),dp(24))}
-        val scroll=ScrollView(this).apply{setBackgroundColor(Color.rgb(4,17,30));addView(root)};setContentView(scroll)
+        val root=NeonUi.vertical(this).apply{setPadding(dp(16),dp(16),dp(16),dp(28))}
+        val scroll=ScrollView(this).apply{setBackgroundColor(NeonUi.canvas);addView(root)};setContentView(scroll)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
-        root.addView(NeonUi.row(this,listOf(label("日誌詳情",25f,NeonUi.ink,true),NeonUi.button(this,"返回"){finish()})))
+        root.addView(NeonUi.header(this,"日誌詳情","TRADE JOURNAL"){finish()})
         root.addView(label("日誌 ${id.take(8)} · 獨立保存的回測紀錄",12f,NeonUi.cyan))
         val loading=label("讀取中…",13f);root.addView(loading)
         results=NeonUi.vertical(this);root.addView(results)
@@ -346,7 +369,7 @@ class BacktestActivity:AppCompatActivity(){
         "1. 啟動時保存回測專用 ABC 勾選條件、產業、持倉檔數上限與獲利百分比。A/B 依現有掃描器使用排除當日的日線；C 用當日日線。歷史 EPS／法人等缺資料會阻擋已勾條件，不會偷偷略過。\n\n"+
         "2. 每日入選股票各買 1,000 股，同日跨 ABC 去重；不同日重複入選可以再買一張。不同股號合計不能超過設定的持倉檔數；同股多張只占一檔，全部賣出該股才釋出名額。名額或現金不足會記錄未買原因；競爭時依股號排序。\n\n"+
         "3. 以當日收盤價加不利滑價 0.1% 模擬尾盤買入，時間記為 13:30（模型假設，可能與延後收盤不同）。C 完整收盤訊號與同價成交無法證明可實際執行，屬理想化同收盤模型，可能高估績效。\n\n"+
-        "4. 每張獨立計算目標：扣買入手續費及賣出費稅後，淨利率達到使用者設定值（預設 3%），以含買入費的成本為分母，不含股息或折讓金。最早下一交易日才可賣。超過 5 個日曆日（買入日期差 ≥ 6）改掛扣費稅後的保本價；虧損仍續抱。不把折讓金或股息用來抵交易虧損。\n\n"+
+        "4. 每張獨立計算目標：扣買入手續費及賣出費稅後，淨利率達到使用者設定值（預設 3%），以含買入費的成本為分母，不含股息或折讓金。最早下一交易日才可賣。超過 5 個日曆日（買入日期差 ≥ 6）改掛扣費稅後的保本價；虧損仍續抱；下車條件另以前一完整日線判斷，於下一可交易日開盤模擬賣出。不把折讓金或股息用來抵交易虧損。\n\n"+
         "5. 開盤扣滑價後已達標，記 09:00 開盤模型；否則以日最高價扣滑價判斷是否可達目標，記 09:00–13:30『盤中觸價、確切時間未知』，不編造分鐘。日量只作總量上限，不證明委託排隊或價位深度可成交。\n\n"+
         "6. 買賣費率各 0.1425%，最低 20 元；賣出稅 0.3%；滑價 0.1%，依跳動單位取整。應收股息與折讓金不再投入。每日先處理舊倉賣出、再處理尾盤買入。\n\n"+
         "7. 截止日不強制賣出未達標股票；總損益含未實現損益、股息與估計折讓金。月買賣成交總額超過 5,000 萬按整月 0.1%，否則 0.05%，未滿月依截至當日成交額估算。只看已賣出的高勝率可能掩蓋留倉虧損。現存股票名單、目前產業分類與拆併股排除仍有樣本偏差。"

@@ -16,6 +16,7 @@ object BtRobotSpace {
     fun settings(rules:Map<RadarType,Set<String>> = defaultBtRules(),sectors:Set<StockSector> = StockSector.entries.toSet())=
         BtSettings(LocalDate.of(2026,8,1),LocalDate.of(2026,10,8),5000000.0,"",rules,sectors,maxHoldingStocks=25,targetNetPct=4.0)
     fun validate(s:BtSettings){
+        s.validateTrading()
         require(s.start==LocalDate.of(2026,8,1)&&s.end==LocalDate.of(2026,10,8)&&s.capital==5000000.0&&s.codes.isEmpty()&&s.maxHoldingStocks==25&&s.targetNetPct==4.0&&s.strategyVersion==4){"機器人交易參數必須固定"}
         require(s.sectors.isNotEmpty())
         require(s.rules.keys==RadarType.entries.toSet())

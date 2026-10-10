@@ -56,7 +56,7 @@ object BtRobotCheckpoint {
                 if(store.conditionFile(id).exists())store.conditionFile(id).copyTo(File(dir,"conditions.bin.gz"))
             }
             val snapshot=JSONObject(File(dir,"session.json").readText(Charsets.UTF_8))
-            val archiveVersion=if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).stockPolicy.active())3 else if(snapshot.optInt("searchVersion",1)>=2||BtRobotSpace.required(snapshot.optString("forbidden","0")).signum()!=0)2 else 1
+            val archiveVersion=if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).exitRules.any{it.active})4 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).stockPolicy.active())3 else if(snapshot.optInt("searchVersion",1)>=2||BtRobotSpace.required(snapshot.optString("forbidden","0")).signum()!=0)2 else 1
             val files=dir.listFiles()!!.sortedBy{it.name};val hashes=JSONObject()
             files.forEach{hashes.put(it.name,JSONObject().put("size",it.length()).put("sha256",digest(it)))}
             val manifest=JSONObject().put("format","AI-離職神器-robot").put("version",archiveVersion).put("engine",ENGINE).put("files",hashes)
@@ -82,12 +82,13 @@ object BtRobotCheckpoint {
             }}
             require(seen.containsAll(setOf("manifest.json","session.json","trials.bin","results.csv"))){"備份不完整"}
             fun json(name:String)=JSONObject(File(dir,name).inputStream().use{String(readBounded(it,1024*1024),Charsets.UTF_8)})
-            val manifest=json("manifest.json");require(manifest.getString("format")=="AI-離職神器-robot"&&manifest.getInt("version") in 1..3&&manifest.getString("engine")==ENGINE){"備份版本不相容"}
+            val manifest=json("manifest.json");require(manifest.getString("format")=="AI-離職神器-robot"&&manifest.getInt("version") in 1..4&&manifest.getString("engine")==ENGINE){"備份版本不相容"}
             val hashes=manifest.getJSONObject("files");require(hashes.keys().asSequence().toSet()==seen-"manifest.json")
             (seen-"manifest.json").forEach{name->val f=File(dir,name);val h=hashes.getJSONObject(name);require(f.length()==h.getLong("size")&&digest(f)==h.getString("sha256")){"備份校驗失敗：$name"}}
             val s=json("session.json");require(compatible(s)){"回測引擎版本不相容"}
             val settings=BtSettingsCodec.decode(s.getJSONObject("settings"));BtRobotSpace.validate(settings)
             require(!settings.stockPolicy.active()||manifest.getInt("version")>=3){"含禁股／限價的備份需要版本 3"}
+            require(!settings.exitRules.any{it.active}||manifest.getInt("version")>=4){"含下車條件的備份需要版本 4"}
             val required=s.optString("required","0");val forbidden=s.optString("forbidden","0");val combinations=BtRobotSpace.total(required,forbidden)
             val searchVersion=s.optInt("searchVersion",1)
             require(searchVersion in 1..2&&searchVersion<=manifest.getInt("version")&&(BtRobotSpace.required(forbidden).signum()==0||searchVersion==2)){"排除條件與搜尋版本不符"}

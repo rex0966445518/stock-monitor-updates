@@ -47,12 +47,12 @@ class ResultFilterBar @JvmOverloads constructor(context: Context, attrs: Attribu
             val color = accents[i]
             button.text = "${titles[i]}  ${counts.getOrElse(i) { 0 }}"
             button.isSelected = active
-            button.strokeWidth = NeonUi.dp(context, if(active) 2 else 1).coerceAtLeast(1)
-            button.strokeColor = ColorStateList.valueOf(if(active) color else Color.rgb(39,69,92))
+            button.strokeWidth = NeonUi.dp(context, 1).coerceAtLeast(1)
+            button.strokeColor = ColorStateList.valueOf(if(active) color else NeonUi.border)
             button.backgroundTintList = ColorStateList.valueOf(if(active)
                 Color.rgb((Color.red(color)*.23).toInt(), (Color.green(color)*.23).toInt()+12, (Color.blue(color)*.23).toInt()+20)
-                else Color.rgb(9,28,45))
-            button.setTextColor(if(active) NeonUi.ink else color)
+                else NeonUi.surface)
+            button.setTextColor(if(active) NeonUi.ink else NeonUi.muted)
             button.contentDescription = "${titles[i]}，${counts.getOrElse(i) { 0 }} 筆${if(active) "，已選取" else ""}"
         }
     }

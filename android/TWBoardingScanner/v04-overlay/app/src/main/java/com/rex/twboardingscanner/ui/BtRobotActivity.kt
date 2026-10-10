@@ -37,11 +37,11 @@ class BtRobotActivity:AppCompatActivity(){
     private fun panel(accent:Int)=NeonUi.vertical(this).apply{background=NeonUi.panel(this@BtRobotActivity,accent);setPadding(NeonUi.dp(context,12),NeonUi.dp(context,12),NeonUi.dp(context,12),NeonUi.dp(context,12))}
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState);store=BtRobotStore(this);exportId=savedInstanceState?.getString("exportId").orEmpty()
-        val root=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(context,14),NeonUi.dp(context,12),NeonUi.dp(context,14),NeonUi.dp(context,24))}
-        val scroll=ScrollView(this).apply{setBackgroundColor(Color.rgb(4,17,30));addView(root)};setContentView(scroll)
+        val root=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(context,16),NeonUi.dp(context,16),NeonUi.dp(context,16),NeonUi.dp(context,28))}
+        val scroll=ScrollView(this).apply{setBackgroundColor(NeonUi.canvas);addView(root)};setContentView(scroll)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
-        root.addView(NeonUi.row(this,listOf(label("自動測試機器人",22f,NeonUi.ink,true),NeonUi.button(this,"返回"){finish()})))
-        root.addView(NeonUi.row(this,listOf(NeonUi.button(this,"禁股名單",NeonUi.pink){StockToolsActivity.open(this,"BAN",StockScope.ROBOT)},NeonUi.button(this,"限價名單",NeonUi.amber){StockToolsActivity.open(this,"LIMIT",StockScope.ROBOT)},NeonUi.button(this,"搜尋股票"){StockToolsActivity.open(this,"SEARCH",StockScope.ROBOT)})))
+        root.addView(NeonUi.header(this,"自動測試機器人","AUTOMATION LAB"){finish()})
+        val toolsRow=NeonUi.row(this,listOf(NeonUi.button(this,"禁股名單",NeonUi.pink){StockToolsActivity.open(this,"BAN",StockScope.ROBOT)},NeonUi.button(this,"限價名單",NeonUi.amber){StockToolsActivity.open(this,"LIMIT",StockScope.ROBOT)},NeonUi.button(this,"搜尋股票"){StockToolsActivity.open(this,"SEARCH",StockScope.ROBOT)}));root.addView(toolsRow)
         root.addView(NeonUi.gap(this,8))
         root.addView(label("自動增減 ABC 條件 · 持續搜尋更高總收益",12f,NeonUi.cyan))
         root.addView(NeonUi.gap(this,12))
@@ -51,21 +51,30 @@ class BtRobotActivity:AppCompatActivity(){
         fixed.addView(NeonUi.gap(this,10))
         fixed.addView(NeonUi.row(this,listOf(NeonUi.tile(this,"初始本金","500 萬","不融資",NeonUi.cyan),NeonUi.tile(this,"持倉上限","25 檔","不同股號",NeonUi.amber),NeonUi.tile(this,"淨利下車","4%","扣買賣費稅",NeonUi.pink))))
         fixed.addView(NeonUi.gap(this,8));fixed.addView(label("每次各買 1,000 股；沿用超過 5 天可保本賣出與折讓金。產業沿用建立測試時的回測設定，股號範圍不限。",11f))
-        root.addView(fixed);root.addView(NeonUi.gap(this,12))
+        root.addView(fixed)
+        root.addView(NeonUi.button(this,"下車賣出條件 · 5 組選填",NeonUi.amber){
+            if(!busy){
+                val prior=store.session()?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()
+                ExitRulesEditor.show(this,"自動測試機器人",prior.exitRules){rules->applyExitRules(rules)}
+            }
+        }.apply{tag="robot-exit-rules"})
+        root.addView(label("修改下車條件會保存成新批次、保留舊結果；按開始測試才執行。",11f))
+        root.addView(NeonUi.gap(this,12))
+        val configLast=root.getChildAt(root.childCount-1)
         val progress=panel(NeonUi.amber);progress.tag="robot-progress"
         progress.addView(label("組合探索進度",16f,NeonUi.ink,true));progress.addView(NeonUi.gap(this,8))
         status=label("尚未開始",13f,NeonUi.amber);progress.addView(status)
-        counts=label("已測試 0 組",15f,NeonUi.cyan,true);counts.setPadding(0,NeonUi.dp(this,10),0,NeonUi.dp(this,10));progress.addView(counts)
+        counts=label("已測試 0 組",13f,NeonUi.cyan,true);counts.setPadding(0,NeonUi.dp(this,10),0,NeonUi.dp(this,10));progress.addView(counts)
         best=label("目前已測最佳：—",23f,NeonUi.pink,true);progress.addView(best)
         coverage=label("首次取得日線後，固定保存本次資料",11f);progress.addView(NeonUi.gap(this,8));progress.addView(coverage)
         root.addView(progress);root.addView(NeonUi.gap(this,10))
-        startButton=NeonUi.button(this,"開始測試",NeonUi.mint){startTesting()}
+        startButton=NeonUi.primary(this,"開始測試"){startTesting()}
         pauseButton=NeonUi.button(this,"暫停",NeonUi.amber){if(!busy)BtRobotWorker.pause(this,store.active());render()}
         root.addView(NeonUi.row(this,listOf(startButton,pauseButton)))
         root.addView(NeonUi.gap(this,6))
         bestButton=NeonUi.button(this,"目前最佳 · 條件與套用",NeonUi.pink){if(!busy)store.session()?.let{showBestRules(it)}};root.addView(bestButton)
         root.addView(NeonUi.gap(this,6))
-        root.addView(NeonUi.row(this,listOf(NeonUi.button(this,"未測組合"){untested()},NeonUi.button(this,"測試紀錄"){sessions()})))
+        val manageFirst=NeonUi.row(this,listOf(NeonUi.button(this,"未測組合"){untested()},NeonUi.button(this,"測試紀錄"){sessions()}));root.addView(manageFirst)
         root.addView(NeonUi.gap(this,6))
         requiredButton=NeonUi.button(this,"條件選單",NeonUi.cyan){if(!busy)BtRobotRulesDialog.show(this,required(),forbidden()){required,forbidden->applyRequired(required,forbidden)}};requiredButton.tag="robot-required";root.addView(requiredButton)
         root.addView(NeonUi.gap(this,6))
@@ -80,15 +89,25 @@ class BtRobotActivity:AppCompatActivity(){
         spaceLabel=label("",12f);root.addView(spaceLabel)
         root.addView(label("目前已測最佳 ≠ 全組合最高。固定區間反覆調整可能過度擬合，不代表未來獲利；總損益含留倉、股息與估計折讓金。",12f,NeonUi.amber))
         root.addView(label("勾選財報／法人但缺歷史證據時不通過。意外中斷 10 秒後自動續跑，手動暫停不自啟。歷史條件首次預算完成後保存，續跑直接讀取。Android 省電／背景限制可能延後啟動；每組完成即保存。",11f))
+        val manageLast=root.getChildAt(root.childCount-1)
         root.addView(NeonUi.gap(this,16));root.addView(label("已測試組合",19f,NeonUi.ink,true))
-        records=NeonUi.vertical(this);root.addView(records);render()
+        records=NeonUi.vertical(this);root.addView(records)
+        // Keep execution and best result above configuration and maintenance tools.
+        val controls=NeonUi.vertical(this)
+        val from=root.indexOfChild(progress);val end=root.indexOfChild(bestButton)
+        repeat(end-from+1){val child=root.getChildAt(from);root.removeViewAt(from);controls.addView(child)}
+        root.addView(controls,1)
+        root.removeView(toolsRow);fixed.addView(NeonUi.gap(this,8));fixed.addView(toolsRow)
+        NeonUi.group(root,fixed,configLast,"測試參數與下車條件","固定區間、資金、5 組認賠條件","robot-settings")
+        NeonUi.group(root,manageFirst,manageLast,"條件選單與批次管理","必選／排除、匯入匯出與續跑","robot-management")
+        render()
     }
     override fun onResume(){super.onResume();visible=true;handler.post(poll)}
     override fun onPause(){visible=false;handler.removeCallbacks(poll);super.onPause()}
     private fun base():BtSettings {
         val saved=runCatching{BtSettingsCodec.decode(BacktestStore(this).configuration()!!)}.getOrNull()
             ?:BtSettingsCodec.capture(this,java.time.LocalDate.of(2026,8,1),java.time.LocalDate.of(2026,10,8),5000000.0,"")
-        return BtRobotSpace.settings(saved.rules,saved.sectors.ifEmpty{StockSector.entries.toSet()}).copy(stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(this).read(),stockScope=StockScope.ROBOT)
+        return BtRobotSpace.settings(saved.rules,saved.sectors.ifEmpty{StockSector.entries.toSet()}).copy(stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(this).read(),stockScope=StockScope.ROBOT,exitRules=com.rex.twboardingscanner.data.ExitRuleStore(this).read(StockScope.ROBOT))
     }
     private fun policySession():String {
         val old=store.session()?:return store.create(base(),required(),forbidden())
@@ -142,7 +161,7 @@ class BtRobotActivity:AppCompatActivity(){
     private fun showBestRules(s:JSONObject){val key=s.optString("bestKey");if(key.isNotEmpty())BtSnapshotDialog.show(this,BtSettingsCodec.encode(settings(s,key)),"目前已測最佳 · 條件快照")}
     private fun openReport(id:String,key:String){startActivity(Intent(this,BacktestActivity::class.java).putExtra("robotSession",id).putExtra("robotKey",key))}
     private fun renderTrials(id:String){
-        records.removeAllViews();if(id.isBlank()){records.addView(label("完成第一組後會顯示結果與完整買賣紀錄。",13f));return}
+        records.removeAllViews();if(id.isBlank()){records.addView(NeonUi.empty(this,"等待第一組結果","完成測試後，可在這裡檢閱組合條件與完整買賣紀錄。"));return}
         val rows=store.trials(id,20,page*20)
         rows.forEach{r->
             val key=r.getString("key");val pnl=r.getDouble("profit");val box=panel(color(pnl))
@@ -189,6 +208,19 @@ class BtRobotActivity:AppCompatActivity(){
             if(old.isNotBlank())BtRobotCheckpoint.cloneData(store,old,id)
             getSharedPreferences("backtest_robot",0).edit().putString("requiredDraft",key).putString("forbiddenDraft",forbiddenKey).commit()
             "必選／排除條件已保存；按開始測試，新批次沿用原歷史快取"
+        }
+    }
+    internal fun applyExitRules(rules:List<ExitRule>){
+        ExitRules.validate(rules)
+        val previous=store.session();val old=previous?.getString("id").orEmpty()
+        val settings=previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()
+        if(settings.exitRules==rules)return
+        runTask("正在保存下車條件與新測試批次…"){
+            if(old.isNotBlank())BtRobotWorker.pause(this,old)
+            val id=store.create(settings.copy(exitRules=rules),required(),forbidden())
+            if(old.isNotBlank())BtRobotCheckpoint.cloneData(store,old,id)
+            com.rex.twboardingscanner.data.ExitRuleStore(this).save(StockScope.ROBOT,rules)
+            "下車條件已保存；按開始測試，新批次沿用歷史資料"
         }
     }
     private fun clearZeros(){

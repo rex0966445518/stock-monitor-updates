@@ -35,18 +35,18 @@ class StockToolsActivity:AppCompatActivity(){
     private var lookupRefresh:(()->Unit)?=null
     private fun label(s:String,size:Float=12f,color:Int=NeonUi.muted,bold:Boolean=false)=NeonUi.label(this,s,size,color,bold)
     private fun card(accent:Int=NeonUi.cyan)=NeonUi.vertical(this).apply{background=NeonUi.panel(context,accent);setPadding(NeonUi.dp(context,12),NeonUi.dp(context,12),NeonUi.dp(context,12),NeonUi.dp(context,12))}
-    private fun field(hint:String)=EditText(this).apply{this.hint=hint;isSingleLine=true;setTextColor(NeonUi.ink);setHintTextColor(NeonUi.muted);textSize=16f;minHeight=NeonUi.dp(context,48);inputType=InputType.TYPE_CLASS_NUMBER}
+    private fun field(hint:String)=NeonUi.field(EditText(this)).apply{this.hint=hint;isSingleLine=true;setTextColor(NeonUi.ink);setHintTextColor(NeonUi.muted);textSize=16f;minHeight=NeonUi.dp(context,48);inputType=InputType.TYPE_CLASS_NUMBER}
     private fun safe(action:()->Unit){runCatching(action).onFailure{Toast.makeText(this,it.message?:"操作失敗",Toast.LENGTH_LONG).show()}}
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState);store=StockPolicyStore(this)
         mode=intent.getStringExtra("mode")?:"BAN";scope=runCatching{StockScope.valueOf(intent.getStringExtra("scope")?:"SCANNER")}.getOrDefault(StockScope.SCANNER)
-        val root=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(context,14),NeonUi.dp(context,12),NeonUi.dp(context,14),NeonUi.dp(context,24))}
-        val scroll=ScrollView(this).apply{setBackgroundColor(android.graphics.Color.rgb(4,17,30));addView(root)};setContentView(scroll)
+        val root=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(context,16),NeonUi.dp(context,16),NeonUi.dp(context,16),NeonUi.dp(context,28))}
+        val scroll=ScrollView(this).apply{setBackgroundColor(NeonUi.canvas);addView(root)};setContentView(scroll)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,i->val b=i.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(b.left,b.top,b.right,b.bottom);i}
-        root.addView(NeonUi.row(this,listOf(label("股票管理中心",22f,NeonUi.ink,true),NeonUi.button(this,"返回"){finish()})))
+        root.addView(NeonUi.header(this,"股票管理中心","MARKET TOOLS"){finish()})
         root.addView(label("禁股優先 · 限價放行可分區設定",12f,NeonUi.cyan));root.addView(NeonUi.gap(this,12))
         root.addView(NeonUi.row(this,listOf("BAN" to "禁股名單","LIMIT" to "限價名單","SEARCH" to "搜尋股票").map{(key,title)->NeonUi.button(this,title,if(key=="BAN")NeonUi.pink else NeonUi.cyan){mode=key;render()}.apply{tag="tools-$key"}}))
-        root.addView(NeonUi.gap(this,10));summary=label("",12f,NeonUi.cyan);root.addView(summary)
+        root.addView(NeonUi.gap(this,10));summary=label("",12f,NeonUi.cyan).apply{background=NeonUi.panel(context);setPadding(NeonUi.dp(context,16),NeonUi.dp(context,14),NeonUi.dp(context,16),NeonUi.dp(context,14))};root.addView(summary)
         root.addView(NeonUi.gap(this,10));body=NeonUi.vertical(this);root.addView(body)
         directory=StockDirectory(this).cached();render()
         if(directory.isEmpty()||System.currentTimeMillis()-(directory.minOfOrNull{it.fetchedAt}?:0)>6*3600000L)executor.execute{
@@ -56,6 +56,7 @@ class StockToolsActivity:AppCompatActivity(){
     }
     private fun render(){
         epoch++;lookupRefresh=null;body.removeAllViews();summary.text=store.read().summary()
+        listOf("BAN","LIMIT","SEARCH").forEach{key->findViewById<android.view.View>(android.R.id.content).findViewWithTag<com.google.android.material.button.MaterialButton>("tools-$key")?.let{NeonUi.selected(it,key==mode)}}
         when(mode){"LIMIT"->limits();"SEARCH"->search();else->bans()}
     }
     private fun inputLookup(parent:LinearLayout,onCode:(String,LinearLayout)->Unit={_,_->}){
@@ -92,7 +93,7 @@ class StockToolsActivity:AppCompatActivity(){
         inputLookup(body)
         body.addView(NeonUi.gap(this,12));body.addView(label("已禁用 ${store.read().banned.size} 檔",16f,NeonUi.pink,true))
         store.read().banned.sorted().forEach{code->val row=card(NeonUi.pink);row.addView(label("$code  ${store.name(code)}",17f,NeonUi.ink,true));row.addView(NeonUi.button(this,"解除禁股",NeonUi.muted){safe{store.change{it.copy(banned=it.banned-code)};render()}});body.addView(NeonUi.gap(this,8));body.addView(row)}
-        if(store.read().banned.isEmpty())body.addView(label("尚未加入禁股。",13f))
+        if(store.read().banned.isEmpty())body.addView(NeonUi.empty(this,"禁股名單目前為空","在上方輸入股票代號，即可建立共用禁股名單。"))
         body.addView(NeonUi.gap(this,12));body.addView(label("修改名單會停止正在執行的回測、暫停機器人；已完成日誌保留。機器人下次開始以新名單建立批次，沿用資料快取。",11f,NeonUi.amber))
     }
     private fun dropdown(items:List<String>):Spinner {

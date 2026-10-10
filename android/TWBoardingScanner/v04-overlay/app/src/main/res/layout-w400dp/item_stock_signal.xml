@@ -1,22 +1,22 @@
 <?xml version='1.0' encoding='utf-8'?>
-<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:layout_marginBottom="6dp" app:cardBackgroundColor="#06172A" app:cardCornerRadius="18dp" app:strokeWidth="2dp" app:cardElevation="5dp">
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="12dp">
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:layout_marginBottom="6dp" app:cardBackgroundColor="#101A2A" app:cardCornerRadius="20dp" app:strokeWidth="1dp" app:cardElevation="0dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
             <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
-                <TextView android:id="@+id/badge" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FFFFFF" android:textStyle="bold" android:paddingLeft="10dp" android:paddingRight="10dp" android:paddingTop="5dp" android:paddingBottom="5dp" />
-                <TextView android:id="@+id/codeName" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="18sp" />
-                <TextView android:id="@+id/sector" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#93AAC0" />
+                <TextView android:id="@+id/badge" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#EBF1FA" android:textStyle="bold" android:paddingLeft="10dp" android:paddingRight="10dp" android:paddingTop="5dp" android:paddingBottom="5dp" />
+                <TextView android:id="@+id/codeName" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textColor="#EBF1FA" android:textStyle="bold" android:textSize="18sp" />
+                <TextView android:id="@+id/sector" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#94A4B9" />
                 <TextView android:id="@+id/price" android:layout_width="match_parent" android:layout_height="wrap_content" android:textStyle="bold" android:textSize="26sp" />
             </LinearLayout>
             <com.rex.twboardingscanner.ui.ScoreRingView android:id="@+id/scoreRing" android:layout_width="68dp" android:layout_height="68dp" />
         </LinearLayout>
         <com.rex.twboardingscanner.ui.MiniStockChartView android:id="@+id/chartView" android:layout_width="match_parent" android:layout_height="245dp" android:layout_marginTop="6dp" />
-        <TextView android:id="@+id/volumeSummary" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#7BDFFE" android:textSize="12sp" android:textStyle="bold" android:paddingTop="8dp" android:paddingBottom="6dp" />
+        <TextView android:id="@+id/volumeSummary" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#6FDAEB" android:textSize="12sp" android:textStyle="bold" android:paddingTop="8dp" android:paddingBottom="6dp" />
         <LinearLayout android:id="@+id/recentVolumes" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:paddingBottom="6dp" />
         <com.rex.twboardingscanner.ui.ClosingAuctionView android:id="@+id/closingAuction" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:layout_marginBottom="8dp" />
-        <TextView android:id="@+id/trigger" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="4dp" android:textColor="#C7D7E5" android:textSize="12sp" />
+        <TextView android:id="@+id/trigger" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="4dp" android:textColor="#B7C4D6" android:textSize="12sp" />
         <com.rex.twboardingscanner.ui.FinancialPanelView android:id="@+id/financialPanel" android:layout_width="match_parent" android:layout_height="wrap_content" />
-        <com.google.android.material.button.MaterialButton android:id="@+id/financialButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="財務查核  ·  EPS 趨勢與明細  ›" android:textSize="12sp" android:textColor="#64DFFF" app:backgroundTint="#0C2337" app:strokeColor="#27638B" app:strokeWidth="1dp" app:cornerRadius="12dp" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/financialButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="財務查核  ·  EPS 趨勢與明細  ›" android:textSize="12sp" android:textColor="#6FDAEB" app:backgroundTint="#142031" app:strokeColor="#243346" app:strokeWidth="1dp" app:cornerRadius="12dp" />
         <com.google.android.material.chip.ChipGroup android:id="@+id/indicatorChips" android:layout_width="match_parent" android:layout_height="wrap_content" app:chipSpacingHorizontal="4dp" app:chipSpacingVertical="2dp" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

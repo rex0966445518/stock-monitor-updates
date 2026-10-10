@@ -24,22 +24,22 @@ class AppUpdateActivity:AppCompatActivity(){
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState);store=AppUpdateStore(this)
         autoInstall=savedInstanceState?.getBoolean("autoInstall")?:false;awaitingPermission=savedInstanceState?.getBoolean("awaitingPermission")?:false
-        val root=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(this@AppUpdateActivity,14),NeonUi.dp(this@AppUpdateActivity,12),NeonUi.dp(this@AppUpdateActivity,14),NeonUi.dp(this@AppUpdateActivity,24))}
-        val scroll=ScrollView(this).apply{setBackgroundColor(Color.rgb(4,17,30));addView(root)};setContentView(scroll)
+        val root=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(this@AppUpdateActivity,16),NeonUi.dp(this@AppUpdateActivity,16),NeonUi.dp(this@AppUpdateActivity,16),NeonUi.dp(this@AppUpdateActivity,28))}
+        val scroll=ScrollView(this).apply{setBackgroundColor(NeonUi.canvas);addView(root)};setContentView(scroll)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val b=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(b.left,b.top,b.right,b.bottom);insets}
-        root.addView(NeonUi.row(this,listOf(NeonUi.label(this,"軟件更新",25f,NeonUi.ink,true),NeonUi.button(this,"返回"){finish()})))
+        root.addView(NeonUi.header(this,"軟件更新","SYSTEM UPDATE"){finish()})
         root.addView(NeonUi.label(this,"GitHub 官方更新包 · 支援跨版本更新",12f,NeonUi.cyan));root.addView(NeonUi.gap(this,16))
         val panel=NeonUi.vertical(this).apply{background=NeonUi.panel(this@AppUpdateActivity,NeonUi.cyan);setPadding(NeonUi.dp(this@AppUpdateActivity,16),NeonUi.dp(this@AppUpdateActivity,16),NeonUi.dp(this@AppUpdateActivity,16),NeonUi.dp(this@AppUpdateActivity,16))}
         headline=NeonUi.label(this,"準備檢查更新",22f,NeonUi.ink,true);panel.addView(headline)
         version=NeonUi.label(this,"",14f,NeonUi.cyan);panel.addView(version);panel.addView(NeonUi.gap(this,16))
-        bar=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply{max=100;progressTintList=android.content.res.ColorStateList.valueOf(NeonUi.pink);progressBackgroundTintList=android.content.res.ColorStateList.valueOf(NeonUi.blue)}
+        bar=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply{max=100;progressTintList=android.content.res.ColorStateList.valueOf(NeonUi.cyan);progressBackgroundTintList=android.content.res.ColorStateList.valueOf(NeonUi.blue)}
         panel.addView(bar,android.widget.LinearLayout.LayoutParams(-1,NeonUi.dp(this,8)));panel.addView(NeonUi.gap(this,10))
         detail=NeonUi.label(this,"",13f);panel.addView(detail);root.addView(panel);root.addView(NeonUi.gap(this,12))
-        primary=NeonUi.button(this,"一鍵更新",NeonUi.mint){if(store.snapshot().optString("status")=="READY"&&isNewer())install() else startUpdate()}.apply{tag="update-primary"};root.addView(primary)
+        primary=NeonUi.primary(this,"一鍵更新"){if(store.snapshot().optString("status")=="READY"&&isNewer())install() else startUpdate()}.apply{tag="update-primary"};root.addView(primary)
         pause=NeonUi.button(this,"暫停下載",NeonUi.amber){autoInstall=false;store.cancel();WorkManager.getInstance(this).cancelUniqueWork(AppUpdateWorker.WORK);render()}.apply{tag="update-pause"};root.addView(pause)
         root.addView(NeonUi.label(this,"下載中斷可重試接續；更新後保留掃描設定與回測日誌。安裝需由 Android 確認，首次可能要求允許此 App 安裝更新。",12f))
-        root.addView(NeonUi.gap(this,16));root.addView(NeonUi.label(this,"最新版本更新說明",18f,NeonUi.ink,true))
-        notes=NeonUi.label(this,"按一鍵更新取得最新版說明。",13f);notes.setTextIsSelectable(true);root.addView(notes)
+        root.addView(NeonUi.gap(this,16));val releaseNotes=NeonUi.section(this,"版本更新說明");root.addView(releaseNotes)
+        notes=NeonUi.label(this,"按一鍵更新取得最新版說明。",13f);notes.setTextIsSelectable(true);releaseNotes.addView(notes)
         root.addView(NeonUi.gap(this,16));root.addView(NeonUi.button(this,"開啟 GitHub 發布頁"){runCatching{startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(AppUpdateSource.PAGE)))}.onFailure{Toast.makeText(this,"無法開啟瀏覽器",Toast.LENGTH_SHORT).show()}})
         render()
         if(savedInstanceState==null&&intent.getBooleanExtra("startUpdate",false)){
