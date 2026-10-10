@@ -46,7 +46,8 @@ internal class BtRuleChoice(c:Context,private val title:String,initial:Choice,pr
             val color=when(choice){Choice.FREE->NeonUi.muted;Choice.REQUIRED->NeonUi.mint;Choice.EXCLUDED->NeonUi.pink}
             paint.color=color;paint.strokeWidth=NeonUi.dp(context,2).toFloat();val r=NeonUi.dp(context,3).toFloat()
             canvas.drawRoundRect(left.toFloat(),top,left+size,top+size,r,r,paint)
-            fun x(f:Float)=left+size*f;fun y(f:Float)=top+size*f
+            fun x(f:Float)=left+size*f
+            fun y(f:Float)=top+size*f
             when(choice){
                 Choice.REQUIRED->{val path=Path();path.moveTo(x(.2f),y(.52f));path.lineTo(x(.43f),y(.75f));path.lineTo(x(.82f),y(.24f));canvas.drawPath(path,paint)}
                 Choice.EXCLUDED->{canvas.drawLine(x(.26f),y(.26f),x(.74f),y(.74f),paint);canvas.drawLine(x(.26f),y(.74f),x(.74f),y(.26f),paint)}
