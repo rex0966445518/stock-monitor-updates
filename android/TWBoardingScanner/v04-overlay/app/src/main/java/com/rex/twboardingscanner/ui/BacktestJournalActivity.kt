@@ -21,6 +21,10 @@ internal object BacktestJournalUi {
     fun time(value:Long)=if(value>0)formatter.format(Instant.ofEpochMilli(value)) else "舊版未記錄"
     fun state(value:String)=when(value){"DONE"->"已完成";"RUNNING"->"執行中";"CANCELED"->"已停止";"ERROR"->"失敗";else->"未完成"}
     private fun strings(a:JSONArray?)=if(a==null)emptyList() else (0 until a.length()).map{a.getString(it)}
+    fun bannedCount(s:JSONObject):Int?{
+        val banned=s.optJSONObject("stockPolicy")?.optJSONArray("banned")?:return null
+        return runCatching{(0 until banned.length()).map{i->banned.getString(i).trim().also{require(it.matches(Regex("[1-9][0-9]{3}")))}}.toSet().size}.getOrNull()
+    }
     fun tradingSummary(s:JSONObject):String {
         val version=s.optInt("strategyVersion",1)
         if(version<2)return "交易限制依原始舊版報告"
@@ -56,6 +60,7 @@ class BacktestJournalActivity:AppCompatActivity(){
     private lateinit var status:TextView
     private var rows:List<JSONObject> = emptyList()
     private var shown=20
+    private val expandedDiffs=mutableSetOf<String>()
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState)
         val root=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(this@BacktestJournalActivity,16),NeonUi.dp(this@BacktestJournalActivity,16),NeonUi.dp(this@BacktestJournalActivity,16),NeonUi.dp(this@BacktestJournalActivity,28))}
@@ -94,11 +99,14 @@ class BacktestJournalActivity:AppCompatActivity(){
             runOnUiThread{if(!isFinishing&&!isDestroyed)result.fold({reload();android.widget.Toast.makeText(this,"已匯入獨立日誌，原始績效保留",android.widget.Toast.LENGTH_LONG).show()},{status.text="匯入失敗：請選擇匯出的完整回測報告 JSON。${it.message}"})}
         }.start()
     }
-    internal fun renderEntries(data:List<JSONObject>){rows=data;shown=20;renderPage()}
+    internal fun renderEntries(data:List<JSONObject>){
+        rows=data.sortedWith(compareByDescending<JSONObject>{it.optLong("startedAt").takeIf{t->t>0}?:it.optLong("finishedAt")}.thenByDescending{it.optString("id")})
+        expandedDiffs.retainAll(rows.map{it.optString("id")}.toSet());shown=20;renderPage()
+    }
     private fun renderPage(){
         entries.removeAllViews();status.text="共 ${rows.size} 次回測 · 新到舊排列"
         if(rows.isEmpty()){entries.addView(NeonUi.empty(this,"尚無回測紀錄","開始一次回測後，條件快照、執行狀態與交易結果會自動保存在這裡。"));return}
-        rows.take(shown).forEach{row->
+        rows.take(shown).forEachIndexed{index,row->
             val id=row.getString("id");val s=row.optJSONObject("settings")?:JSONObject();val complete=row.optString("state")=="DONE"
             val pnl=row.optDouble("profit",0.0);val color=if(!complete)NeonUi.amber else if(pnl>=0)NeonUi.pink else NeonUi.mint
             val panel=NeonUi.vertical(this).apply{background=NeonUi.panel(this@BacktestJournalActivity,color);setPadding(NeonUi.dp(this@BacktestJournalActivity,12),NeonUi.dp(this@BacktestJournalActivity,12),NeonUi.dp(this@BacktestJournalActivity,12),NeonUi.dp(this@BacktestJournalActivity,12))}
@@ -106,16 +114,21 @@ class BacktestJournalActivity:AppCompatActivity(){
             panel.addView(NeonUi.label(this,BacktestJournalUi.state(row.optString("state"))+" · "+id.take(8),13f,color,true))
             panel.addView(NeonUi.label(this,BacktestJournalUi.time(stamp)+(if(row.optBoolean("legacyImported"))" · 舊版檔案時間" else " · 台北"),11f))
             panel.addView(NeonUi.label(this,"${s.optString("start","—")} → ${s.optString("end","—")}",15f,NeonUi.ink,true))
+            val banned=BacktestJournalUi.bannedCount(s)
+            panel.addView(NeonUi.label(this,banned?.let{"禁股 $it 檔"}?:"禁股數未記錄",13f,if(banned==null)NeonUi.muted else if(banned>0)NeonUi.amber else NeonUi.cyan,true).apply{
+                tag="journal-banned-$id";contentDescription=banned?.let{"本次回測保存的禁股名單共 $it 檔"}?:"此筆舊日誌未保存禁股數量"
+            })
             panel.addView(NeonUi.label(this,if(complete)String.format(Locale.TAIWAN,"%+,.0f 元",pnl) else "尚無完成績效",28f,color,true))
             if(complete)panel.addView(NeonUi.label(this,"買入 ${row.optInt("buys")} 張 · 賣出 ${row.optInt("closed")} 張 · 留倉 ${row.optInt("holdings")} 張",11f))
             panel.addView(NeonUi.label(this,"本金 ${String.format(Locale.TAIWAN,"%,.0f",s.optDouble("capital",0.0))} 元",12f))
             panel.addView(NeonUi.label(this,BacktestJournalUi.tradingSummary(s),12f,NeonUi.cyan))
             val rules=s.optJSONObject("rules")
             panel.addView(NeonUi.label(this,if(rules==null)"舊版條件未完整記錄" else RadarType.entries.joinToString(" · "){"${it.name.take(1)} ${rules.optJSONArray(it.name)?.length()?:0} 項"},12f,NeonUi.cyan))
+            panel.addView(BacktestDiffView(this,row,rows.getOrNull(index+1),id in expandedDiffs){open->if(open)expandedDiffs.add(id) else expandedDiffs.remove(id)})
             panel.addView(NeonUi.gap(this,8))
             panel.addView(NeonUi.row(this,listOf(NeonUi.button(this,"條件快照"){BtSnapshotDialog.show(this,s,"回測條件 · ${id.take(8)}")},NeonUi.button(this,"檢閱日誌",color){startActivity(Intent(this,BacktestActivity::class.java).putExtra("journalId",id))})))
             entries.addView(panel);entries.addView(NeonUi.gap(this,10))
         }
-        if(shown<rows.size)entries.addView(NeonUi.button(this,"載入更多（已顯示 $shown / ${rows.size}）"){shown+=20;renderPage()})
+        if(shown<rows.size)entries.addView(NeonUi.button(this,"載入更多（已顯示 $shown / ${rows.size}）"){shown+=20;renderPage()}.apply{tag="journal-load-more"})
     }
 }

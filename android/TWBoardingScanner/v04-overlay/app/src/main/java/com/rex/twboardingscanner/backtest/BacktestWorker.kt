@@ -38,6 +38,7 @@ object BtSettingsCodec {
         .put("sectors",JSONArray(s.sectors.map{it.name}.sorted()))
         .put("sectorLabels",JSONArray(s.sectors.sortedBy{it.ordinal}.map{it.label}))
         .put("ruleLabels",JSONObject().apply{s.rules.forEach{(type,ids)->put(type.name,JSONArray(com.rex.twboardingscanner.domain.ScanConditions.forRadar(type).filter{it.id in ids}.map{it.label}))}})
+        .put("ruleLabelMap",JSONObject().apply{s.rules.forEach{(type,ids)->put(type.name,JSONObject().apply{com.rex.twboardingscanner.domain.ScanConditions.forRadar(type).filter{it.id in ids}.forEach{put(it.id,it.label)}})}})
         .put("rebateModel",if(s.strategyVersion>=3)JSONObject().put("threshold",50000000).put("lowRate",0.0005).put("highRate",0.001).put("basis","每曆月買賣成交總額；超過門檻全月適用高率；未滿月依截止日累計估計，不加入可用資金")else JSONObject.NULL)
         .put("breakEvenAfterCalendarDays",if(s.strategyVersion>=3)5 else JSONObject.NULL)
         .put("strategyLabel",(s.maxHoldingStocks?.let{"最高持倉 $it 檔（不同股號）；"}?:"持倉檔數不限；")+if(s.strategyVersion>=3)"尾盤各買 1,000 股；隔日起扣買賣費稅淨利 $target% 賣出；持有超過 5 個日曆日改以扣費稅保本出場，虧損續抱（另有下車條件時依快照判斷）。每月買賣合計超過 5,000 萬折讓 0.1%，否則 0.05%；估計應收折讓金納入總損益但不再投資。" else "尾盤各買 1,000 股；隔日起扣買賣費稅淨利 ≥ $target% 才賣出；未達標續抱，截止日保留持倉。")
