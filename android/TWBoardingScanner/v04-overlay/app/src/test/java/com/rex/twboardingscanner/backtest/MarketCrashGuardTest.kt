@@ -113,6 +113,10 @@ class MarketCrashGuardTest {
             .putString("decision",MarketGuardDecision("NORMAL").json().toString()).commit()
         val data=MarketIndexData(app)
         assertTrue(data.cached(now+1000).canBuy);assertFalse(data.cached(now+300001).canBuy);assertFalse(data.cached(now+86400000).canBuy)
+        val month=YearMonth.of(2026,9);val firstOctober=stamp(LocalDate.of(2026,10,1),9,0)
+        assertFalse("September intramonth cache cannot become permanent in October",MarketIndexData.monthCacheUsable(month,stamp(LocalDate.of(2026,9,30),10,0),firstOctober,false))
+        assertTrue(MarketIndexData.monthCacheUsable(month,firstOctober,firstOctober+86400000,false))
+        assertFalse(MarketIndexData.monthCacheUsable(YearMonth.of(2026,10),firstOctober,firstOctober+1000,true))
     }
     @Test fun robotSnapshotRoundTripPreservesTheSameIndexAndGuardDecisions(){
         val bars=market();val series=stock(bars.map{it.date});val data=BacktestData.Loaded(listOf(series),1,emptyList(),bars)

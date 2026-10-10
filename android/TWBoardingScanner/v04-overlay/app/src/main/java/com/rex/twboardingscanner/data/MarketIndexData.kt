@@ -17,6 +17,14 @@ class MarketIndexData(private val context:Context){
     companion object {
         private val liveLock=Any()
         private const val TTL=300000L
+        internal fun monthCacheUsable(month:YearMonth,savedAt:Long,now:Long,force:Boolean):Boolean{
+            if(savedAt<=0||now<savedAt)return false
+            val savedDay=java.time.Instant.ofEpochMilli(savedAt).atZone(RuleMetrics.TAIPEI).toLocalDate()
+            val today=java.time.Instant.ofEpochMilli(now).atZone(RuleMetrics.TAIPEI).toLocalDate()
+            // A cache fetched DURING a month may omit its final session. Re-fetch it after rollover.
+            val complete=month<YearMonth.from(today)&&savedDay>month.atEndOfMonth()
+            return complete||(!force&&now-savedAt<=TTL)
+        }
         fun date(raw:String):LocalDate {
             val digits=raw.filter{it.isDigit()}
             require(digits.length in 7..8){"大盤日期格式無效"}
@@ -62,13 +70,12 @@ class MarketIndexData(private val context:Context){
     }
     fun load(from:LocalDate,end:LocalDate,progress:(String)->Unit={},cancel:()->Boolean={false},force:Boolean=false):List<MarketIndexBar>{
         require(from<=end)
-        val result=mutableListOf<MarketIndexBar>();val today=LocalDate.now(RuleMetrics.TAIPEI)
+        val result=mutableListOf<MarketIndexBar>()
         var month=YearMonth.from(from)
         while(month<=YearMonth.from(end)){
             check(!cancel()){"已取消大盤讀取"};progress("讀取加權指數 $month · 大盤暴跌保護")
             val file=File(context.cacheDir,"taiex-official-v1/$month.json").apply{parentFile?.mkdirs()}
-            val closed=month<YearMonth.from(today)
-            val cached=if(file.exists()&&(closed||(!force&&System.currentTimeMillis()-file.lastModified() in 0..TTL)))runCatching{parse(file.readText(),month)}.getOrNull() else null
+            val cached=if(file.exists()&&monthCacheUsable(month,file.lastModified(),System.currentTimeMillis(),force))runCatching{parse(file.readText(),month)}.getOrNull() else null
             val bars=cached?:run{
                 val date=month.atDay(1).format(DateTimeFormatter.BASIC_ISO_DATE)
                 val raw=fetch("https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK?date=$date&response=json")
@@ -91,7 +98,8 @@ class MarketIndexData(private val context:Context){
         if(!force&&prefs.getString("day",null)==today.toString()&&now-prefs.getLong("checked",0) in 0..TTL)return@synchronized cached(now)
         val decision=runCatching{
             val calendarFile=File(context.cacheDir,"taiex-calendar-${today.year}.json")
-            val calendar=if(calendarFile.exists()&&now-calendarFile.lastModified() in 0..86400000L)JSONArray(calendarFile.readText()) else {
+            val savedCalendar=if(!force&&calendarFile.exists()&&now-calendarFile.lastModified() in 0..86400000L)runCatching{JSONArray(calendarFile.readText()).also{previousSession(today,it)}}.getOrNull() else null
+            val calendar=savedCalendar?:run {
                 val raw=fetch("https://openapi.twse.com.tw/v1/holidaySchedule/holidaySchedule")
                 val a=JSONArray(raw);previousSession(today,a);calendarFile.writeText(raw);a
             }
