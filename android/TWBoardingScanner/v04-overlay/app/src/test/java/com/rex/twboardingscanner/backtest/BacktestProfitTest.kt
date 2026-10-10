@@ -29,7 +29,7 @@ class BacktestProfitTest {
     private val app get()=RuntimeEnvironment.getApplication()
     @Before fun clean(){
         File(app.filesDir,"backtests").deleteRecursively();File(app.filesDir,"backtest-journal").deleteRecursively()
-        listOf("backtest_status","scanner_filters").forEach{app.getSharedPreferences(it,0).edit().clear().commit()}
+        listOf("backtest_status","scanner_filters","stock-entry-policy").forEach{app.getSharedPreferences(it,0).edit().clear().commit()}
     }
     private fun fills(count:Int):JSONArray {
         val raw=JSONArray()
@@ -120,6 +120,8 @@ class BacktestProfitTest {
         val decor=ctl.get().window.decorView
         tagged(decor,"realized-profit-toggle")!!.performClick();assertEquals(1,cards(decor));assertNotNull(text(decor,"測試2330"))
         tagged(decor,"unrealized-profit-toggle")!!.performClick();assertEquals(1,cards(decor));assertNotNull(text(decor,"截止日現價"))
+        tagged(decor,"holding-ban")!!.performClick()
+        assertTrue("3661" in com.rex.twboardingscanner.data.StockPolicyStore(app).read().banned)
         val enriched=BacktestDailyLedger.enrich(report)
         assertEquals(run.realized,enriched.getJSONObject("run").getDouble("realized"),0.0)
         assertEquals(run.unrealized,enriched.getJSONObject("run").getDouble("unrealized"),0.0)

@@ -87,7 +87,7 @@ class StockPolicyTest{
         val policy=StockPolicyStore(app);policy.change{it.copy(ceiling=150.0)}
         policy.candidates(StockScope.SCANNER,JSONArray().put(JSONObject().put("date","2026-10-08").put("code","2317").put("name","示範公司").put("price",212.5).put("radar","A/C")),"畫面驗證示範 · 非真實行情",policy.read())
         val limits=Robolectric.buildActivity(StockToolsActivity::class.java,Intent(app,StockToolsActivity::class.java).putExtra("mode","LIMIT")).setup();capture(limits.get().window.decorView,"stock-limit-360.png");limits.pause().stop().destroy()
-        val home=Robolectric.buildActivity(MainActivity::class.java).setup();val h=home.get();val text=h.findViewById<TextView>(com.rex.twboardingscanner.R.id.versionText).text.toString();assertTrue(text.contains("雷允澤"));assertTrue(text.contains("0.4.31"));capture(h.window.decorView,"home-policy-360.png");home.pause().stop().destroy()
+        val home=Robolectric.buildActivity(MainActivity::class.java).setup();val h=home.get();val text=h.findViewById<TextView>(com.rex.twboardingscanner.R.id.versionText).text.toString();assertTrue(text.contains("雷允澤"));assertTrue(text.contains(h.packageManager.getPackageInfo(h.packageName,0).versionName!!));capture(h.window.decorView,"home-policy-360.png");home.pause().stop().destroy()
     }
     private fun capture(v:View,name:String){v.measure(View.MeasureSpec.makeMeasureSpec(720,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(1600,View.MeasureSpec.EXACTLY));v.layout(0,0,720,1600);val b=Bitmap.createBitmap(720,1600,Bitmap.Config.ARGB_8888);v.draw(Canvas(b));val f=File("build/ui-previews/$name");f.parentFile!!.mkdirs();f.outputStream().use{b.compress(Bitmap.CompressFormat.PNG,100,it)};b.recycle()}
 }
