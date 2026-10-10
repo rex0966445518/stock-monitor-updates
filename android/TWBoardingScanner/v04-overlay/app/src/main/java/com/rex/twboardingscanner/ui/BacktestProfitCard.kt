@@ -2,16 +2,21 @@ package com.rex.twboardingscanner.ui
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
 import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.Toast
 import com.google.android.material.button.MaterialButton
 import com.rex.twboardingscanner.data.StockPolicyStore
+import com.rex.twboardingscanner.data.StockDirectory
 import org.json.JSONObject
 import java.time.LocalDate
 import java.util.Locale
 
-internal class BacktestProfitCard(c:Context,t:JSONObject,realized:Boolean,cutoff:String):LinearLayout(c){
+internal class BacktestProfitCard(c:Context,t:JSONObject,realized:Boolean,cutoff:String,industry:String?=null):LinearLayout(c){
     private val code=t.optString("code").trim()
     private val stockName=t.optString("name").trim()
     private val policyStore=StockPolicyStore(c)
@@ -61,7 +66,19 @@ internal class BacktestProfitCard(c:Context,t:JSONObject,realized:Boolean,cutoff
         val pct=n(t,if(realized)"netProfitPct" else "unrealizedPct")
         val accent=tint(pnl)
         orientation=VERTICAL;background=NeonUi.panel(c,accent);setPadding(NeonUi.dp(c,12),NeonUi.dp(c,12),NeonUi.dp(c,12),NeonUi.dp(c,12))
-        val title=NeonUi.label(c,"${value(t,"code")}  ${value(t,"name")}",19f,NeonUi.ink,true)
+        val titleText="${value(t,"code")}  ${value(t,"name")}"
+        val sector=if(realized)"" else industry?:StockDirectory(c).industryLabels()[code]?:"待分類"
+        val title=NeonUi.label(c,titleText,19f,NeonUi.ink,true).apply{
+            tag="holding-title"
+            if(!realized){
+                text=SpannableStringBuilder(titleText).apply{
+                    val start=length;append("  · $sector")
+                    setSpan(RelativeSizeSpan(.58f),start,length,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    setSpan(ForegroundColorSpan(NeonUi.cyan),start,length,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+                contentDescription="$titleText，產業分類 $sector"
+            }
+        }
         if(realized)addView(title) else{
             banButton=NeonUi.button(c,"一鍵禁買",NeonUi.amber){
                 try{
@@ -114,6 +131,6 @@ internal class BacktestProfitCard(c:Context,t:JSONObject,realized:Boolean,cutoff
             if(source.isNotBlank()&&source!="原買入紀錄")addView(NeonUi.label(c,source,10f,NeonUi.amber))
         }
         if(pnl==null)addView(NeonUi.label(c,"此筆舊紀錄缺少損益資料",11f,NeonUi.amber))
-        contentDescription="${value(t,"code")} ${value(t,"name")} ${if(realized)"已實現" else "未實現"}損益 ${signed(pnl)} 元"
+        contentDescription="${value(t,"code")} ${value(t,"name")} ${if(realized)"" else "產業分類 $sector，"}${if(realized)"已實現" else "未實現"}損益 ${signed(pnl)} 元"
     }
 }

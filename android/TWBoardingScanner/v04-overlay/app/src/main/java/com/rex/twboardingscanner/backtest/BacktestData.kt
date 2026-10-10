@@ -16,6 +16,7 @@ class BacktestData(private val context:Context) {
         progress("取得現存上市櫃股票名單…")
         val universe=MarketDataProvider(context).loadBacktestUniverse()
         require(universe.isNotEmpty()){ "無法取得股票名單，請稍後重試" }
+        runCatching{com.rex.twboardingscanner.data.StockDirectory(context).remember(universe)}
         val codes=settings.codes.split(Regex("[,，\\s]+" )).filter{it.isNotBlank()}.toSet()
         if(codes.isEmpty())require(Market.entries.all{m->universe.any{it.market==m}}){"上市／上櫃名單不完整，請稍後重試"}
         val selected=universe.filter{it.sector in settings.sectors&&(codes.isEmpty()||it.code in codes)}

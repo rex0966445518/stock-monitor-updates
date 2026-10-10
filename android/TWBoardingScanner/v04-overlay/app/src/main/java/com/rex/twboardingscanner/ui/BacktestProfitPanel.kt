@@ -18,6 +18,7 @@ internal class BacktestProfitPanel(c:Context,trades:JSONArray,holdings:JSONArray
         val sold=(0 until trades.length()).map{trades.getJSONObject(it)}.filter{it.optString("side")=="SELL"}.sortedByDescending{it.optString("date")}
         val rawHeld=BacktestHoldingLedger.rows(holdings)
         val held=(0 until rawHeld.length()).map{rawHeld.getJSONObject(it)}.sortedWith(compareBy({it.optString("code")},{it.optString("entryDate")}))
+        val industries=com.rex.twboardingscanner.data.StockDirectory(c).industryLabels()
         val soldTile=NeonUi.tile(c,"已實現獲利",signed(realized),"已賣出 $closed 張 · 展開 ▾",tint(realized)).apply{tag="realized-profit-toggle"}
         val heldTile=NeonUi.tile(c,"未實現損益",signed(unrealized),"持倉 ${holdings.length()} 張 · 展開 ▾",tint(unrealized)).apply{tag="unrealized-profit-toggle"}
         addView(NeonUi.row(c,listOf(soldTile,heldTile)))
@@ -43,7 +44,7 @@ internal class BacktestProfitPanel(c:Context,trades:JSONArray,holdings:JSONArray
                 val total=if(selling)realized else unrealized
                 if(!complete||kotlin.math.abs(rows.sumOf{it.optDouble(key,0.0)}-total)>.5)host.addView(NeonUi.label(c,"部分舊明細缺資料或與總額不一致，上方保留原日誌總額。",11f,NeonUi.amber))
             }
-            rows.take(shown).forEach{row->host.addView(NeonUi.gap(c,8));host.addView(BacktestProfitCard(c,row,selling,cutoff))}
+            rows.take(shown).forEach{row->host.addView(NeonUi.gap(c,8));host.addView(BacktestProfitCard(c,row,selling,cutoff,industries[row.optString("code")]?:"待分類"))}
             if(shown<rows.size)host.addView(NeonUi.button(c,"載入更多（已顯示 $shown／${rows.size} 筆）"){shown+=20;render()}.apply{tag="profit-load-more"})
             else if(rows.isNotEmpty())host.addView(NeonUi.label(c,"已顯示全部 ${rows.size} 筆",12f,NeonUi.cyan))
             host.addView(NeonUi.button(c,"收合清單",NeonUi.muted){selected=null;render()}.apply{tag="profit-collapse"})

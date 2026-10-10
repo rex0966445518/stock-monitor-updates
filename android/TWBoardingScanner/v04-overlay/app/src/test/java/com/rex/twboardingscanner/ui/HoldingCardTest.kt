@@ -24,7 +24,7 @@ import java.io.File
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class HoldingCardTest {
     private val app get()=RuntimeEnvironment.getApplication()
-    @Before fun clean(){app.getSharedPreferences("stock-entry-policy",0).edit().clear().commit()}
+    @Before fun clean(){app.getSharedPreferences("stock-entry-policy",0).edit().clear().commit();File(app.filesDir,"stock-directory.json").delete()}
     private fun lot()=JSONObject().put("code","1597").put("name","直得").put("shares",1000).put("radar","C")
         .put("entryDate","2026-10-01").put("entryTime","13:30（收盤模型）").put("entry",155.0)
         .put("mark",142.5).put("markDate","2026-10-08").put("cost",155221.0)
@@ -66,6 +66,14 @@ class HoldingCardTest {
         }
         val missing=BacktestProfitCard(a,JSONObject(),false,"2026-10-08")
         assertFalse(button(missing).isEnabled)
+        assertTrue(missing.findViewWithTag<TextView>("holding-title").text.contains("待分類"))
+        val tsmc=BacktestProfitCard(a,lot().put("code","2330").put("name","台積電"),false,"2026-10-08")
+        assertEquals("2330  台積電  · 半導體",tsmc.findViewWithTag<TextView>("holding-title").text.toString())
+        val directory=com.rex.twboardingscanner.data.StockDirectory(a)
+        directory.remember(listOf(MarketStock("1597","直得",Market.TWSE,StockSector.UNKNOWN,155.0,155.0,155.0,155.0,0.0,1000,null,null)))
+        assertEquals("電機機械",directory.industryLabels()["1597"])
+        directory.remember(listOf(MarketStock("9998","分類測試",Market.TWSE,StockSector.SHIPPING,10.0,10.0,10.0,10.0,0.0,1000,null,null)))
+        assertEquals("航運",directory.industryLabels()["9998"])
         assertEquals(List(2){"買入 日期未記錄 時間未記錄"},times(missing))
         val sold=BacktestProfitCard(a,lot(),true,"2026-10-08")
         assertNull(button(sold));assertTrue(times(sold).isEmpty())
@@ -73,9 +81,9 @@ class HoldingCardTest {
     }
     @Test fun narrowCardAndLargeFontKeepActionAndTimeInsideTheCard(){
         val ctl=Robolectric.buildActivity(Activity::class.java).setup();val a=ctl.get();a.setTheme(R.style.Theme_TWBoardingScanner)
-        for(scale in listOf(1f,1.3f)){
+        for(scale in listOf(1f,1.3f))for(tsmc in listOf(false,true)){
             RuntimeEnvironment.setFontScale(scale)
-            val card=BacktestProfitCard(a,lot(),false,"2026-10-08")
+            val card=BacktestProfitCard(a,if(tsmc)lot().put("code","2330").put("name","台積電") else lot(),false,"2026-10-08")
             val width=NeonUi.dp(a,336)
             card.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED))
             card.layout(0,0,width,card.measuredHeight)
@@ -88,7 +96,7 @@ class HoldingCardTest {
             }
             assertTrue(button(card).height>=NeonUi.dp(a,48))
             val bitmap=Bitmap.createBitmap(card.width,card.height,Bitmap.Config.ARGB_8888);card.draw(Canvas(bitmap))
-            val file=File("build/ui-previews/holding-actions-${scale}.png");file.parentFile.mkdirs()
+            val file=File("build/ui-previews/holding-industry-${if(tsmc)"tsmc" else "hiwin"}-${scale}.png");file.parentFile.mkdirs()
             file.outputStream().use{bitmap.compress(Bitmap.CompressFormat.PNG,100,it)};bitmap.recycle()
         }
         ctl.pause().stop().destroy()
