@@ -95,8 +95,21 @@ class StockToolsActivity:AppCompatActivity(){
         if(store.read().banned.isEmpty())body.addView(label("尚未加入禁股。",13f))
         body.addView(NeonUi.gap(this,12));body.addView(label("修改名單會停止正在執行的回測、暫停機器人；已完成日誌保留。機器人下次開始以新名單建立批次，沿用資料快取。",11f,NeonUi.amber))
     }
+    private fun dropdown(items:List<String>):Spinner {
+        val values=object:ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,items){
+            private fun item(position:Int,expanded:Boolean)=label(getItem(position).orEmpty()+if(expanded)"" else "  ▾",15f,NeonUi.ink).apply{
+                gravity=android.view.Gravity.CENTER_VERTICAL
+                setPadding(NeonUi.dp(context,12),NeonUi.dp(context,8),NeonUi.dp(context,12),NeonUi.dp(context,8))
+                minHeight=NeonUi.dp(context,48)
+                if(expanded)setBackgroundColor(android.graphics.Color.rgb(12,35,55))
+            }
+            override fun getView(position:Int,convertView:android.view.View?,parent:android.view.ViewGroup):android.view.View=item(position,false)
+            override fun getDropDownView(position:Int,convertView:android.view.View?,parent:android.view.ViewGroup):android.view.View=item(position,true)
+        }
+        return Spinner(this).apply{adapter=values;background=NeonUi.panel(context,NeonUi.cyan);setPopupBackgroundDrawable(NeonUi.panel(context,NeonUi.cyan));minimumHeight=NeonUi.dp(context,48)}
+    }
     private fun selector(parent:LinearLayout,onSelect:()->Unit){
-        val spinner=Spinner(this).apply{adapter=ArrayAdapter(this@StockToolsActivity,android.R.layout.simple_spinner_dropdown_item,StockScope.entries.map{it.label});setSelection(scope.ordinal)}
+        val spinner=dropdown(StockScope.entries.map{it.label}).apply{setSelection(scope.ordinal);tag="scope-selector"}
         parent.addView(spinner,LinearLayout.LayoutParams(-1,NeonUi.dp(this,48)))
         spinner.onItemSelectedListener=object:AdapterView.OnItemSelectedListener{override fun onNothingSelected(p:AdapterView<*>?){};override fun onItemSelected(p:AdapterView<*>?,v:android.view.View?,position:Int,id:Long){if(scope!=StockScope.entries[position]){scope=StockScope.entries[position];onSelect()}}}
     }
@@ -112,20 +125,31 @@ class StockToolsActivity:AppCompatActivity(){
         val dates=(0 until rows.length()).map{rows.getJSONObject(it).getString("date")}.distinct().sortedDescending()
         val cards=NeonUi.vertical(this)
         if(dates.isNotEmpty()){
-            val days=Spinner(this).apply{adapter=ArrayAdapter(this@StockToolsActivity,android.R.layout.simple_spinner_dropdown_item,dates)};body.addView(days)
+            val days=dropdown(dates).apply{tag="date-selector"};body.addView(NeonUi.gap(this,8));body.addView(days)
             days.onItemSelectedListener=object:AdapterView.OnItemSelectedListener{override fun onNothingSelected(p:AdapterView<*>?){};override fun onItemSelected(p:AdapterView<*>?,v:android.view.View?,pos:Int,id:Long){cards.removeAllViews();limitedCards(cards,rows,dates[pos])}}
         }else body.addView(label("本次沒有超過限價的入選候選股。執行掃描或回測後會按日列出。",13f))
         body.addView(cards);body.addView(NeonUi.gap(this,12));body.addView(label("${scope.label} · 已放行",17f,NeonUi.mint,true))
         store.read().overrides[scope].orEmpty().sorted().forEach{code->body.addView(NeonUi.button(this,"$code ${store.name(code)} · 管理放行",NeonUi.mint){allowDialog(code,store.name(code))})}
     }
     private fun limitedCards(parent:LinearLayout,rows:JSONArray,date:String){
-        (0 until rows.length()).map{rows.getJSONObject(it)}.filter{it.getString("date")==date}.forEach{o->
+        val dayRows=(0 until rows.length()).map{rows.getJSONObject(it)}.filter{it.getString("date")==date}
+        var shown=0
+        parent.addView(label("$date · ${dayRows.size} 檔超價候選",12f,NeonUi.amber))
+        val more=NeonUi.button(this,"載入更多候選"){ }
+        fun page(){
+            parent.removeView(more)
+            val end=minOf(shown+50,dayRows.size)
+            dayRows.subList(shown,end).forEach{o->
             val code=o.getString("code");val name=o.getString("name");val p=store.read();val banned=code in p.banned
             val c=card(NeonUi.amber);c.addView(label("$code  $name",18f,NeonUi.ink,true));c.addView(label("${o.getString("date")} · ${o.optString("radar")} 區",11f))
             c.addView(label("${String.format(Locale.TAIWAN,"%,.2f",o.getDouble("price"))} 元",27f,NeonUi.amber,true))
             c.addView(NeonUi.button(this,if(banned)"已禁股，不能放行" else if(code in p.overrides[scope].orEmpty())"已放行 · 管理區域" else "選擇放行區域",NeonUi.mint){allowDialog(code,name)}.apply{isEnabled=!banned})
             parent.addView(NeonUi.gap(this,8));parent.addView(c)
+            }
+            shown=end
+            if(shown<dayRows.size){more.text="載入更多 · 已顯示 $shown / ${dayRows.size}";parent.addView(more)}
         }
+        more.setOnClickListener{page()};page()
     }
     private fun allowDialog(code:String,name:String){
         val p=store.read();val checks=StockScope.entries.map{code in p.overrides[it].orEmpty()}.toBooleanArray()

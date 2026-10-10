@@ -168,7 +168,8 @@ object BacktestEngine {
             if(trade.side=="BUY"){bucket.buyAmount+=trade.price*trade.shares;bucket.buyTrades++}
             else{bucket.sellAmount+=trade.price*trade.shares;bucket.sellTrades++}
         }
-        b.curve.add(BtDay(day,b.equity,signals.map{it.code}.distinct().size,today.count{it.side=="BUY"},today.count{it.side=="SELL"},b.skipped.size-skippedBefore,
+        val admitted=signals.map{it.code}.distinct().count{code->settings.stockPolicy.decision(code,bars[code]?.get(day)?.close?:Double.NaN,settings.stockScope)==StockDecision.ALLOW}
+        b.curve.add(BtDay(day,b.equity,admitted,today.count{it.side=="BUY"},today.count{it.side=="SELL"},b.skipped.size-skippedBefore,
             realized=today.filter{it.side=="SELL"}.sumOf{it.pnl},holdingCost=b.holdings.sumOf{it.cost},
             holdingValue=b.holdings.sumOf{PaperEngine.netSell(it.mark)},holdingLots=b.holdings.size,cash=b.cash,
             dividendAccrued=b.dividendAccrued,dayProfit=b.equity-previousEquity,staleLots=b.holdings.count{it.markDate<day},rebateAccrued=b.rebateAccrued,rebateChange=b.rebateAccrued-previousRebate))
