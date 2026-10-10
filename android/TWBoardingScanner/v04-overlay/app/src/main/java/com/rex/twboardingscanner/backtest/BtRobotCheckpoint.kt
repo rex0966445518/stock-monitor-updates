@@ -55,9 +55,11 @@ object BtRobotCheckpoint {
                 if(store.dataset(id).exists())store.dataset(id).copyTo(File(dir,"history.bin.gz"))
                 if(store.conditionFile(id).exists())store.conditionFile(id).copyTo(File(dir,"conditions.bin.gz"))
             }
+            val snapshot=JSONObject(File(dir,"session.json").readText(Charsets.UTF_8))
+            val archiveVersion=if(snapshot.optInt("searchVersion",1)>=2||BtRobotSpace.required(snapshot.optString("forbidden","0")).signum()!=0)2 else 1
             val files=dir.listFiles()!!.sortedBy{it.name};val hashes=JSONObject()
             files.forEach{hashes.put(it.name,JSONObject().put("size",it.length()).put("sha256",digest(it)))}
-            val manifest=JSONObject().put("format","AI-離職神器-robot").put("version",1).put("engine",ENGINE).put("files",hashes)
+            val manifest=JSONObject().put("format","AI-離職神器-robot").put("version",archiveVersion).put("engine",ENGINE).put("files",hashes)
             File(dir,"manifest.json").writeText(manifest.toString(),Charsets.UTF_8)
             target.parentFile?.mkdirs()
             ZipOutputStream(BufferedOutputStream(target.outputStream())).use{zip->(files+File(dir,"manifest.json")).forEach{f->zip.putNextEntry(ZipEntry(f.name));f.inputStream().use{it.copyTo(zip)};zip.closeEntry()}}
@@ -80,14 +82,16 @@ object BtRobotCheckpoint {
             }}
             require(seen.containsAll(setOf("manifest.json","session.json","trials.bin","results.csv"))){"備份不完整"}
             fun json(name:String)=JSONObject(File(dir,name).inputStream().use{String(readBounded(it,1024*1024),Charsets.UTF_8)})
-            val manifest=json("manifest.json");require(manifest.getString("format")=="AI-離職神器-robot"&&manifest.getInt("version")==1&&manifest.getString("engine")==ENGINE){"備份版本不相容"}
+            val manifest=json("manifest.json");require(manifest.getString("format")=="AI-離職神器-robot"&&manifest.getInt("version") in 1..2&&manifest.getString("engine")==ENGINE){"備份版本不相容"}
             val hashes=manifest.getJSONObject("files");require(hashes.keys().asSequence().toSet()==seen-"manifest.json")
             (seen-"manifest.json").forEach{name->val f=File(dir,name);val h=hashes.getJSONObject(name);require(f.length()==h.getLong("size")&&digest(f)==h.getString("sha256")){"備份校驗失敗：$name"}}
             val s=json("session.json");require(compatible(s)){"回測引擎版本不相容"}
             val settings=BtSettingsCodec.decode(s.getJSONObject("settings"));BtRobotSpace.validate(settings)
-            val required=s.optString("required","0");val combinations=BtRobotSpace.total(required)
+            val required=s.optString("required","0");val forbidden=s.optString("forbidden","0");val combinations=BtRobotSpace.total(required,forbidden)
+            val searchVersion=s.optInt("searchVersion",1)
+            require(searchVersion in 1..2&&searchVersion<=manifest.getInt("version")&&(BtRobotSpace.required(forbidden).signum()==0||searchVersion==2)){"排除條件與搜尋版本不符"}
             val tested=s.getLong("tested");require(tested in 0..5000000&&BigInteger.valueOf(tested)<=combinations)
-            require(BigInteger(s.getString("cursor")) in BigInteger.ZERO..combinations&&BigInteger(s.getString("seed")).signum()>=0&&s.optInt("searchVersion",1)==1)
+            require(BigInteger(s.getString("cursor")) in BigInteger.ZERO..combinations&&BigInteger(s.getString("seed")).signum()>=0)
             val history=File(dir,"history.bin.gz");val conditions=File(dir,"conditions.bin.gz")
             if(history.exists()){
                 require(digest(history)==s.getString("datasetSha256")){"固定行情校驗失敗"}
@@ -104,7 +108,7 @@ object BtRobotCheckpoint {
                     DataInputStream(BufferedInputStream(File(dir,"trials.bin").inputStream())).use{data->
                         require(data.readUTF()=="BTTRIALS1"&&data.readLong()==tested)
                         repeat(tested.toInt()){i->
-                            val key=data.readUTF();require(BtRobotSpace.key(BtRobotSpace.rules(key))==key&&BtRobotSpace.includes(key,required))
+                            val key=data.readUTF();require(BtRobotSpace.key(BtRobotSpace.rules(key))==key&&BtRobotSpace.includes(key,required,forbidden))
                             val length=data.readInt();require(length in 1..65536);val summary=ByteArray(length);data.readFully(summary);val r=JSONObject(String(summary,Charsets.UTF_8))
                             require(r.getString("key")==key&&r.getLong("seq")==i+1L&&r.getDouble("profit").isFinite())
                             val deleted=data.readInt();require(deleted in 0..1)

@@ -32,14 +32,14 @@ class BtRobotStore(private val c:Context){
     fun session(id:String=active()):JSONObject?=synchronized(lock){db.rawQuery("SELECT json FROM sessions WHERE id=?",arrayOf(id)).use{if(it.moveToFirst())JSONObject(it.getString(0))else null}}
     private fun putSession(o:JSONObject){check(db.update("sessions",ContentValues().apply{put("json",o.toString())},"id=?",arrayOf(o.getString("id")))==1)}
     fun sessions():List<JSONObject> = synchronized(lock){val out=mutableListOf<JSONObject>();db.rawQuery("SELECT json FROM sessions ORDER BY created DESC",null).use{while(it.moveToNext())out+=JSONObject(it.getString(0))};out}
-    fun create(s:BtSettings,required:String="0"):String=synchronized(lock){
-        BtRobotSpace.validate(s);BtRobotSpace.required(required)
+    fun create(s:BtSettings,required:String="0",forbidden:String="0"):String=synchronized(lock){
+        BtRobotSpace.validate(s);BtRobotSpace.validateConstraints(required,forbidden)
         session()?.let{if(it.optString("state") in setOf("RUNNING","RETRY"))putSession(it.put("state","PAUSED").put("token","").put("message","建立新測試；原進度已保存"))}
         val id=UUID.randomUUID().toString()
         val o=JSONObject().put("id",id).put("created",System.currentTimeMillis()).put("state","PAUSED").put("token","")
             .put("settings",BtSettingsCodec.encode(s)).put("tested",0).put("bestKey","").put("bestSeq",0).put("ack",0)
             .put("seed",BigInteger(80,java.security.SecureRandom()).toString()).put("cursor","0").put("message","按開始測試啟動")
-            .put("appVersion",c.packageManager.getPackageInfo(c.packageName,0).versionName).put("searchVersion",1).put("required",required).put("engineVersion",BtRobotCheckpoint.ENGINE).put("cleared",0)
+            .put("appVersion",c.packageManager.getPackageInfo(c.packageName,0).versionName).put("searchVersion",if(BtRobotSpace.required(forbidden).signum()==0)1 else 2).put("required",required).put("forbidden",forbidden).put("engineVersion",BtRobotCheckpoint.ENGINE).put("cleared",0)
         check(db.insertOrThrow("sessions",null,ContentValues().apply{put("id",id);put("created",o.getLong("created"));put("json",o.toString())})>0)
         check(prefs.edit().putString("active",id).commit());id
     }
@@ -48,6 +48,8 @@ class BtRobotStore(private val c:Context){
         val o=session(id)?:error("找不到測試紀錄")
         require(o.getString("state")!="DONE"){"此測試已完成"}
         BtRobotSpace.validate(BtSettingsCodec.decode(o.getJSONObject("settings")))
+        BtRobotSpace.validateConstraints(o.optString("required","0"),o.optString("forbidden","0"))
+        require(o.optInt("searchVersion",1) in 1..2){"搜尋版本不相容"}
         val token=UUID.randomUUID().toString();putSession(o.put("state","RUNNING").put("token",token).put("message","排入測試工作…").put("updatedAt",System.currentTimeMillis()));token
     }
     fun current(id:String,token:String)=synchronized(lock){session(id)?.let{it.optString("token")==token&&token.isNotEmpty()&&it.optString("state") in setOf("RUNNING","RETRY")}?:false}
@@ -61,9 +63,9 @@ class BtRobotStore(private val c:Context){
     fun seen(id:String,key:String)=synchronized(lock){db.rawQuery("SELECT 1 FROM trials WHERE session=? AND key=? LIMIT 1",arrayOf(id,key)).use{it.moveToFirst()}}
     fun next(id:String):BtRobotSpace.Candidate?=synchronized(lock){
         val s=session(id)?:error("找不到測試紀錄")
-        BtRobotSpace.next(BtRobotSpace.key(BtSettingsCodec.decode(s.getJSONObject("settings")).rules),s.optString("bestKey").ifBlank{null},BigInteger(s.getString("cursor")),BigInteger(s.getString("seed")),s.optString("required","0")){seen(id,it)}
+        BtRobotSpace.next(BtRobotSpace.key(BtSettingsCodec.decode(s.getJSONObject("settings")).rules),s.optString("bestKey").ifBlank{null},BigInteger(s.getString("cursor")),BigInteger(s.getString("seed")),s.optString("required","0"),s.optString("forbidden","0")){seen(id,it)}
     }
-    fun remaining(id:String):BigInteger {val s=session(id);return BtRobotSpace.total(s?.optString("required","0")?:"0")-BigInteger.valueOf(s?.optLong("tested")?:0L)}
+    fun remaining(id:String):BigInteger {val s=session(id);return BtRobotSpace.total(s?.optString("required","0")?:"0",s?.optString("forbidden","0")?:"0")-BigInteger.valueOf(s?.optLong("tested")?:0L)}
     fun retained(id:String)=synchronized(lock){db.rawQuery("SELECT COUNT(*) FROM trials WHERE session=? AND cleared=0",arrayOf(id)).use{it.moveToFirst();it.getLong(0)}}
     fun clearZero(id:String):Int=synchronized(lock){
         val s=session(id)?:return@synchronized 0;var removed=0
@@ -98,7 +100,7 @@ class BtRobotStore(private val c:Context){
         if(!current(id,token)||seen(id,candidate.key))return@synchronized false
         BtRobotSpace.validate(result.settings);require(BtRobotSpace.key(result.settings.rules)==candidate.key)
         require(result.run.profit.isFinite())
-        val s=session(id)!!;require(BtRobotSpace.includes(candidate.key,s.optString("required","0")));val finished=System.currentTimeMillis();val seq=s.getLong("tested")+1
+        val s=session(id)!!;require(BtRobotSpace.includes(candidate.key,s.optString("required","0"),s.optString("forbidden","0")));val finished=System.currentTimeMillis();val seq=s.getLong("tested")+1
         val report=JSONObject().put("id",UUID.nameUUIDFromBytes("$id:${candidate.key}".toByteArray(Charsets.UTF_8)).toString())
             .put("journalVersion",1).put("strategyVersion",result.settings.strategyVersion).put("robotSession",id).put("robotSequence",seq)
             .put("state","DONE").put("appVersion",s.getString("appVersion"))

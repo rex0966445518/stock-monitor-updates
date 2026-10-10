@@ -24,11 +24,20 @@ object BtRobotSpace {
     data class Candidate(val key:String,val cursor:BigInteger)
     /** Best-first one-bit neighbours, then an odd affine permutation visits every bit mask once. */
     fun required(key:String)=BigInteger(key,16).also{rules(key)}
-    fun total(required:String)=BigInteger.ONE.shiftLeft(slots.size-BtRobotSpace.required(required).bitCount())
-    fun includes(key:String,required:String)=BigInteger(key,16).and(BtRobotSpace.required(required))==BtRobotSpace.required(required)
-    fun next(base:String,best:String?,cursor:BigInteger,seed:BigInteger,required:String="0",seen:(String)->Boolean):Candidate? {
-        val fixed=BtRobotSpace.required(required);val free=slots.indices.filterNot{fixed.testBit(it)};val total=total(required)
-        fun lock(k:String)=BigInteger(k,16).or(fixed).toString(16)
+    fun validateConstraints(required:String,forbidden:String){
+        require(BtRobotSpace.required(required).and(BtRobotSpace.required(forbidden))==BigInteger.ZERO){"同一條件不能同時必選與排除"}
+    }
+    fun total(required:String,forbidden:String="0"):BigInteger {
+        validateConstraints(required,forbidden)
+        return BigInteger.ONE.shiftLeft(slots.size-BtRobotSpace.required(required).bitCount()-BtRobotSpace.required(forbidden).bitCount())
+    }
+    fun includes(key:String,required:String,forbidden:String="0"):Boolean {
+        validateConstraints(required,forbidden)
+        return BigInteger(key,16).and(BtRobotSpace.required(required))==BtRobotSpace.required(required)&&BigInteger(key,16).and(BtRobotSpace.required(forbidden))==BigInteger.ZERO
+    }
+    fun next(base:String,best:String?,cursor:BigInteger,seed:BigInteger,required:String="0",forbidden:String="0",seen:(String)->Boolean):Candidate? {
+        val total=total(required,forbidden);val fixed=BtRobotSpace.required(required);val blocked=BtRobotSpace.required(forbidden);val free=slots.indices.filterNot{fixed.testBit(it)||blocked.testBit(it)}
+        fun lock(k:String)=BigInteger(k,16).or(fixed).andNot(blocked).toString(16)
         fun expand(n:BigInteger)=free.foldIndexed(fixed){i,mask,bit->if(n.testBit(i))mask.setBit(bit)else mask}.toString(16)
         require(cursor.signum()>=0&&cursor<=total)
         val defaults=key(defaultBtRules())

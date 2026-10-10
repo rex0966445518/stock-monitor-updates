@@ -65,14 +65,14 @@ class BtRobotActivity:AppCompatActivity(){
         root.addView(NeonUi.gap(this,6))
         root.addView(NeonUi.row(this,listOf(NeonUi.button(this,"未測組合"){untested()},NeonUi.button(this,"測試紀錄"){sessions()})))
         root.addView(NeonUi.gap(this,6))
-        requiredButton=NeonUi.button(this,"必選條件",NeonUi.cyan){if(!busy)BtRobotRulesDialog.show(this,required()){applyRequired(it)}};requiredButton.tag="robot-required";root.addView(requiredButton)
+        requiredButton=NeonUi.button(this,"條件選單",NeonUi.cyan){if(!busy)BtRobotRulesDialog.show(this,required(),forbidden()){required,forbidden->applyRequired(required,forbidden)}};requiredButton.tag="robot-required";root.addView(requiredButton)
         root.addView(NeonUi.gap(this,6))
         root.addView(NeonUi.button(this,"一鍵清除零收益",NeonUi.amber){clearZeros()}.apply{tag="robot-clear-zero"})
         root.addView(NeonUi.gap(this,6))
         root.addView(NeonUi.row(this,listOf(NeonUi.button(this,"匯出結果／斷點"){exportCheckpoint()},NeonUi.button(this,"匯入並續跑"){importCheckpoint()})))
         root.addView(NeonUi.gap(this,6));root.addView(NeonUi.button(this,"建立新測試",NeonUi.amber){
-            if(!busy)MaterialAlertDialogBuilder(this).setTitle("建立新的測試批次").setMessage("會暂停目前批次並保留所有紀錄；新批次沿用目前回測的 ABC 與產業及必選條件，重新取得歷史資料。")
-                .setNegativeButton("取消",null).setPositiveButton("建立"){_,_->BtRobotWorker.pause(this,store.active());store.create(base(),required());stamp="";render()}.show()
+            if(!busy)MaterialAlertDialogBuilder(this).setTitle("建立新的測試批次").setMessage("會暂停目前批次並保留所有紀錄；新批次沿用目前回測的 ABC 與產業及必選／排除設定，重新取得歷史資料。")
+                .setNegativeButton("取消",null).setPositiveButton("建立"){_,_->BtRobotWorker.pause(this,store.active());store.create(base(),required(),forbidden());stamp="";render()}.show()
         })
         root.addView(NeonUi.gap(this,10))
         spaceLabel=label("",12f);root.addView(spaceLabel)
@@ -92,7 +92,7 @@ class BtRobotActivity:AppCompatActivity(){
         if(busy)return
         startButton.isEnabled=false
         Thread{
-            val result=runCatching{val id=store.active().ifBlank{store.create(base(),required())};BtRobotWorker.start(this,id)}
+            val result=runCatching{val id=store.active().ifBlank{store.create(base(),required(),forbidden())};BtRobotWorker.start(this,id)}
             runOnUiThread{if(!isFinishing&&!isDestroyed){result.onFailure{Toast.makeText(this,"無法開始：${it.message}",Toast.LENGTH_LONG).show()};render()}}
         }.start()
     }
@@ -100,10 +100,10 @@ class BtRobotActivity:AppCompatActivity(){
         if(busy)return
         val s=store.session();val id=s?.optString("id").orEmpty()
         if(lastId!=id){lastId=id;page=0;stamp=""}
-        val tested=s?.optLong("tested")?:0L;val total=BtRobotSpace.total(required());val remaining=total-BigInteger.valueOf(tested)
-        val fixed=BtRobotSpace.required(required()).bitCount()
-        requiredButton.text="必選條件 · 鎖定 $fixed 項"
-        spaceLabel.text="必選 $fixed 項 · 自由 ${65-fixed} 項 · 共 ${num(total)} 種組合。先測基準與最佳附近，再探索其他組合。已清理的組合仍標記為測過。"
+        val tested=s?.optLong("tested")?:0L;val total=BtRobotSpace.total(required(),forbidden());val remaining=total-BigInteger.valueOf(tested)
+        val fixed=BtRobotSpace.required(required()).bitCount();val blocked=BtRobotSpace.required(forbidden()).bitCount()
+        requiredButton.text="條件選單 · 必選 $fixed／排除 $blocked"
+        spaceLabel.text="必選 $fixed 項 · 排除 $blocked 項 · 自由 ${65-fixed-blocked} 項 · 共 ${num(total)} 種組合。先測基準與最佳附近，再探索其他組合。已清理的組合仍標記為測過。"
         val running=s?.optString("state") in setOf("RUNNING","RETRY")
         status.text=s?.optString("message")?:"按開始測試，自動尋找更高收益組合"
         counts.text="已測試 ${num(tested)} 組\n未測試 ${num(remaining)} 組\n已清理 ${num(s?.optLong("cleared")?:0L)} 組零收益"
@@ -154,7 +154,7 @@ class BtRobotActivity:AppCompatActivity(){
         val id=s.getString("id");val content=NeonUi.vertical(this);val preview=mutableSetOf<String>()
         var cursor=BigInteger(s.getString("cursor"))
         repeat(10){
-            val candidate=BtRobotSpace.next(BtRobotSpace.key(BtSettingsCodec.decode(s.getJSONObject("settings")).rules),s.optString("bestKey").ifBlank{null},cursor,BigInteger(s.getString("seed")),s.optString("required","0")){it in preview||store.seen(id,it)}
+            val candidate=BtRobotSpace.next(BtRobotSpace.key(BtSettingsCodec.decode(s.getJSONObject("settings")).rules),s.optString("bestKey").ifBlank{null},cursor,BigInteger(s.getString("seed")),s.optString("required","0"),s.optString("forbidden","0")){it in preview||store.seen(id,it)}
             if(candidate!=null){
                 preview+=candidate.key;cursor=candidate.cursor
                 content.addView(NeonUi.button(this,BtRobotSpace.rules(candidate.key).entries.joinToString(" · "){"${it.key.name.take(1)} ${it.value.size} 項"}){BtSnapshotDialog.show(this,BtSettingsCodec.encode(settings(s,candidate.key)),"尚未測試 · 候選規則")})
@@ -165,17 +165,18 @@ class BtRobotActivity:AppCompatActivity(){
         MaterialAlertDialogBuilder(this).setTitle("未測試組合").setView(ScrollView(this).apply{addView(wrap)}).setPositiveButton("關閉",null).show()
     }
     private fun required()=store.session()?.optString("required","0")?:getSharedPreferences("backtest_robot",0).getString("requiredDraft","0").orEmpty()
-    internal fun applyRequired(key:String){
-        BtRobotSpace.required(key)
-        if(key==required())return
+    private fun forbidden()=store.session()?.optString("forbidden","0")?:getSharedPreferences("backtest_robot",0).getString("forbiddenDraft","0").orEmpty()
+    internal fun applyRequired(key:String,forbiddenKey:String=forbidden()){
+        BtRobotSpace.validateConstraints(key,forbiddenKey)
+        if(key==required()&&forbiddenKey==forbidden())return
         val old=store.active();val previous=store.session()
         val settings=previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()
-        runTask("正在保存必選條件並沿用快取…"){
+        runTask("正在保存必選／排除條件並沿用快取…"){
             if(old.isNotBlank())BtRobotWorker.pause(this,old)
-            val id=store.create(settings,key)
+            val id=store.create(settings,key,forbiddenKey)
             if(old.isNotBlank())BtRobotCheckpoint.cloneData(store,old,id)
-            getSharedPreferences("backtest_robot",0).edit().putString("requiredDraft",key).commit()
-            "必選條件已保存；按開始測試，新批次沿用原歷史快取"
+            getSharedPreferences("backtest_robot",0).edit().putString("requiredDraft",key).putString("forbiddenDraft",forbiddenKey).commit()
+            "必選／排除條件已保存；按開始測試，新批次沿用原歷史快取"
         }
     }
     private fun clearZeros(){

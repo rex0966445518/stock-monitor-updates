@@ -132,11 +132,91 @@ class BtRobotCheckpointTest {
         assertTrue(BtRobotCheckpoint.compatible(JSONObject().put("appVersion","0.4.24")))
         assertFalse(BtRobotCheckpoint.compatible(JSONObject().put("engineVersion","future").put("appVersion","0.4.24")))
     }
+    @Test fun exclusionsAreNeverTestedAcrossSeedsNeighboursAndExhaustiveFreeSpace(){
+        val all=BtRobotSpace.total-BigInteger.ONE
+        val free=setOf(0,24,64)
+        val required=BtRobotSpace.slots.indices.filter{it !in free&&it%2==0}.fold(BigInteger.ZERO){n,i->n.setBit(i)}
+        val forbidden=all.xor(required).let{n->free.fold(n){v,i->v.clearBit(i)}}
+        val on=required.toString(16);val off=forbidden.toString(16)
+        assertEquals(BigInteger.valueOf(8),BtRobotSpace.total(on,off))
+        for(seed in listOf(BigInteger.ZERO,BigInteger.ONE,BigInteger("736895001"))){
+            val seen=mutableSetOf<String>();var cursor=BigInteger.ZERO
+            repeat(8){
+                val candidate=BtRobotSpace.next(all.toString(16),all.toString(16),cursor,seed,on,off){it in seen}!!
+                assertTrue(BtRobotSpace.includes(candidate.key,on,off));assertTrue(seen.add(candidate.key));cursor=candidate.cursor
+            }
+            assertNull(BtRobotSpace.next(all.toString(16),"0",cursor,seed,on,off){it in seen})
+        }
+        assertEquals(BigInteger.ONE,BtRobotSpace.total("0",all.toString(16)))
+        assertEquals("0",BtRobotSpace.next(all.toString(16),null,BigInteger.ZERO,BigInteger.ONE,"0",all.toString(16)){false}!!.key)
+        assertThrows(Exception::class.java){BtRobotSpace.total("1","1")}
+        val store=BtRobotStore(app);val old=store.create(BtRobotSpace.settings())
+        assertThrows(Exception::class.java){store.create(BtRobotSpace.settings(),"1","1")};assertEquals(old,store.active())
+    }
+    @Test fun exclusionsPersistThroughPauseExportImportAndRejectContradictoryResults(){
+        val store=BtRobotStore(app);val settings=BtRobotSpace.settings();val id=store.create(settings,"1","2");val token=store.resume(id)
+        snapshot(store,id,token);add(store,id,token,50.0);add(store,id,token,70.0)
+        val bad=BtRobotSpace.Candidate("3",BigInteger.ZERO)
+        assertThrows(Exception::class.java){store.commit(id,token,bad,fixture(settings.copy(rules=BtRobotSpace.rules("3")),1000.0),123)}
+        assertEquals(2L,store.session(id)!!.getLong("tested"));store.pause(id)
+        val expected=store.next(id)!!;assertTrue(BtRobotSpace.includes(expected.key,"1","2"))
+        val resumed=store.resume(id);assertEquals(expected,store.next(id));store.pause(id)
+        assertFalse(store.current(id,resumed))
+        val zip=File(app.cacheDir,"robot-exclusions.zip");BtRobotCheckpoint.export(app,id,zip)
+        ZipFile(zip).use{z->assertEquals(2,JSONObject(z.getInputStream(z.getEntry("manifest.json")).bufferedReader().readText()).getInt("version"))}
+        val restored=zip.inputStream().use{BtRobotCheckpoint.restore(app,it)}
+        assertEquals("2",store.session(restored)!!.getString("forbidden"));assertEquals(2,store.session(restored)!!.getInt("searchVersion"))
+        assertEquals(expected,store.next(restored));assertEquals(BigInteger.ONE.shiftLeft(63)-BigInteger.valueOf(2),store.remaining(restored))
+        assertArrayEquals(store.conditionFile(id).readBytes(),store.conditionFile(restored).readBytes())
+        val nextToken=store.resume(restored);repeat(30){val key=add(store,restored,nextToken,it.toDouble());assertTrue(BtRobotSpace.includes(key,"1","2"))};store.pause(restored)
+        assertEquals("0",store.session(store.create(settings))!!.optString("forbidden","0"))
+    }
+    @Test fun quickDoubleTapShowsCrossAndSingleTapClearsItWithoutAffectingOtherRows(){
+        val ctl=Robolectric.buildActivity(BtRobotActivity::class.java).setup();val a=ctl.get()
+        var calls=0
+        val row=BtRuleChoice(a,"成交量",BtRuleChoice.Choice.FREE){calls++}
+        fun waitTap(){org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(android.view.ViewConfiguration.getDoubleTapTimeout()+1L))}
+        row.performClick();assertEquals(BtRuleChoice.Choice.REQUIRED,row.choice);assertTrue(row.isChecked)
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(80))
+        row.performClick();assertEquals(BtRuleChoice.Choice.EXCLUDED,row.choice);assertFalse(row.isChecked);assertTrue(row.contentDescription.contains("排除"))
+        row.performClick();assertEquals(BtRuleChoice.Choice.FREE,row.choice)
+        waitTap();row.performClick();assertEquals(BtRuleChoice.Choice.REQUIRED,row.choice)
+        waitTap();row.performClick();assertEquals(BtRuleChoice.Choice.FREE,row.choice)
+        assertEquals(5,calls)
+        row.performLongClick();assertEquals(BtRuleChoice.Choice.EXCLUDED,row.choice)
+        val alreadyRequired=BtRuleChoice(a,"股價",BtRuleChoice.Choice.REQUIRED){}
+        alreadyRequired.performClick();alreadyRequired.performClick();assertEquals(BtRuleChoice.Choice.EXCLUDED,alreadyRequired.choice)
+        val other=BtRuleChoice(a,"MACD",BtRuleChoice.Choice.FREE){}
+        other.performClick();assertEquals(BtRuleChoice.Choice.REQUIRED,other.choice)
+        ctl.pause().stop().destroy()
+    }
+    @Test fun dialogRemembersCrossesAcrossAbcTabsAndSavesBothMasks(){
+        val store=BtRobotStore(app);store.create(BtRobotSpace.settings(),"1","2")
+        val ctl=Robolectric.buildActivity(BtRobotActivity::class.java).setup();val a=ctl.get()
+        var savedOn="";var savedOff=""
+        BtRobotRulesDialog.show(a,"1","2"){on,off->savedOn=on;savedOff=off}
+        val dialog=ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
+        val v=dialog.window!!.decorView
+        val price=find(v){it.tag=="required-A_EARLY_BREAKOUT-price"} as BtRuleChoice
+        assertEquals(BtRuleChoice.Choice.REQUIRED,price.choice)
+        price.performClick();price.performClick();assertEquals(BtRuleChoice.Choice.EXCLUDED,price.choice)
+        find(v){it is TextView&&it.text.toString()=="B 反轉"}!!.performClick()
+        (find(v){it.tag=="required-B_DEEP_REVERSAL-price"} as BtRuleChoice).performClick()
+        find(v){it is TextView&&it.text.toString()=="A 起漲"}!!.performClick()
+        assertEquals(BtRuleChoice.Choice.EXCLUDED,(find(v){it.tag=="required-A_EARLY_BREAKOUT-price"} as BtRuleChoice).choice)
+        assertEquals(BtRuleChoice.Choice.EXCLUDED,(find(v){it.tag=="required-A_EARLY_BREAKOUT-volume"} as BtRuleChoice).choice)
+        capture(v,"robot-exclusions-360.png",1450)
+        find(v){it.tag=="save-required-rules"}!!.performClick()
+        val on=BtRobotSpace.rules(savedOn);val off=BtRobotSpace.rules(savedOff)
+        assertTrue(on[RadarType.A_EARLY_BREAKOUT]!!.isEmpty());assertEquals(setOf("price"),on[RadarType.B_DEEP_REVERSAL]);assertEquals(setOf("price","volume"),off[RadarType.A_EARLY_BREAKOUT]);assertTrue(off[RadarType.B_DEEP_REVERSAL]!!.isEmpty())
+        assertEquals(BigInteger.ONE.shiftLeft(62),BtRobotSpace.total(savedOn,savedOff))
+        ctl.pause().stop().destroy()
+    }
     @Test fun requiredMenuSeparatesAbcAndRendersWithClearAndExportActions(){
         val store=BtRobotStore(app);store.create(BtRobotSpace.settings(),"1")
         val ctl=Robolectric.buildActivity(BtRobotActivity::class.java).setup();val a=ctl.get()
         assertNotNull(find(a.window.decorView){it.tag=="robot-clear-zero"});assertNotNull(find(a.window.decorView){it is TextView&&it.text.toString()=="匯出結果／斷點"})
-        var selected="";BtRobotRulesDialog.show(a,"1"){selected=it}
+        var selected="";BtRobotRulesDialog.show(a,"1"){required,_->selected=required}
         val dialog=ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
         (find(dialog.window!!.decorView){it.tag=="required-A_EARLY_BREAKOUT-volume"} as CheckBox).performClick()
         find(dialog.window!!.decorView){it is TextView&&it.text.toString()=="C 爆量"}!!.performClick()
