@@ -16,6 +16,10 @@ internal class BacktestDailyCard(c:Context,d:JSONObject,trades:List<JSONObject> 
         fun tint(v:Double?)=if(v==null||v==0.0)NeonUi.ink else if(v>0)NeonUi.pink else NeonUi.mint
         addView(NeonUi.label(c,d.getString("date"),16f,NeonUi.ink,true))
         addView(NeonUi.label(c,"入選 ${count(d,"selected")} 檔 · 買 ${count(d,"buys")} / 賣 ${count(d,"sells")} 張 · 未買 ${count(d,"skipped")}",11f))
+        d.optJSONObject("marketGuard")?.let{g->
+            addView(NeonUi.label(c,g.optString("title"),13f,if(g.optString("state")=="NORMAL")NeonUi.cyan else NeonUi.amber,true))
+            addView(NeonUi.label(c,g.optString("detail"),11f))
+        }
         addView(NeonUi.gap(c,8))
         addView(NeonUi.row(c,listOf(
             NeonUi.tile(c,"當日淨利",signed(realized),"已實現 · 扣買賣費稅",tint(realized)),

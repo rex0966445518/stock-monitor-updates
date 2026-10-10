@@ -56,6 +56,10 @@ class MainActivity: AppCompatActivity() {
 
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private val coordinator = Executors.newSingleThreadExecutor()
+    private val guardExecutor=Executors.newSingleThreadExecutor()
+    private val guardHandler=android.os.Handler(android.os.Looper.getMainLooper())
+    private val guardBusy=java.util.concurrent.atomic.AtomicBoolean(false)
+    private val guardPoll=object:Runnable{override fun run(){refreshMarketGuard();guardHandler.postDelayed(this,30000)}}
     private val workers = Executors.newFixedThreadPool(6)
 
     private var latest = listOf<SignalResult>()
@@ -98,6 +102,7 @@ class MainActivity: AppCompatActivity() {
         b.recycler.layoutManager = LinearLayoutManager(this)
         b.recycler.adapter = adapter
 
+        b.marketGuardButton.setOnClickListener { showMarketGuard() }
         b.settingsButton.setOnClickListener { showSettings() }
         b.robotButton.setOnClickListener { startActivity(android.content.Intent(this,BtRobotActivity::class.java)) }
         b.resultFilters.onSelected = { index -> selectedTab = index; render() }
@@ -144,6 +149,20 @@ class MainActivity: AppCompatActivity() {
         render()
     }
 
+    private fun refreshMarketGuard(force:Boolean=false){
+        val source=com.rex.twboardingscanner.data.MarketIndexData(this)
+        b.marketGuardButton.text=source.cached().title+"  ›"
+        if(!guardBusy.compareAndSet(false,true))return
+        guardExecutor.submit{val state=runCatching{source.live(force)}.getOrElse{com.rex.twboardingscanner.domain.MarketCrashGuard.unknown("大盤更新失敗，暫停買入")}
+            guardBusy.set(false)
+            runOnUiThread{if(!isFinishing&&!isDestroyed){b.marketGuardButton.text=state.title+"  ›";b.marketGuardButton.setTextColor(if(state.canBuy)NeonUi.cyan else NeonUi.amber)}}
+        }
+    }
+    private fun showMarketGuard(){
+        val state=com.rex.twboardingscanner.data.MarketIndexData(this).cached()
+        MaterialAlertDialogBuilder(this).setTitle(state.title).setMessage(state.detail()+"\n\n"+com.rex.twboardingscanner.domain.MarketCrashGuard.SUMMARY+"\n\n以證交所收盤資料判斷；掃描結果保留觀察，模擬交易每次買入前檢查。")
+            .setNegativeButton("關閉",null).setPositiveButton("重新檢查大盤"){_,_->refreshMarketGuard(true)}.show()
+    }
     private fun showSettings() {
         val panel=b.settingsPanel
         (panel.parent as? ViewGroup)?.removeView(panel)
@@ -163,8 +182,8 @@ class MainActivity: AppCompatActivity() {
         dialog.behavior.state=com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
     }
 
-    override fun onResume() { super.onResume();loadScanSettings();b.exitRulesButton.text="下車賣出條件 · ${com.rex.twboardingscanner.data.ExitRuleStore(this).read(com.rex.twboardingscanner.domain.StockScope.SCANNER).count{it.active}} / 5 組";if(::paperLoop.isInitialized){paperLoop.start();render();if(latest.isNotEmpty())coordinator.submit{runCatching{publishLists()}}} }
-    override fun onPause() { if(::paperLoop.isInitialized)paperLoop.stop();super.onPause() }
+    override fun onResume() { super.onResume();guardHandler.post(guardPoll);loadScanSettings();b.exitRulesButton.text="下車賣出條件 · ${com.rex.twboardingscanner.data.ExitRuleStore(this).read(com.rex.twboardingscanner.domain.StockScope.SCANNER).count{it.active}} / 5 組";if(::paperLoop.isInitialized){paperLoop.start();render();if(latest.isNotEmpty())coordinator.submit{runCatching{publishLists()}}} }
+    override fun onPause() { guardHandler.removeCallbacks(guardPoll);if(::paperLoop.isInitialized)paperLoop.stop();super.onPause() }
 
     private fun startFullScan() {
         if (isScanning) {
@@ -190,6 +209,8 @@ class MainActivity: AppCompatActivity() {
         b.progressStats.text = "已分析 0｜排除 0｜資料不足 0｜失敗 0"
 
         coordinator.submit {
+            val guard=runCatching{com.rex.twboardingscanner.data.MarketIndexData(this).live()}.getOrElse{com.rex.twboardingscanner.domain.MarketCrashGuard.unknown("大盤檢查失敗，暫停買入")}
+            runOnUiThread{b.marketGuardButton.text=guard.title+"  ›";b.marketGuardButton.setTextColor(if(guard.canBuy)NeonUi.cyan else NeonUi.amber)}
             val universe = provider.loadUniverse { msg ->
                 runOnUiThread { b.progressTitle.text = msg }
             }
@@ -266,7 +287,7 @@ class MainActivity: AppCompatActivity() {
                                     r.filter { it.light != SignalLight.NONE && com.rex.twboardingscanner.data.StockPolicyStore(this).read().decision(it.code,it.snapshot.sourceStock?.close?:it.snapshot.price,com.rex.twboardingscanner.domain.StockScope.SCANNER)==com.rex.twboardingscanner.domain.StockDecision.ALLOW }.forEach { sig ->
                                         if (history.insertIfNew(sig)) {
                                             newCount.incrementAndGet()
-                                            if (sig.light == SignalLight.RED || sig.light == SignalLight.ORANGE) {
+                                            if ((sig.light == SignalLight.RED || sig.light == SignalLight.ORANGE)&&com.rex.twboardingscanner.data.MarketIndexData(this).cached().canBuy) {
                                                 notifyNewSignal(sig)
                                             }
                                         }
@@ -354,7 +375,8 @@ class MainActivity: AppCompatActivity() {
         val rows=org.json.JSONArray(candidates.filter{policy.decision(it.code,it.snapshot.sourceStock?.close?:it.snapshot.price,com.rex.twboardingscanner.domain.StockScope.SCANNER)==com.rex.twboardingscanner.domain.StockDecision.LIMITED}.groupBy{it.code}.map{(code,all)->
             val r=all.first();org.json.JSONObject().put("date",date).put("code",code).put("name",r.name).put("price",r.snapshot.sourceStock?.close?:r.snapshot.price).put("radar",all.map{it.radarType.name.take(1)}.distinct().joinToString("/"))
         })
-        val current=org.json.JSONObject().put("date",date).put("rows",org.json.JSONArray(admitted().map{r->org.json.JSONObject().put("code",r.code).put("name",r.name).put("radar",r.radarType.name.take(1)).put("price",r.snapshot.sourceStock?.close?:r.snapshot.price).put("state",if(r.light!=SignalLight.NONE)"入選" else if(r.checks.any{it.selected&&it.state==com.rex.twboardingscanner.domain.CheckState.PENDING})"待查核" else "未通過")}))
+        val guard=com.rex.twboardingscanner.data.MarketIndexData(this).cached()
+        val current=org.json.JSONObject().put("marketGuard",guard.json()).put("date",date).put("rows",org.json.JSONArray(admitted().map{r->org.json.JSONObject().put("code",r.code).put("name",r.name).put("radar",r.radarType.name.take(1)).put("price",r.snapshot.sourceStock?.close?:r.snapshot.price).put("state",if(r.light!=SignalLight.NONE&&!guard.canBuy)"僅觀察 · 大盤保護暫停買入" else if(r.light!=SignalLight.NONE)"入選" else if(r.checks.any{it.selected&&it.state==com.rex.twboardingscanner.domain.CheckState.PENDING})"待查核" else "未通過")}))
         val file=java.io.File(filesDir,"scanner-search.json");val temp=java.io.File(file.path+".tmp");temp.writeText(current.toString());check(temp.renameTo(file))
         store.candidates(com.rex.twboardingscanner.domain.StockScope.SCANNER,rows,"主頁掃描 · $date",policy)
         com.rex.twboardingscanner.paper.PaperRepository(this).publish(admitted(),latestScanAt)
@@ -608,6 +630,7 @@ class MainActivity: AppCompatActivity() {
         chartDialog?.dismiss()
         chartDialog = null
         handler.removeCallbacksAndMessages(null)
+        guardHandler.removeCallbacksAndMessages(null);guardExecutor.shutdownNow()
         coordinator.shutdownNow()
         workers.shutdownNow()
         financialDialog?.dismiss()

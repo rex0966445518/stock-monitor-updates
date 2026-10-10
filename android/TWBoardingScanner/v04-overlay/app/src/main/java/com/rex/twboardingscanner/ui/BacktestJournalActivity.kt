@@ -40,6 +40,7 @@ internal object BacktestJournalUi {
             "初始本金 ${String.format(Locale.TAIWAN,"%,.0f",s.optDouble("capital",0.0))} 元\n"+
             "股票 ${s.optString("codes").ifBlank{"全部"}}\n產業 ${sectors.joinToString("、").ifBlank{"舊版未記錄"}}\n"+
             "${tradingSummary(s)}\n"+
+            "${s.optString("marketGuardSummary","此舊日誌未啟用大盤保護")}\n"+
             com.rex.twboardingscanner.domain.StockPolicy.read(s.optJSONObject("stockPolicy")).let{p->p.summary()+"\n禁股："+p.banned.sorted().joinToString("、").ifBlank{"無"}+"\n放行："+p.overrides.entries.joinToString("；"){"${it.key.label} ${it.value.sorted().joinToString("、")}"}.ifBlank{"無"}+"\n"}+
             "${s.optString("strategyLabel","舊版策略，請參考原始報告")}\n"+
             com.rex.twboardingscanner.domain.ExitRules.summary(com.rex.twboardingscanner.domain.ExitRules.read(s.optJSONArray("exitRules")))+"\n"+
@@ -122,6 +123,7 @@ class BacktestJournalActivity:AppCompatActivity(){
             if(complete)panel.addView(NeonUi.label(this,"買入 ${row.optInt("buys")} 張 · 賣出 ${row.optInt("closed")} 張 · 留倉 ${row.optInt("holdings")} 張",11f))
             panel.addView(NeonUi.label(this,"本金 ${String.format(Locale.TAIWAN,"%,.0f",s.optDouble("capital",0.0))} 元",12f))
             panel.addView(NeonUi.label(this,BacktestJournalUi.tradingSummary(s),12f,NeonUi.cyan))
+            panel.addView(NeonUi.label(this,if(s.optInt("marketGuardVersion")>0)"大盤暴跌保護 · 已啟用" else "大盤保護 · 舊紀錄未啟用",11f,NeonUi.amber))
             val rules=s.optJSONObject("rules")
             panel.addView(NeonUi.label(this,if(rules==null)"舊版條件未完整記錄" else RadarType.entries.joinToString(" · "){"${it.name.take(1)} ${rules.optJSONArray(it.name)?.length()?:0} 項"},12f,NeonUi.cyan))
             panel.addView(BacktestDiffView(this,row,rows.getOrNull(index+1),id in expandedDiffs){open->if(open)expandedDiffs.add(id) else expandedDiffs.remove(id)})

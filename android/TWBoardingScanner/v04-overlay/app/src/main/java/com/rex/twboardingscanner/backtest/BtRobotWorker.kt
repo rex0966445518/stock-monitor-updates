@@ -18,12 +18,13 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
     companion object {
         const val WORK="backtest-robot"
         const val NOTE="固定區間內調整條件，屬樣本內最佳化，可能過度擬合；目前已測最佳不等於全組合最高或未來收益。現存上市櫃及目前產業分類有存活偏差；已勾選財報／法人缺歷史證據即不通過。A/B 排除當日日線，C 包含當日；C 同收盤成交屬理想化假設。交易時刻為日線模型，並非逐筆成交。扣買賣費稅及滑價；留倉以扣估計賣出費稅估值。股息與折讓金列應收不再投資；超過 5 個日曆日可扣費稅保本賣出，虧損續抱；另有下車條件時，以前一完整日線判斷、下一可交易日開盤模擬認賠出場。"
-        private data class Runtime(val id:String,val data:BacktestData.Loaded,val index:BtConditionIndex,val execution:BtExecutionIndex)
+        private data class Runtime(val id:String,val data:BacktestData.Loaded,val index:BtConditionIndex,val execution:BtExecutionIndex,val guards:Map<java.time.LocalDate,com.rex.twboardingscanner.domain.MarketGuardDecision>)
         private val runLock=Any()
         private var cached:Runtime?=null
         fun start(c:Context,id:String){
             val store=BtRobotStore(c)
             require(BtSettingsCodec.decode(store.session(id)!!.getJSONObject("settings")).stockPolicy==com.rex.twboardingscanner.data.StockPolicyStore(c).read()){"禁股／限價已變更，請從機器人頁面開始新批次"}
+            require(BtSettingsCodec.decode(store.session(id)!!.getJSONObject("settings")).marketGuardVersion>0){"舊批次未啟用大盤保護，請從機器人頁面開始新批次"}
             val token=store.resume(id)
             try{enqueue(c,id,token,ExistingWorkPolicy.REPLACE)}catch(e:Exception){store.status(id,token,"無法排入測試：${e.message}","ERROR");throw e}
         }
@@ -70,6 +71,7 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
             val session=store.session(id)!!
             require(BtRobotCheckpoint.compatible(session)){"回測引擎版本不相容；原紀錄可檢閱，請建立新測試"}
             val base=BtSettingsCodec.decode(session.getJSONObject("settings"));BtRobotSpace.validate(base)
+            require(base.marketGuardVersion>0){"舊批次未啟用大盤保護；按開始建立新批次，原紀錄保留"}
             var lastProgress=0L
             val progress={msg:String->check(!cancel()){ "已暫停測試" };val now=System.currentTimeMillis();if(now-lastProgress>=800){store.status(id,token,msg);lastProgress=now}}
             val runtime=cached?.takeIf{it.id==id}?:run{
@@ -84,6 +86,7 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
                     val loaded=BacktestData(applicationContext).load(base,progress,cancel)
                     check(!cancel()){ "已暫停測試" };BtRobotDataset.write(file,loaded);loaded
                 }
+                require(data.market.isNotEmpty()){"缺少此批次的加權指數快照，請建立新測試"}
                 store.coverage(id,token,data.series.size,data.requested,digest(file))
                 val indexFile=store.conditionFile(id);val fingerprint=BtConditionIndex.fingerprint(digest(file),base)
                 val index=if(indexFile.exists()){
@@ -93,7 +96,7 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
                     val compiled=BtConditionIndex.build(data.series,base,progress,cancel)
                     check(!cancel()){ "已暫停測試" };compiled.save(indexFile,fingerprint);compiled
                 }
-                Runtime(id,data,index,BacktestEngine.executionIndex(data.series)).also{cached=it}
+                Runtime(id,data,index,BacktestEngine.executionIndex(data.series),com.rex.twboardingscanner.domain.MarketCrashGuard.forDays(data.market,index.days)).also{cached=it}
             }
             val batchStart=System.currentTimeMillis();var completed=0
             while(!cancel()&&completed<30&&(completed==0||System.currentTimeMillis()-batchStart<120000)){
@@ -103,7 +106,7 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
                 val settings=base.copy(rules=BtRobotSpace.rules(candidate.key));val started=System.currentTimeMillis()
                 val seq=store.session(id)!!.optLong("tested")+1
                 store.status(id,token,"正在測試第 $seq 組 · ${candidate.key}")
-                val prepared=runtime.index.prepare(settings,cancel)
+                val prepared=runtime.index.prepare(settings,cancel).copy(marketGuards=runtime.guards)
                 val run=BacktestEngine.run(prepared,settings,cancel=cancel,execution=runtime.execution)
                 check(!cancel()){ "已暫停測試" }
                 val better=store.commit(id,token,candidate,BtResult(settings,run,runtime.data.requested,runtime.data.series.size,runtime.data.excluded,NOTE,prepared.pendingChecks),started)

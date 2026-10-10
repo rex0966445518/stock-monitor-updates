@@ -73,7 +73,7 @@ class BacktestActivity:AppCompatActivity(){
         execution.addView(NeonUi.row(this,listOf(
             NeonUi.button(this,"停止回測",NeonUi.muted){store.update(store.active(),"使用者停止回測；未完成結果不列為績效","CANCELED");WorkManager.getInstance(this).cancelUniqueWork("historical-backtest");refreshStatus()},
             NeonUi.button(this,"清除歸零",NeonUi.muted){clearCurrent()})))
-        root.addView(execution);root.addView(NeonUi.gap(this,16))
+        root.addView(execution);root.addView(NeonUi.gap(this,12));root.addView(MarketGuardPanel(this));root.addView(NeonUi.gap(this,16))
 
         val period=NeonUi.vertical(this)
         startButton=NeonUi.button(this,"起始 $start"){pick(true)};endButton=NeonUi.button(this,"結束 $end"){pick(false)}
@@ -318,6 +318,10 @@ class BacktestActivity:AppCompatActivity(){
         results.addView(label("資料涵蓋 ${data.getInt("loaded")} / ${data.getInt("requested")} 檔",16f,NeonUi.ink,true))
         results.addView(label("缺少歷史查核資料 ${data.optInt("pendingChecks")} 項次 · 缺資料的條件不能通過",11f))
         results.addView(label(data.getString("note"),12f,NeonUi.amber));results.addView(NeonUi.gap(this,8))
+        if(s.optInt("marketGuardVersion",0)>0){
+            val curve=r.optJSONArray("curve");val guards=(0 until (curve?.length()?:0)).mapNotNull{curve?.optJSONObject(it)?.optJSONObject("marketGuard")}
+            results.addView(label("大盤保護 · 暫停買入 ${guards.count{it.optString("state")=="PAUSED"}} 個交易日 · 資料待確認 ${guards.count{it.optString("state")=="UNKNOWN"}} 日",12f,NeonUi.amber,true))
+        }
         if(!legacy)results.addView(NeonUi.button(this,"查看本次 ABC、產業與交易規則"){showRules(s)})
         if(r.has("limited"))results.addView(NeonUi.button(this,"本次當日限價名單 · ${r.getJSONArray("limited").length()} 筆",NeonUi.amber){
             val frozen=JSONObject().put("source","報告 ${data.optString("id").take(8)} · ${s.optString("start")} → ${s.optString("end")}").put("policy",s.optJSONObject("stockPolicy")).put("rows",r.getJSONArray("limited"))

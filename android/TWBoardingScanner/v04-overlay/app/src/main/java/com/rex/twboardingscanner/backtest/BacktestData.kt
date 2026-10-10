@@ -11,8 +11,9 @@ import java.time.LocalDate
 import java.util.concurrent.*
 
 class BacktestData(private val context:Context) {
-    data class Loaded(val series:List<BtSeries>,val requested:Int,val excluded:List<String>)
+    data class Loaded(val series:List<BtSeries>,val requested:Int,val excluded:List<String>,val market:List<MarketIndexBar> = emptyList())
     fun load(settings:BtSettings,progress:(String)->Unit,cancel:()->Boolean):Loaded {
+        val market=if(settings.marketGuardVersion>0)com.rex.twboardingscanner.data.MarketIndexData(context).load(settings.start.minusDays(100),settings.end,progress,cancel) else emptyList()
         progress("取得現存上市櫃股票名單…")
         val universe=MarketDataProvider(context).loadBacktestUniverse()
         require(universe.isNotEmpty()){ "無法取得股票名單，請稍後重試" }
@@ -39,7 +40,7 @@ class BacktestData(private val context:Context) {
             }
         } finally {pool.shutdownNow()}
         require(loaded.isNotEmpty()){ "沒有可用歷史日線；請檢查日期或稍後重試" }
-        return Loaded(loaded.sortedBy{it.code},selected.size+codes.count{c->selected.none{it.code==c}},excluded)
+        return Loaded(loaded.sortedBy{it.code},selected.size+codes.count{c->selected.none{it.code==c}},excluded,market)
     }
     private fun loadOne(stock:MarketStock,settings:BtSettings):BtSeries {
         val symbol=stock.code+if(stock.market==Market.TWSE)".TW" else ".TWO"

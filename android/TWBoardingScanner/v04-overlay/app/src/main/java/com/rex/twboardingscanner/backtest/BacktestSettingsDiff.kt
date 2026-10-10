@@ -108,6 +108,7 @@ object BacktestSettingsDiff {
         }
         value("持倉計算方式",scalar(previous,"holdingLimitBasis"),scalar(current,"holdingLimitBasis"))
         value("名單套用區域",scalar(previous,"stockScope"),scalar(current,"stockScope")){v->StockScope.entries.firstOrNull{it.name==v}?.label?:v}
+        value("大盤暴跌保護",previous.optInt("marketGuardVersion",0).toString(),current.optInt("marketGuardVersion",0).toString()){if(it=="0")"未啟用（舊策略）" else "已啟用 v$it：跌逾 1,000 點暫停，連漲 2 日且站回 5 日線恢復"}
         value("策略版本",scalar(previous,"strategyVersion"),scalar(current,"strategyVersion"))
         value("條件定義版本",scalar(previous,"rulesVersion"),scalar(current,"rulesVersion"))
         return SettingsDifference(changes,missing.toList())

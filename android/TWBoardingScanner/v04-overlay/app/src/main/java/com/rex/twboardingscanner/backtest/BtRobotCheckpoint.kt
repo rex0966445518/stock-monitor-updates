@@ -21,6 +21,7 @@ object BtRobotCheckpoint {
     }
     fun cloneData(store:BtRobotStore,from:String,to:String){
         val original=store.session(from)?:return
+        if(original.getJSONObject("settings").optInt("marketGuardVersion",0)!=store.session(to)?.getJSONObject("settings")?.optInt("marketGuardVersion",0))return
         if(!store.dataset(from).exists())return
         require(digest(store.dataset(from))==original.getString("datasetSha256")){"原行情快照校驗失敗"}
         store.dataset(to).parentFile?.mkdirs();store.dataset(from).copyTo(store.dataset(to),true)
@@ -56,7 +57,7 @@ object BtRobotCheckpoint {
                 if(store.conditionFile(id).exists())store.conditionFile(id).copyTo(File(dir,"conditions.bin.gz"))
             }
             val snapshot=JSONObject(File(dir,"session.json").readText(Charsets.UTF_8))
-            val archiveVersion=if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).exitRules.any{it.active})4 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).stockPolicy.active())3 else if(snapshot.optInt("searchVersion",1)>=2||BtRobotSpace.required(snapshot.optString("forbidden","0")).signum()!=0)2 else 1
+            val archiveVersion=if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).marketGuardVersion>0)5 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).exitRules.any{it.active})4 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).stockPolicy.active())3 else if(snapshot.optInt("searchVersion",1)>=2||BtRobotSpace.required(snapshot.optString("forbidden","0")).signum()!=0)2 else 1
             val files=dir.listFiles()!!.sortedBy{it.name};val hashes=JSONObject()
             files.forEach{hashes.put(it.name,JSONObject().put("size",it.length()).put("sha256",digest(it)))}
             val manifest=JSONObject().put("format","AI-離職神器-robot").put("version",archiveVersion).put("engine",ENGINE).put("files",hashes)
@@ -82,11 +83,12 @@ object BtRobotCheckpoint {
             }}
             require(seen.containsAll(setOf("manifest.json","session.json","trials.bin","results.csv"))){"備份不完整"}
             fun json(name:String)=JSONObject(File(dir,name).inputStream().use{String(readBounded(it,1024*1024),Charsets.UTF_8)})
-            val manifest=json("manifest.json");require(manifest.getString("format")=="AI-離職神器-robot"&&manifest.getInt("version") in 1..4&&manifest.getString("engine")==ENGINE){"備份版本不相容"}
+            val manifest=json("manifest.json");require(manifest.getString("format")=="AI-離職神器-robot"&&manifest.getInt("version") in 1..5&&manifest.getString("engine")==ENGINE){"備份版本不相容"}
             val hashes=manifest.getJSONObject("files");require(hashes.keys().asSequence().toSet()==seen-"manifest.json")
             (seen-"manifest.json").forEach{name->val f=File(dir,name);val h=hashes.getJSONObject(name);require(f.length()==h.getLong("size")&&digest(f)==h.getString("sha256")){"備份校驗失敗：$name"}}
             val s=json("session.json");require(compatible(s)){"回測引擎版本不相容"}
             val settings=BtSettingsCodec.decode(s.getJSONObject("settings"));BtRobotSpace.validate(settings)
+            require(settings.marketGuardVersion==0||manifest.getInt("version")>=5){"含大盤保護的備份需要版本 5"}
             require(!settings.stockPolicy.active()||manifest.getInt("version")>=3){"含禁股／限價的備份需要版本 3"}
             require(!settings.exitRules.any{it.active}||manifest.getInt("version")>=4){"含下車條件的備份需要版本 4"}
             val required=s.optString("required","0");val forbidden=s.optString("forbidden","0");val combinations=BtRobotSpace.total(required,forbidden)
@@ -98,6 +100,7 @@ object BtRobotCheckpoint {
             if(history.exists()){
                 require(digest(history)==s.getString("datasetSha256")){"固定行情校驗失敗"}
                 val loaded=BtRobotDataset.read(history)
+                require(settings.marketGuardVersion==0||loaded.market.isNotEmpty()){"此備份缺少加權指數快照"}
                 if(conditions.exists())BtConditionIndex.read(conditions,loaded.series,BtConditionIndex.fingerprint(s.getString("datasetSha256"),settings))
             }else require(tested==0L&&!conditions.exists()){"缺少固定行情，不能續跑"}
             store.dataset(id).parentFile?.mkdirs()

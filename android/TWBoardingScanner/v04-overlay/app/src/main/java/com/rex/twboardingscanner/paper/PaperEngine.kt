@@ -31,7 +31,7 @@ object PaperEngine {
         val slipped=price*(if(buy)1+SLIPPAGE else 1-SLIPPAGE);val step=tick(slipped)
         return round((if(buy)ceil(slipped/step-1e-8) else floor(slipped/step+1e-8))*step*100)/100
     }
-    fun step(b:PaperBook,quotes:Map<String,PaperQuote>,now:Long,policy:com.rex.twboardingscanner.domain.StockPolicy=com.rex.twboardingscanner.domain.StockPolicy(),exitRules:List<com.rex.twboardingscanner.domain.ExitRule> = emptyList(),histories:Map<String,List<com.rex.twboardingscanner.domain.DailyBar>> = emptyMap()) {
+    fun step(b:PaperBook,quotes:Map<String,PaperQuote>,now:Long,policy:com.rex.twboardingscanner.domain.StockPolicy=com.rex.twboardingscanner.domain.StockPolicy(),exitRules:List<com.rex.twboardingscanner.domain.ExitRule> = emptyList(),histories:Map<String,List<com.rex.twboardingscanner.domain.DailyBar>> = emptyMap(),marketGuard:com.rex.twboardingscanner.domain.MarketGuardDecision?=null) {
         b.lastRun=now
         if(!b.enabled){b.status="已暫停 · 不新增或賣出";return}
         if(!session(now)){b.status=if(b.positions.isEmpty())"休市／時段外 · 等待下次開盤" else "時段外停止交易 · ${b.positions.size} 檔保留至下次交易時段";return}
@@ -61,7 +61,7 @@ object PaperEngine {
             b.cash+=net;b.positions.remove(p)
             b.trades.add(PaperTrade(p.code,p.name,p.radar,"SELL",now,q.at,px,f,tax,net-p.cost,reason));sells++
         }
-        if(!flatten) b.candidates.sortedWith(compareByDescending<PaperCandidate>{it.score}.thenBy{it.code}).distinctBy{it.code}.forEach {c->
+        if(!flatten&&(marketGuard==null||marketGuard.canBuy)) b.candidates.sortedWith(compareByDescending<PaperCandidate>{it.score}.thenBy{it.code}).distinctBy{it.code}.forEach {c->
             if(b.positions.size>=5)return@forEach
             val age=now-c.observedAt
             if(age !in 1..7*86400000L || b.positions.any{it.code==c.code})return@forEach
@@ -80,6 +80,6 @@ object PaperEngine {
         }
         val day=local(now).toLocalDate().toString();val eq=equity(b)
         b.days.firstOrNull{it.date==day}?.apply{equity=eq;at=now} ?: b.days.add(PaperDay(day,eq,now))
-        b.status=if(flatten)"13:15 平倉階段 · 尚餘 ${b.positions.size} 檔" else "本輪買 $buys／賣 $sells · 略過 $skipped（資金／報價／流動性）"
+        b.status=if(marketGuard!=null&&!marketGuard.canBuy)"${marketGuard.title} · 本輪賣 $sells · ${marketGuard.reason}" else if(flatten)"13:15 平倉階段 · 尚餘 ${b.positions.size} 檔" else "本輪買 $buys／賣 $sells · 略過 $skipped（資金／報價／流動性）"
     }
 }
