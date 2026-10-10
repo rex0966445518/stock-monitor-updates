@@ -169,14 +169,36 @@ class StockToolsActivity:AppCompatActivity(){
                         runOnUiThread{if(alive()){rows.forEach{row->val c=card();c.addView(label("${row.code} ${row.name}",17f,NeonUi.ink,true));c.addView(label("掃描日誌 · ${row.scanDate} · ${row.radar} 區 · ${row.price} 元",12f));c.addView(NeonUi.button(this,"查看日 K 圖"){StockChartDialog(this,MarketDataProvider(this),row.code,row.name,initial=row.chartBars).show()});hits.addView(c);hits.addView(NeonUi.gap(this,8));total++};status.text="找到 $total 筆掃描日誌（保留原始歷史，不代表目前仍入選）"}}
                     }else if(selected==StockScope.BACKTEST){
                         val bt=BacktestStore(this);val list=bt.history();var found=0
-                        while(offset<list.size&&found<30&&alive()){val entry=list[offset++];val report=bt.log(entry.getString("id"))?:continue;if(matches(report)){found++;runOnUiThread{showHit(report,"回測 ${entry.getString("id").take(8)}"){startActivity(Intent(this,BacktestActivity::class.java).putExtra("journalId",entry.getString("id")))}}}
+                        while(offset<list.size&&found<30&&alive()){
+                            val entry=list[offset++]
+                            val report=bt.log(entry.getString("id"))?:continue
+                            if(matches(report)){
+                                found++
+                                runOnUiThread{
+                                    showHit(report,"回測 ${entry.getString("id").take(8)}"){
+                                        startActivity(Intent(this,BacktestActivity::class.java).putExtra("journalId",entry.getString("id")))
+                                    }
+                                }
+                            }
+                        }
                         runOnUiThread{if(alive()){status.text="找到 $total 份回測 · 已查 $offset / ${list.size}";more.visibility=if(offset<list.size)android.view.View.VISIBLE else android.view.View.GONE}}
                     }else{
                         val robot=BtRobotStore(this);var inspected=0;var found=0;var hasMore=true
                         while(inspected<300&&found<30&&alive()){
                             val page=robot.searchPage(before);if(page.isEmpty()){hasMore=false;break}
-                            for(row in page){if(!alive())break;before=row.getLong("n");inspected++;val report=robot.report(row.getString("session"),row.getString("key"))?:continue
-                                if(matches(report)){found++;runOnUiThread{showHit(report,"機器人 ${row.getString("session").take(8)} · 第 ${report.optLong("robotSequence")} 組"){startActivity(Intent(this,BacktestActivity::class.java).putExtra("robotSession",row.getString("session")).putExtra("robotKey",row.getString("key")))}}}
+                            for(row in page){
+                                if(!alive())break
+                                before=row.getLong("n");inspected++
+                                val report=robot.report(row.getString("session"),row.getString("key"))?:continue
+                                if(matches(report)){
+                                    found++
+                                    runOnUiThread{
+                                        showHit(report,"機器人 ${row.getString("session").take(8)} · 第 ${report.optLong("robotSequence")} 組"){
+                                            startActivity(Intent(this,BacktestActivity::class.java).putExtra("robotSession",row.getString("session")).putExtra("robotKey",row.getString("key")))
+                                        }
+                                    }
+                                }
+                            }
                         }
                         offset+=inspected;val remaining=hasMore
                         runOnUiThread{if(alive()){status.text="找到 $total 份結果 · 已查 $offset 組"+(if(remaining)"，可繼續查詢" else "，搜尋完畢");more.visibility=if(remaining)android.view.View.VISIBLE else android.view.View.GONE}}
