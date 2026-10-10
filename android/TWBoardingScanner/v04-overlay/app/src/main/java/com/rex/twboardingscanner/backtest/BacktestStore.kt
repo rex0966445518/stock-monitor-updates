@@ -68,7 +68,9 @@ class BacktestStore(private val c:Context){
             .put("finishedAt",System.currentTimeMillis()).put("message","回測完成，結果已保存")
             .put("settings",settings).put("requested",result.requested).put("loaded",result.loaded)
             .put("excluded",JSONArray(result.excluded)).put("note",result.note).put("pendingChecks",result.pendingChecks).put("run",runJson(result.run))
+        if(com.rex.twboardingscanner.data.StockPolicyStore(c).read()!=result.settings.stockPolicy)return@synchronized false
         write(reportFile(id),o)
+        com.rex.twboardingscanner.data.StockPolicyStore(c).candidates(com.rex.twboardingscanner.domain.StockScope.BACKTEST,limitedJson(result.run),"回測 ${id.take(8)} · ${result.settings.start} → ${result.settings.end}",result.settings.stockPolicy)
         write(journalFile(id),summary(o))
         check(prefs.edit().putString("resultId",id).putString("state","DONE").putString("status","回測完成，已新增獨立日誌").commit())
         true
@@ -131,6 +133,7 @@ class BacktestStore(private val c:Context){
         if(!data.has("loaded"))data.put("loaded",0)
         write(reportFile(id),data);write(journalFile(id),summary(data));id
     }
+    internal fun limitedJson(r:BtRun)=JSONArray(r.limited.map{JSONObject().put("date",it.date.toString()).put("code",it.code).put("name",it.name).put("price",it.price).put("radar",it.radar)})
     internal fun runJson(r:BtRun):JSONObject=JSONObject().put("profit",r.profit).put("equity",r.equity).put("cash",r.cash).put("realized",r.realized).put("unrealized",r.unrealized).put("dividend",r.dividendAccrued).put("rebateAccrued",r.rebateAccrued)
         .put("rebateMonths",JSONArray(r.rebateMonths.values.map{JSONObject().put("month",it.month).put("buyAmount",it.buyAmount).put("sellAmount",it.sellAmount).put("buyTrades",it.buyTrades).put("sellTrades",it.sellTrades).put("turnover",it.turnover).put("rate",it.rate).put("amount",it.amount)})).put("drawdown",r.drawdown).put("winRate",r.winRate?:JSONObject.NULL).put("buys",r.buys)
         .put("closed",r.closed.size).put("holdings",JSONArray(r.holdings.map{JSONObject().put("code",it.code).put("name",it.name).put("radar",it.radar).put("markDate",it.markDate.toString()).put("mark",it.mark).put("cost",it.cost).put("entry",it.entry).put("entryDate",it.entryDate.toString()).put("entryTime","13:30（收盤模型）").put("lotId",it.lotId).put("target",it.target).put("shares",1000).put("unrealized",com.rex.twboardingscanner.paper.PaperEngine.netSell(it.mark)-it.cost)}))
@@ -138,6 +141,7 @@ class BacktestStore(private val c:Context){
             .put("dailyAccountingVersion",1).put("realized",it.realized?:JSONObject.NULL).put("holdingCost",it.holdingCost?:JSONObject.NULL)
             .put("holdingValue",it.holdingValue?:JSONObject.NULL).put("holdingLots",it.holdingLots?:JSONObject.NULL).put("cash",it.cash?:JSONObject.NULL)
             .put("dividendAccrued",it.dividendAccrued?:JSONObject.NULL).put("dayProfit",it.dayProfit?:JSONObject.NULL).put("staleLots",it.staleLots?:JSONObject.NULL).put("rebateAccrued",it.rebateAccrued?:JSONObject.NULL).put("rebateChange",it.rebateChange?:JSONObject.NULL)}))
+        .put("limited",limitedJson(r))
         .put("skipped",JSONArray(r.skipped.map{JSONObject().put("date",it.date.toString()).put("code",it.code).put("reason",it.reason)}))
         .put("trades",JSONArray(r.trades.map{JSONObject().put("date",it.date.toString()).put("time",it.time).put("timeKind",it.timeKind).put("signalDate",it.signalDate.toString()).put("dataDate",it.dataDate.toString()).put("lotId",it.lotId).put("target",it.target).put("code",it.code).put("name",it.name).put("radar",it.radar).put("side",it.side).put("dayClose",it.dayClose?:JSONObject.NULL).put("previousClose",it.previousClose?:JSONObject.NULL).put("shares",it.shares).put("price",it.price).put("turnover",it.price*it.shares).put("rebateMonth",it.date.toString().take(7)).put("fee",it.fee).put("tax",it.tax).put("pnl",it.pnl).put("reason",it.reason)}))
         .also{it.put("trades",BacktestTradeLedger.rows(it.getJSONArray("trades")))}

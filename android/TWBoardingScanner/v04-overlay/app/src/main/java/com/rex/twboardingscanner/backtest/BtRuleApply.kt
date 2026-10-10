@@ -9,7 +9,7 @@ import java.time.LocalDate
 object BtRuleApply {
     const val REVISION="applied_snapshot_revision"
     fun apply(c:Context,snapshot:JSONObject):BtSettings {
-        val s=BtSettingsCodec.decode(JSONObject(snapshot.toString()))
+        val s=BtSettingsCodec.decode(JSONObject(snapshot.toString())).copy(stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(c).read(),stockScope=StockScope.BACKTEST)
         require(s.strategyVersion==4){"此舊版日誌缺少目前交易限制，無法完整套用"}
         require(s.capital.isFinite()&&s.capital in 50000.0..100000000.0){"快照本金無效"}
         require(s.start>=LocalDate.of(2016,1,1)&&s.start<=s.end&&s.end<LocalDate.now(RuleMetrics.TAIPEI)&&java.time.temporal.ChronoUnit.DAYS.between(s.start,s.end)<=730){"快照日期無效"}

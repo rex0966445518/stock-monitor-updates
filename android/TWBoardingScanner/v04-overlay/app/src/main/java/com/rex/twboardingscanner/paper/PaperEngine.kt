@@ -31,7 +31,7 @@ object PaperEngine {
         val slipped=price*(if(buy)1+SLIPPAGE else 1-SLIPPAGE);val step=tick(slipped)
         return round((if(buy)ceil(slipped/step-1e-8) else floor(slipped/step+1e-8))*step*100)/100
     }
-    fun step(b:PaperBook,quotes:Map<String,PaperQuote>,now:Long) {
+    fun step(b:PaperBook,quotes:Map<String,PaperQuote>,now:Long,policy:com.rex.twboardingscanner.domain.StockPolicy=com.rex.twboardingscanner.domain.StockPolicy()) {
         b.lastRun=now
         if(!b.enabled){b.status="已暫停 · 不新增或賣出";return}
         if(!session(now)){b.status=if(b.positions.isEmpty())"休市／時段外 · 等待下次開盤" else "時段外停止交易 · ${b.positions.size} 檔保留至下次交易時段";return}
@@ -64,6 +64,7 @@ object PaperEngine {
             val day=local(now).toLocalDate()
             if(b.trades.any{it.code==c.code && it.side=="BUY" && local(it.at).toLocalDate()==day})return@forEach
             val q=usable[c.code] ?:return@forEach
+            if(policy.decision(c.code,q.last,com.rex.twboardingscanner.domain.StockScope.SCANNER)!=com.rex.twboardingscanner.domain.StockDecision.ALLOW)return@forEach
             if(q.at<=c.observedAt)return@forEach // no hindsight fills at the signal price
             val px=execution(q.ask,true)
             if(q.last<50||q.volume<500||q.ask<=0||q.askLots<1||!px.isFinite()||px>q.upper||px<q.lower){skipped++;return@forEach}

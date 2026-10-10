@@ -6,6 +6,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 class PaperRepository(context:Context) {
+    private val app=context.applicationContext
     private val prefs=context.applicationContext.getSharedPreferences("paper_trading_v1",Context.MODE_PRIVATE)
     companion object { private val lock=Any() }
     fun read():PaperBook=synchronized(lock){ prefs.getString("book",null)?.let{decode(it)} ?: PaperBook() }
@@ -19,7 +20,7 @@ class PaperRepository(context:Context) {
     fun publish(results:List<SignalResult>,now:Long=System.currentTimeMillis())=synchronized(lock) {
         val b=read()
         b.candidates.clear()
-        b.candidates.addAll(results.filter{it.light!=SignalLight.NONE && it.checks.any{c->c.selected} && it.checks.filter{c->c.selected}.all{c->c.state==CheckState.PASS}}
+        b.candidates.addAll(results.filter{com.rex.twboardingscanner.data.StockPolicyStore(app).read().decision(it.code,it.snapshot.sourceStock?.close?:it.snapshot.bars.lastOrNull()?.close?:Double.NaN,StockScope.SCANNER)==StockDecision.ALLOW && it.light!=SignalLight.NONE && it.checks.any{c->c.selected} && it.checks.filter{c->c.selected}.all{c->c.state==CheckState.PASS}}
             .sortedByDescending{it.score}.distinctBy{it.code}.mapNotNull {r->
                 val market=r.snapshot.sourceStock?.market ?:return@mapNotNull null
                 if(!r.code.matches(Regex("[1-9][0-9]{3}")))return@mapNotNull null
@@ -35,7 +36,7 @@ class PaperRepository(context:Context) {
         val quotes=runCatching{if(symbols.isEmpty())emptyMap() else PaperQuoteProvider().load(symbols)}.getOrDefault(emptyMap())
         // Use time AFTER the network request: a delayed request must not cross the 13:20 cutoff.
         return synchronized(lock) {
-            val current=read();now=System.currentTimeMillis();PaperEngine.step(current,quotes,now)
+            val current=read();now=System.currentTimeMillis();PaperEngine.step(current,quotes,now,com.rex.twboardingscanner.data.StockPolicyStore(app).read())
             if(symbols.isEmpty()&&current.enabled&&PaperEngine.session(now))current.status="尚無有效候選股 · 請先完成 ABC 全市場掃描"
             save(current);current
         }

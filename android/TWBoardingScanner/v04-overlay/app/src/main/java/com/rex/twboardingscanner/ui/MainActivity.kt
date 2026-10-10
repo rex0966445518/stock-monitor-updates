@@ -61,6 +61,7 @@ class MainActivity: AppCompatActivity() {
     private var latest = listOf<SignalResult>()
     private var selectedTab = 0
     private var isScanning = false
+    private var latestScanDate = ""
 
     private val prefs by lazy { getSharedPreferences("scanner_filters", MODE_PRIVATE) }
     private var enabledSectors: MutableSet<StockSector> = mutableSetOf()
@@ -105,13 +106,17 @@ class MainActivity: AppCompatActivity() {
         posterExport=PosterExport(this)
         b.refreshButton.text="導出海報"
         b.refreshButton.setOnClickListener {
-            val snapshot=latest.toList()
+            val snapshot=admitted()
             posterExport.generate(isScanning,ScanPoster.collect(snapshot),b.scanProgress.progress,b.scanProgress.max)
         }
         b.logButton.setOnClickListener { showLogDatePicker() }
-        b.searchButton.setOnClickListener { searchHistory() }
-        b.searchInput.setOnEditorActionListener { _, action, _ ->
-            if (action == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) { searchHistory(); true } else false
+        b.searchButton.setOnClickListener { StockToolsActivity.open(this,"SEARCH") }
+        b.banButton.setOnClickListener { StockToolsActivity.open(this,"BAN") }
+        b.limitButton.setOnClickListener { StockToolsActivity.open(this,"LIMIT") }
+        b.versionText.text="v${packageManager.getPackageInfo(packageName,0).versionName} · 作者：雷允澤"
+        b.changelogButton.setOnClickListener {
+            val text=NeonUi.label(this,assets.open("optimization-log.txt").bufferedReader().use{it.readText()},13f,NeonUi.ink).apply{setPadding(dp(16),dp(12),dp(16),dp(12))}
+            MaterialAlertDialogBuilder(this).setTitle("優化日誌").setView(ScrollView(this).apply{addView(text)}).setPositiveButton("關閉",null).show()
         }
 
         b.backtestButton.setOnClickListener { startActivity(android.content.Intent(this,BacktestActivity::class.java)) }
@@ -128,7 +133,7 @@ class MainActivity: AppCompatActivity() {
         render()
     }
 
-    override fun onResume() { super.onResume();loadScanSettings();if(::paperLoop.isInitialized)paperLoop.start() }
+    override fun onResume() { super.onResume();loadScanSettings();if(::paperLoop.isInitialized){paperLoop.start();render();if(latest.isNotEmpty())coordinator.submit{runCatching{publishLists()}}} }
     override fun onPause() { if(::paperLoop.isInitialized)paperLoop.stop();super.onPause() }
 
     private fun startFullScan() {
@@ -138,6 +143,7 @@ class MainActivity: AppCompatActivity() {
         }
 
         val scanDate = java.time.LocalDate.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI)
+        latestScanDate=scanDate.toString()
         val scanRules = radarSelections.mapValues { it.value.toSet() }
         val scanSectors = enabledSectors.toSet()
         isScanning = true
@@ -167,6 +173,7 @@ class MainActivity: AppCompatActivity() {
                 return@submit
             }
 
+            runCatching { com.rex.twboardingscanner.data.StockDirectory(this).remember(universe) }
             runOnUiThread { sectorCounts = universe.groupingBy { it.sector }.eachCount(); refreshSectorCounts() }
 
             val total = universe.size
@@ -191,7 +198,7 @@ class MainActivity: AppCompatActivity() {
                 workers.submit {
                     try {
                         val userExcluded =
-                            stock.sector !in scanSectors
+                            stock.sector !in scanSectors || stock.code in com.rex.twboardingscanner.data.StockPolicyStore(this).read().banned
 
                         if (userExcluded) {
                             excluded.incrementAndGet()
@@ -225,7 +232,7 @@ class MainActivity: AppCompatActivity() {
                                     } else initial
                                     results.addAll(r)
 
-                                    r.filter { it.light != SignalLight.NONE }.forEach { sig ->
+                                    r.filter { it.light != SignalLight.NONE && com.rex.twboardingscanner.data.StockPolicyStore(this).read().decision(it.code,it.snapshot.sourceStock?.close?:it.snapshot.price,com.rex.twboardingscanner.domain.StockScope.SCANNER)==com.rex.twboardingscanner.domain.StockDecision.ALLOW }.forEach { sig ->
                                         if (history.insertIfNew(sig)) {
                                             newCount.incrementAndGet()
                                             if (sig.light == SignalLight.RED || sig.light == SignalLight.ORANGE) {
@@ -260,7 +267,7 @@ class MainActivity: AppCompatActivity() {
             latch.await()
             val copy = synchronized(results) { results.toList() }
             latest = copy
-            runCatching { com.rex.twboardingscanner.paper.PaperRepository(this).publish(copy) }
+            runCatching { publishLists() }
                 .onFailure { runOnUiThread { Toast.makeText(this,"模擬候選清單儲存失敗，請檢查儲存空間",Toast.LENGTH_LONG).show() } }
 
             runOnUiThread {
@@ -305,8 +312,24 @@ class MainActivity: AppCompatActivity() {
         }
     }
 
+    private fun admitted():List<SignalResult>{
+        val policy=com.rex.twboardingscanner.data.StockPolicyStore(this).read()
+        return latest.filter{policy.decision(it.code,it.snapshot.sourceStock?.close?:it.snapshot.price,com.rex.twboardingscanner.domain.StockScope.SCANNER)==com.rex.twboardingscanner.domain.StockDecision.ALLOW}
+    }
+    private fun publishLists(){
+        val store=com.rex.twboardingscanner.data.StockPolicyStore(this);val policy=store.read()
+        val candidates=latest.filter{it.light!=SignalLight.NONE&&it.checks.filter{c->c.selected}.all{c->c.state==com.rex.twboardingscanner.domain.CheckState.PASS}}
+        val date=latestScanDate.ifBlank{java.time.LocalDate.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI).toString()}
+        val rows=org.json.JSONArray(candidates.filter{policy.decision(it.code,it.snapshot.sourceStock?.close?:it.snapshot.price,com.rex.twboardingscanner.domain.StockScope.SCANNER)==com.rex.twboardingscanner.domain.StockDecision.LIMITED}.groupBy{it.code}.map{(code,all)->
+            val r=all.first();org.json.JSONObject().put("date",date).put("code",code).put("name",r.name).put("price",r.snapshot.sourceStock?.close?:r.snapshot.price).put("radar",all.map{it.radarType.name.take(1)}.distinct().joinToString("/"))
+        })
+        val current=org.json.JSONObject().put("date",date).put("rows",org.json.JSONArray(admitted().map{r->org.json.JSONObject().put("code",r.code).put("name",r.name).put("radar",r.radarType.name.take(1)).put("price",r.snapshot.sourceStock?.close?:r.snapshot.price).put("state",if(r.light!=SignalLight.NONE)"入選" else if(r.checks.any{it.selected&&it.state==com.rex.twboardingscanner.domain.CheckState.PENDING})"待查核" else "未通過")}))
+        val file=java.io.File(filesDir,"scanner-search.json");val temp=java.io.File(file.path+".tmp");temp.writeText(current.toString());check(temp.renameTo(file))
+        store.candidates(com.rex.twboardingscanner.domain.StockScope.SCANNER,rows,"主頁掃描 · $date",policy)
+        com.rex.twboardingscanner.paper.PaperRepository(this).publish(admitted())
+    }
     private fun render() {
-        val groups = (0..4).map { ResultFilters.select(latest, it) }
+        val groups = (0..4).map { ResultFilters.select(admitted(), it) }
         b.resultFilters.update(groups.map { it.size }, selectedTab)
         adapter.submit(groups[selectedTab])
     }
@@ -477,15 +500,6 @@ class MainActivity: AppCompatActivity() {
             cal.get(Calendar.MONTH),
             cal.get(Calendar.DAY_OF_MONTH)
         ).show()
-    }
-
-    private fun searchHistory() {
-        val code = b.searchInput.text?.toString()?.trim().orEmpty()
-        if (code.isBlank()) {
-            Toast.makeText(this, "請輸入股號", Toast.LENGTH_SHORT).show()
-            return
-        }
-        showHistoryCards("${code} 歷史掃描紀錄", history.queryByCode(code))
     }
 
     private fun showHistoryCards(title:String, rows:List<HistoryRow>) {

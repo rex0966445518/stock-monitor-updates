@@ -100,7 +100,10 @@ class BtRobotStore(private val c:Context){
         if(!current(id,token)||seen(id,candidate.key))return@synchronized false
         BtRobotSpace.validate(result.settings);require(BtRobotSpace.key(result.settings.rules)==candidate.key)
         require(result.run.profit.isFinite())
-        val s=session(id)!!;require(BtRobotSpace.includes(candidate.key,s.optString("required","0"),s.optString("forbidden","0")));val finished=System.currentTimeMillis();val seq=s.getLong("tested")+1
+        val s=session(id)!!
+        require(result.settings==BtSettingsCodec.decode(s.getJSONObject("settings")).copy(rules=BtRobotSpace.rules(candidate.key))){"測試條件與批次不一致"}
+        if(com.rex.twboardingscanner.data.StockPolicyStore(c).read()!=result.settings.stockPolicy)return@synchronized false
+        require(BtRobotSpace.includes(candidate.key,s.optString("required","0"),s.optString("forbidden","0")));val finished=System.currentTimeMillis();val seq=s.getLong("tested")+1
         val report=JSONObject().put("id",UUID.nameUUIDFromBytes("$id:${candidate.key}".toByteArray(Charsets.UTF_8)).toString())
             .put("journalVersion",1).put("strategyVersion",result.settings.strategyVersion).put("robotSession",id).put("robotSequence",seq)
             .put("state","DONE").put("appVersion",s.getString("appVersion"))
@@ -119,12 +122,18 @@ class BtRobotStore(private val c:Context){
             s.put("updatedAt",finished).put("tested",seq).put("cursor",candidate.cursor.toString()).put("message","已完成第 $seq 組；持續搜尋更高收益")
             putSession(s);db.setTransactionSuccessful()
         }finally{db.endTransaction()}
+        com.rex.twboardingscanner.data.StockPolicyStore(c).candidates(com.rex.twboardingscanner.domain.StockScope.ROBOT,BacktestStore(c).limitedJson(result.run),"機器人 ${id.take(8)} · 第 $seq 組",result.settings.stockPolicy)
         better
     }
     fun acknowledge(id:String,seq:Long)=synchronized(lock){session(id)?.let{putSession(it.put("ack",maxOf(it.optLong("ack"),seq)))}}
     fun trials(id:String,limit:Int=20,offset:Int=0):List<JSONObject> = synchronized(lock){
         require(limit in 1..1000&&offset>=0);val out=mutableListOf<JSONObject>()
         db.rawQuery("SELECT summary FROM trials WHERE session=? AND cleared=0 ORDER BY n DESC LIMIT ? OFFSET ?",arrayOf(id,limit.toString(),offset.toString())).use{while(it.moveToNext())out+=JSONObject(it.getString(0))};out
+    }
+    /** Keyset paging keeps stock search responsive without loading all compressed reports. */
+    fun searchPage(before:Long=Long.MAX_VALUE):List<JSONObject> = synchronized(lock){
+        val out=mutableListOf<JSONObject>()
+        db.rawQuery("SELECT n,session,key FROM trials WHERE cleared=0 AND n<? ORDER BY n DESC LIMIT 30",arrayOf(before.toString())).use{r->while(r.moveToNext())out+=JSONObject().put("n",r.getLong(0)).put("session",r.getString(1)).put("key",r.getString(2))};out
     }
     fun report(id:String,key:String):JSONObject?=synchronized(lock){
         db.rawQuery("SELECT report FROM trials WHERE session=? AND key=? AND cleared=0",arrayOf(id,key)).use{cursor->

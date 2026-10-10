@@ -22,7 +22,9 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
         private val runLock=Any()
         private var cached:Runtime?=null
         fun start(c:Context,id:String){
-            val store=BtRobotStore(c);val token=store.resume(id)
+            val store=BtRobotStore(c)
+            require(BtSettingsCodec.decode(store.session(id)!!.getJSONObject("settings")).stockPolicy==com.rex.twboardingscanner.data.StockPolicyStore(c).read()){"禁股／限價已變更，請從機器人頁面開始新批次"}
+            val token=store.resume(id)
             try{enqueue(c,id,token,ExistingWorkPolicy.REPLACE)}catch(e:Exception){store.status(id,token,"無法排入測試：${e.message}","ERROR");throw e}
         }
         private fun enqueue(c:Context,id:String,token:String,policy:ExistingWorkPolicy,delay:Long=0){
@@ -59,7 +61,9 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
         val id=inputData.getString("session")?:return@synchronized Result.failure()
         val token=inputData.getString("token")?:return@synchronized Result.failure()
         val store=BtRobotStore(applicationContext)
-        val cancel={isStopped||!store.current(id,token)}
+        val policy=com.rex.twboardingscanner.data.StockPolicyStore(applicationContext)
+        val frozen=store.session(id)?.let{BtSettingsCodec.decode(it.getJSONObject("settings")).stockPolicy}
+        val cancel={isStopped||!store.current(id,token)||policy.read()!=frozen}
         if(cancel())return@synchronized Result.success()
         try{
             setForegroundAsync(foreground()).get()

@@ -41,6 +41,8 @@ class BtRobotActivity:AppCompatActivity(){
         val scroll=ScrollView(this).apply{setBackgroundColor(Color.rgb(4,17,30));addView(root)};setContentView(scroll)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
         root.addView(NeonUi.row(this,listOf(label("自動測試機器人",22f,NeonUi.ink,true),NeonUi.button(this,"返回"){finish()})))
+        root.addView(NeonUi.row(this,listOf(NeonUi.button(this,"禁股名單",NeonUi.pink){StockToolsActivity.open(this,"BAN",StockScope.ROBOT)},NeonUi.button(this,"限價名單",NeonUi.amber){StockToolsActivity.open(this,"LIMIT",StockScope.ROBOT)},NeonUi.button(this,"搜尋股票"){StockToolsActivity.open(this,"SEARCH",StockScope.ROBOT)})))
+        root.addView(NeonUi.gap(this,8))
         root.addView(label("自動增減 ABC 條件 · 持續搜尋更高總收益",12f,NeonUi.cyan))
         root.addView(NeonUi.gap(this,12))
         val fixed=panel(NeonUi.cyan)
@@ -86,13 +88,22 @@ class BtRobotActivity:AppCompatActivity(){
     private fun base():BtSettings {
         val saved=runCatching{BtSettingsCodec.decode(BacktestStore(this).configuration()!!)}.getOrNull()
             ?:BtSettingsCodec.capture(this,java.time.LocalDate.of(2026,8,1),java.time.LocalDate.of(2026,10,8),5000000.0,"")
-        return BtRobotSpace.settings(saved.rules,saved.sectors.ifEmpty{StockSector.entries.toSet()})
+        return BtRobotSpace.settings(saved.rules,saved.sectors.ifEmpty{StockSector.entries.toSet()}).copy(stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(this).read(),stockScope=StockScope.ROBOT)
+    }
+    private fun policySession():String {
+        val old=store.session()?:return store.create(base(),required(),forbidden())
+        val settings=BtSettingsCodec.decode(old.getJSONObject("settings"))
+        val policy=com.rex.twboardingscanner.data.StockPolicyStore(this).read()
+        if(settings.stockPolicy==policy)return old.getString("id")
+        val id=store.create(settings.copy(stockPolicy=policy,stockScope=StockScope.ROBOT),old.optString("required","0"),old.optString("forbidden","0"))
+        BtRobotCheckpoint.cloneData(store,old.getString("id"),id)
+        return id
     }
     private fun startTesting(){
         if(busy)return
         startButton.isEnabled=false
         Thread{
-            val result=runCatching{val id=store.active().ifBlank{store.create(base(),required(),forbidden())};BtRobotWorker.start(this,id)}
+            val result=runCatching{val id=policySession();BtRobotWorker.start(this,id)}
             runOnUiThread{if(!isFinishing&&!isDestroyed){result.onFailure{Toast.makeText(this,"無法開始：${it.message}",Toast.LENGTH_LONG).show()};render()}}
         }.start()
     }
@@ -104,8 +115,9 @@ class BtRobotActivity:AppCompatActivity(){
         val fixed=BtRobotSpace.required(required()).bitCount();val blocked=BtRobotSpace.required(forbidden()).bitCount()
         requiredButton.text="條件選單 · 必選 $fixed／排除 $blocked"
         spaceLabel.text="必選 $fixed 項 · 排除 $blocked 項 · 自由 ${65-fixed-blocked} 項 · 共 ${num(total)} 種組合。先測基準與最佳附近，再探索其他組合。已清理的組合仍標記為測過。"
+        val policyChanged=s?.let{BtSettingsCodec.decode(it.getJSONObject("settings")).stockPolicy!=com.rex.twboardingscanner.data.StockPolicyStore(this).read()}?:false
         val running=s?.optString("state") in setOf("RUNNING","RETRY")
-        status.text=s?.optString("message")?:"按開始測試，自動尋找更高收益組合"
+        status.text=if(policyChanged)"禁股／限價已更新；按開始將建立新批次並沿用快取" else s?.optString("message")?:"按開始測試，自動尋找更高收益組合"
         counts.text="已測試 ${num(tested)} 組\n未測試 ${num(remaining)} 組\n已清理 ${num(s?.optLong("cleared")?:0L)} 組零收益"
         val key=s?.optString("bestKey").orEmpty()
         best.text=if(key.isEmpty())"目前已測最佳：—" else "目前已測最佳\n${signed(s!!.getDouble("bestProfit"))} 元"
@@ -114,8 +126,8 @@ class BtRobotActivity:AppCompatActivity(){
             val settings=BtSettingsCodec.decode(s.getJSONObject("settings"))
             "批次 ${id.take(8)} · "+(if(s.has("loaded"))"資料 ${s.getInt("loaded")} / ${s.getInt("requested")} 檔"else"資料尚未備妥")+"\n產業："+settings.sectors.sortedBy{it.ordinal}.joinToString("、"){it.label}
         }
-        startButton.text=when{running->"測試進行中…";s?.optString("state")=="DONE"->"全部測試完成";tested>0->"繼續／重試";else->"開始測試"}
-        startButton.isEnabled=!busy&&!running&&s?.optString("state")!="DONE";pauseButton.isEnabled=running;bestButton.isEnabled=key.isNotEmpty()
+        startButton.text=when{policyChanged->"套用新名單並開始";running->"測試進行中…";s?.optString("state")=="DONE"->"全部測試完成";tested>0->"繼續／重試";else->"開始測試"}
+        startButton.isEnabled=!busy&&!running&&(policyChanged||s?.optString("state")!="DONE");pauseButton.isEnabled=running;bestButton.isEnabled=key.isNotEmpty()
         val signature="$id-$tested-${s?.optLong("cleared")?:0}-$page"
         if(stamp!=signature){stamp=signature;renderTrials(id)}
         if(visible&&s!=null&&key.isNotEmpty()&&s.optLong("bestSeq")>s.optLong("ack")&&alert?.isShowing!=true){
@@ -214,8 +226,9 @@ class BtRobotActivity:AppCompatActivity(){
         }}else if(requestCode==732)runTask("正在校驗並匯入測試斷點…"){
             val old=store.active();val id=contentResolver.openInputStream(uri)!!.use{BtRobotCheckpoint.restore(this,it)}
             if(old.isNotBlank())BtRobotWorker.pause(this,old)
-            BtRobotWorker.start(this,id)
-            "已匯入獨立批次並接續未測組合"
+            if(BtSettingsCodec.decode(store.session(id)!!.getJSONObject("settings")).stockPolicy==com.rex.twboardingscanner.data.StockPolicyStore(this).read()){
+                BtRobotWorker.start(this,id);"已匯入獨立批次並接續未測組合"
+            }else "已匯入；名單與目前設定不同，保留暫停。按開始會套用目前名單建立新批次，沿用歷史快取。"
         }
     }
     private fun recover(){

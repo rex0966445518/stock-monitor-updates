@@ -36,6 +36,7 @@ internal object BacktestJournalUi {
             "初始本金 ${String.format(Locale.TAIWAN,"%,.0f",s.optDouble("capital",0.0))} 元\n"+
             "股票 ${s.optString("codes").ifBlank{"全部"}}\n產業 ${sectors.joinToString("、").ifBlank{"舊版未記錄"}}\n"+
             "${tradingSummary(s)}\n"+
+            com.rex.twboardingscanner.domain.StockPolicy.read(s.optJSONObject("stockPolicy")).let{p->p.summary()+"\n禁股："+p.banned.sorted().joinToString("、").ifBlank{"無"}+"\n放行："+p.overrides.entries.joinToString("；"){"${it.key.label} ${it.value.sorted().joinToString("、")}"}.ifBlank{"無"}+"\n"}+
             "${s.optString("strategyLabel","舊版策略，請參考原始報告")}\n"+
             "條件版本 ${s.optString("rulesVersion","舊版未記錄")}"
         if(rules==null)return intro+"\n\n舊版沒有完整 ABC 勾選快照。"

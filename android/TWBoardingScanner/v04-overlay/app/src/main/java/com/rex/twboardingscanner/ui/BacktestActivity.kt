@@ -61,6 +61,8 @@ class BacktestActivity:AppCompatActivity(){
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
         root.addView(NeonUi.row(this,listOf(label("歷史回測",25f,NeonUi.ink,true),NeonUi.button(this,"返回"){finish()})))
         root.addView(label("每日篩選 → 尾盤買一張 → 達獲利目標賣出",12f,NeonUi.mint));root.addView(NeonUi.gap(this,12))
+        root.addView(NeonUi.row(this,listOf(NeonUi.button(this,"禁股名單",NeonUi.pink){StockToolsActivity.open(this,"BAN",StockScope.BACKTEST)},NeonUi.button(this,"限價名單",NeonUi.amber){StockToolsActivity.open(this,"LIMIT",StockScope.BACKTEST)},NeonUi.button(this,"搜尋股票"){StockToolsActivity.open(this,"SEARCH",StockScope.BACKTEST)})))
+        root.addView(NeonUi.gap(this,8))
         root.addView(NeonUi.button(this,"自動測試機器人",NeonUi.amber){startActivity(Intent(this,BtRobotActivity::class.java))})
         root.addView(NeonUi.gap(this,8))
         root.addView(tradingControls())
@@ -294,6 +296,11 @@ class BacktestActivity:AppCompatActivity(){
         results.addView(label("缺少歷史查核資料 ${data.optInt("pendingChecks")} 項次 · 缺資料的條件不能通過",11f))
         results.addView(label(data.getString("note"),12f,NeonUi.amber));results.addView(NeonUi.gap(this,8))
         if(!legacy)results.addView(NeonUi.button(this,"查看本次 ABC、產業與交易規則"){showRules(s)})
+        if(r.has("limited"))results.addView(NeonUi.button(this,"本次當日限價名單 · ${r.getJSONArray("limited").length()} 筆",NeonUi.amber){
+            val frozen=JSONObject().put("source","報告 ${data.optString("id").take(8)} · ${s.optString("start")} → ${s.optString("end")}").put("policy",s.optJSONObject("stockPolicy")).put("rows",r.getJSONArray("limited"))
+            java.io.File(cacheDir,"view-limited.json").writeText(frozen.toString())
+            startActivity(Intent(this,StockToolsActivity::class.java).putExtra("mode","LIMIT").putExtra("scope",s.optString("stockScope","BACKTEST")).putExtra("reportLimited",true))
+        })
         if(hasRebate){results.addView(BacktestRebatePanel(this,r));results.addView(NeonUi.gap(this,12))}
         results.addView(label("每日買賣紀錄",17f,NeonUi.ink,true))
         results.addView(label("金額單位：元。淨利為當日賣出的已實現損益；留倉金額為未賣股票的含費成本。",11f))

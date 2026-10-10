@@ -23,13 +23,14 @@ object BtSettingsCodec {
         val saved=prefs.getStringSet("enabled_sectors",null)
         val sectors=saved?.mapNotNull {name->allSectors.firstOrNull{it.name==name}}?.toMutableSet()?:allSectors.toMutableSet()
         if(saved!=null&&allSectors.filter{it!=com.rex.twboardingscanner.domain.StockSector.UNKNOWN}.all{it.name in saved})sectors.add(com.rex.twboardingscanner.domain.StockSector.UNKNOWN)
-        return BtSettings(start,end,capital,codes,rules.mapValues{it.value.toSet()},sectors.ifEmpty{allSectors}.toSet())
+        return BtSettings(start,end,capital,codes,rules.mapValues{it.value.toSet()},sectors.ifEmpty{allSectors}.toSet(),stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(c).read())
     }
     fun encode(s:BtSettings):JSONObject {
         s.validateTrading()
         val target=btPercent(s.targetNetPct)
         return JSONObject().put("strategyVersion",s.strategyVersion).put("rulesVersion",com.rex.twboardingscanner.domain.ScanConditions.VERSION)
         .put("start",s.start.toString()).put("end",s.end.toString()).put("capital",s.capital).put("codes",s.codes)
+        .put("stockPolicy",s.stockPolicy.json()).put("stockScope",s.stockScope.name)
         .put("targetNetPct",s.targetNetPct).put("maxHoldingStocks",s.maxHoldingStocks?:JSONObject.NULL)
         .put("holdingLimitBasis","不同股號計算檔數；同股不同日可加買一張；先賣後買；名額及資金競爭按股號排序")
         .put("rules",JSONObject().apply{s.rules.forEach{(type,ids)->put(type.name,JSONArray(ids.sorted()))}})
@@ -53,7 +54,7 @@ object BtSettingsCodec {
             require(n.isFinite()&&n>=1&&n<=Int.MAX_VALUE&&n==kotlin.math.floor(n)){"持倉上限不是有效整數"}
             n.toInt()
         }else null
-        return BtSettings(LocalDate.parse(o.getString("start")),LocalDate.parse(o.getString("end")),o.getDouble("capital"),o.getString("codes"),rules,sectors,version,limit,if(version>=4)o.getDouble("targetNetPct")else 3.0).also{it.validateTrading()}
+        return BtSettings(LocalDate.parse(o.getString("start")),LocalDate.parse(o.getString("end")),o.getDouble("capital"),o.getString("codes"),rules,sectors,version,limit,if(version>=4)o.getDouble("targetNetPct")else 3.0,com.rex.twboardingscanner.domain.StockPolicy.read(o.optJSONObject("stockPolicy")),com.rex.twboardingscanner.domain.StockScope.valueOf(o.optString("stockScope","BACKTEST"))).also{it.validateTrading()}
     }
 }
 
@@ -68,7 +69,7 @@ class BacktestWorker(c:Context,p:WorkerParameters):Worker(c,p){
             val s=BtSettingsCodec.decode(snapshot)
             require(s.start<=s.end&&s.end<LocalDate.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI))
             require(java.time.temporal.ChronoUnit.DAYS.between(s.start,s.end)<=730)
-            val cancel={isStopped||store.active()!=runId||store.state()!="RUNNING"}
+            val cancel={isStopped||store.active()!=runId||store.state()!="RUNNING"||com.rex.twboardingscanner.data.StockPolicyStore(applicationContext).read()!=s.stockPolicy}
             val progress={message:String->check(!cancel()){ "已取消回測" };store.update(runId,message)}
             val data=BacktestData(applicationContext).load(s,progress,cancel)
             val prepared=BacktestEngine.prepare(data.series,s,progress,cancel)

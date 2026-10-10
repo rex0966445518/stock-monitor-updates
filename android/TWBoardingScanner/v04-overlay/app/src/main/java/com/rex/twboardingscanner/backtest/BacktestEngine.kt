@@ -10,8 +10,10 @@ import kotlin.math.*
 fun defaultBtRules()=RadarType.entries.associateWith{type->ScanConditions.forRadar(type).filter{it.defaultEnabled}.map{it.id}.toSet()}
 fun btPercent(value:Double)=java.math.BigDecimal.valueOf(value).stripTrailingZeros().toPlainString()
 data class BtSettings(val start:LocalDate,val end:LocalDate,val capital:Double=3000000.0,val codes:String="",val rules:Map<RadarType,Set<String>> = defaultBtRules(),val sectors:Set<StockSector> = StockSector.entries.toSet(),val strategyVersion:Int=4,
-    val maxHoldingStocks:Int?=if(strategyVersion>=4)25 else null,val targetNetPct:Double=3.0){
+    val maxHoldingStocks:Int?=if(strategyVersion>=4)25 else null,val targetNetPct:Double=3.0,
+    val stockPolicy:StockPolicy=StockPolicy(),val stockScope:StockScope=StockScope.BACKTEST){
     fun validateTrading(){
+        stockPolicy.validate()
         require(strategyVersion in 2..4)
         if(strategyVersion>=4)require(maxHoldingStocks!=null&&maxHoldingStocks>0){"最高持倉請填 1 以上的整數"}
         else require(maxHoldingStocks==null&&targetNetPct==3.0){"舊策略必須保留原持倉及獲利規則"}
@@ -30,8 +32,9 @@ data class BtRebateMonth(val month:String,var buyAmount:Double=0.0,var sellAmoun
     val rate:Double get()=if(Math.round(turnover*100)>5000000000L)0.001 else 0.0005
     val amount:Double get()=Math.round(turnover*rate*100)/100.0
 }
+data class BtLimited(val date:LocalDate,val code:String,val name:String,val price:Double,val radar:String)
 data class BtSkipped(val date:LocalDate,val code:String,val reason:String)
-data class BtRun(val capital:Double,var cash:Double=capital,var dividendAccrued:Double=0.0,val trades:MutableList<BtTrade> = mutableListOf(),val holdings:MutableList<BtHolding> = mutableListOf(),val curve:MutableList<BtDay> = mutableListOf(),val skipped:MutableList<BtSkipped> = mutableListOf(),val strategyVersion:Int=3,val rebateMonths:MutableMap<String,BtRebateMonth> = sortedMapOf()){
+data class BtRun(val capital:Double,var cash:Double=capital,var dividendAccrued:Double=0.0,val trades:MutableList<BtTrade> = mutableListOf(),val holdings:MutableList<BtHolding> = mutableListOf(),val curve:MutableList<BtDay> = mutableListOf(),val skipped:MutableList<BtSkipped> = mutableListOf(),val strategyVersion:Int=3,val rebateMonths:MutableMap<String,BtRebateMonth> = sortedMapOf(),val limited:MutableList<BtLimited> = mutableListOf()){
     val rebateAccrued:Double get()=rebateMonths.values.sumOf{it.amount}
     val equity:Double get()=cash+dividendAccrued+rebateAccrued+holdings.sumOf{PaperEngine.netSell(it.mark)}
     val profit:Double get()=equity-capital
@@ -136,6 +139,12 @@ object BacktestEngine {
             val lotId="$day-$code"
             if(lotId in boughtLots)return@forEach
             val bar=bars[code]?.get(day)
+            val decision=settings.stockPolicy.decision(code,bar?.close?:Double.NaN,settings.stockScope)
+            if(decision==StockDecision.BANNED){b.skipped.add(BtSkipped(day,code,"禁股名單，不買入"));return@forEach}
+            if(bar!=null&&decision==StockDecision.LIMITED){
+                b.limited.add(BtLimited(day,code,meta[code]?.name?:code,bar.close,matched.flatMap{it.radar.split('/')}.distinct().sorted().joinToString("/")))
+                b.skipped.add(BtSkipped(day,code,"超過限價 ${settings.stockPolicy.ceiling} 元，列入當日限價名單"));return@forEach
+            }
             val reason=when{
                 settings.maxHoldingStocks!=null&&b.holdings.none{it.code==code}&&b.holdings.map{it.code}.distinct().size>=settings.maxHoldingStocks->"已達最高持倉 ${settings.maxHoldingStocks} 檔，未買入新股"
                 bar==null->"缺少當日收盤價"
