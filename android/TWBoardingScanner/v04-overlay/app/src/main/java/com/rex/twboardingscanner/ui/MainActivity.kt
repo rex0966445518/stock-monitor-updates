@@ -62,6 +62,7 @@ class MainActivity: AppCompatActivity() {
     private var selectedTab = 0
     private var isScanning = false
     private var latestScanDate = ""
+    private var latestScanAt = 0L
 
     private val prefs by lazy { getSharedPreferences("scanner_filters", MODE_PRIVATE) }
     private var enabledSectors: MutableSet<StockSector> = mutableSetOf()
@@ -144,6 +145,7 @@ class MainActivity: AppCompatActivity() {
 
         val scanDate = java.time.LocalDate.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI)
         latestScanDate=scanDate.toString()
+        latestScanAt=System.currentTimeMillis()
         val scanRules = radarSelections.mapValues { it.value.toSet() }
         val scanSectors = enabledSectors.toSet()
         isScanning = true
@@ -326,7 +328,7 @@ class MainActivity: AppCompatActivity() {
         val current=org.json.JSONObject().put("date",date).put("rows",org.json.JSONArray(admitted().map{r->org.json.JSONObject().put("code",r.code).put("name",r.name).put("radar",r.radarType.name.take(1)).put("price",r.snapshot.sourceStock?.close?:r.snapshot.price).put("state",if(r.light!=SignalLight.NONE)"入選" else if(r.checks.any{it.selected&&it.state==com.rex.twboardingscanner.domain.CheckState.PENDING})"待查核" else "未通過")}))
         val file=java.io.File(filesDir,"scanner-search.json");val temp=java.io.File(file.path+".tmp");temp.writeText(current.toString());check(temp.renameTo(file))
         store.candidates(com.rex.twboardingscanner.domain.StockScope.SCANNER,rows,"主頁掃描 · $date",policy)
-        com.rex.twboardingscanner.paper.PaperRepository(this).publish(admitted())
+        com.rex.twboardingscanner.paper.PaperRepository(this).publish(admitted(),latestScanAt)
     }
     private fun render() {
         val groups = (0..4).map { ResultFilters.select(admitted(), it) }

@@ -21,7 +21,7 @@ data class StockPolicy(val banned:Set<String> = emptySet(),val ceiling:Double?=n
     fun json():JSONObject { validate();return JSONObject().put("version",1).put("banned",JSONArray(banned.sorted())).put("ceiling",ceiling?:JSONObject.NULL)
         .put("overrides",JSONObject().apply{StockScope.entries.forEach{put(it.name,JSONArray(overrides[it].orEmpty().sorted()))}}) }
     fun summary()="禁股 ${banned.size} 檔 · 最高股價 "+(ceiling?.let{"${com.rex.twboardingscanner.backtest.btPercent(it)} 元"}?:"不限")+
-        "\n"+StockScope.entries.joinToString("／"){"${it.label}放行 ${overrides[it].orEmpty().size} 檔"}
+        "\n"+"放行：主頁 ${overrides[StockScope.SCANNER].orEmpty().size} · 回測 ${overrides[StockScope.BACKTEST].orEmpty().size} · 機器人 ${overrides[StockScope.ROBOT].orEmpty().size} 檔"
     companion object {
         fun read(o:JSONObject?):StockPolicy {
             if(o==null)return StockPolicy()

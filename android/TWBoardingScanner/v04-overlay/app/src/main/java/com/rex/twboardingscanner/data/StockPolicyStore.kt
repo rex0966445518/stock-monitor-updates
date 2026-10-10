@@ -17,8 +17,15 @@ class StockPolicyStore(context:Context){
         check(prefs.edit().putString("policy",next.json().toString()).commit()){"名單儲存失敗"}
         // Freeze old reports. A changed policy must not be mixed into a running comparison.
         val bt=BacktestStore(c);bt.update(bt.active(),"禁股／限價已變更；請以新設定重新回測，舊日誌保留","CANCELED")
-        androidx.work.WorkManager.getInstance(c).cancelUniqueWork("historical-backtest")
-        val robot=BtRobotStore(c);if(robot.active().isNotEmpty())BtRobotWorker.pause(c,robot.active())
+        val robot=BtRobotStore(c);if(robot.active().isNotEmpty())robot.pause(robot.active())
+        // Persisted cancellation/token invalidation above is authoritative. Scheduling services
+        // may be unavailable during initialization; that must not prevent saving a ban.
+        runCatching{
+            val work=androidx.work.WorkManager.getInstance(c)
+            work.cancelUniqueWork("historical-backtest")
+            work.cancelUniqueWork(BtRobotWorker.WORK)
+            work.cancelUniqueWork(BtRobotWorker.WORK+"-recover")
+        }
         true
     }
     fun ban(code:String,name:String){change{it.copy(banned=it.banned+code)};prefs.edit().putString("name-$code",name).apply()}
