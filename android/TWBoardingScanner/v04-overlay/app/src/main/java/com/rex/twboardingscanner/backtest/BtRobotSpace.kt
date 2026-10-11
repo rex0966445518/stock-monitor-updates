@@ -6,8 +6,16 @@ import java.time.LocalDate
 
 /** Each radar's own checkbox is a separate bit, including optional financial checks. */
 object BtRobotSpace {
-    val slots=RadarType.entries.flatMap{type->ScanConditions.forRadar(type).map{type to it.id}}
+    // Legacy bit positions must NEVER move; old journals and robot checkpoint keys
+    // used 65 bits. Append new features after ALL historical positions.
+    val legacySlots=RadarType.entries.flatMap{type->
+        ScanConditions.forRadar(type).filterNot{it.id in ScanConditions.NEW_IDS}.map{type to it.id}
+    }
+    val slots=legacySlots+RadarType.entries.flatMap{type->
+        ScanConditions.forRadar(type).filter{it.id in ScanConditions.NEW_IDS}.map{type to it.id}
+    }
     val total:BigInteger=BigInteger.ONE.shiftLeft(slots.size)
+    val legacyTotal:BigInteger=BigInteger.ONE.shiftLeft(legacySlots.size)
     fun key(rules:Map<RadarType,Set<String>>):String=slots.foldIndexed(BigInteger.ZERO){i,n,(type,id)->if(id in rules[type].orEmpty())n.setBit(i)else n}.toString(16)
     fun rules(key:String):Map<RadarType,Set<String>> {
         val mask=BigInteger(key,16);require(mask.signum()>=0&&mask<total)
@@ -34,16 +42,20 @@ object BtRobotSpace {
     fun validateConstraints(required:String,forbidden:String){
         require(BtRobotSpace.required(required).and(BtRobotSpace.required(forbidden))==BigInteger.ZERO){"同一條件不能同時必選與排除"}
     }
-    fun total(required:String,forbidden:String="0"):BigInteger {
+    fun total(required:String,forbidden:String="0",legacy:Boolean=false):BigInteger {
         validateConstraints(required,forbidden)
-        return BigInteger.ONE.shiftLeft(slots.size-BtRobotSpace.required(required).bitCount()-BtRobotSpace.required(forbidden).bitCount())
+        if(legacy)require(BtRobotSpace.required(required)<legacyTotal&&BtRobotSpace.required(forbidden)<legacyTotal){"舊批次不支援新條件"}
+        return BigInteger.ONE.shiftLeft((if(legacy)legacySlots else slots).size-
+            BtRobotSpace.required(required).bitCount()-BtRobotSpace.required(forbidden).bitCount())
     }
     fun includes(key:String,required:String,forbidden:String="0"):Boolean {
         validateConstraints(required,forbidden)
         return BigInteger(key,16).and(BtRobotSpace.required(required))==BtRobotSpace.required(required)&&BigInteger(key,16).and(BtRobotSpace.required(forbidden))==BigInteger.ZERO
     }
-    fun next(base:String,best:String?,cursor:BigInteger,seed:BigInteger,required:String="0",forbidden:String="0",seen:(String)->Boolean):Candidate? {
-        val total=total(required,forbidden);val fixed=BtRobotSpace.required(required);val blocked=BtRobotSpace.required(forbidden);val free=slots.indices.filterNot{fixed.testBit(it)||blocked.testBit(it)}
+    fun next(base:String,best:String?,cursor:BigInteger,seed:BigInteger,required:String="0",forbidden:String="0",
+        legacy:Boolean=false,seen:(String)->Boolean):Candidate? {
+        val total=total(required,forbidden,legacy);val fixed=BtRobotSpace.required(required);val blocked=BtRobotSpace.required(forbidden)
+        val free=(if(legacy)legacySlots else slots).indices.filterNot{fixed.testBit(it)||blocked.testBit(it)}
         fun lock(k:String)=BigInteger(k,16).or(fixed).andNot(blocked).toString(16)
         fun expand(n:BigInteger)=free.foldIndexed(fixed){i,mask,bit->if(n.testBit(i))mask.setBit(bit)else mask}.toString(16)
         require(cursor.signum()>=0&&cursor<=total)

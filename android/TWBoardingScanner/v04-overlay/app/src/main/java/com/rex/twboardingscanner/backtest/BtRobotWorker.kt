@@ -67,8 +67,11 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
         val token=inputData.getString("token")?:return@synchronized Result.failure()
         val store=BtRobotStore(applicationContext)
         val policy=com.rex.twboardingscanner.data.StockPolicyStore(applicationContext)
-        val frozen=store.session(id)?.let{BtSettingsCodec.decode(it.getJSONObject("settings")).stockPolicy}
-        val cancel={isStopped||!store.current(id,token)||policy.read()!=frozen}
+        val frozenSession=store.session(id)
+        val frozen=frozenSession?.let{BtSettingsCodec.decode(it.getJSONObject("settings")).stockPolicy}
+        val flowSource=com.rex.twboardingscanner.data.TradeSideVolumeStore(applicationContext)
+        val flowRevision=frozenSession?.optString("flowRevision",flowSource.revision())?:flowSource.revision()
+        val cancel={isStopped||!store.current(id,token)||policy.read()!=frozen||flowSource.revision()!=flowRevision}
         if(cancel())return@synchronized Result.success()
         try{
             setForegroundAsync(foreground()).get()
@@ -93,12 +96,20 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
                 }
                 require(data.market.isNotEmpty()){"缺少此批次的加權指數快照，請建立新測試"}
                 store.coverage(id,token,data.series.size,data.requested,digest(file))
-                val indexFile=store.conditionFile(id);val fingerprint=BtConditionIndex.fingerprint(digest(file),base)
-                val index=if(indexFile.exists()){
-                    progress("讀取已保存的歷史條件快取；不重新預算…")
+                val indexFile=store.conditionFile(id);val fingerprint=BtConditionIndex.fingerprint(digest(file),base,flowRevision)
+                val reusable=if(indexFile.exists())runCatching{
                     BtConditionIndex.read(indexFile,data.series,fingerprint)
-                }else{
-                    val compiled=BtConditionIndex.build(data.series,base,progress,cancel)
+                }.getOrNull() else null
+                val index=reusable?:run{
+                    progress("更新已保存歷史條件，缺失的外／內盤資料會標記待查核…")
+                    var lastCode=""
+                    var samples:Map<java.time.LocalDate,com.rex.twboardingscanner.domain.TradeSideVolume> = emptyMap()
+                    val compiled=BtConditionIndex.build(data.series,base,progress,cancel){code,day->
+                        if(lastCode!=code){
+                            lastCode=code;samples=flowSource.forCode(code,base.start,base.end,completed=true)
+                        }
+                        samples[day]
+                    }
                     check(!cancel()){ "已暫停測試" };compiled.save(indexFile,fingerprint);compiled
                 }
                 Runtime(id,data,index,BacktestEngine.executionIndex(data.series),com.rex.twboardingscanner.domain.MarketCrashGuard.forDays(data.market,index.days)).also{cached=it}

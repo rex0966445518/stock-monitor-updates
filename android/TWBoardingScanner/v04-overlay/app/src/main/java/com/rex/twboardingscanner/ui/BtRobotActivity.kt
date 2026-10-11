@@ -213,6 +213,9 @@ class BtRobotActivity:AppCompatActivity(){
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
         root.addView(NeonUi.header(this,"自動測試機器人","AUTOMATION LAB"){finish()})
         val toolsRow=NeonUi.row(this,listOf(NeonUi.button(this,"禁股名單",NeonUi.pink){StockToolsActivity.open(this,"BAN",StockScope.ROBOT)},NeonUi.button(this,"限價名單",NeonUi.amber){StockToolsActivity.open(this,"LIMIT",StockScope.ROBOT)},NeonUi.button(this,"搜尋股票"){StockToolsActivity.open(this,"SEARCH",StockScope.ROBOT)}));root.addView(toolsRow)
+        root.addView(NeonUi.button(this,"匯入主動買／賣成交量 CSV",NeonUi.cyan){
+            if(!busy)startActivity(Intent(this,TradeSideVolumeImportActivity::class.java))
+        }.apply{tag="robot-flow-import"})
         root.addView(NeonUi.gap(this,8))
         root.addView(label("自動增減 ABC 條件 · 持續搜尋更高總收益",12f,NeonUi.cyan))
         root.addView(NeonUi.gap(this,12))
@@ -400,11 +403,12 @@ class BtRobotActivity:AppCompatActivity(){
         }
         refreshParameterHint()
         val tested=s?.optLong("tested")?:0L
+        val legacySpace=(s?.optInt("searchVersion",3)?:3)<3
         val sessionSweep=BtRobotSweep.read(s?.optJSONObject("sweep"))
         val desiredSweep=runCatching{selectedSweep()}.getOrNull()
         val invalidSweep=sweepCheck.isChecked&&desiredSweep==null
         val total=(sessionSweep?:if(s==null)desiredSweep else null)?.total?.let{BigInteger.valueOf(it.toLong())}
-            ?:BtRobotSpace.total(required(),forbidden())
+            ?:BtRobotSpace.total(required(),forbidden(),legacy=legacySpace)
         val remaining=total-BigInteger.valueOf(tested)
         val fixed=BtRobotSpace.required(required()).bitCount();val blocked=BtRobotSpace.required(forbidden()).bitCount()
         requiredButton.text="條件選單 · 必選 $fixed／排除 $blocked"
@@ -412,7 +416,7 @@ class BtRobotActivity:AppCompatActivity(){
         val effectiveSweep=sessionSweep?:if(s==null)desiredSweep else null
         spaceLabel.text=if(effectiveSweep!=null)
             "持倉 ${effectiveSweep.holdingFrom}～${effectiveSweep.holdingTo} 檔 × 淨利 ${effectiveSweep.profitFrom}%～${effectiveSweep.profitTo}% · 共 ${effectiveSweep.total} 組。當前 ABC 固定，逐組測試直到全部完成。"
-        else "必選 $fixed 項 · 排除 $blocked 項 · 自由 ${65-fixed-blocked} 項 · 共 ${num(total)} 種 ABC 組合。"
+        else "必選 $fixed 項 · 排除 $blocked 項 · 自由 ${(if(legacySpace)BtRobotSpace.legacySlots.size else BtRobotSpace.slots.size)-fixed-blocked} 項 · 共 ${num(total)} 種 ABC 組合。"
 
         val policyChanged=s?.let{BtSettingsCodec.decode(it.getJSONObject("settings")).stockPolicy!=com.rex.twboardingscanner.data.StockPolicyStore(this).read()}?:false
         val guardChanged=s?.getJSONObject("settings")?.optInt("marketGuardVersion",0)==0
@@ -535,7 +539,10 @@ class BtRobotActivity:AppCompatActivity(){
         var cursor=BigInteger(s.getString("cursor"))
         repeat(10){
             val candidate=if(grid==null)
-                BtRobotSpace.next(BtRobotSpace.key(BtSettingsCodec.decode(s.getJSONObject("settings")).rules),s.optString("bestKey").ifBlank{null},cursor,BigInteger(s.getString("seed")),s.optString("required","0"),s.optString("forbidden","0")){it in preview||store.seen(id,it)}
+                BtRobotSpace.next(BtRobotSpace.key(BtSettingsCodec.decode(s.getJSONObject("settings")).rules),
+                    s.optString("bestKey").ifBlank{null},cursor,BigInteger(s.getString("seed")),
+                    s.optString("required","0"),s.optString("forbidden","0"),
+                    legacy=s.optInt("searchVersion",1)<3){it in preview||store.seen(id,it)}
                 else grid.next(cursor.toLong())
             if(candidate!=null){
                 preview+=candidate.key;cursor=candidate.cursor

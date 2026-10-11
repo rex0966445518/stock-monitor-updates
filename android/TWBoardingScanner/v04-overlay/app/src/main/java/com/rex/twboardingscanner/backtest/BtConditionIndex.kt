@@ -40,7 +40,7 @@ class BtConditionIndex private constructor(val series:List<BtSeries>,private val
         RandomAccessFile(tmp,"rw").use{it.fd.sync()};check(tmp.renameTo(file)){"歷史條件快取無法保存"}
     }
     companion object {
-        fun fingerprint(digest:String,settings:BtSettings)="$digest:${settings.start}:${settings.end}:${ScanConditions.VERSION}:"+BtRobotSpace.slots.joinToString(","){"${it.first.name}/${it.second}"}
+        fun fingerprint(digest:String,settings:BtSettings,flowRevision:String="none")="$digest:${settings.start}:${settings.end}:${ScanConditions.VERSION}:$flowRevision:"+BtRobotSpace.slots.joinToString(","){"${it.first.name}/${it.second}"}
         fun read(file:File,series:List<BtSeries>,fingerprint:String):BtConditionIndex=DataInputStream(BufferedInputStream(GZIPInputStream(file.inputStream()))).use{input->
             require(input.readUTF()=="BTINDEX1"&&input.readUTF()==fingerprint){"歷史條件快取版本或行情不符"}
             val count=input.readInt();require(count in 0..1000000)
@@ -57,7 +57,8 @@ class BtConditionIndex private constructor(val series:List<BtSeries>,private val
             require(days==days.distinct().sorted()&&input.read()==-1){"歷史條件快取不完整"}
             BtConditionIndex(series,records,days)
         }
-        fun build(series:List<BtSeries>,settings:BtSettings,progress:(String)->Unit={},cancel:()->Boolean={false}):BtConditionIndex {
+        fun build(series:List<BtSeries>,settings:BtSettings,progress:(String)->Unit={},cancel:()->Boolean={false},
+            flowFor:(String,LocalDate)->TradeSideVolume?={_,_->null}):BtConditionIndex {
             val records=mutableListOf<Record>();val calc=TechnicalCalculator()
             val options=RadarType.entries.map{ScanConditions.forRadar(it)}
             require(options.all{it.size<63})
@@ -75,7 +76,8 @@ class BtConditionIndex private constructor(val series:List<BtSeries>,private val
                         if(end<60)return@radar
                         val m=metrics.getOrPut(end){
                             val known=bars.subList(max(0,end-320),end);val bar=known.last()
-                            val stock=MarketStock(s.code,s.name,s.market,StockSector.UNKNOWN,bar.open,bar.high,bar.low,bar.close,0.0,(bar.volumeShares/1000).toInt(),null,null)
+                            val stock=MarketStock(s.code,s.name,s.market,StockSector.UNKNOWN,bar.open,bar.high,bar.low,bar.close,0.0,(bar.volumeShares/1000).toInt(),null,null,
+                                tradeSideVolume=flowFor(s.code,day))
                             RuleMetrics(calc.build(stock,known).copy(timestamp=day.atTime(13,30).atZone(RuleMetrics.TAIPEI).toInstant().toEpochMilli()))
                         }
                         dates[i]=RuleMetrics.tradingDate(m.last!!.time)

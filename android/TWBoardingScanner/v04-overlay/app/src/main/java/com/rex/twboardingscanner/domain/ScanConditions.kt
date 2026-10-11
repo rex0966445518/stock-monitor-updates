@@ -12,7 +12,11 @@ data class ScanCondition(val id: String, val label: String, val extra: Boolean =
 }
 
 object ScanConditions {
-    const val VERSION = "20261009"
+    const val VERSION = "20261012"
+    const val LEGACY_VERSION = "20261009"
+    const val MA5_TOUCH_MA10 = "ma5_touch_ma10"
+    const val ACTIVE_BUY_SELL_15 = "active_buy_sell_15"
+    val NEW_IDS=setOf(MA5_TOUCH_MA10,ACTIVE_BUY_SELL_15)
     fun forRadar(type: RadarType): List<ScanCondition> {
         val basic = listOf(
             ScanCondition("price", "股價 ≥ 50 元") { it.last?.close?.let { p -> p >= 50 } },
@@ -59,7 +63,13 @@ object ScanConditions {
             ScanCondition("extra_flow", "法人：外資或投信近 5 日累計買超，且至少 3 日買超", true) { it.institutions },
             ScanCondition("extra_risk", "風險結構：報酬風險比 ≥ 2", true) { it.rewardRisk?.let { v -> v >= 2.0 - 1e-9 } },
             ScanCondition("extra_high", "避開高點：排除現價 ≥ 近 30 日最高價的 95%", true) { it.belowHigh },
-            ScanCondition("extra_limit", "避開漲停：排除現價達估算漲停價", true) { it.belowLimit }
+            ScanCondition("extra_limit", "避開漲停：排除現價達估算漲停價", true) { it.belowLimit },
+            ScanCondition(MA5_TOUCH_MA10,
+                "5 日線向上，剛碰到 10 日線（差距 ≤ 1%，前日差距更大）", true) { it.ma5RisingTouchesMa10 },
+            ScanCondition(ACTIVE_BUY_SELL_15,
+                "當日主動買進成交量（外盤）≥ 主動賣出成交量（內盤）1.5 倍；需真實來源",true) {
+                it.activeBuySellAtLeast(1.5)
+            }
         )
     }
 }
@@ -88,6 +98,30 @@ class RuleMetrics(val s: StockSnapshot) {
         return (m.maxOrNull()!! - m.minOrNull()!!) / ma20 <= 0.03 + 1e-12
     }
     val ma5Up: Boolean? get() = avg(5, 1)?.let { old -> ma5?.let { it > old } }
+    /**
+     * A rising 5MA approaching/touching 10MA from below or just across it.
+     * Both are calculated from completed daily prices (no intraday fabricated 5MA).
+     * Previous day's relative gap must be wider, avoiding old/consolidated crosses.
+     */
+    val ma5RisingTouchesMa10: Boolean? get() {
+        if(closes.size<11)return null
+        val now5=ma5?:return null;val now10=ma10?:return null
+        val previous5=avg(5,1)?:return null;val previous10=avg(10,1)?:return null
+        if(now10<=0||previous10<=0||previous5<=0)return null
+        val gap=kotlin.math.abs(now5-now10)/now10
+        val priorGap=kotlin.math.abs(previous5-previous10)/previous10
+        return now5>previous5 && previous5<previous10 &&
+            priorGap>0.01+1e-12 && gap<=0.01+1e-12
+    }
+    /** Bid/ask displays are pending orders, NEVER aggressive executed volume. */
+    fun activeBuySellAtLeast(factor:Double):Boolean?{
+        val flow=s.tradeSideVolume?:return null
+        if(flow.date!=today)return null
+        val evaluation=Instant.ofEpochMilli(s.timestamp).atZone(TAIPEI).toLocalTime()
+        if(flow.asOf.isAfter(evaluation)||flow.asOf.isBefore(java.time.LocalTime.of(9,0)))return null
+        if(flow.sellAtBid<=0L)return null // zero denominator cannot establish a ratio
+        return flow.buyAtAsk.toDouble()>=flow.sellAtBid.toDouble()*factor
+    }
     val aboveMa5: Boolean? get() = ma5?.let { last!!.close > it }
     val aboveThree: Boolean? get() = if (ma5 == null || ma10 == null || ma20 == null) null else last!!.close > ma5 && last.close > ma10 && last.close > ma20
     val consolidationContracting: Boolean? get() = if (previous.size < 19) null else previous.takeLast(9).map { it.volumeShares.toDouble() }.average() < previous.dropLast(9).takeLast(10).map { it.volumeShares.toDouble() }.average()

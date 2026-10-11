@@ -117,7 +117,8 @@ class MainActivity: AppCompatActivity() {
             val snapshot=admitted()
             posterExport.generate(isScanning,ScanPoster.collect(snapshot),b.scanProgress.progress,b.scanProgress.max)
         }
-        b.logButton.setOnClickListener { showLogDatePicker() }
+        b.logButton.text="掃描日誌資料夾"
+        b.logButton.setOnClickListener { startActivity(android.content.Intent(this,ScanArchiveActivity::class.java)) }
         b.searchButton.setOnClickListener { StockToolsActivity.open(this,"SEARCH") }
         b.exitRulesButton.setOnClickListener {
             val store=com.rex.twboardingscanner.data.ExitRuleStore(this)
@@ -170,6 +171,9 @@ class MainActivity: AppCompatActivity() {
         val body=NeonUi.vertical(this)
         body.addView(NeonUi.label(this,"條件與工具",23f,NeonUi.ink,true).apply{setPadding(dp(16),dp(12),dp(16),dp(4))})
         body.addView(NeonUi.label(this,"入場、下車與股票管理集中設定",12f).apply{setPadding(dp(16),0,dp(16),dp(8))})
+        body.addView(NeonUi.button(this,"匯入內／外盤成交量 CSV（主動買賣 ≥1.5 倍）",NeonUi.cyan){
+            startActivity(android.content.Intent(this,TradeSideVolumeImportActivity::class.java))
+        }.apply{tag="scan-import-trade-side"})
         body.addView(ScrollView(this).apply{addView(panel)},LinearLayout.LayoutParams(-1,0,1f))
         val dialog=com.google.android.material.bottomsheet.BottomSheetDialog(this)
         body.addView(NeonUi.button(this,"完成設定"){dialog.dismiss()}.apply{NeonUi.primaryStyle(this)},LinearLayout.LayoutParams(-1,-2).apply{setMargins(dp(16),dp(8),dp(16),dp(16))})
@@ -195,6 +199,9 @@ class MainActivity: AppCompatActivity() {
         latestScanDate=scanDate.toString()
         latestScanAt=System.currentTimeMillis()
         val scanRules = radarSelections.mapValues { it.value.toSet() }
+        val flowStore=com.rex.twboardingscanner.data.TradeSideVolumeStore(this)
+        val flowRevision=flowStore.revision()
+        val scanPolicy=com.rex.twboardingscanner.data.StockPolicyStore(this).read()
         val mainSectors = enabledSectors.toSet()
         // Paper mode owns independent ABC/sectors. Fetch the union so paper-only
         // candidates are not accidentally excluded by the main scanner view.
@@ -254,7 +261,7 @@ class MainActivity: AppCompatActivity() {
                 workers.submit {
                     try {
                         val userExcluded =
-                            stock.sector !in scanSectors || stock.code in com.rex.twboardingscanner.data.StockPolicyStore(this).read().banned
+                            stock.sector !in scanSectors || stock.code in scanPolicy.banned
 
                         if (userExcluded) {
                             excluded.incrementAndGet()
@@ -278,7 +285,8 @@ class MainActivity: AppCompatActivity() {
                                             }
                                         }
                                     }
-                                    val initial = evaluate(stock)
+                                    val withFlow=stock.copy(tradeSideVolume=flowStore.read(stock.code,scanDate))
+                                    val initial = evaluate(withFlow)
                                     // Fetch financial tables only for candidates that pass selected technical rules.
                                     val candidate = initial.any { result -> result.checks.filter { it.selected && !it.extra }.all { it.state == com.rex.twboardingscanner.domain.CheckState.PASS } } ||
                                         (paperSettings?.let{config->initial.any{r->
@@ -290,12 +298,12 @@ class MainActivity: AppCompatActivity() {
                                         }}?:false)
                                     val r = if (candidate) {
                                         val report = financialProvider.load(stock.code)
-                                        evaluate(stock.copy(financials = report, quarterlyEps = report.eps,
+                                        evaluate(withFlow.copy(financials = report, quarterlyEps = report.eps,
                                             epsTtm = report.ttm(scanDate), closingAuction = auctionProvider.load(stock.code, stock.market)))
                                     } else initial
                                     results.addAll(r)
 
-                                    r.filter { it.sector in mainSectors && it.light != SignalLight.NONE && com.rex.twboardingscanner.data.StockPolicyStore(this).read().decision(it.code,it.snapshot.sourceStock?.close?:it.snapshot.price,com.rex.twboardingscanner.domain.StockScope.SCANNER)==com.rex.twboardingscanner.domain.StockDecision.ALLOW }.forEach { sig ->
+                                    r.filter { it.sector in mainSectors && it.light != SignalLight.NONE && scanPolicy.decision(it.code,it.snapshot.sourceStock?.close?:it.snapshot.price,com.rex.twboardingscanner.domain.StockScope.SCANNER)==com.rex.twboardingscanner.domain.StockDecision.ALLOW }.forEach { sig ->
                                         if (history.insertIfNew(sig)) {
                                             newCount.incrementAndGet()
                                             if ((sig.light == SignalLight.RED || sig.light == SignalLight.ORANGE)&&com.rex.twboardingscanner.data.MarketIndexData(this).cached().canBuy) {
@@ -330,6 +338,22 @@ class MainActivity: AppCompatActivity() {
             latch.await()
             val copy = synchronized(results) { results.toList() }
             latest = copy
+            // Save an IMMUTABLE folder for this exact scan, including every chosen
+            // ABC predicate, selected sector, banned policy and ranked candidates.
+            // Do not mix a newly imported flow CSV into an already-running scan.
+            runCatching{
+                check(flowStore.revision()==flowRevision){
+                    "主動買／賣量資料於掃描中變更，請重新開始，避免同一次掃描條件不一致"
+                }
+                val snapshot=com.rex.twboardingscanner.data.ScanArchiveStore.snapshot(
+                    scanDate.toString(),latestScanAt,scanRules,mainSectors,scanPolicy,
+                    flowRevision,total,analyzed.get(),failed.get())
+                com.rex.twboardingscanner.data.ScanArchiveStore(this).use{store->
+                    store.addCompleteScan(scanDate.toString(),latestScanAt,snapshot,copy)
+                }
+            }.onFailure{failure->runOnUiThread{
+                Toast.makeText(this,"此次掃描未能存入獨立資料夾：${failure.message}",Toast.LENGTH_LONG).show()
+            }}
             runCatching { publishLists() }
                 .onFailure { runOnUiThread { Toast.makeText(this,"模擬候選清單儲存失敗，請檢查儲存空間",Toast.LENGTH_LONG).show() } }
 
@@ -421,6 +445,7 @@ class MainActivity: AppCompatActivity() {
         RadarType.entries.forEach { type ->
             val rules = ScanConditions.forRadar(type)
             val savedRules = prefs.getStringSet("rules_${ScanConditions.VERSION}_${type.name}", null)
+                ?:prefs.getStringSet("rules_${ScanConditions.LEGACY_VERSION}_${type.name}",null)
             radarSelections[type] = savedRules?.intersect(rules.map { it.id }.toSet())
                 ?: rules.filter { it.defaultEnabled }.map { it.id }.toSet()
         }
@@ -509,7 +534,7 @@ class MainActivity: AppCompatActivity() {
             setPadding(dp(16), dp(8), dp(16), dp(8))
         }
         box.addView(TextView(this).apply {
-            text = "勾選條件全部滿足才入選；未勾選不限制。基本條件預設全選，額外查核預設關閉。\nA/B 排除台灣當日日線；C 使用最新日 K。\nB 通過後若 RSI>50 且收盤>20日線，另標示技術升級；不辨識 W 底形狀。\n額外資料不足標示待查核，勾選後會阻擋入選。HiStock 財報會查核技術候選股，快取24小時；HTTP403/429、格式變更、資料過期均待查核。逐日法人尚未接入。分數為所選條件通過率，不是公司評級。\n財務條件共用於ABC、可各自勾選；EPS為正不代表現金流為正。產業EPS範圍不是通用及格線，未設成硬門檻。\n現金流使用原站最新列示期間，不跨季加總；金融業現金流需另行解讀。營業利益率為正不能排除一次性業外收益。\n風險估算：前20日最低價為支撐，支撐下1%為失效價，前60日最高價為壓力；(壓力−現價)/(現價−失效價)≥2。\n漲停估算：前收盤×1.1，按台股跳動單位向下取整；非交易所公告漲停價。\nC 為觀察訊號，尚無回測證明隔天一定續漲。"
+            text = "勾選條件全部滿足才入選；未勾選不限制。基本條件預設全選，額外查核預設關閉。\nA/B 排除台灣當日日線；C 使用最新日 K。\nB 通過後若 RSI>50 且收盤>20日線，另標示技術升級；不辨識 W 底形狀。\n額外資料不足標示待查核，勾選後會阻擋入選。5日／10日線碰觸以差距1%內且前一日差距較大定義；主動買賣比需提供來源可靠的內外盤成交量CSV，不能使用五檔委買委賣掛單量。HiStock 財報會查核技術候選股，快取24小時；HTTP403/429、格式變更、資料過期均待查核。逐日法人尚未接入。分數為所選條件通過率，不是公司評級。\n財務條件共用於ABC、可各自勾選；EPS為正不代表現金流為正。產業EPS範圍不是通用及格線，未設成硬門檻。\n現金流使用原站最新列示期間，不跨季加總；金融業現金流需另行解讀。營業利益率為正不能排除一次性業外收益。\n風險估算：前20日最低價為支撐，支撐下1%為失效價，前60日最高價為壓力；(壓力−現價)/(現價−失效價)≥2。\n漲停估算：前收盤×1.1，按台股跳動單位向下取整；非交易所公告漲停價。\nC 為觀察訊號，尚無回測證明隔天一定續漲。"
             setTextColor(Color.parseColor("#9FBAD0"))
         })
         var extraHeadingShown = false

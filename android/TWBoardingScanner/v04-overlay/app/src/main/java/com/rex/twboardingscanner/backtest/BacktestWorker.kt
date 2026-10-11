@@ -16,7 +16,8 @@ object BtSettingsCodec {
         val prefs=c.getSharedPreferences("scanner_filters",0)
         val rules=com.rex.twboardingscanner.domain.RadarType.entries.associateWith { type ->
             val all=com.rex.twboardingscanner.domain.ScanConditions.forRadar(type)
-            prefs.getStringSet("rules_${com.rex.twboardingscanner.domain.ScanConditions.VERSION}_${type.name}",null)?.intersect(all.map{it.id}.toSet())
+            (prefs.getStringSet("rules_${com.rex.twboardingscanner.domain.ScanConditions.VERSION}_${type.name}",null)
+                ?:prefs.getStringSet("rules_${com.rex.twboardingscanner.domain.ScanConditions.LEGACY_VERSION}_${type.name}",null))?.intersect(all.map{it.id}.toSet())
                 ?:all.filter{it.defaultEnabled}.map{it.id}.toSet()
         }
         val allSectors=com.rex.twboardingscanner.domain.StockSector.entries.toSet()
@@ -46,7 +47,7 @@ object BtSettingsCodec {
         .put("costModel",JSONObject().put("buyFeeRate",0.001425).put("sellFeeRate",0.001425).put("minimumFee",20).put("sellTaxRate",0.003).put("slippageRate",0.001))
     }
     fun decode(o:JSONObject):BtSettings {
-        require(o.getInt("strategyVersion") in 2..4&&o.getString("rulesVersion")==com.rex.twboardingscanner.domain.ScanConditions.VERSION){"回測條件版本已變更，請重新開始"}
+        require(o.getInt("strategyVersion") in 2..4&&o.getString("rulesVersion") in setOf(com.rex.twboardingscanner.domain.ScanConditions.VERSION,com.rex.twboardingscanner.domain.ScanConditions.LEGACY_VERSION)){"回測條件版本已變更，請重新開始"}
         val rules=com.rex.twboardingscanner.domain.RadarType.entries.associateWith{type->val a=o.getJSONObject("rules").getJSONArray(type.name);(0 until a.length()).map{a.getString(it)}.toSet()}
         rules.forEach{(type,ids)->require(ids.all{id->com.rex.twboardingscanner.domain.ScanConditions.forRadar(type).any{it.id==id}})}
         val a=o.getJSONArray("sectors");val sectors=(0 until a.length()).map{com.rex.twboardingscanner.domain.StockSector.valueOf(a.getString(it))}.toSet()
@@ -76,7 +77,17 @@ class BacktestWorker(c:Context,p:WorkerParameters):Worker(c,p){
             val cancel={isStopped||store.active()!=runId||store.state()!="RUNNING"||com.rex.twboardingscanner.data.StockPolicyStore(applicationContext).read()!=s.stockPolicy}
             val progress={message:String->check(!cancel()){ "已取消回測" };store.update(runId,message)}
             val data=BacktestData(applicationContext).load(s,progress,cancel)
-            val rawPrepared=BacktestEngine.prepare(data.series,s,progress,cancel)
+            val flows=com.rex.twboardingscanner.data.TradeSideVolumeStore(applicationContext)
+            val flowRevision=flows.revision()
+            var lastCode=""
+            var samples:Map<LocalDate,com.rex.twboardingscanner.domain.TradeSideVolume> = emptyMap()
+            val rawPrepared=BacktestEngine.prepare(data.series,s,progress,cancel){code,day->
+                if(lastCode!=code){
+                    lastCode=code;samples=flows.forCode(code,s.start,s.end,completed=true)
+                }
+                samples[day]
+            }
+            check(flows.revision()==flowRevision){"交易日內外盤資料在回測中變動，結果不可混用"}
             val prepared=rawPrepared.copy(marketGuards=if(s.marketGuardVersion>0)com.rex.twboardingscanner.domain.MarketCrashGuard.forDays(data.market,rawPrepared.days) else emptyMap())
             val run=BacktestEngine.run(prepared,s,progress,cancel)
             check(!cancel()){ "已取消回測" }

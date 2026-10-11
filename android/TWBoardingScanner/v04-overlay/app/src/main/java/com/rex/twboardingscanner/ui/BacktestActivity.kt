@@ -108,6 +108,9 @@ class BacktestActivity:AppCompatActivity(){
         universe.addView(NeonUi.gap(this,8))
         universe.addView(NeonUi.row(this,listOf(NeonUi.button(this,"禁股名單",NeonUi.muted){StockToolsActivity.open(this,"BAN",StockScope.BACKTEST)},NeonUi.button(this,"限價名單",NeonUi.muted){StockToolsActivity.open(this,"LIMIT",StockScope.BACKTEST)})))
         universe.addView(NeonUi.button(this,"搜尋股票"){StockToolsActivity.open(this,"SEARCH",StockScope.BACKTEST)})
+        universe.addView(NeonUi.button(this,"匯入主動買／賣成交量 CSV",NeonUi.cyan){
+            startActivity(Intent(this,TradeSideVolumeImportActivity::class.java))
+        }.apply{tag="backtest-flow-import"})
         root.addView(universe);NeonUi.group(root,universe,universe,"03  股票與入場篩選","股票範圍、產業、ABC 與管理名單","backtest-universe")
         val watcher=object:android.text.TextWatcher{
             override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}

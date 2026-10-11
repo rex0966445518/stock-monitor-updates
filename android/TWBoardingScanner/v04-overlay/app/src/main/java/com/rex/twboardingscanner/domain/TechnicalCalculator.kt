@@ -78,7 +78,8 @@ class TechnicalCalculator {
             fiveDayGainPct = fiveGain,
             distanceFromMa20Pct = maDist,
             bars = bars,
-            timestamp = System.currentTimeMillis(), sourceStock = stock
+            timestamp = System.currentTimeMillis(), sourceStock = stock,
+            tradeSideVolume=stock.tradeSideVolume
         )
     }
 

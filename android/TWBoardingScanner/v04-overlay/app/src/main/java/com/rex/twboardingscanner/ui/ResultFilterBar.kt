@@ -27,17 +27,21 @@ class ResultFilterBar @JvmOverloads constructor(context: Context, attrs: Attribu
     private val accents = listOf(NeonUi.pink, NeonUi.amber, NeonUi.cyan, NeonUi.amber, NeonUi.muted)
     private val buttons = titles.mapIndexed { index, title ->
         NeonUi.button(context, title, accents[index]) { onSelected?.invoke(index) }.apply {
-            textSize = 13f
+            textSize = 12f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setSingleLine(false)
             maxLines = 2
             minimumWidth = 0
+            minHeight=NeonUi.dp(context,36)
+            minimumHeight=NeonUi.dp(context,36)
+            insetTop=0;insetBottom=0
+            setPadding(NeonUi.dp(context,3),NeonUi.dp(context,2),NeonUi.dp(context,3),NeonUi.dp(context,2))
         }
     }
     init {
         orientation = VERTICAL
         addView(NeonUi.row(context, buttons.take(3)))
-        addView(NeonUi.gap(context, 6))
+        addView(NeonUi.gap(context, 3))
         addView(NeonUi.row(context, buttons.drop(3)))
         update(List(5) { 0 }, 0)
     }

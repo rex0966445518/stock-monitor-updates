@@ -65,7 +65,8 @@ class BtRobotTest {
         assertThrows(Exception::class.java){BtRuleApply.apply(app,wrong)}
     }
     @Test fun sixtyFiveIndependentSwitchesRoundTripAndSearchNeverRepeats(){
-        assertEquals(65,BtRobotSpace.slots.size)
+        assertEquals(65,BtRobotSpace.legacySlots.size)
+        assertEquals(71,BtRobotSpace.slots.size)
         assertEquals(BigInteger("36893488147419103232"),BtRobotSpace.total)
         BtRobotSpace.slots.forEachIndexed{i,slot->
             val rules=BtRobotSpace.rules(BigInteger.ONE.shiftLeft(i).toString(16))

@@ -54,7 +54,8 @@ data class BtResult(val settings:BtSettings,val run:BtRun,val requested:Int,val 
 object BacktestEngine {
     private val calculator=TechnicalCalculator()
     private fun date(b:DailyBar)=RuleMetrics.tradingDate(b.time)
-    fun prepare(series:List<BtSeries>,settings:BtSettings,progress:(String)->Unit={},cancel:()->Boolean={false}):BtPrepared {
+    fun prepare(series:List<BtSeries>,settings:BtSettings,progress:(String)->Unit={},cancel:()->Boolean={false},
+        flowFor:(String,LocalDate)->TradeSideVolume?={_,_->null}):BtPrepared {
         val signals=mutableMapOf<LocalDate,MutableList<BtSignal>>();var pending=0
         series.forEachIndexed{index,s->
             check(!cancel()){ "已取消回測" }
@@ -69,7 +70,8 @@ object BacktestEngine {
                     val end=if(type==RadarType.C_LONG_RED_VOLUME)j+1 else j
                     if(end<60)return@radarLoop
                     val known=bars.subList(max(0,end-320),end);val bar=known.last()
-                    val stock=MarketStock(s.code,s.name,s.market,StockSector.UNKNOWN,bar.open,bar.high,bar.low,bar.close,0.0,(bar.volumeShares/1000).toInt(),null,null)
+                    val stock=MarketStock(s.code,s.name,s.market,StockSector.UNKNOWN,bar.open,bar.high,bar.low,bar.close,0.0,(bar.volumeShares/1000).toInt(),null,null,
+                        tradeSideVolume=flowFor(s.code,day))
                     val snap=calculator.build(stock,known).copy(timestamp=day.atTime(13,30).atZone(RuleMetrics.TAIPEI).toInstant().toEpochMilli())
                     val metrics=RuleMetrics(snap)
                     val checks=ScanConditions.forRadar(type).filter{it.id in ids}.map{it.test(metrics)}

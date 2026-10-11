@@ -12,6 +12,8 @@
  <activity android:name=".ui.BtRobotActivity" android:exported="false"/>
  <activity android:name=".ui.BacktestJournalActivity" android:exported="false"/>
  <activity android:name=".ui.BacktestActivity" android:exported="false"/>
+ <activity android:name=".ui.ScanArchiveActivity" android:exported="false"/>
+ <activity android:name=".ui.TradeSideVolumeImportActivity" android:exported="false"/>
  <activity android:name=".ui.PaperStrategyActivity" android:exported="false"/>
  <activity android:name=".ui.PaperTradingActivity" android:exported="false"/>
  <activity android:name=".ui.MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>

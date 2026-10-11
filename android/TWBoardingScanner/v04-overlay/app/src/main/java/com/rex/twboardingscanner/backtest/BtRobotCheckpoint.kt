@@ -70,7 +70,7 @@ object BtRobotCheckpoint {
                 if(store.conditionFile(id).exists())store.conditionFile(id).copyTo(File(dir,"conditions.bin.gz"))
             }
             val snapshot=JSONObject(File(dir,"session.json").readText(Charsets.UTF_8))
-            val archiveVersion=if(BtRobotSweep.read(snapshot.optJSONObject("sweep"))!=null)6 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).marketGuardVersion>0)5 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).exitRules.any{it.active})4 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).stockPolicy.active())3 else if(snapshot.optInt("searchVersion",1)>=2||BtRobotSpace.required(snapshot.optString("forbidden","0")).signum()!=0)2 else 1
+            val archiveVersion=if(snapshot.optInt("searchVersion",1)>=3)7 else if(BtRobotSweep.read(snapshot.optJSONObject("sweep"))!=null)6 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).marketGuardVersion>0)5 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).exitRules.any{it.active})4 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).stockPolicy.active())3 else if(snapshot.optInt("searchVersion",1)>=2||BtRobotSpace.required(snapshot.optString("forbidden","0")).signum()!=0)2 else 1
             val files=dir.listFiles()!!.sortedBy{it.name};val hashes=JSONObject()
             files.forEach{hashes.put(it.name,JSONObject().put("size",it.length()).put("sha256",digest(it)))}
             val manifest=JSONObject().put("format","AI-離職神器-robot").put("version",archiveVersion).put("engine",ENGINE).put("files",hashes)
@@ -96,7 +96,7 @@ object BtRobotCheckpoint {
             }}
             require(seen.containsAll(setOf("manifest.json","session.json","trials.bin","results.csv"))){"備份不完整"}
             fun json(name:String)=JSONObject(File(dir,name).inputStream().use{String(readBounded(it,1024*1024),Charsets.UTF_8)})
-            val manifest=json("manifest.json");require(manifest.getString("format")=="AI-離職神器-robot"&&manifest.getInt("version") in 1..6&&manifest.getString("engine")==ENGINE){"備份版本不相容"}
+            val manifest=json("manifest.json");require(manifest.getString("format")=="AI-離職神器-robot"&&manifest.getInt("version") in 1..7&&manifest.getString("engine")==ENGINE){"備份版本不相容"}
             val hashes=manifest.getJSONObject("files");require(hashes.keys().asSequence().toSet()==seen-"manifest.json")
             (seen-"manifest.json").forEach{name->val f=File(dir,name);val h=hashes.getJSONObject(name);require(f.length()==h.getLong("size")&&digest(f)==h.getString("sha256")){"備份校驗失敗：$name"}}
             val s=json("session.json");require(compatible(s)){"回測引擎版本不相容"}
@@ -107,18 +107,26 @@ object BtRobotCheckpoint {
             val required=s.optString("required","0");val forbidden=s.optString("forbidden","0")
             val sweep=BtRobotSweep.read(s.optJSONObject("sweep"))
             if(sweep!=null)require(manifest.getInt("version")>=6&&required=="0"&&forbidden=="0"){"網格備份版本／ABC 設定不一致"}
-            val combinations=if(sweep!=null)BigInteger.valueOf(sweep.total.toLong()) else BtRobotSpace.total(required,forbidden)
             val searchVersion=s.optInt("searchVersion",1)
-            require(searchVersion in 1..2&&searchVersion<=manifest.getInt("version")&&(BtRobotSpace.required(forbidden).signum()==0||searchVersion==2)){"排除條件與搜尋版本不符"}
+            val combinations=if(sweep!=null)BigInteger.valueOf(sweep.total.toLong())
+                else BtRobotSpace.total(required,forbidden,legacy=searchVersion<3)
+            require(searchVersion in 1..3&&searchVersion<=manifest.getInt("version")&&
+                (BtRobotSpace.required(forbidden).signum()==0||searchVersion>=2)){"排除條件與搜尋版本不符"}
             val tested=s.getLong("tested");require(tested in 0..5000000&&BigInteger.valueOf(tested)<=combinations)
             require(BigInteger(s.getString("cursor")) in BigInteger.ZERO..combinations&&BigInteger(s.getString("seed")).signum()>=0)
             if(sweep!=null)require(BigInteger(s.getString("cursor"))==BigInteger.valueOf(tested)){"參數網格進度損壞"}
+            if(s.has("flowRevision"))require(s.getString("flowRevision")==com.rex.twboardingscanner.data.TradeSideVolumeStore(c).revision()){
+                "備份使用不同版本的逐日內外盤成交資料；請先匯入相同來源再還原"
+            }
             val history=File(dir,"history.bin.gz");val conditions=File(dir,"conditions.bin.gz")
             if(history.exists()){
                 require(digest(history)==s.getString("datasetSha256")){"固定行情校驗失敗"}
                 val loaded=BtRobotDataset.read(history)
                 require(settings.marketGuardVersion==0||loaded.market.isNotEmpty()){"此備份缺少加權指數快照"}
-                if(conditions.exists())BtConditionIndex.read(conditions,loaded.series,BtConditionIndex.fingerprint(s.getString("datasetSha256"),settings))
+                if(conditions.exists()&&settings.let{s.getJSONObject("settings").optString("rulesVersion")==com.rex.twboardingscanner.domain.ScanConditions.VERSION}
+                    &&s.has("flowRevision"))
+                    BtConditionIndex.read(conditions,loaded.series,BtConditionIndex.fingerprint(
+                        s.getString("datasetSha256"),settings,s.getString("flowRevision")))
             }else require(tested==0L&&!conditions.exists()){"缺少固定行情，不能續跑"}
             store.dataset(id).parentFile?.mkdirs()
             if(history.exists())history.copyTo(store.dataset(id))

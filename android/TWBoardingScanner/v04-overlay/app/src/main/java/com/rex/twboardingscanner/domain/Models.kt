@@ -69,6 +69,25 @@ data class DailyBar(
     val volumeShares: Long
 )
 
+/**
+ * Executed aggressive trade volumes, not five-level outstanding order quantities.
+ * buyAtAsk = 外盤成交（買方主動吃賣價）, sellAtBid = 內盤成交（賣方主動打買價）.
+ * Values must come from a dated, sourced snapshot; no inference from daily OHLCV.
+ */
+data class TradeSideVolume(
+    val date:java.time.LocalDate,
+    val buyAtAsk:Long,
+    val sellAtBid:Long,
+    val asOf:java.time.LocalTime,
+    val source:String
+){
+    init{
+        require(buyAtAsk>=0&&sellAtBid>=0&&buyAtAsk<=10_000_000_000L&&sellAtBid<=10_000_000_000L)
+        require(source.isNotBlank()&&source.length<=140)
+        require(!asOf.isBefore(java.time.LocalTime.of(9,0))&&!asOf.isAfter(java.time.LocalTime.of(13,30)))
+    }
+}
+
 data class MarketStock(
     val code: String,
     val name: String,
@@ -86,7 +105,8 @@ data class MarketStock(
     val foreignDaily: List<InstitutionDay>? = null,
     val trustDaily: List<InstitutionDay>? = null,
     val financials: FinancialReport? = null,
-    val closingAuction: ClosingAuction? = null
+    val closingAuction: ClosingAuction? = null,
+    val tradeSideVolume:TradeSideVolume? = null
 )
 
 data class StockSnapshot(
@@ -131,7 +151,8 @@ data class StockSnapshot(
     val distanceFromMa20Pct: Double?,
     val bars: List<DailyBar>,
     val timestamp: Long,
-    val sourceStock: MarketStock? = null
+    val sourceStock: MarketStock? = null,
+    val tradeSideVolume:TradeSideVolume? = null
 )
 
 data class SignalResult(
