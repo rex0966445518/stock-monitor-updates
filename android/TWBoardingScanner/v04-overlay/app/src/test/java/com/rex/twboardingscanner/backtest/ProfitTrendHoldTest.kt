@@ -69,7 +69,8 @@ class ProfitTrendHoldTest {
         val now=day.atTime(9,5).atZone(RuleMetrics.TAIPEI).toInstant().toEpochMilli()
         val cost=120000+PaperEngine.fee(120000.0)
         val strategy=BtSettings(day.minusDays(7),day.plusDays(5),capital=500000.0,
-            stockScope=StockScope.SCANNER,targetNetPct=3.0,holdProfitUntilMa5Break=true)
+            stockScope=StockScope.SCANNER,targetNetPct=3.0,holdProfitUntilMa5Break=true,
+            marketGuardVersion=MarketCrashGuard.VERSION)
         val book=PaperBook(capital=500000.0,cash=500000.0-cost,enabled=true,strategy=strategy).apply{
             positions+=PaperPosition("2330","台積電","tse","A",120.0,cost,buyAt,120.0,120.0,buyAt)
         }
