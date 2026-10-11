@@ -179,7 +179,7 @@ class PaperTradingActivity:AppCompatActivity() {
         runCatching {
             fun cell(v:Any)="\""+v.toString().replace("\"","\"\"")+"\""
             val rows=mutableListOf("策略,台北成交時間,報價時間,股號,名稱,區域,方向,股數,成交價,手續費,交易稅,已實現損益,理由")
-            b.trades.forEach{t->rows.add(listOf(if(b.strategy!=null)"自訂策略" else "v1",PaperEngine.local(t.at).toString(),PaperEngine.local(t.quoteAt).toString(),t.code,t.name,t.radar,t.side,t.shares,t.price,t.fee,t.tax,t.realized,t.reason).joinToString(","){cell(it)})}
+            b.trades.forEach{t->rows.add(listOf(if(b.strategy!=null)"混合版本 · 依交易理由" else "v1",PaperEngine.local(t.at).toString(),PaperEngine.local(t.quoteAt).toString(),t.code,t.name,t.radar,t.side,t.shares,t.price,t.fee,t.tax,t.realized,t.reason).joinToString(","){cell(it)})}
             val file=File(cacheDir,"paper/自買自投_${java.time.LocalDate.now(TAIPEI)}.csv");file.parentFile?.mkdirs();file.writeText("\uFEFF"+rows.joinToString("\r\n"))
             val uri=FileProvider.getUriForFile(this,"$packageName.posters",file)
             startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/csv").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),"儲存或分享交易明細"))

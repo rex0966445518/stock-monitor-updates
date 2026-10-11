@@ -13,7 +13,7 @@ data class PaperTrade(val code:String,val name:String,val radar:String,val side:
 data class PaperDay(val date:String,var equity:Double,var at:Long)
 data class PaperBook(var capital:Double=3000000.0,var cash:Double=3000000.0,var enabled:Boolean=false,var lastRun:Long=0,var status:String="尚未啟動",var candidateAt:Long=0,
     val candidates:MutableList<PaperCandidate> = mutableListOf(),val positions:MutableList<PaperPosition> = mutableListOf(),val trades:MutableList<PaperTrade> = mutableListOf(),val days:MutableList<PaperDay> = mutableListOf(),
-    var strategy:BtSettings?=null)
+    var strategy:BtSettings?=null,var strategySavedAt:Long=0L)
 
 /** Paper strategy v1. Deterministic and auditable, never submits a broker order. */
 object PaperEngine {
@@ -88,6 +88,9 @@ object PaperEngine {
             if(age !in 1..7*86400000L || b.positions.any{it.code==c.code})return@forEach
             val day=local(now).toLocalDate()
             if(b.trades.any{it.code==c.code && it.side=="BUY" && local(it.at).toLocalDate()==day})return@forEach
+            // An exit and a new buy cannot consume the SAME old scan signal.
+            // Require a fresh candidate produced after the last sale, not just a new day.
+            if(b.trades.any{it.code==c.code&&it.side=="SELL"&&it.at>=c.observedAt})return@forEach
             val q=usable[c.code] ?:return@forEach
             if(policy.decision(c.code,q.last,com.rex.twboardingscanner.domain.StockScope.SCANNER)!=com.rex.twboardingscanner.domain.StockDecision.ALLOW)return@forEach
             if(q.at<=c.observedAt)return@forEach // no hindsight fills at the signal price

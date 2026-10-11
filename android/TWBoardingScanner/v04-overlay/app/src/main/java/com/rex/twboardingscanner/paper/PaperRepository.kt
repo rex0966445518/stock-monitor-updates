@@ -26,6 +26,7 @@ class PaperRepository(context:Context) {
             b.capital=strategy.capital;b.cash=strategy.capital
         }
         b.strategy=strategy
+        b.strategySavedAt=System.currentTimeMillis()
         b.enabled=false
         b.candidates.clear();b.candidateAt=0
         b.status="自訂條件已保存並暫停，請回主頁重新掃描，再手動啟動策略；既有持倉與交易帳本保留"
@@ -45,6 +46,12 @@ class PaperRepository(context:Context) {
     }
     fun publish(results:List<SignalResult>,now:Long=System.currentTimeMillis())=synchronized(lock) {
         val b=read()
+        // MainActivity may republish its PREVIOUS scan when returning from settings.
+        // Do not let an old snapshot repopulate the pool after a strategy change.
+        if(b.strategy!=null&&now<=b.strategySavedAt){
+            b.candidates.clear();b.candidateAt=0
+            save(b);return@synchronized
+        }
         b.candidates.clear()
         val policy=com.rex.twboardingscanner.data.StockPolicyStore(app).read()
         val candidates=b.strategy?.let{PaperStrategyConfig.candidates(results,it,policy,now)}
@@ -78,7 +85,7 @@ class PaperRepository(context:Context) {
     }
     internal fun encode(b:PaperBook):String {
         fun arr(list:List<JSONObject>)=JSONArray(list)
-        return JSONObject().put("version",if(b.strategy==null)1 else 2).put("strategy",b.strategy?.let{BtSettingsCodec.encode(it)}?:JSONObject.NULL).put("capital",b.capital).put("cash",b.cash).put("enabled",b.enabled).put("lastRun",b.lastRun).put("status",b.status).put("candidateAt",b.candidateAt)
+        return JSONObject().put("version",if(b.strategy==null)1 else 2).put("strategy",b.strategy?.let{BtSettingsCodec.encode(it)}?:JSONObject.NULL).put("strategySavedAt",b.strategySavedAt).put("capital",b.capital).put("cash",b.cash).put("enabled",b.enabled).put("lastRun",b.lastRun).put("status",b.status).put("candidateAt",b.candidateAt)
             .put("candidates",arr(b.candidates.map{JSONObject().put("code",it.code).put("name",it.name).put("exchange",it.exchange).put("radar",it.radar).put("score",it.score).put("observedAt",it.observedAt)}))
             .put("positions",arr(b.positions.map{JSONObject().put("code",it.code).put("name",it.name).put("exchange",it.exchange).put("radar",it.radar).put("entry",it.entry).put("cost",it.cost).put("boughtAt",it.boughtAt).put("peak",it.peak).put("mark",it.mark).put("markAt",it.markAt)}))
             .put("trades",arr(b.trades.map{JSONObject().put("code",it.code).put("name",it.name).put("radar",it.radar).put("side",it.side).put("at",it.at).put("quoteAt",it.quoteAt).put("price",it.price).put("fee",it.fee).put("tax",it.tax).put("realized",it.realized).put("reason",it.reason).put("shares",it.shares)}))
@@ -88,6 +95,7 @@ class PaperRepository(context:Context) {
         val o=JSONObject(raw);require(o.getInt("version") in 1..2){"模擬帳本版本不支援"}
         val b=PaperBook(o.getDouble("capital"),o.getDouble("cash"),o.getBoolean("enabled"),o.getLong("lastRun"),o.getString("status"),o.getLong("candidateAt"))
         if(o.getInt("version")>=2){
+            b.strategySavedAt=o.optLong("strategySavedAt",0L)
             b.strategy=o.optJSONObject("strategy")?.let{BtSettingsCodec.decode(it).also{value->PaperStrategyConfig.validate(value)}}
             require(b.strategy!=null&&kotlin.math.abs(b.strategy!!.capital-b.capital)<0.0001){"模擬策略本金與帳本不一致"}
         }

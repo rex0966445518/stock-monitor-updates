@@ -40,7 +40,7 @@ class PaperStrategyParityTest {
         if(root is ViewGroup)for(i in 0 until root.childCount)locate(root.getChildAt(i),tag)?.let{return it}
         return null
     }
-    @Before fun reset(){app.getSharedPreferences("paper_trading_v1",0).edit().clear().commit()}
+    @Before fun reset(){app.getSharedPreferences("paper_trading_v1",0).edit().clear().commit();app.getSharedPreferences("stock-entry-policy",0).edit().clear().commit()}
     @Test fun sameSettingsCanBeEditedAndPersistWithoutRewritingTrades(){
         val repo=PaperRepository(app)
         val initial=repo.read()
@@ -122,6 +122,12 @@ class PaperStrategyParityTest {
         assertTrue(PaperStrategyConfig.candidates(listOf(scanner),pending,StockPolicy(),1L).isEmpty())
         assertTrue(PaperStrategyConfig.candidates(listOf(scanner),s,StockPolicy(banned=setOf("2330")),1L).isEmpty())
         assertTrue(PaperStrategyConfig.candidates(listOf(scanner),s.copy(sectors=setOf(StockSector.SHIPPING)),StockPolicy(),1L).isEmpty())
+        val repo=PaperRepository(app)
+        val changed=repo.saveStrategy(s)
+        repo.publish(listOf(scanner),changed.strategySavedAt-1L)
+        assertTrue("Returning from settings cannot reuse the previous scan",repo.read().candidates.isEmpty())
+        repo.publish(listOf(scanner),changed.strategySavedAt+1L)
+        assertEquals("2330",repo.read().candidates.single().code)
     }
     @Test fun paperConfigurationScreenExposesBacktestParametersAndPortfolioEntry(){
         val ctl=Robolectric.buildActivity(PaperStrategyActivity::class.java).setup()
