@@ -41,13 +41,17 @@ object BtRobotCheckpoint {
                 DataOutputStream(BufferedOutputStream(File(dir,"trials.bin").outputStream())).use{out->
                     out.writeUTF("BTTRIALS1");out.writeLong(s.getLong("tested"))
                     File(dir,"results.csv").bufferedWriter(Charsets.UTF_8).use{csv->
-                        csv.write("\uFEFF序號,組合代碼,總損益,已實現,未實現,買入張數,賣出張數,最大回撤百分比,已清除,A條件,B條件,C條件\n")
+                        csv.write("\uFEFF序號,組合代碼,總損益,已實現,未實現,買入張數,賣出張數,最大回撤百分比,已清除,A條件,B條件,C條件,最高持倉檔數,淨利下車百分比\n")
                         var count=0L
                         db.rawQuery("SELECT key,summary,report,cleared FROM trials WHERE session=? ORDER BY n",arrayOf(id)).use{rows->while(rows.moveToNext()){
                             val key=rows.getString(0);val summary=rows.getString(1);val report=rows.getBlob(2);val cleared=rows.getInt(3)
                             out.writeUTF(key);val bytes=summary.toByteArray(Charsets.UTF_8);out.writeInt(bytes.size);out.write(bytes);out.writeInt(cleared);out.writeInt(report.size);out.write(report);count++
-                            val r=JSONObject(summary);val rule=BtRobotSpace.rules(key)
-                            val fields=listOf(r.getLong("seq"),key,r.getDouble("profit"),r.getDouble("realized"),r.getDouble("unrealized"),r.getInt("buys"),r.getInt("closed"),r.getDouble("drawdown"),cleared)+rule.values.map{it.sorted().joinToString("|")}
+                            val r=JSONObject(summary)
+                            val sweep=BtRobotSweep.read(s.optJSONObject("sweep"))
+                            val rule=if(sweep==null)BtRobotSpace.rules(key) else BtSettingsCodec.decode(s.getJSONObject("settings")).rules
+                            val fields=listOf(r.getLong("seq"),key,r.getDouble("profit"),r.getDouble("realized"),r.getDouble("unrealized"),r.getInt("buys"),r.getInt("closed"),r.getDouble("drawdown"),cleared)+
+                                com.rex.twboardingscanner.domain.RadarType.entries.map{rule[it].orEmpty().sorted().joinToString("|")}+
+                                listOf(r.optInt("maxHoldingStocks",0),r.optDouble("targetNetPct",0.0))
                             csv.write(fields.joinToString(","){"\"${it.toString().replace("\"","\"\"")}\""}+"\n")
                         }}
                         check(count==s.getLong("tested")){"測試紀錄數不符"}
@@ -57,7 +61,7 @@ object BtRobotCheckpoint {
                 if(store.conditionFile(id).exists())store.conditionFile(id).copyTo(File(dir,"conditions.bin.gz"))
             }
             val snapshot=JSONObject(File(dir,"session.json").readText(Charsets.UTF_8))
-            val archiveVersion=if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).marketGuardVersion>0)5 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).exitRules.any{it.active})4 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).stockPolicy.active())3 else if(snapshot.optInt("searchVersion",1)>=2||BtRobotSpace.required(snapshot.optString("forbidden","0")).signum()!=0)2 else 1
+            val archiveVersion=if(BtRobotSweep.read(snapshot.optJSONObject("sweep"))!=null)6 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).marketGuardVersion>0)5 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).exitRules.any{it.active})4 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).stockPolicy.active())3 else if(snapshot.optInt("searchVersion",1)>=2||BtRobotSpace.required(snapshot.optString("forbidden","0")).signum()!=0)2 else 1
             val files=dir.listFiles()!!.sortedBy{it.name};val hashes=JSONObject()
             files.forEach{hashes.put(it.name,JSONObject().put("size",it.length()).put("sha256",digest(it)))}
             val manifest=JSONObject().put("format","AI-離職神器-robot").put("version",archiveVersion).put("engine",ENGINE).put("files",hashes)
@@ -83,7 +87,7 @@ object BtRobotCheckpoint {
             }}
             require(seen.containsAll(setOf("manifest.json","session.json","trials.bin","results.csv"))){"備份不完整"}
             fun json(name:String)=JSONObject(File(dir,name).inputStream().use{String(readBounded(it,1024*1024),Charsets.UTF_8)})
-            val manifest=json("manifest.json");require(manifest.getString("format")=="AI-離職神器-robot"&&manifest.getInt("version") in 1..5&&manifest.getString("engine")==ENGINE){"備份版本不相容"}
+            val manifest=json("manifest.json");require(manifest.getString("format")=="AI-離職神器-robot"&&manifest.getInt("version") in 1..6&&manifest.getString("engine")==ENGINE){"備份版本不相容"}
             val hashes=manifest.getJSONObject("files");require(hashes.keys().asSequence().toSet()==seen-"manifest.json")
             (seen-"manifest.json").forEach{name->val f=File(dir,name);val h=hashes.getJSONObject(name);require(f.length()==h.getLong("size")&&digest(f)==h.getString("sha256")){"備份校驗失敗：$name"}}
             val s=json("session.json");require(compatible(s)){"回測引擎版本不相容"}
@@ -91,11 +95,15 @@ object BtRobotCheckpoint {
             require(settings.marketGuardVersion==0||manifest.getInt("version")>=5){"含大盤保護的備份需要版本 5"}
             require(!settings.stockPolicy.active()||manifest.getInt("version")>=3){"含禁股／限價的備份需要版本 3"}
             require(!settings.exitRules.any{it.active}||manifest.getInt("version")>=4){"含下車條件的備份需要版本 4"}
-            val required=s.optString("required","0");val forbidden=s.optString("forbidden","0");val combinations=BtRobotSpace.total(required,forbidden)
+            val required=s.optString("required","0");val forbidden=s.optString("forbidden","0")
+            val sweep=BtRobotSweep.read(s.optJSONObject("sweep"))
+            if(sweep!=null)require(manifest.getInt("version")>=6&&required=="0"&&forbidden=="0"){"網格備份版本／ABC 設定不一致"}
+            val combinations=if(sweep!=null)BigInteger.valueOf(sweep.total.toLong()) else BtRobotSpace.total(required,forbidden)
             val searchVersion=s.optInt("searchVersion",1)
             require(searchVersion in 1..2&&searchVersion<=manifest.getInt("version")&&(BtRobotSpace.required(forbidden).signum()==0||searchVersion==2)){"排除條件與搜尋版本不符"}
             val tested=s.getLong("tested");require(tested in 0..5000000&&BigInteger.valueOf(tested)<=combinations)
             require(BigInteger(s.getString("cursor")) in BigInteger.ZERO..combinations&&BigInteger(s.getString("seed")).signum()>=0)
+            if(sweep!=null)require(BigInteger(s.getString("cursor"))==BigInteger.valueOf(tested)){"參數網格進度損壞"}
             val history=File(dir,"history.bin.gz");val conditions=File(dir,"conditions.bin.gz")
             if(history.exists()){
                 require(digest(history)==s.getString("datasetSha256")){"固定行情校驗失敗"}
@@ -113,15 +121,22 @@ object BtRobotCheckpoint {
                     DataInputStream(BufferedInputStream(File(dir,"trials.bin").inputStream())).use{data->
                         require(data.readUTF()=="BTTRIALS1"&&data.readLong()==tested)
                         repeat(tested.toInt()){i->
-                            val key=data.readUTF();require(BtRobotSpace.key(BtRobotSpace.rules(key))==key&&BtRobotSpace.includes(key,required,forbidden))
+                            val key=data.readUTF()
+                            if(sweep==null)require(BtRobotSpace.key(BtRobotSpace.rules(key))==key&&BtRobotSpace.includes(key,required,forbidden))
+                            else require(sweep.at(i).key==key){"網格斷點組合順序不正確"}
                             val length=data.readInt();require(length in 1..65536);val summary=ByteArray(length);data.readFully(summary);val r=JSONObject(String(summary,Charsets.UTF_8))
                             require(r.getString("key")==key&&r.getLong("seq")==i+1L&&r.getDouble("profit").isFinite())
+                            if(sweep!=null){
+                                val point=sweep.parseKey(key)
+                                require(r.getInt("maxHoldingStocks")==point.holding&&r.getDouble("targetNetPct")==point.profit.toDouble()){"參數網格摘要與條件不一致"}
+                            }
                             val deleted=data.readInt();require(deleted in 0..1)
                             val size=data.readInt();require(size in 0..32*1024*1024);val bytes=ByteArray(size);data.readFully(bytes)
                             if(deleted==1){require(size==0&&kotlin.math.abs(r.getDouble("profit"))<0.005);cleared++}else{
                                 val report=GZIPInputStream(ByteArrayInputStream(bytes)).use{JSONObject(String(readBounded(it,64*1024*1024),Charsets.UTF_8))}
                                 val actual=BtSettingsCodec.decode(report.getJSONObject("settings"))
-                                require(actual==settings.copy(rules=BtRobotSpace.rules(key))&&report.getJSONObject("run").getDouble("profit")==r.getDouble("profit")){"組合報告與摘要不符"}
+                                val expected=if(sweep==null)settings.copy(rules=BtRobotSpace.rules(key)) else sweep.settings(settings,key)
+                                require(actual==expected&&report.getJSONObject("run").getDouble("profit")==r.getDouble("profit")){"組合報告與摘要不符"}
                                 if(best==null||r.getDouble("profit")>best!!.getDouble("profit"))best=r
                             }
                             db.insertOrThrow("trials",null,ContentValues().apply{put("session",id);put("key",key);put("summary",r.toString());put("report",bytes);put("cleared",deleted)})

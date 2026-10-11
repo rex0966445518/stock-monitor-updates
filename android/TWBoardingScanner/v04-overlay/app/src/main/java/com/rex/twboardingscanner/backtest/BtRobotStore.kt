@@ -32,13 +32,15 @@ class BtRobotStore(private val c:Context){
     fun session(id:String=active()):JSONObject?=synchronized(lock){db.rawQuery("SELECT json FROM sessions WHERE id=?",arrayOf(id)).use{if(it.moveToFirst())JSONObject(it.getString(0))else null}}
     private fun putSession(o:JSONObject){check(db.update("sessions",ContentValues().apply{put("json",o.toString())},"id=?",arrayOf(o.getString("id")))==1)}
     fun sessions():List<JSONObject> = synchronized(lock){val out=mutableListOf<JSONObject>();db.rawQuery("SELECT json FROM sessions ORDER BY created DESC",null).use{while(it.moveToNext())out+=JSONObject(it.getString(0))};out}
-    fun create(s:BtSettings,required:String="0",forbidden:String="0",sourceJournalId:String?=null):String=synchronized(lock){
+    fun create(s:BtSettings,required:String="0",forbidden:String="0",sourceJournalId:String?=null,sweep:BtRobotSweep?=null):String=synchronized(lock){
         BtRobotSpace.validate(s);BtRobotSpace.validateConstraints(required,forbidden)
+        require(sweep==null||required=="0"&&forbidden=="0"){"參數網格固定本批次 ABC，不可同時調整必選／排除條件"}
         require(sourceJournalId==null||sourceJournalId.matches(Regex("[A-Za-z0-9_-]{1,100}"))){"日誌編號不合法"}
         session()?.let{if(it.optString("state") in setOf("RUNNING","RETRY"))putSession(it.put("state","PAUSED").put("token","").put("message","建立新測試；原進度已保存"))}
         val id=UUID.randomUUID().toString()
         val o=JSONObject().put("id",id).put("created",System.currentTimeMillis()).put("state","PAUSED").put("token","")
-            .put("settings",BtSettingsCodec.encode(s)).put("sourceJournalId",sourceJournalId?:JSONObject.NULL).put("tested",0).put("bestKey","").put("bestSeq",0).put("ack",0)
+            .put("settings",BtSettingsCodec.encode(s)).put("sourceJournalId",sourceJournalId?:JSONObject.NULL)
+            .put("sweep",sweep?.json()?:JSONObject.NULL).put("tested",0).put("bestKey","").put("bestSeq",0).put("ack",0)
             .put("seed",BigInteger(80,java.security.SecureRandom()).toString()).put("cursor","0").put("message","按開始測試啟動")
             .put("appVersion",c.packageManager.getPackageInfo(c.packageName,0).versionName).put("searchVersion",if(BtRobotSpace.required(forbidden).signum()==0)1 else 2).put("required",required).put("forbidden",forbidden).put("engineVersion",BtRobotCheckpoint.ENGINE).put("cleared",0)
         check(db.insertOrThrow("sessions",null,ContentValues().apply{put("id",id);put("created",o.getLong("created"));put("json",o.toString())})>0)
@@ -51,6 +53,11 @@ class BtRobotStore(private val c:Context){
         BtRobotSpace.validate(BtSettingsCodec.decode(o.getJSONObject("settings")))
         BtRobotSpace.validateConstraints(o.optString("required","0"),o.optString("forbidden","0"))
         require(o.optInt("searchVersion",1) in 1..2){"搜尋版本不相容"}
+        BtRobotSweep.read(o.optJSONObject("sweep"))?.let{sweep->
+            require(o.optString("required","0")=="0"&&o.optString("forbidden","0")=="0"){"網格批次條件不可改動"}
+            val tested=o.getLong("tested")
+            require(tested in 0..sweep.total.toLong()&&BigInteger(o.getString("cursor"))==BigInteger.valueOf(tested)){"網格斷點數量不一致"}
+        }
         val token=UUID.randomUUID().toString();putSession(o.put("state","RUNNING").put("token",token).put("message","排入測試工作…").put("updatedAt",System.currentTimeMillis()));token
     }
     fun current(id:String,token:String)=synchronized(lock){session(id)?.let{it.optString("token")==token&&token.isNotEmpty()&&it.optString("state") in setOf("RUNNING","RETRY")}?:false}
@@ -64,9 +71,12 @@ class BtRobotStore(private val c:Context){
     fun seen(id:String,key:String)=synchronized(lock){db.rawQuery("SELECT 1 FROM trials WHERE session=? AND key=? LIMIT 1",arrayOf(id,key)).use{it.moveToFirst()}}
     fun next(id:String):BtRobotSpace.Candidate?=synchronized(lock){
         val s=session(id)?:error("找不到測試紀錄")
-        BtRobotSpace.next(BtRobotSpace.key(BtSettingsCodec.decode(s.getJSONObject("settings")).rules),s.optString("bestKey").ifBlank{null},BigInteger(s.getString("cursor")),BigInteger(s.getString("seed")),s.optString("required","0"),s.optString("forbidden","0")){seen(id,it)}
+        val sweep=BtRobotSweep.read(s.optJSONObject("sweep"))
+        if(sweep!=null)sweep.next(s.getLong("tested"))
+        else BtRobotSpace.next(BtRobotSpace.key(BtSettingsCodec.decode(s.getJSONObject("settings")).rules),s.optString("bestKey").ifBlank{null},BigInteger(s.getString("cursor")),BigInteger(s.getString("seed")),s.optString("required","0"),s.optString("forbidden","0")){seen(id,it)}
     }
-    fun remaining(id:String):BigInteger {val s=session(id);return BtRobotSpace.total(s?.optString("required","0")?:"0",s?.optString("forbidden","0")?:"0")-BigInteger.valueOf(s?.optLong("tested")?:0L)}
+    fun remaining(id:String):BigInteger {val s=session(id);return (BtRobotSweep.read(s?.optJSONObject("sweep"))?.total?.let{BigInteger.valueOf(it.toLong())}
+        ?:BtRobotSpace.total(s?.optString("required","0")?:"0",s?.optString("forbidden","0")?:"0"))-BigInteger.valueOf(s?.optLong("tested")?:0L)}
     fun retained(id:String)=synchronized(lock){db.rawQuery("SELECT COUNT(*) FROM trials WHERE session=? AND cleared=0",arrayOf(id)).use{it.moveToFirst();it.getLong(0)}}
     fun clearZero(id:String):Int=synchronized(lock){
         val s=session(id)?:return@synchronized 0;var removed=0
@@ -99,12 +109,19 @@ class BtRobotStore(private val c:Context){
     internal fun <T> locked(action:(SQLiteDatabase)->T):T=synchronized(lock){action(db)}
     fun commit(id:String,token:String,candidate:BtRobotSpace.Candidate,result:BtResult,started:Long):Boolean=synchronized(lock){
         if(!current(id,token)||seen(id,candidate.key))return@synchronized false
-        BtRobotSpace.validate(result.settings);require(BtRobotSpace.key(result.settings.rules)==candidate.key)
+        BtRobotSpace.validate(result.settings)
         require(result.run.profit.isFinite())
         val s=session(id)!!
-        require(result.settings==BtSettingsCodec.decode(s.getJSONObject("settings")).copy(rules=BtRobotSpace.rules(candidate.key))){"測試條件與批次不一致"}
+        val sweep=BtRobotSweep.read(s.optJSONObject("sweep"))
+        val base=BtSettingsCodec.decode(s.getJSONObject("settings"))
+        if(sweep==null)require(BtRobotSpace.key(result.settings.rules)==candidate.key){"ABC 組合代碼不符"}
+        else require(candidate.cursor==BigInteger.valueOf(s.getLong("tested")+1)&&
+            sweep.next(s.getLong("tested"))?.key==candidate.key){"參數網格游標／組合不一致"}
+        val expected=if(sweep==null)base.copy(rules=BtRobotSpace.rules(candidate.key)) else sweep.settings(base,candidate.key)
+        require(result.settings==expected){"測試條件與批次不一致"}
         if(com.rex.twboardingscanner.data.StockPolicyStore(c).read()!=result.settings.stockPolicy)return@synchronized false
-        require(BtRobotSpace.includes(candidate.key,s.optString("required","0"),s.optString("forbidden","0")));val finished=System.currentTimeMillis();val seq=s.getLong("tested")+1
+        if(sweep==null)require(BtRobotSpace.includes(candidate.key,s.optString("required","0"),s.optString("forbidden","0")))
+        val finished=System.currentTimeMillis();val seq=s.getLong("tested")+1
         val report=JSONObject().put("id",UUID.nameUUIDFromBytes("$id:${candidate.key}".toByteArray(Charsets.UTF_8)).toString())
             .put("journalVersion",1).put("strategyVersion",result.settings.strategyVersion).put("robotSession",id).put("robotSequence",seq)
             .put("state","DONE").put("appVersion",s.getString("appVersion"))
@@ -112,6 +129,9 @@ class BtRobotStore(private val c:Context){
             .put("requested",result.requested).put("loaded",result.loaded).put("excluded",org.json.JSONArray(result.excluded))
             .put("pendingChecks",result.pendingChecks).put("note",result.note).put("run",BacktestStore(c).runJson(result.run))
         val summary=JSONObject().put("key",candidate.key).put("seq",seq).put("startedAt",started).put("finishedAt",finished)
+            .put("mode",if(sweep==null)"ABC" else "GRID")
+            .put("maxHoldingStocks",result.settings.maxHoldingStocks?:JSONObject.NULL)
+            .put("targetNetPct",result.settings.targetNetPct)
             .put("profit",result.run.profit).put("drawdown",result.run.drawdown).put("buys",result.run.buys).put("closed",result.run.closed.size)
             .put("realized",result.run.realized).put("unrealized",result.run.unrealized).put("pendingChecks",result.pendingChecks)
         val bytes=ByteArrayOutputStream().also{buffer->GZIPOutputStream(buffer).use{it.write(report.toString().toByteArray(Charsets.UTF_8))}}.toByteArray()
@@ -120,7 +140,9 @@ class BtRobotStore(private val c:Context){
         try{
             db.insertOrThrow("trials",null,ContentValues().apply{put("session",id);put("key",candidate.key);put("summary",summary.toString());put("report",bytes)})
             if(better)s.put("bestKey",candidate.key).put("bestProfit",result.run.profit).put("bestSeq",seq)
-            s.put("updatedAt",finished).put("tested",seq).put("cursor",candidate.cursor.toString()).put("message","已完成第 $seq 組；持續搜尋更高收益")
+            s.put("updatedAt",finished).put("tested",seq).put("cursor",candidate.cursor.toString())
+                .put("message",if(sweep==null)"已完成第 $seq 組；持續搜尋更高收益"
+                    else "參數範圍第 $seq／${sweep.total} 組完成 · ${sweep.parseKey(candidate.key).label}")
             putSession(s);db.setTransactionSuccessful()
         }finally{db.endTransaction()}
         com.rex.twboardingscanner.data.StockPolicyStore(c).candidates(com.rex.twboardingscanner.domain.StockScope.ROBOT,BacktestStore(c).limitedJson(result.run),"機器人 ${id.take(8)} · 第 $seq 組",result.settings.stockPolicy)
@@ -130,6 +152,20 @@ class BtRobotStore(private val c:Context){
     fun trials(id:String,limit:Int=20,offset:Int=0):List<JSONObject> = synchronized(lock){
         require(limit in 1..1000&&offset>=0);val out=mutableListOf<JSONObject>()
         db.rawQuery("SELECT summary FROM trials WHERE session=? AND cleared=0 ORDER BY n DESC LIMIT ? OFFSET ?",arrayOf(id,limit.toString(),offset.toString())).use{while(it.moveToNext())out+=JSONObject(it.getString(0))};out
+    }
+    /** Return real top-profit parameter combinations; an empty/cleared report never becomes best. */
+    fun topTrials(id:String,limit:Int=10):List<JSONObject> = synchronized(lock){
+        require(limit in 1..100)
+        val top=mutableListOf<JSONObject>()
+        db.rawQuery("SELECT summary FROM trials WHERE session=? AND cleared=0",arrayOf(id)).use{cursor->
+            while(cursor.moveToNext()){
+                val item=JSONObject(cursor.getString(0))
+                top.add(item)
+                top.sortWith(compareByDescending<JSONObject>{it.getDouble("profit")}.thenBy{it.getLong("seq")})
+                if(top.size>limit)top.removeAt(top.lastIndex)
+            }
+        }
+        top
     }
     /** Keyset paging keeps stock search responsive without loading all compressed reports. */
     fun searchPage(before:Long=Long.MAX_VALUE):List<JSONObject> = synchronized(lock){

@@ -18,7 +18,11 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
     companion object {
         const val WORK="backtest-robot"
         const val NOTE="固定區間內調整條件，屬樣本內最佳化，可能過度擬合；目前已測最佳不等於全組合最高或未來收益。現存上市櫃及目前產業分類有存活偏差；已勾選財報／法人缺歷史證據即不通過。A/B 排除當日日線，C 包含當日；C 同收盤成交屬理想化假設。交易時刻為日線模型，並非逐筆成交。扣買賣費稅及滑價；留倉以扣估計賣出費稅估值。股息與折讓金列應收不再投資；超過 5 個日曆日可扣費稅保本賣出，虧損續抱；另有下車條件時，以前一完整日線判斷、下一可交易日開盤模擬認賠出場。"
-        private data class Runtime(val id:String,val data:BacktestData.Loaded,val index:BtConditionIndex,val execution:BtExecutionIndex,val guards:Map<java.time.LocalDate,com.rex.twboardingscanner.domain.MarketGuardDecision>)
+        private data class Runtime(val id:String,val data:BacktestData.Loaded,val index:BtConditionIndex,val execution:BtExecutionIndex,val guards:Map<java.time.LocalDate,com.rex.twboardingscanner.domain.MarketGuardDecision>){
+            // A grid tests identical ABC and historical observations each time.
+            // Prepare once per loaded snapshot; only holdings and take-profit are varied.
+            var gridPrepared:BtPrepared?=null
+        }
         private val runLock=Any()
         private var cached:Runtime?=null
         fun start(c:Context,id:String){
@@ -71,6 +75,7 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
             val session=store.session(id)!!
             require(BtRobotCheckpoint.compatible(session)){"回測引擎版本不相容；原紀錄可檢閱，請建立新測試"}
             val base=BtSettingsCodec.decode(session.getJSONObject("settings"));BtRobotSpace.validate(base)
+            val sweep=BtRobotSweep.read(session.optJSONObject("sweep"))
             require(base.marketGuardVersion>0){"舊批次未啟用大盤保護；按開始建立新批次，原紀錄保留"}
             var lastProgress=0L
             val progress={msg:String->check(!cancel()){ "已暫停測試" };val now=System.currentTimeMillis();if(now-lastProgress>=800){store.status(id,token,msg);lastProgress=now}}
@@ -102,14 +107,24 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
             while(!cancel()&&completed<30&&(completed==0||System.currentTimeMillis()-batchStart<120000)){
                 require(applicationContext.filesDir.usableSpace>128L*1024*1024){"儲存空間不足 128 MB，請先釋出空間"}
                 val candidate=store.next(id)
-                if(candidate==null){store.status(id,token,"所有組合測試完成；最高收益僅限本次歷史樣本","DONE");cached=null;return@synchronized Result.success()}
-                val settings=base.copy(rules=BtRobotSpace.rules(candidate.key));val started=System.currentTimeMillis()
+                if(candidate==null){
+                    val end=store.session(id)!!
+                    val message=if(sweep==null)"所有 ABC 組合測試完成；最佳收益僅限本次歷史樣本"
+                        else "參數範圍 ${sweep.total} 組全部完成；已測最佳 ${end.optString("bestKey").ifBlank{"無"}}，可於結果榜檢閱"
+                    store.status(id,token,message,"DONE");cached=null;return@synchronized Result.success()
+                }
+                val settings=if(sweep==null)base.copy(rules=BtRobotSpace.rules(candidate.key)) else sweep.settings(base,candidate.key)
+                val started=System.currentTimeMillis()
                 val seq=store.session(id)!!.optLong("tested")+1
-                store.status(id,token,"正在測試第 $seq 組 · ${candidate.key}")
-                val prepared=runtime.index.prepare(settings,cancel).copy(marketGuards=runtime.guards)
+                store.status(id,token,if(sweep==null)"正在測試第 $seq 組 · ${candidate.key}"
+                    else "正在測試第 $seq／${sweep.total} 組 · ${sweep.parseKey(candidate.key).label}")
+                val prepared=if(sweep==null)runtime.index.prepare(settings,cancel).copy(marketGuards=runtime.guards)
+                    else runtime.gridPrepared?:runtime.index.prepare(base,cancel).copy(marketGuards=runtime.guards)
+                        .also{runtime.gridPrepared=it}
                 val run=BacktestEngine.run(prepared,settings,cancel=cancel,execution=runtime.execution)
                 check(!cancel()){ "已暫停測試" }
-                val better=store.commit(id,token,candidate,BtResult(settings,run,runtime.data.requested,runtime.data.series.size,runtime.data.excluded,NOTE,prepared.pendingChecks),started)
+                val note=NOTE+if(sweep!=null)"本批次固定 ABC 條件，逐一測試持倉 ${sweep.holdingFrom}～${sweep.holdingTo} 檔 × 扣費稅淨利 ${sweep.profitFrom}%～${sweep.profitTo}% 的 ${sweep.total} 組有限範圍；每組使用相同歷史樣本，沒有再搜尋 ABC。" else ""
+                val better=store.commit(id,token,candidate,BtResult(settings,run,runtime.data.requested,runtime.data.series.size,runtime.data.excluded,note,prepared.pendingChecks),started)
                 if(better)notifyBest(seq,run.profit)
                 completed++
             }
@@ -144,7 +159,7 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
     private fun foreground():ForegroundInfo {
         manager()
         val n=NotificationCompat.Builder(applicationContext,"robot-progress").setSmallIcon(android.R.drawable.stat_notify_sync).setContentTitle("自動回測機器人執行中")
-            .setContentText("持續測試 ABC 組合；點擊查看進度或暫停").setContentIntent(intent()).setOngoing(true).build()
+            .setContentText("持續逐組回測；點擊可查看參數範圍進度或暫停").setContentIntent(intent()).setOngoing(true).build()
         return if(Build.VERSION.SDK_INT>=29)ForegroundInfo(4220,n,ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)else ForegroundInfo(4220,n)
     }
     private fun notifyBest(seq:Long,profit:Double){runCatching{
