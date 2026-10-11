@@ -209,7 +209,7 @@ class BtRobotCheckpointTest {
         find(v){it.tag=="save-required-rules"}!!.performClick()
         val on=BtRobotSpace.rules(savedOn);val off=BtRobotSpace.rules(savedOff)
         assertTrue(on[RadarType.A_EARLY_BREAKOUT]!!.isEmpty());assertEquals(setOf("price"),on[RadarType.B_DEEP_REVERSAL]);assertEquals(setOf("price","volume"),off[RadarType.A_EARLY_BREAKOUT]);assertTrue(off[RadarType.B_DEEP_REVERSAL]!!.isEmpty())
-        assertEquals(BigInteger.ONE.shiftLeft(62),BtRobotSpace.total(savedOn,savedOff))
+        assertEquals(BigInteger.ONE.shiftLeft(68),BtRobotSpace.total(savedOn,savedOff))
         ctl.pause().stop().destroy()
     }
     @Test fun requiredMenuSeparatesAbcAndRendersWithClearAndExportActions(){

@@ -3,11 +3,16 @@ package com.rex.twboardingscanner.domain
 import com.rex.twboardingscanner.backtest.*
 import com.rex.twboardingscanner.data.TradeSideVolumeStore
 import org.junit.Assert.*
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import org.junit.Test
 import java.time.LocalDate
 import java.time.LocalTime
 import java.math.BigInteger
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk=[34])
 class TrendTouchAndActiveFlowTest {
     private val date=LocalDate.of(2026,10,9)
     private fun snapshot(closes:List<Double>,flow:TradeSideVolume?=null,price:Double=closes.last()):StockSnapshot{
