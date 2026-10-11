@@ -8,7 +8,7 @@ import kotlin.math.*
 val TAIPEI: ZoneId = ZoneId.of("Asia/Taipei")
 data class PaperCandidate(val code:String,val name:String,val exchange:String,val radar:String,val score:Int,val observedAt:Long)
 data class PaperQuote(val code:String,val at:Long,val last:Double,val bid:Double,val ask:Double,val bidLots:Double,val askLots:Double,val volume:Long,val upper:Double,val lower:Double)
-data class PaperPosition(val code:String,val name:String,val exchange:String,val radar:String,val entry:Double,val cost:Double,val boughtAt:Long,var peak:Double,var mark:Double,var markAt:Long)
+data class PaperPosition(val code:String,val name:String,val exchange:String,val radar:String,val entry:Double,val cost:Double,val boughtAt:Long,var peak:Double,var mark:Double,var markAt:Long,var trendHoldActivated:Boolean=false)
 data class PaperTrade(val code:String,val name:String,val radar:String,val side:String,val at:Long,val quoteAt:Long,val price:Double,val fee:Double,val tax:Double,val realized:Double,val reason:String,val shares:Int=1000)
 data class PaperDay(val date:String,var equity:Double,var at:Long)
 data class PaperBook(var capital:Double=3000000.0,var cash:Double=3000000.0,var enabled:Boolean=false,var lastRun:Long=0,var status:String="尚未啟動",var candidateAt:Long=0,
@@ -55,14 +55,23 @@ object PaperEngine {
             val known=histories[p.code].orEmpty().filter{com.rex.twboardingscanner.domain.RuleMetrics.tradingDate(it.time)<local(now).toLocalDate()}.sortedBy{it.time}
             val signal=known.lastOrNull()
             val exitIndex=signal?.let{com.rex.twboardingscanner.domain.ExitRules.match(activeExitRules,local(p.boughtAt).toLocalDate(),com.rex.twboardingscanner.domain.RuleMetrics.tradingDate(it.time),(netSell(it.close)/p.cost-1)*100,known)}
+            val trendEnabled=strategy?.holdProfitUntilMa5Break==true
+            val dailyTrend=if(trendEnabled)com.rex.twboardingscanner.domain.ProfitTrendHold.fromCompleted(known) else null
             val aged=java.time.temporal.ChronoUnit.DAYS.between(local(p.boughtAt).toLocalDate(),tradeDay)>5
             val liveSellPrice=if(q.bid>0&&q.bidLots>=1)execution(q.bid,false) else Double.NaN
             val liveNet=if(liveSellPrice.isFinite()&&liveSellPrice>0)netSell(liveSellPrice) else Double.NaN
             val netThreshold=if(aged)1.0 else 1.0+(strategy?.targetNetPct?:6.0)/100.0
             val reached=strategy!=null&&tradeDay>local(p.boughtAt).toLocalDate()&&
                 liveNet.isFinite()&&liveNet+1e-8>=p.cost*netThreshold
+            val fullTargetReached=strategy!=null&&tradeDay>local(p.boughtAt).toLocalDate()&&
+                liveNet.isFinite()&&liveNet+1e-8>=p.cost*(1.0+strategy.targetNetPct/100.0)
+            if(trendEnabled&&exitIndex==null&&!p.trendHoldActivated&&fullTargetReached&&dailyTrend?.canHoldOnTarget==true)
+                p.trendHoldActivated=true
             val reason=when {
                 exitIndex!=null->"下車條件 ${exitIndex+1}：${activeExitRules[exitIndex].description()}；訊號 ${com.rex.twboardingscanner.domain.RuleMetrics.tradingDate(signal!!.time)}"
+                trendEnabled&&p.trendHoldActivated&&dailyTrend?.closedBelowMa5==true->
+                    "淨利達標後續抱；${dailyTrend.date} 日K收盤跌破5MA，取得有效報價後賣出"
+                trendEnabled&&p.trendHoldActivated->null
                 strategy!=null&&reached&&aged->"留倉超過 5 個日曆日，扣除費稅後保本出場"
                 strategy!=null&&reached->"扣除買賣費稅後淨利至少 ${btPercent(strategy.targetNetPct)}%"
                 strategy==null&&flatten->"13:15 收束平倉"

@@ -24,7 +24,7 @@ object BtSettingsCodec {
         val saved=prefs.getStringSet("enabled_sectors",null)
         val sectors=saved?.mapNotNull {name->allSectors.firstOrNull{it.name==name}}?.toMutableSet()?:allSectors.toMutableSet()
         if(saved!=null&&allSectors.filter{it!=com.rex.twboardingscanner.domain.StockSector.UNKNOWN}.all{it.name in saved})sectors.add(com.rex.twboardingscanner.domain.StockSector.UNKNOWN)
-        return BtSettings(start,end,capital,codes,rules.mapValues{it.value.toSet()},sectors.ifEmpty{allSectors}.toSet(),stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(c).read(),exitRules=com.rex.twboardingscanner.data.ExitRuleStore(c).read(com.rex.twboardingscanner.domain.StockScope.BACKTEST),marketGuardVersion=com.rex.twboardingscanner.domain.MarketCrashGuard.VERSION)
+        return BtSettings(start,end,capital,codes,rules.mapValues{it.value.toSet()},sectors.ifEmpty{allSectors}.toSet(),stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(c).read(),exitRules=com.rex.twboardingscanner.data.ExitRuleStore(c).read(com.rex.twboardingscanner.domain.StockScope.BACKTEST),marketGuardVersion=com.rex.twboardingscanner.domain.MarketCrashGuard.VERSION,holdProfitUntilMa5Break=com.rex.twboardingscanner.data.ExitRuleStore(c).readProfitTrendHold(com.rex.twboardingscanner.domain.StockScope.BACKTEST))
     }
     fun encode(s:BtSettings):JSONObject {
         s.validateTrading()
@@ -35,6 +35,7 @@ object BtSettingsCodec {
         .put("stockPolicy",s.stockPolicy.json()).put("stockScope",s.stockScope.name)
         .put("marketGuardVersion",s.marketGuardVersion).put("marketGuardSummary",if(s.marketGuardVersion>0)com.rex.twboardingscanner.domain.MarketCrashGuard.SUMMARY else "此舊策略未啟用大盤保護")
         .put("targetNetPct",s.targetNetPct).put("maxHoldingStocks",s.maxHoldingStocks?:JSONObject.NULL)
+        .put("holdProfitUntilMa5Break",s.holdProfitUntilMa5Break)
         .put("holdingLimitBasis","不同股號計算檔數；同股不同日可加買一張；先賣後買；名額及資金競爭按股號排序")
         .put("rules",JSONObject().apply{s.rules.forEach{(type,ids)->put(type.name,JSONArray(ids.sorted()))}})
         .put("sectors",JSONArray(s.sectors.map{it.name}.sorted()))
@@ -43,7 +44,7 @@ object BtSettingsCodec {
         .put("ruleLabelMap",JSONObject().apply{s.rules.forEach{(type,ids)->put(type.name,JSONObject().apply{com.rex.twboardingscanner.domain.ScanConditions.forRadar(type).filter{it.id in ids}.forEach{put(it.id,it.label)}})}})
         .put("rebateModel",if(s.strategyVersion>=3)JSONObject().put("threshold",50000000).put("lowRate",0.0005).put("highRate",0.001).put("basis","每曆月買賣成交總額；超過門檻全月適用高率；未滿月依截止日累計估計，不加入可用資金")else JSONObject.NULL)
         .put("breakEvenAfterCalendarDays",if(s.strategyVersion>=3)5 else JSONObject.NULL)
-        .put("strategyLabel",(s.maxHoldingStocks?.let{"最高持倉 $it 檔（不同股號）；"}?:"持倉檔數不限；")+if(s.strategyVersion>=3)"尾盤各買 1,000 股；隔日起扣買賣費稅淨利 $target% 賣出；持有超過 5 個日曆日改以扣費稅保本出場，虧損續抱（另有下車條件時依快照判斷）。每月買賣合計超過 5,000 萬折讓 0.1%，否則 0.05%；估計應收折讓金納入總損益但不再投資。" else "尾盤各買 1,000 股；隔日起扣買賣費稅淨利 ≥ $target% 才賣出；未達標續抱，截止日保留持倉。")
+        .put("strategyLabel",(if(s.holdProfitUntilMa5Break)"淨利達標後若前一完整日K RSI(14)>50 且收盤未跌破5MA則續抱；完整日K收盤跌破5MA後次一交易日開盤賣出；5組認賠條件優先。" else "")+(s.maxHoldingStocks?.let{"最高持倉 $it 檔（不同股號）；"}?:"持倉檔數不限；")+if(s.strategyVersion>=3)"尾盤各買 1,000 股；隔日起扣買賣費稅淨利 $target% 賣出；持有超過 5 個日曆日改以扣費稅保本出場，虧損續抱（另有下車條件時依快照判斷）。每月買賣合計超過 5,000 萬折讓 0.1%，否則 0.05%；估計應收折讓金納入總損益但不再投資。" else "尾盤各買 1,000 股；隔日起扣買賣費稅淨利 ≥ $target% 才賣出；未達標續抱，截止日保留持倉。")
         .put("costModel",JSONObject().put("buyFeeRate",0.001425).put("sellFeeRate",0.001425).put("minimumFee",20).put("sellTaxRate",0.003).put("slippageRate",0.001))
     }
     fun decode(o:JSONObject):BtSettings {
@@ -58,7 +59,7 @@ object BtSettingsCodec {
             require(n.isFinite()&&n>=1&&n<=Int.MAX_VALUE&&n==kotlin.math.floor(n)){"持倉上限不是有效整數"}
             n.toInt()
         }else null
-        return BtSettings(LocalDate.parse(o.getString("start")),LocalDate.parse(o.getString("end")),o.getDouble("capital"),o.getString("codes"),rules,sectors,version,limit,if(version>=4)o.getDouble("targetNetPct")else 3.0,com.rex.twboardingscanner.domain.StockPolicy.read(o.optJSONObject("stockPolicy")),com.rex.twboardingscanner.domain.StockScope.valueOf(o.optString("stockScope","BACKTEST")),com.rex.twboardingscanner.domain.ExitRules.read(o.optJSONArray("exitRules")),o.optInt("marketGuardVersion",0)).also{it.validateTrading()}
+        return BtSettings(LocalDate.parse(o.getString("start")),LocalDate.parse(o.getString("end")),o.getDouble("capital"),o.getString("codes"),rules,sectors,version,limit,if(version>=4)o.getDouble("targetNetPct")else 3.0,com.rex.twboardingscanner.domain.StockPolicy.read(o.optJSONObject("stockPolicy")),com.rex.twboardingscanner.domain.StockScope.valueOf(o.optString("stockScope","BACKTEST")),com.rex.twboardingscanner.domain.ExitRules.read(o.optJSONArray("exitRules")),o.optInt("marketGuardVersion",0),o.optBoolean("holdProfitUntilMa5Break",false)).also{it.validateTrading()}
     }
 }
 

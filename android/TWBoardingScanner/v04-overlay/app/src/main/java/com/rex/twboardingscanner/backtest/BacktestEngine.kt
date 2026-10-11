@@ -11,12 +11,13 @@ fun defaultBtRules()=RadarType.entries.associateWith{type->ScanConditions.forRad
 fun btPercent(value:Double)=java.math.BigDecimal.valueOf(value).stripTrailingZeros().toPlainString()
 data class BtSettings(val start:LocalDate,val end:LocalDate,val capital:Double=3000000.0,val codes:String="",val rules:Map<RadarType,Set<String>> = defaultBtRules(),val sectors:Set<StockSector> = StockSector.entries.toSet(),val strategyVersion:Int=4,
     val maxHoldingStocks:Int?=if(strategyVersion>=4)25 else null,val targetNetPct:Double=3.0,
-    val stockPolicy:StockPolicy=StockPolicy(),val stockScope:StockScope=StockScope.BACKTEST,val exitRules:List<ExitRule> = emptyList(),val marketGuardVersion:Int=0){
+    val stockPolicy:StockPolicy=StockPolicy(),val stockScope:StockScope=StockScope.BACKTEST,val exitRules:List<ExitRule> = emptyList(),val marketGuardVersion:Int=0,val holdProfitUntilMa5Break:Boolean=false){
     fun validateTrading(){
         require(marketGuardVersion in 0..MarketCrashGuard.VERSION){"大盤保護版本不相容"}
         stockPolicy.validate()
         ExitRules.validate(exitRules)
         require(strategyVersion in 2..4)
+        if(strategyVersion<4)require(!holdProfitUntilMa5Break){"舊交易模型不支援 RSI／5MA 續抱"}
         if(strategyVersion>=4)require(maxHoldingStocks!=null&&maxHoldingStocks>0){"最高持倉請填 1 以上的整數"}
         else require(maxHoldingStocks==null&&targetNetPct==3.0){"舊策略必須保留原持倉及獲利規則"}
         require(targetNetPct.isFinite()&&targetNetPct in 0.01..1000.0){"獲利賣出請填 0.01～1000%"}
@@ -25,7 +26,7 @@ data class BtSettings(val start:LocalDate,val end:LocalDate,val capital:Double=3
 data class BtSeries(val code:String,val name:String,val market:Market,val bars:List<DailyBar>,val dividends:Map<LocalDate,Double> = emptyMap())
 data class BtSignal(val code:String,val radar:String,val dataDate:LocalDate?=null)
 data class BtTrade(val date:LocalDate,val signalDate:LocalDate,val code:String,val name:String,val radar:String,val side:String,val price:Double,val fee:Double,val tax:Double,val pnl:Double,val reason:String,val shares:Int=1000,val time:String="",val timeKind:String="",val lotId:String="",val target:Double=0.0,val dataDate:LocalDate=signalDate,val dayClose:Double?=null,val previousClose:Double?=null)
-data class BtHolding(val code:String,val name:String,val radar:String,val entry:Double,val cost:Double,val entryDate:LocalDate,val signalDate:LocalDate,var mark:Double,var markDate:LocalDate,val lotId:String,val target:Double,val dataDate:LocalDate)
+data class BtHolding(val code:String,val name:String,val radar:String,val entry:Double,val cost:Double,val entryDate:LocalDate,val signalDate:LocalDate,var mark:Double,var markDate:LocalDate,val lotId:String,val target:Double,val dataDate:LocalDate,var trendHoldActivated:Boolean=false)
 data class BtDay(val date:LocalDate,val equity:Double,val selected:Int=0,val buys:Int=0,val sells:Int=0,val skipped:Int=0,
     val realized:Double?=null,val holdingCost:Double?=null,val holdingValue:Double?=null,val holdingLots:Int?=null,
     val cash:Double?=null,val dividendAccrued:Double?=null,val dayProfit:Double?=null,val staleLots:Int?=null,val rebateAccrued:Double?=null,val rebateChange:Double?=null,val marketGuard:MarketGuardDecision?=null)
@@ -126,6 +127,9 @@ object BacktestEngine {
             if(day<=p.entryDate)return@forEach
             val bar=bars[p.code]?.get(day)?:return@forEach
             if(bar.volumeShares-(usedShares[p.code]?:0)<1000)return@forEach
+            val completeBars=if(settings.holdProfitUntilMa5Break)
+                meta[p.code]?.bars.orEmpty().filter{date(it)<day} else emptyList()
+            val dailyTrend=if(settings.holdProfitUntilMa5Break)ProfitTrendHold.fromCompleted(completeBars) else null
             if(settings.exitRules.any{it.active}) {
                 val known=meta[p.code]?.bars.orEmpty().filter{date(it)<day}.sortedBy{it.time}.distinctBy(::date)
                 val signal=known.lastOrNull()
@@ -141,6 +145,29 @@ object BacktestEngine {
                         return@forEach
                     }
                 }
+            }
+            // An armed lot ignores the normal target and five-day break-even exits.
+            // A close below MA5 must be confirmed YESTERDAY; simulate the NEXT open.
+            // Explicit loss exits above retain their priority.
+            if(settings.holdProfitUntilMa5Break&&p.trendHoldActivated){
+                if(dailyTrend?.closedBelowMa5==true&&bar.open.isFinite()&&bar.open>0){
+                    val px=PaperEngine.execution(bar.open,false)
+                    val amount=px*1000;val fee=PaperEngine.fee(amount);val tax=PaperEngine.tax(amount)
+                    val net=amount-fee-tax
+                    b.cash+=net;b.holdings.remove(p);usedShares[p.code]=(usedShares[p.code]?:0)+1000
+                    b.trades.add(BtTrade(day,p.signalDate,p.code,p.name,p.radar,"SELL",px,fee,tax,net-p.cost,
+                        "獲利達標後續抱；${dailyTrend.date} 日K收盤 ${btPercent(dailyTrend.close)} 跌破5日線 ${btPercent(dailyTrend.ma5)}，下一交易日開盤賣出",
+                        time="09:00",timeKind="前一完整日K跌破5日線；下一交易日開盤價模擬",
+                        lotId=p.lotId,target=0.0,dataDate=dailyTrend.date,dayClose=bar.close,previousClose=previous[p.code]?.get(day)))
+                }
+                return@forEach
+            }
+            // The daily high proves that the profit target could trade intraday,
+            // but the decision to defer uses ONLY the previous completed day.
+            if(settings.holdProfitUntilMa5Break&&dailyTrend?.canHoldOnTarget==true
+                &&bar.high+1e-8>=triggerPrice(p.target)){
+                p.trendHoldActivated=true
+                return@forEach
             }
             // From day 6 onward, the standing exit is break-even. Do not inspect the
             // day's future high to choose a better target fill over an earlier break-even fill.

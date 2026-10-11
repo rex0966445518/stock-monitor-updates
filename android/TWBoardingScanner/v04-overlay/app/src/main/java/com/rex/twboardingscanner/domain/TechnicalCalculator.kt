@@ -91,7 +91,7 @@ class TechnicalCalculator {
 
     private fun sma(v: List<Double>, n: Int): Double? = if (v.size >= n) v.takeLast(n).average() else null
 
-    private fun rsi(v: List<Double>, n: Int): Double? {
+    fun rsi(v: List<Double>, n: Int): Double? {
         if (v.size < n + 1) return null
         val diffs = v.takeLast(n + 1).zipWithNext { a, b -> b - a }
         val gain = diffs.filter { it > 0 }.sum() / n

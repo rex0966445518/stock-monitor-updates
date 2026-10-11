@@ -23,7 +23,8 @@ object PaperStrategyConfig {
             stockPolicy=StockPolicyStore(context).read(),
             maxHoldingStocks=5,targetNetPct=6.0,
             exitRules=ExitRuleStore(context).read(StockScope.SCANNER),
-            marketGuardVersion=MarketCrashGuard.VERSION
+            marketGuardVersion=MarketCrashGuard.VERSION,
+            holdProfitUntilMa5Break=ExitRuleStore(context).readProfitTrendHold(StockScope.SCANNER)
         )
     }
     fun validate(settings:BtSettings,now:LocalDate=LocalDate.now(RuleMetrics.TAIPEI)){

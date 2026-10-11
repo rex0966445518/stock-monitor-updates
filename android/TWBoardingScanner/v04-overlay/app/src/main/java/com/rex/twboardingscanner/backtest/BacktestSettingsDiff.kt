@@ -60,6 +60,9 @@ object BacktestSettingsDiff {
         value("初始本金",scalar(previous,"capital"),scalar(current,"capital")){"$it 元"}
         value("最高持倉",oldTrading(previous,"maxHoldingStocks"),oldTrading(current,"maxHoldingStocks")){if(it=="不限")it else "$it 檔"}
         value("獲利賣出",oldTrading(previous,"targetNetPct"),oldTrading(current,"targetNetPct")){"$it%（扣費稅）"}
+        val beforeTrend=previous.optBoolean("holdProfitUntilMa5Break",false)
+        val afterTrend=current.optBoolean("holdProfitUntilMa5Break",false)
+        if(beforeTrend!=afterTrend)change(SettingChangeKind.CHANGED,"達標 RSI>50／5MA 續抱：${if(beforeTrend)"啟用" else "關閉"} → ${if(afterTrend)"啟用" else "關閉"}")
         val oldPolicy=previous.optJSONObject("stockPolicy");val newPolicy=current.optJSONObject("stockPolicy")
         if(oldPolicy==null||newPolicy==null)missing+="禁買／限價設定" else{
             sets("禁買名單",strings(oldPolicy.optJSONArray("banned")),strings(newPolicy.optJSONArray("banned")))
