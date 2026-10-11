@@ -5,7 +5,7 @@ import android.widget.LinearLayout
 import org.json.JSONObject
 import java.util.Locale
 
-internal class BacktestDailyCard(c:Context,d:JSONObject,trades:List<JSONObject> = emptyList()):LinearLayout(c){
+internal class BacktestDailyCard(c:Context,d:JSONObject,trades:List<JSONObject> = emptyList(),industries:Map<String,String> = emptyMap()):LinearLayout(c){
     private fun number(d:JSONObject,key:String)=d.optDouble(key,Double.NaN).takeIf{d.has(key)&&!d.isNull(key)&&it.isFinite()}
     private fun amount(v:Double?)=v?.let{String.format(Locale.TAIWAN,"%,.0f",it)}?:"—"
     private fun signed(v:Double?)=v?.let{(if(it>=0)"+" else "−")+amount(kotlin.math.abs(it))}?:"—"
@@ -46,7 +46,7 @@ internal class BacktestDailyCard(c:Context,d:JSONObject,trades:List<JSONObject> 
                 sellButton.text="賣出 ${sells.size} 筆 ${if(opened=="SELL")"▲" else "▼"}"
                 details.removeAllViews();if(opened.isEmpty())return
                 val selected=if(opened=="BUY")buys else sells
-                selected.take(visibleCount).forEach{details.addView(NeonUi.gap(c,8));details.addView(BacktestTradeCard(c,it))}
+                selected.take(visibleCount).forEach{details.addView(NeonUi.gap(c,8));details.addView(BacktestTradeCard(c,it,industries[it.optString("code")]))}
                 if(visibleCount<selected.size)details.addView(NeonUi.button(c,"載入更多明細（$visibleCount / ${selected.size}）"){visibleCount+=10;render()})
             }
             buyButton=NeonUi.button(c,"",NeonUi.pink){opened=if(opened=="BUY")"" else "BUY";visibleCount=10;render()}.apply{isEnabled=buys.isNotEmpty()}

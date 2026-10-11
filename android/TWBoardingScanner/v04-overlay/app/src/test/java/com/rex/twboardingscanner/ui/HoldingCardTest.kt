@@ -76,7 +76,8 @@ class HoldingCardTest {
         assertEquals("航運",directory.industryLabels()["9998"])
         assertEquals(List(2){"買入 日期未記錄 時間未記錄"},times(missing))
         val sold=BacktestProfitCard(a,lot(),true,"2026-10-08")
-        assertNull(button(sold));assertTrue(times(sold).isEmpty())
+        assertNotNull(button(sold));assertTrue(button(sold).isEnabled);assertTrue(times(sold).isEmpty())
+        assertTrue(sold.findViewWithTag<TextView>("holding-title").text.contains("電機機械"))
         ctl.pause().stop().destroy()
     }
     @Test fun narrowCardAndLargeFontKeepActionAndTimeInsideTheCard(){

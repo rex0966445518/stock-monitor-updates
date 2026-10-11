@@ -299,6 +299,7 @@ class BacktestActivity:AppCompatActivity(){
     internal fun showResult(data:JSONObject){
         results.removeAllViews();val s=data.getJSONObject("settings");val r=data.getJSONObject("run");val pnl=r.getDouble("profit");val hasRebate=data.optInt("strategyVersion",1)>=3;val legacy=data.optInt("strategyVersion",1)<2
         val curve=BacktestDailyLedger.rows(data);val holdings=r.getJSONArray("holdings");val trades=BacktestTradeLedger.rows(r.getJSONArray("trades"));val tradesByDay=BacktestTradeLedger.byDate(trades)
+        val industries=com.rex.twboardingscanner.data.StockDirectory(this).industryLabels()
         val panel=NeonUi.vertical(this).apply{background=NeonUi.panel(this@BacktestActivity,tint(pnl));setPadding(dp(14),dp(14),dp(14),dp(14))}
         panel.addView(label(if(legacy)"舊版開盤策略報告" else "截止日總損益",16f,NeonUi.ink,true))
         panel.addView(label(signed(pnl)+" 元",34f,tint(pnl),true))
@@ -343,13 +344,13 @@ class BacktestActivity:AppCompatActivity(){
                     NeonUi.button(this,"較新 30 天"){pageEnd=minOf(curve.length(),pageEnd+30);dailyPage()}.apply{isEnabled=pageEnd<curve.length()}
                 )))
             }
-            for(i in first until pageEnd){val day=curve.getJSONObject(i);dailyHost.addView(BacktestDailyCard(this,day,tradesByDay[day.getString("date")].orEmpty()));dailyHost.addView(NeonUi.gap(this,8))}
+            for(i in first until pageEnd){val day=curve.getJSONObject(i);dailyHost.addView(BacktestDailyCard(this,day,tradesByDay[day.getString("date")].orEmpty(),industries));dailyHost.addView(NeonUi.gap(this,8))}
         }
         dailyPage()
         results.addView(NeonUi.gap(this,8));results.addView(label("成交明細 · 最近 30 筆",17f,NeonUi.ink,true))
         for(i in (trades.length()-1) downTo maxOf(0,trades.length()-30)){
             val t=trades.getJSONObject(i)
-            results.addView(label(t.getString("date"),13f,NeonUi.ink,true));results.addView(BacktestTradeCard(this,t));results.addView(NeonUi.gap(this,8))
+            results.addView(label(t.getString("date"),13f,NeonUi.ink,true));results.addView(BacktestTradeCard(this,t,industries[t.optString("code")]));results.addView(NeonUi.gap(this,8))
         }
         results.addView(label("截止日留倉 · ${holdings.length()} 張",17f,NeonUi.ink,true))
         for(i in 0 until minOf(30,holdings.length())){

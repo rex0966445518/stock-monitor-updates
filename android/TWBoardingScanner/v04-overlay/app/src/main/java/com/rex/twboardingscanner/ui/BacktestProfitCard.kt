@@ -67,19 +67,17 @@ internal class BacktestProfitCard(c:Context,t:JSONObject,realized:Boolean,cutoff
         val accent=tint(pnl)
         orientation=VERTICAL;background=NeonUi.panel(c,accent);setPadding(NeonUi.dp(c,12),NeonUi.dp(c,12),NeonUi.dp(c,12),NeonUi.dp(c,12))
         val titleText="${value(t,"code")}  ${value(t,"name")}"
-        val sector=if(realized)"" else industry?:StockDirectory(c).industryLabels()[code]?:"待分類"
+        val sector=industry?:StockDirectory(c).industryLabels()[code]?:"待分類"
         val title=NeonUi.label(c,titleText,19f,NeonUi.ink,true).apply{
             tag="holding-title"
-            if(!realized){
-                text=SpannableStringBuilder(titleText).apply{
+            text=SpannableStringBuilder(titleText).apply{
                     val start=length;append("  · $sector")
                     setSpan(RelativeSizeSpan(.58f),start,length,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                     setSpan(ForegroundColorSpan(NeonUi.cyan),start,length,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
-                contentDescription="$titleText，產業分類 $sector"
-            }
+            contentDescription="$titleText，產業分類 $sector"
         }
-        if(realized)addView(title) else{
+        run{
             banButton=NeonUi.button(c,"一鍵禁買",NeonUi.amber){
                 try{
                     policyStore.ban(code,stockName)
@@ -131,6 +129,14 @@ internal class BacktestProfitCard(c:Context,t:JSONObject,realized:Boolean,cutoff
             if(source.isNotBlank()&&source!="原買入紀錄")addView(NeonUi.label(c,source,10f,NeonUi.amber))
         }
         if(pnl==null)addView(NeonUi.label(c,"此筆舊紀錄缺少損益資料",11f,NeonUi.amber))
-        contentDescription="${value(t,"code")} ${value(t,"name")} ${if(realized)"" else "產業分類 $sector，"}${if(realized)"已實現" else "未實現"}損益 ${signed(pnl)} 元"
+        addView(NeonUi.gap(c,10))
+        addView(BacktestFiveMinutePanel(
+            c,code,if(realized)t.optString("date")else t.optString("entryDate"),
+            if(realized)"SELL" else "BUY",
+            n(t,if(realized)"sellPrice" else "entry"),
+            t.optString(if(realized)"time" else "entryTime"),
+            t.optString("timeKind",if(realized)"" else "收盤模型，非逐筆成交")
+        ))
+        contentDescription="${value(t,"code")} ${value(t,"name")} 產業分類 $sector，${if(realized)"已實現" else "未實現"}損益 ${signed(pnl)} 元"
     }
 }
