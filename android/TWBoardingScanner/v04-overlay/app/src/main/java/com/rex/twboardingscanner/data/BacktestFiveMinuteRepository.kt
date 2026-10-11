@@ -34,7 +34,7 @@ internal class BacktestFiveMinuteRepository(context:Context){
         private val lock=Any()
         fun retentionReason(day:LocalDate,today:LocalDate=LocalDate.now(RuleMetrics.TAIPEI)):String?=when {
             day>today->"交易日期尚未到來，沒有當日 5 分 K 資料"
-            ChronoUnit.DAYS.between(day,today)>59->"該交易日超過免費行情來源約 60 天的 5 分 K 回溯範圍；若當時未快取，無法真實還原"
+            ChronoUnit.DAYS.between(day,today)>59->"該交易日超過 Yahoo 約 60 天的 5 分 K 回溯範圍；若當時未保存分鐘資料，請改用下方 Goodinfo 查看長期日 K（不是 5 分 K）"
             else->null
         }
         fun parse(raw:String,symbol:String,day:LocalDate):List<FiveMinuteBar>{

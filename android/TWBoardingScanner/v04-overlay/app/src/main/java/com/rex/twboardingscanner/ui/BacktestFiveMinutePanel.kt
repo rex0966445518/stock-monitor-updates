@@ -1,12 +1,16 @@
 package com.rex.twboardingscanner.ui
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.view.ViewTreeObserver
 import android.widget.LinearLayout
+import android.widget.Toast
+import com.rex.twboardingscanner.domain.ChartSeries
 import com.rex.twboardingscanner.data.BacktestFiveMinuteRepository
 import com.rex.twboardingscanner.data.FiveMinuteResult
 import com.rex.twboardingscanner.data.StockDirectory
@@ -26,6 +30,20 @@ internal class BacktestFiveMinutePanel(
     private val status=NeonUi.label(c,"捲動至此卡片時載入真實 5 分 K…",11f)
     private val chart=BacktestFiveMinuteChartView(c)
     private val retry=NeonUi.button(c,"重試載入 5 分 K",NeonUi.cyan){startLoading()}
+    // Goodinfo's verified historical chart is a DAILY chart, not a 5-minute OHLCV feed.
+    // Keep the real five-minute feed/cache unchanged; never label daily candles as minute candles.
+    private val goodinfo=NeonUi.button(c,"Goodinfo 歷史日 K（非 5 分 K）",NeonUi.cyan){
+        try{
+            require(code.matches(Regex("[0-9]{4}"))){"股號未記錄"}
+            c.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(ChartSeries.goodinfoUrl(code))))
+        }catch(e:Exception){
+            Toast.makeText(c,"目前無法開啟 Goodinfo，請確認網路及瀏覽器",Toast.LENGTH_SHORT).show()
+        }
+    }.apply{
+        tag="goodinfo-historical-daily"
+        contentDescription="$code Goodinfo 長期日 K 線；不是五分鐘 K 線"
+        isEnabled=code.matches(Regex("[0-9]{4}"))
+    }
     private var loading=false
     private var done=false
     private var observer:ViewTreeObserver?=null
@@ -47,6 +65,11 @@ internal class BacktestFiveMinutePanel(
         if(timeKind.isNotBlank())addView(NeonUi.label(c,timeKind,10f,NeonUi.amber))
         retry.visibility=View.GONE
         addView(retry)
+        addView(NeonUi.gap(c,6))
+        addView(goodinfo)
+        addView(NeonUi.label(c,
+            "Goodinfo 公開圖表提供長期日／週／月 K；目前未確認指定歷史日期的 5 分 K。此入口僅供長期走勢對照，不能取代上方的真實 5 分 K。",
+            10f,NeonUi.muted))
     }
     private fun checkVisible(){
         if(done||loading||!isAttachedToWindow)return
