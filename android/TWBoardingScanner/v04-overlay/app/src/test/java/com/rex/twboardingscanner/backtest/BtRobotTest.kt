@@ -130,7 +130,7 @@ class BtRobotTest {
         val reopened=BtRobotStore(app);val newToken=reopened.resume(id);assertNotEquals(token,newToken)
         assertEquals(second.key,reopened.next(id)!!.key)
         assertTrue(reopened.commit(id,newToken,second,report(s.copy(rules=BtRobotSpace.rules(second.key)),5000.0),125))
-        assertEquals(2L,reopened.session(id)!!.getLong("tested"));assertEquals(BtRobotSpace.total-BigInteger.valueOf(2),reopened.remaining(id))
+        assertEquals(2L,reopened.session(id)!!.getLong("tested"));assertEquals(BtRobotSpace.total("0","0",enabled=defaultActiveRadars())-BigInteger.valueOf(2),reopened.remaining(id))
         assertEquals(5000.0,reopened.session(id)!!.getDouble("bestProfit"),0.0)
         val restored=reopened.report(id,first.key)!!
         assertEquals(4,restored.getInt("strategyVersion"));assertEquals(1,restored.getInt("robotSequence"))

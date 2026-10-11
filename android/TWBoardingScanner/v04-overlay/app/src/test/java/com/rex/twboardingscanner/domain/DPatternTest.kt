@@ -18,10 +18,10 @@ class DPatternTest{
         val bars=(0 until 80).map{i->
             val date=end.minusDays((79-i).toLong()).atTime(9,0)
                 .atZone(RuleMetrics.TAIPEI).toInstant().toEpochMilli()
-            DailyBar(date,99.0,100.0,98.0,99.5,1000000)
+            DailyBar(date,100.0,100.0,98.0,99.5,1000000)
         }.toMutableList()
         // A historical limit-up HIGH, and then return to a quiet baseline.
-        bars[65]=bars[65].copy(high=110.0,close=100.0)
+        bars[65]=bars[65].copy(high=110.0,close=110.0)
         // Recent four clean rising red candlesticks and a real upward gap.
         (76..79).forEach{i->
             val min=101.0+(i-76)*2

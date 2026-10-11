@@ -25,7 +25,7 @@ class TrendTouchAndActiveFlowTest {
             timestamp=date.atTime(13,30).atZone(RuleMetrics.TAIPEI).toInstant().toEpochMilli())
     }
     @Test fun allThreeRadarsHaveNewOptionalRulesWhileHistoricalSlotsDoNotMove(){
-        RadarType.entries.forEach{type->
+        RadarType.entries.filter{it!=RadarType.D_MAIN_FORCE}.forEach{type->
             val options=ScanConditions.forRadar(type)
             assertEquals(1,options.count{it.id==ScanConditions.MA5_TOUCH_MA10})
             assertEquals(1,options.count{it.id==ScanConditions.ACTIVE_BUY_SELL_15})
@@ -74,13 +74,13 @@ class TrendTouchAndActiveFlowTest {
         assertTrue(passes.light!=SignalLight.NONE)
     }
     @Test fun historicalRuleVersionCanStillDecodePreviousSnapshotsWithoutRenumbering(){
-        val rules=RadarType.entries.associateWith{type->setOf("price","volume")}
+        val rules=RadarType.entries.associateWith{type->if(type==RadarType.D_MAIN_FORCE)emptySet() else setOf("price","volume")}
         val old=BtRobotSpace.settings(rules)
         val o=BtSettingsCodec.encode(old)
         o.put("rulesVersion",ScanConditions.LEGACY_VERSION)
         assertEquals(old,BtSettingsCodec.decode(o))
         val keys=rules.keys
-        assertEquals(3,keys.size)
+        assertEquals(4,keys.size)
         assertEquals(BtRobotSpace.key(rules),BtRobotSpace.key(BtSettingsCodec.decode(o).rules))
     }
 }

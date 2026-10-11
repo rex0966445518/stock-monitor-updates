@@ -35,7 +35,7 @@ class ScanPosterTest {
         val newer=signal.copy(snapshot=snap.copy(timestamp=snap.timestamp+1,price=105.0))
         val rejected=signal.copy(code="9999",light=SignalLight.NONE)
         val result=ScanPoster.collect(listOf(newer,signal,rejected))
-        assertEquals(3,result.size);assertEquals(1,result.getValue(RadarType.A_EARLY_BREAKOUT).size)
+        assertEquals(4,result.size);assertEquals(1,result.getValue(RadarType.A_EARLY_BREAKOUT).size)
         assertEquals(105.0,result.getValue(RadarType.A_EARLY_BREAKOUT).single().price,0.001)
         assertTrue(result.getValue(RadarType.B_DEEP_REVERSAL).isEmpty())
         assertTrue(ScanPoster.collect(emptyList()).values.all { it.isEmpty() })

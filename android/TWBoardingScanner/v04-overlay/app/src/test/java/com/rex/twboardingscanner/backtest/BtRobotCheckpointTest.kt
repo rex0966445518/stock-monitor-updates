@@ -95,7 +95,7 @@ class BtRobotCheckpointTest {
         assertThrows(Exception::class.java){BtConditionIndex.read(store.conditionFile(id),data().series,"wrong data")}
         store.pause(id);val newer=store.create(s,"1");BtRobotCheckpoint.cloneData(store,id,newer)
         assertArrayEquals(store.conditionFile(id).readBytes(),store.conditionFile(newer).readBytes())
-        assertArrayEquals(store.dataset(id).readBytes(),store.dataset(newer).readBytes());assertEquals(BigInteger.ONE.shiftLeft(76),store.remaining(newer))
+        assertArrayEquals(store.dataset(id).readBytes(),store.dataset(newer).readBytes());assertEquals(BigInteger.ONE.shiftLeft(70),store.remaining(newer))
     }
     @Test fun portableArchiveRestoresEveryCompletedTrialClearedMarkerAndNextCandidate(){
         val store=BtRobotStore(app);val s=BtRobotSpace.settings();val id=store.create(s,"1");val token=store.resume(id);snapshot(store,id,token)
@@ -165,8 +165,8 @@ class BtRobotCheckpointTest {
         val zip=File(app.cacheDir,"robot-exclusions.zip");BtRobotCheckpoint.export(app,id,zip)
         ZipFile(zip).use{z->assertEquals(8,JSONObject(z.getInputStream(z.getEntry("manifest.json")).bufferedReader().readText()).getInt("version"))}
         val restored=zip.inputStream().use{BtRobotCheckpoint.restore(app,it)}
-        assertEquals("2",store.session(restored)!!.getString("forbidden"));assertEquals(3,store.session(restored)!!.getInt("searchVersion"))
-        assertEquals(expected,store.next(restored));assertEquals(BigInteger.ONE.shiftLeft(75)-BigInteger.valueOf(2),store.remaining(restored))
+        assertEquals("2",store.session(restored)!!.getString("forbidden"));assertEquals(4,store.session(restored)!!.getInt("searchVersion"))
+        assertEquals(expected,store.next(restored));assertEquals(BigInteger.ONE.shiftLeft(69)-BigInteger.valueOf(2),store.remaining(restored))
         assertArrayEquals(store.conditionFile(id).readBytes(),store.conditionFile(restored).readBytes())
         val nextToken=store.resume(restored);repeat(30){val key=add(store,restored,nextToken,it.toDouble());assertTrue(BtRobotSpace.includes(key,"1","2"))};store.pause(restored)
         assertEquals("0",store.session(store.create(settings))!!.optString("forbidden","0"))

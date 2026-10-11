@@ -23,7 +23,7 @@ object ScanConditions {
             // Keep exactly six independent D predicates. Numeric thresholds are frozen
             // inside StockSnapshot.dConfig and used by both scans and historical replay.
             return listOf(
-                ScanCondition(DPattern.LIMIT,"近 N 交易日觸及估算漲停至少 K 次"){DPattern.checks(it.dPattern)[DPattern.LIMIT]},
+                ScanCondition(DPattern.LIMIT,"近 N 交易日至少 K 次收盤達估算漲停價"){DPattern.checks(it.dPattern)[DPattern.LIMIT]},
                 ScanCondition(DPattern.GREEN,"近 N 交易日曾連續 K 根陽線"){DPattern.checks(it.dPattern)[DPattern.GREEN]},
                 ScanCondition(DPattern.GAP,"近 N 交易日曾有向上不重疊缺口"){DPattern.checks(it.dPattern)[DPattern.GAP]},
                 ScanCondition(DPattern.UNFILLED,"至少一個向上缺口至今未完全回補",true){DPattern.checks(it.dPattern)[DPattern.UNFILLED]},

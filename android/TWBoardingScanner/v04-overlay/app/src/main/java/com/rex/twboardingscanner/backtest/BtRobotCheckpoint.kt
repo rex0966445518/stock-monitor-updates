@@ -50,7 +50,7 @@ object BtRobotCheckpoint {
                 DataOutputStream(BufferedOutputStream(File(dir,"trials.bin").outputStream())).use{out->
                     out.writeUTF("BTTRIALS1");out.writeLong(s.getLong("tested"))
                     File(dir,"results.csv").bufferedWriter(Charsets.UTF_8).use{csv->
-                        csv.write("\uFEFF序號,組合代碼,總損益,已實現,未實現,買入張數,賣出張數,最大回撤百分比,已清除,A條件,B條件,C條件,最高持倉檔數,淨利下車百分比\n")
+                        csv.write("\uFEFF序號,組合代碼,總損益,已實現,未實現,買入張數,賣出張數,最大回撤百分比,已清除,A條件,B條件,C條件,D條件,最高持倉檔數,淨利下車百分比\n")
                         var count=0L
                         db.rawQuery("SELECT key,summary,report,cleared FROM trials WHERE session=? ORDER BY n",arrayOf(id)).use{rows->while(rows.moveToNext()){
                             val key=rows.getString(0);val summary=rows.getString(1);val report=rows.getBlob(2);val cleared=rows.getInt(3)

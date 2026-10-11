@@ -64,12 +64,12 @@ data class DPatternEvidence(
         val gapText=gap?.let{"${it.date} · 下緣 ${p(it.lower)}／上緣 ${p(it.upper)} · ${if(it.unfilled)"尚未完全回補" else "已回補"}"}?:"未偵測"
         return listOf(
             "D｜主力進場技術形態（不代表已確認主力買超）",
-            "估算漲停觸及：${limitDates.joinToString("、").ifBlank{"未偵測"}}",
+            "估算漲停收盤：${limitDates.joinToString("、").ifBlank{"未偵測"}}",
             "連陽起訖：$bullishText",
             "向上缺口：$gapText",
             "最近 ${config.volumeDays} 個交易日量比：" + volumes.joinToString("／"){"${it.date} ×${p(it.ratio)}"}.ifBlank{"資料不足"},
             "連陽個股／大盤漲幅：${stockGainPct?.let{p(it)+"%"}?:"無資料"}／${marketGainPct?.let{p(it)+"%"}?:"待查核"}",
-            "漲停依台股一般漲跌幅與跳動單位估算，不等同證交所官方確認；大盤比較僅用當時已收盤資料"
+            "漲停以日 K 收盤達一般漲停估算價判斷，不計只盤中觸及後回落；特殊漲跌幅限制需官方核對；大盤比較僅用同期已收盤資料"
         ).joinToString("\n")
     }
 }
@@ -88,7 +88,7 @@ object DPattern {
         val limitDates=window.mapNotNull{day->
             val i=positions.getValue(date(day))
             val previous=bars.getOrNull(i-1)?.close?.takeIf{it>0}?:return@mapNotNull null
-            if(day.high+1e-7>=RuleMetrics.estimatedLimit(previous))date(day) else null
+            if(day.close+1e-7>=RuleMetrics.estimatedLimit(previous))date(day) else null
         }
         val greenValid=bars.size>=c.lookback
         // latest qualifying run wholly inside lookback; stores actual first/last K dates.
