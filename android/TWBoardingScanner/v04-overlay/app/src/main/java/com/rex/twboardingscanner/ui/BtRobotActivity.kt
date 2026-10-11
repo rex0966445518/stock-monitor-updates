@@ -1,5 +1,6 @@
 package com.rex.twboardingscanner.ui
 
+import android.app.DatePickerDialog
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
@@ -15,6 +16,7 @@ import com.rex.twboardingscanner.backtest.*
 import com.rex.twboardingscanner.domain.*
 import org.json.JSONObject
 import java.math.BigInteger
+import java.time.LocalDate
 import java.util.Locale
 
 class BtRobotActivity:AppCompatActivity(){
@@ -27,6 +29,9 @@ class BtRobotActivity:AppCompatActivity(){
     private lateinit var requiredButton:com.google.android.material.button.MaterialButton
     private lateinit var spaceLabel:TextView
     private lateinit var robotRange:TextView
+    private lateinit var robotStartDate:com.google.android.material.button.MaterialButton
+    private lateinit var robotEndDate:com.google.android.material.button.MaterialButton
+    private lateinit var selectedDates:RobotBacktestDates
     private lateinit var robotCapital:EditText
     private lateinit var robotHoldings:EditText
     private lateinit var robotProfit:EditText
@@ -72,6 +77,34 @@ class BtRobotActivity:AppCompatActivity(){
         return card to field
     }
     private fun parameters():RobotTradingParams=RobotTradingParams.parse(robotCapital.text.toString(),robotHoldings.text.toString(),robotProfit.text.toString())
+    private fun dates()=selectedDates
+    private fun showDates(value:RobotBacktestDates){
+        selectedDates=value
+        robotRange.text="測試日期：${value.start} → ${value.end}"
+        robotStartDate.text="起始日\n${value.start}"
+        robotEndDate.text="結束日\n${value.end}"
+        robotStartDate.contentDescription="選擇測試起始日期，目前 ${value.start}"
+        robotEndDate.contentDescription="選擇測試結束日期，目前 ${value.end}"
+    }
+    /** Pick dates independently, then validate the complete interval before creating a new run. */
+    private fun pickDate(start:Boolean){
+        if(busy)return
+        val day=if(start)dates().start else dates().end
+        val latest=LocalDate.now(RuleMetrics.TAIPEI).minusDays(1)
+        val earliest=LocalDate.of(2016,1,1)
+        if(latest<earliest){
+            Toast.makeText(this,"尚無可供回測的歷史交易日期",Toast.LENGTH_LONG).show();return
+        }
+        val initial=day.coerceIn(earliest,latest)
+        val picker=DatePickerDialog(this,{_,y,m,d->
+            val next=LocalDate.of(y,m+1,d)
+            showDates(if(start)dates().copy(start=next) else dates().copy(end=next))
+            if(::status.isInitialized)render() else refreshParameterHint()
+        },initial.year,initial.monthValue-1,initial.dayOfMonth)
+        picker.datePicker.minDate=earliest.atStartOfDay(RuleMetrics.TAIPEI).toInstant().toEpochMilli()
+        picker.datePicker.maxDate=latest.atStartOfDay(RuleMetrics.TAIPEI).toInstant().toEpochMilli()
+        picker.show()
+    }
     private fun selectedSweep():BtRobotSweep?=if(sweepCheck.isChecked)
         BtRobotSweep.parse(hFrom.text.toString(),hTo.text.toString(),pFrom.text.toString(),pTo.text.toString()) else null
     private fun rangeInput(tagName:String):EditText=EditText(this).apply{
@@ -133,7 +166,11 @@ class BtRobotActivity:AppCompatActivity(){
         robotCapital.setText(candidate("capital",btPercent(values.capital)))
         robotHoldings.setText(candidate("holdings",values.maxHoldings.toString()))
         robotProfit.setText(candidate("profit",btPercent(values.targetPct)))
-        robotRange.text="測試日期：${settings.start} → ${settings.end}"
+        val savedDates=RobotBacktestDates.of(settings)
+        val dateDraft=if(useDraft)runCatching{RobotBacktestDates.parse(
+            prefs.getString("dateStart",savedDates.start.toString()).orEmpty(),
+            prefs.getString("dateEnd",savedDates.end.toString()).orEmpty())}.getOrNull() else null
+        showDates(dateDraft?:savedDates)
         val grid=BtRobotSweep.read(store.session()?.optJSONObject("sweep"))?:BtRobotSweep()
         fun gridValue(key:String,default:Int)=if(useDraft)prefs.getString(key,default.toString()).orEmpty() else default.toString()
         hFrom.setText(gridValue("holdingFrom",grid.holdingFrom))
@@ -149,6 +186,7 @@ class BtRobotActivity:AppCompatActivity(){
         val parsed=runCatching{parameters()}.getOrNull()
         val grid=runCatching{selectedSweep()}.getOrNull()
         val invalidGrid=sweepCheck.isChecked&&grid==null
+        val dateError=runCatching{dates().validated()}.exceptionOrNull()?.message
         val activeGrid=BtRobotSweep.read(active?.optJSONObject("sweep"))
         sweepPreview.text=when{
             invalidGrid->"範圍有誤，持倉需 5～50、淨利需 1%～30%，且起點不可大於終點"
@@ -159,12 +197,14 @@ class BtRobotActivity:AppCompatActivity(){
         paramNotice.text=when{
             parsed==null->"參數有誤：本金須大於 0、持倉為正整數、獲利目標 0.01～1000%。"
             invalidGrid->"持倉／淨利範圍輸入錯誤，請先修改。"
+            dateError!=null->"測試日期：$dateError；請修改起始日或結束日。"
             active==null->"填寫後按「開始測試」即建立新批次；結果獨立保存。"
+            dates()!=RobotBacktestDates.of(BtSettingsCodec.decode(active.getJSONObject("settings")))||
             activeGrid!=grid||RobotTradingParams.of(BtSettingsCodec.decode(active.getJSONObject("settings")))!=parsed->
                 "測試設定已修改；按開始會另建獨立批次，不覆蓋舊結果。"
             else->"本批次條件已保存；可暫停續跑。範圍測試完畢後會自動停止。"
         }
-        paramNotice.setTextColor(if(parsed==null||invalidGrid)NeonUi.amber else NeonUi.muted)
+        paramNotice.setTextColor(if(parsed==null||invalidGrid||dateError!=null)NeonUi.amber else NeonUi.muted)
     }
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState);store=BtRobotStore(this);exportId=savedInstanceState?.getString("exportId").orEmpty()
@@ -180,6 +220,14 @@ class BtRobotActivity:AppCompatActivity(){
         fixed.addView(label("測試範圍與可調整參數",15f,NeonUi.ink,true));fixed.addView(NeonUi.gap(this,6))
         robotRange=label("",14f,NeonUi.cyan,true).apply{tag="robot-date-range"}
         fixed.addView(robotRange)
+        fixed.addView(NeonUi.gap(this,8))
+        robotStartDate=NeonUi.button(this,"起始日",NeonUi.cyan){pickDate(true)}
+            .apply{tag="robot-start-date";isAllCaps=false;minHeight=NeonUi.dp(this@BtRobotActivity,58)}
+        robotEndDate=NeonUi.button(this,"結束日",NeonUi.cyan){pickDate(false)}
+            .apply{tag="robot-end-date";isAllCaps=false;minHeight=NeonUi.dp(this@BtRobotActivity,58)}
+        fixed.addView(NeonUi.row(this,listOf(robotStartDate,robotEndDate)))
+        fixed.addView(NeonUi.gap(this,6))
+        fixed.addView(label("點日期可選擇歷史回測區間；只使用已結束的日期，最長 730 天。修改後會另建測試批次。",11f))
         fixed.addView(NeonUi.gap(this,10))
         val cash=paramBox("初始本金","元 · 不融資",NeonUi.cyan,"robot-capital-input",true)
         val holding=paramBox("持倉上限","檔 · 不同股號",NeonUi.amber,"robot-holdings-input",false)
@@ -238,12 +286,16 @@ class BtRobotActivity:AppCompatActivity(){
                     Toast.makeText(this,"請先修正範圍：${it.message}",Toast.LENGTH_LONG).show()
                     return@button
                 }
+                val chosenDates=runCatching{dates().validated()}.getOrElse{
+                    Toast.makeText(this,"請先修正測試日期：${it.message}",Toast.LENGTH_LONG).show()
+                    return@button
+                }
                 MaterialAlertDialogBuilder(this).setTitle("建立新的測試批次")
-                    .setMessage("會暫停目前批次並保留所有紀錄；新批次沿用目前的 ABC、產業、日期、股號範圍及下車條件，採用上方填寫的本金、持倉與淨利目標。建立後按「開始測試」才執行。")
+                    .setMessage("會保留目前批次的全部結果，使用你選定的 ${chosenDates.start} → ${chosenDates.end} 歷史日期，以及目前 ABC、產業、股號範圍、下車規則和輸入的資金／持倉／獲利設定。日期改變時重新取得該期間的歷史行情，不沿用舊區間資料。建立後按開始才測試。")
                     .setNegativeButton("取消",null).setPositiveButton("建立"){_,_->
                         runTask("正在建立新的測試批次…"){
                             val previous=store.session()
-                            val settings=entered.applyTo(previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base())
+                            val settings=chosenDates.applyTo(entered.applyTo(previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()))
                                 .copy(stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(this).read(),
                                     stockScope=StockScope.ROBOT,marketGuardVersion=MarketCrashGuard.VERSION)
                             BtRobotSpace.validate(settings)
@@ -280,6 +332,7 @@ class BtRobotActivity:AppCompatActivity(){
         visible=false;handler.removeCallbacks(poll)
         if(::robotCapital.isInitialized)getSharedPreferences("robot-params-draft",0).edit()
             .putString("session",store.active()).putString("capital",robotCapital.text.toString())
+            .putString("dateStart",dates().start.toString()).putString("dateEnd",dates().end.toString())
             .putString("holdings",robotHoldings.text.toString()).putString("profit",robotProfit.text.toString())
             .putBoolean("gridEnabled",sweepCheck.isChecked)
             .putString("holdingFrom",hFrom.text.toString()).putString("holdingTo",hTo.text.toString())
@@ -292,13 +345,14 @@ class BtRobotActivity:AppCompatActivity(){
         return BtRobotSpace.settings(saved.rules,saved.sectors.ifEmpty{StockSector.entries.toSet()}).copy(stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(this).read(),stockScope=StockScope.ROBOT,exitRules=com.rex.twboardingscanner.data.ExitRuleStore(this).read(StockScope.ROBOT),marketGuardVersion=MarketCrashGuard.VERSION)
     }
     /** Changed money/holding/exit targets must always become a NEW independent batch. */
-    private fun policySession(params:RobotTradingParams,sweep:BtRobotSweep?):String {
+    private fun policySession(params:RobotTradingParams,sweep:BtRobotSweep?,dateRange:RobotBacktestDates):String {
         val old=store.session()
         val saved=old?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}
         val previousSweep=BtRobotSweep.read(old?.optJSONObject("sweep"))
         val original=saved?:base()
         val policy=com.rex.twboardingscanner.data.StockPolicyStore(this).read()
-        val next=params.applyTo(original).copy(stockPolicy=policy,stockScope=StockScope.ROBOT,marketGuardVersion=MarketCrashGuard.VERSION)
+        val next=dateRange.applyTo(params.applyTo(original))
+            .copy(stockPolicy=policy,stockScope=StockScope.ROBOT,marketGuardVersion=MarketCrashGuard.VERSION)
         BtRobotSpace.validate(next)
         if(old!=null&&next==saved&&sweep==previousSweep)return old.getString("id")
         val oldId=old?.optString("id").orEmpty()
@@ -322,9 +376,13 @@ class BtRobotActivity:AppCompatActivity(){
             Toast.makeText(this,"範圍錯誤：${it.message}",Toast.LENGTH_LONG).show()
             refreshParameterHint();return
         }
+        val range=runCatching{dates().validated()}.getOrElse{
+            Toast.makeText(this,"日期錯誤：${it.message}",Toast.LENGTH_LONG).show()
+            refreshParameterHint();return
+        }
         busy=true;startButton.isEnabled=false
         Thread{
-            val result=runCatching{val id=policySession(params,grid);BtRobotWorker.start(this,id)}
+            val result=runCatching{val id=policySession(params,grid,range);BtRobotWorker.start(this,id)}
             runOnUiThread{if(!isFinishing&&!isDestroyed){
                 busy=false
                 result.onFailure{Toast.makeText(this,"無法開始：${it.message}",Toast.LENGTH_LONG).show()}
@@ -360,12 +418,15 @@ class BtRobotActivity:AppCompatActivity(){
         val guardChanged=s?.getJSONObject("settings")?.optInt("marketGuardVersion",0)==0
         val running=!guardChanged&&s?.optString("state") in setOf("RUNNING","RETRY")
         val entered=runCatching{parameters()}.getOrNull()
+        val dateError=runCatching{dates().validated()}.exceptionOrNull()?.message
         val changed=s!=null&&(sessionSweep!=desiredSweep||
+            dates()!=RobotBacktestDates.of(BtSettingsCodec.decode(s.getJSONObject("settings")))||
             entered!=null&&RobotTradingParams.of(BtSettingsCodec.decode(s.getJSONObject("settings")))!=entered)
-        val invalid=entered==null||invalidSweep
+        val invalid=entered==null||invalidSweep||dateError!=null
         status.text=when{
+            dateError!=null->"測試日期錯誤：$dateError"
             invalid->"資金／持倉／淨利範圍有無效數字，請修改後再開始"
-            changed->"參數或測試模式已修改；按開始將建立新批次並保留舊績效"
+            changed->"測試日期、參數或模式已修改；按開始將建立新批次並保留舊績效"
             guardChanged->"此舊批次未啟用大盤保護；按開始建立受保護新批次，舊績效保留"
             policyChanged->"禁股／限價已更新；按開始將建立新批次並沿用快取"
             else->s?.optString("message")?:"按開始測試，自動尋找更高收益組合"
@@ -499,8 +560,11 @@ class BtRobotActivity:AppCompatActivity(){
         val entered=runCatching{parameters()}.getOrElse{
             Toast.makeText(this,"請修正測試參數：${it.message}",Toast.LENGTH_LONG).show();return
         }
+        val range=runCatching{dates().validated()}.getOrElse{
+            Toast.makeText(this,"請修正測試日期：${it.message}",Toast.LENGTH_LONG).show();return
+        }
         val old=store.active();val previous=store.session()
-        val settings=entered.applyTo(previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base())
+        val settings=range.applyTo(entered.applyTo(previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()))
         runTask("正在保存必選／排除條件並沿用快取…"){
             if(old.isNotBlank())BtRobotWorker.pause(this,old)
             val id=store.create(settings,key,forbiddenKey,previous?.takeIf{!it.isNull("sourceJournalId")}?.optString("sourceJournalId"))
@@ -517,10 +581,14 @@ class BtRobotActivity:AppCompatActivity(){
         val sweep=runCatching{selectedSweep()}.getOrElse{
             Toast.makeText(this,"請修正範圍：${it.message}",Toast.LENGTH_LONG).show();return
         }
+        val range=runCatching{dates().validated()}.getOrElse{
+            Toast.makeText(this,"請修正測試日期：${it.message}",Toast.LENGTH_LONG).show();return
+        }
         val previous=store.session();val old=previous?.getString("id").orEmpty()
-        val settings=entered.applyTo(previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base())
+        val settings=range.applyTo(entered.applyTo(previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()))
         if(settings.exitRules==rules&&
            (previous==null||RobotTradingParams.of(BtSettingsCodec.decode(previous.getJSONObject("settings")))==entered)&&
+           (previous==null||RobotBacktestDates.of(BtSettingsCodec.decode(previous.getJSONObject("settings")))==range)&&
            BtRobotSweep.read(previous?.optJSONObject("sweep"))==sweep)return
         runTask("正在保存下車條件與新測試批次…"){
             if(old.isNotBlank())BtRobotWorker.pause(this,old)

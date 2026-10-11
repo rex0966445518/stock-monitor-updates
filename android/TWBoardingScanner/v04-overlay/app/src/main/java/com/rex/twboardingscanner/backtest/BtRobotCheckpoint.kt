@@ -21,7 +21,16 @@ object BtRobotCheckpoint {
     }
     fun cloneData(store:BtRobotStore,from:String,to:String){
         val original=store.session(from)?:return
-        if(original.getJSONObject("settings").optInt("marketGuardVersion",0)!=store.session(to)?.getJSONObject("settings")?.optInt("marketGuardVersion",0))return
+        val destination=store.session(to)?:return
+        val sourceSettings=BtSettingsCodec.decode(original.getJSONObject("settings"))
+        val targetSettings=BtSettingsCodec.decode(destination.getJSONObject("settings"))
+        // A cache is reusable across changes in money, hold limits or profit targets,
+        // but never across different date ranges, tickers, sectors or market guards.
+        // Copying the earlier sample when the period changed would silently
+        // compare a NEW user range against OLD candles and index days.
+        if(sourceSettings.start!=targetSettings.start||sourceSettings.end!=targetSettings.end||
+            sourceSettings.codes!=targetSettings.codes||sourceSettings.sectors!=targetSettings.sectors||
+            sourceSettings.marketGuardVersion!=targetSettings.marketGuardVersion)return
         if(!store.dataset(from).exists())return
         require(digest(store.dataset(from))==original.getString("datasetSha256")){"原行情快照校驗失敗"}
         store.dataset(to).parentFile?.mkdirs();store.dataset(from).copyTo(store.dataset(to),true)
