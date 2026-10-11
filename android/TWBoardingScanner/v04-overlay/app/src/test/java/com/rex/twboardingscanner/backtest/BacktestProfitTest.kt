@@ -130,7 +130,9 @@ class BacktestProfitTest {
     }
     private fun capture(v:View,name:String){
         v.setPadding(24,20,24,20);v.setBackgroundColor(android.graphics.Color.rgb(4,17,30))
-        v.measure(View.MeasureSpec.makeMeasureSpec(720,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(1800,View.MeasureSpec.AT_MOST));v.layout(0,0,720,v.measuredHeight)
+        // The production panel lives inside a ScrollView; never compress a longer card into a 1800px screenshot.
+        // Natural-height measurement catches genuinely clipped children without introducing false failures.
+        v.measure(View.MeasureSpec.makeMeasureSpec(720,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));v.layout(0,0,720,v.measuredHeight)
         fun check(w:View){if(w is TextView&&w.layout!=null&&w.text.isNotEmpty())assertTrue("clipped: ${w.text}",w.layout.height<=w.height-w.compoundPaddingTop-w.compoundPaddingBottom+2);w.jumpDrawablesToCurrentState();if(w is ViewGroup)for(i in 0 until w.childCount)check(w.getChildAt(i))}
         check(v);val bitmap=Bitmap.createBitmap(720,v.height,Bitmap.Config.ARGB_8888);v.draw(Canvas(bitmap))
         val file=File("build/ui-previews/$name.png");file.parentFile.mkdirs();file.outputStream().use{bitmap.compress(Bitmap.CompressFormat.PNG,100,it)};bitmap.recycle()
