@@ -37,6 +37,7 @@ class BtRobotActivity:AppCompatActivity(){
     private lateinit var robotProfit:EditText
     private lateinit var paramNotice:TextView
     private lateinit var sweepCheck:CheckBox
+    private lateinit var trendHoldCheck:CheckBox
     private lateinit var sweepFields:LinearLayout
     private lateinit var hFrom:EditText;private lateinit var hTo:EditText
     private lateinit var pFrom:EditText;private lateinit var pTo:EditText
@@ -166,6 +167,7 @@ class BtRobotActivity:AppCompatActivity(){
         robotCapital.setText(candidate("capital",btPercent(values.capital)))
         robotHoldings.setText(candidate("holdings",values.maxHoldings.toString()))
         robotProfit.setText(candidate("profit",btPercent(values.targetPct)))
+        trendHoldCheck.isChecked=if(useDraft)prefs.getBoolean("profitTrendHold",settings.holdProfitUntilMa5Break) else settings.holdProfitUntilMa5Break
         val savedDates=RobotBacktestDates.of(settings)
         val dateDraft=if(useDraft)runCatching{RobotBacktestDates.parse(
             prefs.getString("dateStart",savedDates.start.toString()).orEmpty(),
@@ -200,7 +202,8 @@ class BtRobotActivity:AppCompatActivity(){
             dateError!=null->"測試日期：$dateError；請修改起始日或結束日。"
             active==null->"填寫後按「開始測試」即建立新批次；結果獨立保存。"
             dates()!=RobotBacktestDates.of(BtSettingsCodec.decode(active.getJSONObject("settings")))||
-            activeGrid!=grid||RobotTradingParams.of(BtSettingsCodec.decode(active.getJSONObject("settings")))!=parsed->
+            activeGrid!=grid||RobotTradingParams.of(BtSettingsCodec.decode(active.getJSONObject("settings")))!=parsed||
+            BtSettingsCodec.decode(active.getJSONObject("settings")).holdProfitUntilMa5Break!=trendHoldCheck.isChecked->
                 "測試設定已修改；按開始會另建獨立批次，不覆蓋舊結果。"
             else->"本批次條件已保存；可暫停續跑。範圍測試完畢後會自動停止。"
         }
@@ -237,6 +240,12 @@ class BtRobotActivity:AppCompatActivity(){
         val profit=paramBox("淨利下車","% · 扣費稅",NeonUi.pink,"robot-profit-input",true)
         robotCapital=cash.second;robotHoldings=holding.second;robotProfit=profit.second
         fixed.addView(NeonUi.row(this,listOf(cash.first,holding.first,profit.first)))
+        trendHoldCheck=CheckBox(this).apply{
+            tag="robot-profit-trend-hold";textSize=13f;setTextColor(NeonUi.cyan)
+            text="淨利達標 RSI(14)>50 且日K未跌破5MA 續抱；日K收盤跌破5MA 才賣出"
+            setOnCheckedChangeListener{_,_->if(::paramNotice.isInitialized)refreshParameterHint()}
+        }
+        fixed.addView(trendHoldCheck)
         paramNotice=label("",11f).apply{tag="robot-parameter-notice"}
         fixed.addView(NeonUi.gap(this,8));fixed.addView(paramNotice)
         fixed.addView(NeonUi.gap(this,6));fixed.addView(label("每次各買 1,000 股；超過 5 天可保本賣出，保留折讓金。測試日期、股票範圍、ABC 與產業採用目前批次快照；可從回測日誌完整同步。",11f))
@@ -300,7 +309,8 @@ class BtRobotActivity:AppCompatActivity(){
                             val previous=store.session()
                             val settings=chosenDates.applyTo(entered.applyTo(previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()))
                                 .copy(stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(this).read(),
-                                    stockScope=StockScope.ROBOT,marketGuardVersion=MarketCrashGuard.VERSION)
+                                    stockScope=StockScope.ROBOT,marketGuardVersion=MarketCrashGuard.VERSION,
+                                    holdProfitUntilMa5Break=trendHoldCheck.isChecked)
                             BtRobotSpace.validate(settings)
                             val original=store.active()
                             val mustHave=if(sweep!=null)"0" else required()
@@ -337,7 +347,7 @@ class BtRobotActivity:AppCompatActivity(){
             .putString("session",store.active()).putString("capital",robotCapital.text.toString())
             .putString("dateStart",dates().start.toString()).putString("dateEnd",dates().end.toString())
             .putString("holdings",robotHoldings.text.toString()).putString("profit",robotProfit.text.toString())
-            .putBoolean("gridEnabled",sweepCheck.isChecked)
+            .putBoolean("gridEnabled",sweepCheck.isChecked).putBoolean("profitTrendHold",trendHoldCheck.isChecked)
             .putString("holdingFrom",hFrom.text.toString()).putString("holdingTo",hTo.text.toString())
             .putString("profitFrom",pFrom.text.toString()).putString("profitTo",pTo.text.toString()).apply()
         super.onPause()
@@ -345,7 +355,8 @@ class BtRobotActivity:AppCompatActivity(){
     private fun base():BtSettings {
         val saved=runCatching{BtSettingsCodec.decode(BacktestStore(this).configuration()!!)}.getOrNull()
             ?:BtSettingsCodec.capture(this,java.time.LocalDate.of(2026,8,1),java.time.LocalDate.of(2026,10,8),5000000.0,"")
-        return BtRobotSpace.settings(saved.rules,saved.sectors.ifEmpty{StockSector.entries.toSet()}).copy(stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(this).read(),stockScope=StockScope.ROBOT,exitRules=com.rex.twboardingscanner.data.ExitRuleStore(this).read(StockScope.ROBOT),marketGuardVersion=MarketCrashGuard.VERSION)
+        return BtRobotSpace.settings(saved.rules,saved.sectors.ifEmpty{StockSector.entries.toSet()}).copy(stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(this).read(),stockScope=StockScope.ROBOT,exitRules=com.rex.twboardingscanner.data.ExitRuleStore(this).read(StockScope.ROBOT),marketGuardVersion=MarketCrashGuard.VERSION,
+            holdProfitUntilMa5Break=com.rex.twboardingscanner.data.ExitRuleStore(this).readProfitTrendHold(StockScope.ROBOT))
     }
     /** Changed money/holding/exit targets must always become a NEW independent batch. */
     private fun policySession(params:RobotTradingParams,sweep:BtRobotSweep?,dateRange:RobotBacktestDates):String {
@@ -355,7 +366,8 @@ class BtRobotActivity:AppCompatActivity(){
         val original=saved?:base()
         val policy=com.rex.twboardingscanner.data.StockPolicyStore(this).read()
         val next=dateRange.applyTo(params.applyTo(original))
-            .copy(stockPolicy=policy,stockScope=StockScope.ROBOT,marketGuardVersion=MarketCrashGuard.VERSION)
+            .copy(stockPolicy=policy,stockScope=StockScope.ROBOT,marketGuardVersion=MarketCrashGuard.VERSION,
+                holdProfitUntilMa5Break=trendHoldCheck.isChecked)
         BtRobotSpace.validate(next)
         if(old!=null&&next==saved&&sweep==previousSweep)return old.getString("id")
         val oldId=old?.optString("id").orEmpty()
@@ -572,6 +584,7 @@ class BtRobotActivity:AppCompatActivity(){
         }
         val old=store.active();val previous=store.session()
         val settings=range.applyTo(entered.applyTo(previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()))
+            .copy(holdProfitUntilMa5Break=trendHoldCheck.isChecked)
         runTask("正在保存必選／排除條件並沿用快取…"){
             if(old.isNotBlank())BtRobotWorker.pause(this,old)
             val id=store.create(settings,key,forbiddenKey,previous?.takeIf{!it.isNull("sourceJournalId")}?.optString("sourceJournalId"))
@@ -593,7 +606,9 @@ class BtRobotActivity:AppCompatActivity(){
         }
         val previous=store.session();val old=previous?.getString("id").orEmpty()
         val settings=range.applyTo(entered.applyTo(previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()))
+            .copy(holdProfitUntilMa5Break=trendHoldCheck.isChecked)
         if(settings.exitRules==rules&&
+           (previous==null||BtSettingsCodec.decode(previous.getJSONObject("settings")).holdProfitUntilMa5Break==trendHoldCheck.isChecked)&&
            (previous==null||RobotTradingParams.of(BtSettingsCodec.decode(previous.getJSONObject("settings")))==entered)&&
            (previous==null||RobotBacktestDates.of(BtSettingsCodec.decode(previous.getJSONObject("settings")))==range)&&
            BtRobotSweep.read(previous?.optJSONObject("sweep"))==sweep)return
