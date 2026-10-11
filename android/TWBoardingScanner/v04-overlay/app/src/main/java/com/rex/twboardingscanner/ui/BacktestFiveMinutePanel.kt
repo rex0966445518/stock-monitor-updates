@@ -55,7 +55,7 @@ internal class BacktestFiveMinutePanel(
     }
     private fun startLoading(){
         if(loading)return
-        if(day==null){
+        val date=day ?: run {
             status.text="舊回測紀錄沒有日期，無法查詢真實 5 分 K"
             retry.visibility=View.GONE;done=true;return
         }
@@ -63,7 +63,7 @@ internal class BacktestFiveMinutePanel(
         status.text="正在查詢 $dateLabel 的 5 分鐘行情…"
         val market=StockDirectory(context).cached().firstOrNull{it.code==code}?.market
         BacktestFiveMinuteRepository.executor.execute {
-            val result=runCatching{BacktestFiveMinuteRepository(context).load(code,day,market)}
+            val result=runCatching{BacktestFiveMinuteRepository(context).load(code,date,market)}
                 .getOrElse{FiveMinuteResult.Unavailable("5 分 K 讀取發生錯誤：${it.message?.take(80)?: "未知錯誤"}")}
             handler.post{
                 loading=false
@@ -78,7 +78,7 @@ internal class BacktestFiveMinutePanel(
                     is FiveMinuteResult.Unavailable->{
                         done=true;chart.visibility=View.GONE
                         status.text=result.reason
-                        retry.visibility=if(result.reason.contains("60 天")||day>LocalDate.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI))View.GONE else View.VISIBLE
+                        retry.visibility=if(result.reason.contains("60 天")||date>LocalDate.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI))View.GONE else View.VISIBLE
                     }
                 }
             }
