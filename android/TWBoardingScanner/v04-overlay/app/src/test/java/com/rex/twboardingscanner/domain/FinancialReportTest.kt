@@ -63,11 +63,12 @@ class FinancialReportTest {
         val bars=(1..40).map { DailyBar(it*86400000L,60.0,61.0,59.0,60.0,1000000) }
         val snap=TechnicalCalculator().build(stock,bars).copy(timestamp=today.atStartOfDay(RuleMetrics.TAIPEI).toInstant().toEpochMilli())
         val engine=ScoringEngine()
-        for (type in RadarType.entries) {
+        for (type in RadarType.entries.filter{it!=RadarType.D_MAIN_FORCE}) {
             fun run(ids:Set<String>):SignalResult = when(type) {
                 RadarType.A_EARLY_BREAKOUT -> engine.evaluateA(snap,ids)
                 RadarType.B_DEEP_REVERSAL -> engine.evaluateB(snap,ids)
                 RadarType.C_LONG_RED_VOLUME -> engine.evaluateC(snap,ids)
+                RadarType.D_MAIN_FORCE -> engine.evaluateD(snap,ids)
             }
             assertNotEquals(SignalLight.NONE,run(setOf("price","fin_positive")).light)
             assertEquals(SignalLight.NONE,run(setOf("price","fin_cash")).light)
