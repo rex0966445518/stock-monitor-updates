@@ -9,6 +9,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.rex.twboardingscanner.paper.*
+import com.rex.twboardingscanner.backtest.btPercent
+import com.rex.twboardingscanner.domain.RadarType
 import java.io.File
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -28,7 +30,7 @@ class PaperTradingActivity:AppCompatActivity() {
             val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
         loop=PaperLoop(this){error=it;render()};render()
     }
-    override fun onResume(){super.onResume();loop.start()}
+    override fun onResume(){super.onResume();loop.start();if(::content.isInitialized)render()}
     override fun onPause(){loop.stop();super.onPause()}
     private fun dp(n:Int)=NeonUi.dp(this,n)
     private fun money(n:Double)=String.format(Locale.TAIWAN,"%,.0f",n)
@@ -42,6 +44,10 @@ class PaperTradingActivity:AppCompatActivity() {
         val y=scroll.scrollY;content.removeAllViews()
         content.addView(NeonUi.header(this,"自買自投","PAPER PORTFOLIO"){finish()})
         content.addView(label("模擬資金・不連接券商",12f,NeonUi.mint));space()
+        content.addView(NeonUi.primary(this,"自訂所有交易參數 · 與歷史回測相同欄位"){
+            startActivity(Intent(this,PaperStrategyActivity::class.java))
+        }.apply{tag="paper-open-settings"})
+        space(8)
 
         val b=runCatching{repo.read()}.getOrElse{content.addView(label("帳本無法讀取，已停止操作：${it.message}",14f,NeonUi.pink));return}
         val equity=PaperEngine.equity(b);val pnl=equity-b.capital
@@ -49,6 +55,12 @@ class PaperTradingActivity:AppCompatActivity() {
         header.addView(label(if(b.enabled)"● 自動策略已啟動" else "○ 自動策略已暫停",13f,if(b.enabled)NeonUi.mint else NeonUi.amber,true))
         header.addView(label(error?.let{"更新失敗：$it"}?:b.status,12f,NeonUi.ink))
         header.addView(label("台北時間 09:00–13:20  ·  最後檢查 ${stamp(b.lastRun)}",11f))
+        b.strategy?.let{s->
+            header.addView(NeonUi.gap(this,8))
+            header.addView(label("自訂策略 · 持倉上限 ${s.maxHoldingStocks} 檔 · 扣費稅淨利 ${btPercent(s.targetNetPct)}% · 5 組認賠規則 ${s.exitRules.count{it.active}} 組",12f,NeonUi.cyan,true))
+            header.addView(label("生效日期 ${s.start} → ${s.end} · 股票 ${s.codes.ifBlank{"全部"}} · 產業 ${s.sectors.size} 類",11f))
+            header.addView(label("已啟用的入場區域 "+RadarType.entries.joinToString(" / "){"${it.name.take(1)} ${s.rules[it].orEmpty().size} 項"},11f))
+        }
 
         val hero=panel(color(pnl))
         hero.addView(label("累計淨損益  TWD",12f))
@@ -61,7 +73,7 @@ class PaperTradingActivity:AppCompatActivity() {
         val sells=b.trades.filter{it.side=="SELL"};val wins=sells.count{it.realized>0}
         content.addView(NeonUi.row(this,listOf(
             NeonUi.tile(this,"已實現",signed(PaperEngine.realized(b)),"平倉 ${sells.size} 筆",color(PaperEngine.realized(b))),
-            NeonUi.tile(this,"未實現",signed(PaperEngine.unrealized(b)),"持有 ${b.positions.size} / 5 檔",color(PaperEngine.unrealized(b))))))
+            NeonUi.tile(this,"未實現",signed(PaperEngine.unrealized(b)),"持有 ${b.positions.size} / ${b.strategy?.maxHoldingStocks?:5} 檔",color(PaperEngine.unrealized(b))))))
         space(6)
         content.addView(label("平倉勝率 ${if(sells.isEmpty())"—" else "${wins*100/sells.size}%"}  ·  獲利 $wins / ${sells.size} 筆  ·  成交費稅 ${money(b.trades.sumOf{it.fee+it.tax})} 元",12f))
         space()
@@ -86,6 +98,8 @@ class PaperTradingActivity:AppCompatActivity() {
         space()
         val candidatesTitle=label("最新候選池  ${b.candidates.size} 檔",17f,NeonUi.ink,true);content.addView(candidatesTitle)
         content.addView(label("完成掃描 ${stamp(b.candidateAt)} · A ${b.candidates.count{it.radar=="A"}} / B ${b.candidates.count{it.radar=="B"}} / C ${b.candidates.count{it.radar=="C"}}",11f))
+        if(b.strategy!=null&&b.candidateAt==0L)
+            content.addView(label("新條件已儲存：請回主頁重新執行一次全市場掃描後再啟動策略。",11f,NeonUi.amber))
         val candidates=panel()
         candidates.addView(label(if(b.candidates.isEmpty())"請回主頁完成 ABC 掃描；未通過與待查核不會進場。" else b.candidates.take(12).joinToString("\n"){"${it.radar}  ${it.code} ${it.name}  ·  ${it.score}%"},13f,NeonUi.ink))
         if(b.candidates.size>12)candidates.addView(label("另有 ${b.candidates.size-12} 檔；每輪依通過率、股號排序檢查前 60 檔。",11f))
@@ -113,6 +127,17 @@ class PaperTradingActivity:AppCompatActivity() {
         if(b.enabled){
             MaterialAlertDialogBuilder(this).setTitle("暫停自動模擬？").setMessage("暫停後不再自動買賣，已有持股和紀錄會保留，直到再次啟動。").setNegativeButton("取消",null).setPositiveButton("暫停"){_,_->runCatching{repo.setEnabled(false);PaperWorker.cancel(this)}.onFailure{error=it.message};render()}.show();return
         }
+        if(b.strategy!=null){
+            val strategy=b.strategy!!
+            MaterialAlertDialogBuilder(this).setTitle("啟動自訂模擬策略")
+                .setMessage("本金 ${money(b.capital)} 元 · 持倉 ${strategy.maxHoldingStocks} 檔 · 扣費稅淨利 ${btPercent(strategy.targetNetPct)}%\n生效日期 ${strategy.start} → ${strategy.end}\n\n請先確認主頁已重新掃描。自買自投只在交易時段使用當日有效報價，不會回補舊日期的成交。")
+                .setNegativeButton("取消",null).setPositiveButton("啟動"){_,_->
+                    runCatching{repo.setEnabled(true);PaperWorker.schedule(this)}
+                        .onSuccess{loop.stop();loop.start();render()}
+                        .onFailure{Toast.makeText(this,"啟動失敗：${it.message}",Toast.LENGTH_LONG).show()}
+                }.show()
+            return
+        }
         val body=NeonUi.vertical(this).apply{setPadding(dp(20),dp(8),dp(20),dp(8))}
         body.addView(label("策略 v1 · 每股 1,000 股，最多 5 檔\n停損 3% / 停利 6% / 13:15 嘗試平倉\n13:20 停止買賣，未平倉持股保留。",14f,NeonUi.ink))
         val input=EditText(this).apply{inputType=android.text.InputType.TYPE_CLASS_NUMBER;setText(b.capital.toLong().toString());hint="模擬本金 TWD";isEnabled=b.trades.isEmpty()}
@@ -124,7 +149,24 @@ class PaperTradingActivity:AppCompatActivity() {
             runCatching{repo.setEnabled(true,cap);PaperWorker.schedule(this)}.onSuccess{dialog.dismiss();loop.stop();loop.start();render()}.onFailure{Toast.makeText(this,it.message,Toast.LENGTH_LONG).show()}
         }};dialog.show()
     }
-    private fun rules(){MaterialAlertDialogBuilder(this).setTitle("自動策略 v1").setMessage(
+    private fun rules(){
+        repo.read().strategy?.let{s->
+            MaterialAlertDialogBuilder(this).setTitle("自買自投 · 自訂策略規則")
+                .setMessage(
+                    "本金 ${money(s.capital)} 元 · 最高持倉 ${s.maxHoldingStocks} 檔 · 淨利下車 ${btPercent(s.targetNetPct)}%（扣買賣費稅）\n"+
+                    "有效日期 ${s.start} → ${s.end}（當日模擬生效，並非歷史 K 線重播）\n"+
+                    "股票範圍 ${s.codes.ifBlank{"全部"}} · 產業 ${s.sectors.joinToString("、"){it.label}}\n"+
+                    "ABC："+RadarType.entries.joinToString("、"){"${it.name.take(1)} ${s.rules[it].orEmpty().size} 項"}+"\n"+
+                    com.rex.twboardingscanner.domain.ExitRules.summary(s.exitRules)+"\n\n"+
+                    "入場：回到主頁完成全市場掃描，依本策略 ABC 勾選條件重新挑選候選股。已勾選的條件必須全部通過；缺法人／財報資料不能通過。"+
+                    "09:00～13:15、當日 90 秒內且訊號之後的有效成交報價，才可模擬買入。大盤保護與共用禁買／限價名單始終有效。\n\n"+
+                    "出場：最早隔日，扣除買賣費稅後淨利達標即可模擬賣出；留倉超過 5 個日曆日後達保本價可出場。"+
+                    "最多五組認賠條件依前一完整日線判斷。13:20 後停止模擬成交，但不強迫尾盤清空持股。\n\n"+
+                    "與歷史回測不同：只有收到的真實盤中報價會產生成交，不會假設當日收盤價必然成交，也未估列月成交折讓金。"
+                ).setPositiveButton("了解",null).show()
+            return
+        }
+        MaterialAlertDialogBuilder(this).setTitle("自動策略 v1").setMessage(
         "這是固定規則自動模擬，並非語言模型預測。\n\n"+
         "候選：最新一次完整 ABC 掃描，所有已勾條件通過；同股跨區只買一次，依通過率、股號排序。清單保存至下次掃描，超過 7 天停止新買。背景不重跑全市場掃描。\n\n"+
         "進場：台北週一～週五 09:00–13:15，必須取得當日 90 秒內且晚於訊號的真實成交報價；至少 500 張、股價 50 元、賣一至少 1 張、現金充足。同股每日最多買一次、同時最多 5 檔。休市無當日报價不成交。\n\n"+
@@ -137,7 +179,7 @@ class PaperTradingActivity:AppCompatActivity() {
         runCatching {
             fun cell(v:Any)="\""+v.toString().replace("\"","\"\"")+"\""
             val rows=mutableListOf("策略,台北成交時間,報價時間,股號,名稱,區域,方向,股數,成交價,手續費,交易稅,已實現損益,理由")
-            b.trades.forEach{t->rows.add(listOf("v1",PaperEngine.local(t.at).toString(),PaperEngine.local(t.quoteAt).toString(),t.code,t.name,t.radar,t.side,t.shares,t.price,t.fee,t.tax,t.realized,t.reason).joinToString(","){cell(it)})}
+            b.trades.forEach{t->rows.add(listOf(if(b.strategy!=null)"自訂策略" else "v1",PaperEngine.local(t.at).toString(),PaperEngine.local(t.quoteAt).toString(),t.code,t.name,t.radar,t.side,t.shares,t.price,t.fee,t.tax,t.realized,t.reason).joinToString(","){cell(it)})}
             val file=File(cacheDir,"paper/自買自投_${java.time.LocalDate.now(TAIPEI)}.csv");file.parentFile?.mkdirs();file.writeText("\uFEFF"+rows.joinToString("\r\n"))
             val uri=FileProvider.getUriForFile(this,"$packageName.posters",file)
             startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/csv").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),"儲存或分享交易明細"))

@@ -1,5 +1,7 @@
 package com.rex.twboardingscanner.paper
 
+import com.rex.twboardingscanner.backtest.BtSettings
+import com.rex.twboardingscanner.backtest.btPercent
 import java.time.*
 import kotlin.math.*
 
@@ -10,7 +12,8 @@ data class PaperPosition(val code:String,val name:String,val exchange:String,val
 data class PaperTrade(val code:String,val name:String,val radar:String,val side:String,val at:Long,val quoteAt:Long,val price:Double,val fee:Double,val tax:Double,val realized:Double,val reason:String,val shares:Int=1000)
 data class PaperDay(val date:String,var equity:Double,var at:Long)
 data class PaperBook(var capital:Double=3000000.0,var cash:Double=3000000.0,var enabled:Boolean=false,var lastRun:Long=0,var status:String="尚未啟動",var candidateAt:Long=0,
-    val candidates:MutableList<PaperCandidate> = mutableListOf(),val positions:MutableList<PaperPosition> = mutableListOf(),val trades:MutableList<PaperTrade> = mutableListOf(),val days:MutableList<PaperDay> = mutableListOf())
+    val candidates:MutableList<PaperCandidate> = mutableListOf(),val positions:MutableList<PaperPosition> = mutableListOf(),val trades:MutableList<PaperTrade> = mutableListOf(),val days:MutableList<PaperDay> = mutableListOf(),
+    var strategy:BtSettings?=null)
 
 /** Paper strategy v1. Deterministic and auditable, never submits a broker order. */
 object PaperEngine {
@@ -38,6 +41,11 @@ object PaperEngine {
         val usable=quotes.filterValues{fresh(it,now)}
         if(usable.isEmpty()){b.status="等待當日有效報價 · 休市、延遲或斷線不成交";return}
         val time=local(now).toLocalTime();val flatten=time>=LocalTime.of(13,15)
+        val strategy=b.strategy
+        val tradeDay=local(now).toLocalDate()
+        val mayEnter=strategy==null||tradeDay in strategy.start..strategy.end
+        val maxHoldings=strategy?.maxHoldingStocks?:5
+        val activeExitRules=strategy?.exitRules?:exitRules
         var sells=0;var buys=0;var skipped=0
         b.positions.toList().forEach {p->
             val q=usable[p.code] ?:return@forEach
@@ -46,13 +54,21 @@ object PaperEngine {
             if(q.at<=p.boughtAt)return@forEach
             val known=histories[p.code].orEmpty().filter{com.rex.twboardingscanner.domain.RuleMetrics.tradingDate(it.time)<local(now).toLocalDate()}.sortedBy{it.time}
             val signal=known.lastOrNull()
-            val exitIndex=signal?.let{com.rex.twboardingscanner.domain.ExitRules.match(exitRules,local(p.boughtAt).toLocalDate(),com.rex.twboardingscanner.domain.RuleMetrics.tradingDate(it.time),(netSell(it.close)/p.cost-1)*100,known)}
+            val exitIndex=signal?.let{com.rex.twboardingscanner.domain.ExitRules.match(activeExitRules,local(p.boughtAt).toLocalDate(),com.rex.twboardingscanner.domain.RuleMetrics.tradingDate(it.time),(netSell(it.close)/p.cost-1)*100,known)}
+            val aged=java.time.temporal.ChronoUnit.DAYS.between(local(p.boughtAt).toLocalDate(),tradeDay)>5
+            val liveSellPrice=if(q.bid>0&&q.bidLots>=1)execution(q.bid,false) else Double.NaN
+            val liveNet=if(liveSellPrice.isFinite()&&liveSellPrice>0)netSell(liveSellPrice) else Double.NaN
+            val netThreshold=if(aged)1.0 else 1.0+(strategy?.targetNetPct?:6.0)/100.0
+            val reached=strategy!=null&&tradeDay>local(p.boughtAt).toLocalDate()&&
+                liveNet.isFinite()&&liveNet+1e-8>=p.cost*netThreshold
             val reason=when {
-                exitIndex!=null->"下車條件 ${exitIndex+1}：${exitRules[exitIndex].description()}；訊號 ${com.rex.twboardingscanner.domain.RuleMetrics.tradingDate(signal!!.time)}"
-                flatten->"13:15 收束平倉"
-                q.last<=p.entry*.97->"觸及停損 −3%"
-                q.last>=p.entry*1.06->"觸及停利 +6%"
-                p.peak>=p.entry*1.03 && q.last<=p.peak*.98->"獲利達 3% 後回落 2%"
+                exitIndex!=null->"下車條件 ${exitIndex+1}：${activeExitRules[exitIndex].description()}；訊號 ${com.rex.twboardingscanner.domain.RuleMetrics.tradingDate(signal!!.time)}"
+                strategy!=null&&reached&&aged->"留倉超過 5 個日曆日，扣除費稅後保本出場"
+                strategy!=null&&reached->"扣除買賣費稅後淨利至少 ${btPercent(strategy.targetNetPct)}%"
+                strategy==null&&flatten->"13:15 收束平倉"
+                strategy==null&&q.last<=p.entry*.97->"觸及停損 −3%"
+                strategy==null&&q.last>=p.entry*1.06->"觸及停利 +6%"
+                strategy==null&&p.peak>=p.entry*1.03 && q.last<=p.peak*.98->"獲利達 3% 後回落 2%"
                 else->null
             } ?:return@forEach
             val px=execution(q.bid,false)
@@ -61,8 +77,13 @@ object PaperEngine {
             b.cash+=net;b.positions.remove(p)
             b.trades.add(PaperTrade(p.code,p.name,p.radar,"SELL",now,q.at,px,f,tax,net-p.cost,reason));sells++
         }
-        if(!flatten&&(marketGuard==null||marketGuard.canBuy)) b.candidates.sortedWith(compareByDescending<PaperCandidate>{it.score}.thenBy{it.code}).distinctBy{it.code}.forEach {c->
-            if(b.positions.size>=5)return@forEach
+        if(!flatten&&mayEnter&&(marketGuard==null||marketGuard.canBuy)) b.candidates.sortedWith(compareByDescending<PaperCandidate>{it.score}.thenBy{it.code}).distinctBy{it.code}.forEach {c->
+            if(b.positions.map{it.code}.distinct().size>=maxHoldings)return@forEach
+            if(strategy!=null){
+                val allowed=PaperStrategyConfig.allowedCodes(strategy)
+                if(allowed.isNotEmpty()&&c.code !in allowed)return@forEach
+                if(strategy.rules.entries.none{it.key.name.take(1)==c.radar&&it.value.isNotEmpty()})return@forEach
+            }
             val age=now-c.observedAt
             if(age !in 1..7*86400000L || b.positions.any{it.code==c.code})return@forEach
             val day=local(now).toLocalDate()
@@ -80,6 +101,12 @@ object PaperEngine {
         }
         val day=local(now).toLocalDate().toString();val eq=equity(b)
         b.days.firstOrNull{it.date==day}?.apply{equity=eq;at=now} ?: b.days.add(PaperDay(day,eq,now))
-        b.status=if(marketGuard!=null&&!marketGuard.canBuy)"${marketGuard.title} · 本輪賣 $sells · ${marketGuard.reason}" else if(flatten)"13:15 平倉階段 · 尚餘 ${b.positions.size} 檔" else "本輪買 $buys／賣 $sells · 略過 $skipped（資金／報價／流動性）"
+        b.status=when{
+            marketGuard!=null&&!marketGuard.canBuy->"${marketGuard.title} · 本輪賣 $sells · ${marketGuard.reason}"
+            !mayEnter->"目前日期不在自訂模擬交易期間，停止新買入；已有持股仍按出場條件管理"
+            strategy==null&&flatten->"13:15 平倉階段 · 尚餘 ${b.positions.size} 檔"
+            strategy!=null&&flatten->"尾盤停止新買入 · 自訂留倉 ${b.positions.size} 檔按淨利／認賠條件保留"
+            else->"本輪買 $buys／賣 $sells · 略過 $skipped（資金／報價／流動性）"
+        }
     }
 }

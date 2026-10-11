@@ -195,7 +195,11 @@ class MainActivity: AppCompatActivity() {
         latestScanDate=scanDate.toString()
         latestScanAt=System.currentTimeMillis()
         val scanRules = radarSelections.mapValues { it.value.toSet() }
-        val scanSectors = enabledSectors.toSet()
+        val mainSectors = enabledSectors.toSet()
+        // Paper mode owns independent ABC/sectors. Fetch the union so paper-only
+        // candidates are not accidentally excluded by the main scanner view.
+        val paperSettings=runCatching{com.rex.twboardingscanner.paper.PaperRepository(this).read().strategy}.getOrNull()
+        val scanSectors = mainSectors+(paperSettings?.sectors?:emptySet())
         isScanning = true
         b.startScanButton.isEnabled=false;b.startScanButton.text="掃描中…"
         latest = emptyList()
@@ -276,7 +280,14 @@ class MainActivity: AppCompatActivity() {
                                     }
                                     val initial = evaluate(stock)
                                     // Fetch financial tables only for candidates that pass selected technical rules.
-                                    val candidate = initial.any { result -> result.checks.filter { it.selected && !it.extra }.all { it.state == com.rex.twboardingscanner.domain.CheckState.PASS } }
+                                    val candidate = initial.any { result -> result.checks.filter { it.selected && !it.extra }.all { it.state == com.rex.twboardingscanner.domain.CheckState.PASS } } ||
+                                        (paperSettings?.let{config->initial.any{r->
+                                            r.sector in config.sectors&&
+                                                config.rules[r.radarType].orEmpty().isNotEmpty()&&
+                                                config.rules[r.radarType].orEmpty()
+                                                    .filter{id->com.rex.twboardingscanner.domain.ScanConditions.forRadar(r.radarType).any{x->x.id==id&&!x.extra}}
+                                                    .all{id->r.checks.any{x->x.id==id&&x.state==com.rex.twboardingscanner.domain.CheckState.PASS}}
+                                        }}?:false)
                                     val r = if (candidate) {
                                         val report = financialProvider.load(stock.code)
                                         evaluate(stock.copy(financials = report, quarterlyEps = report.eps,
@@ -284,7 +295,7 @@ class MainActivity: AppCompatActivity() {
                                     } else initial
                                     results.addAll(r)
 
-                                    r.filter { it.light != SignalLight.NONE && com.rex.twboardingscanner.data.StockPolicyStore(this).read().decision(it.code,it.snapshot.sourceStock?.close?:it.snapshot.price,com.rex.twboardingscanner.domain.StockScope.SCANNER)==com.rex.twboardingscanner.domain.StockDecision.ALLOW }.forEach { sig ->
+                                    r.filter { it.sector in mainSectors && it.light != SignalLight.NONE && com.rex.twboardingscanner.data.StockPolicyStore(this).read().decision(it.code,it.snapshot.sourceStock?.close?:it.snapshot.price,com.rex.twboardingscanner.domain.StockScope.SCANNER)==com.rex.twboardingscanner.domain.StockDecision.ALLOW }.forEach { sig ->
                                         if (history.insertIfNew(sig)) {
                                             newCount.incrementAndGet()
                                             if ((sig.light == SignalLight.RED || sig.light == SignalLight.ORANGE)&&com.rex.twboardingscanner.data.MarketIndexData(this).cached().canBuy) {
@@ -366,11 +377,12 @@ class MainActivity: AppCompatActivity() {
 
     private fun admitted():List<SignalResult>{
         val policy=com.rex.twboardingscanner.data.StockPolicyStore(this).read()
-        return latest.filter{policy.decision(it.code,it.snapshot.sourceStock?.close?:it.snapshot.price,com.rex.twboardingscanner.domain.StockScope.SCANNER)==com.rex.twboardingscanner.domain.StockDecision.ALLOW}
+        return latest.filter{it.sector in enabledSectors &&
+            policy.decision(it.code,it.snapshot.sourceStock?.close?:it.snapshot.price,com.rex.twboardingscanner.domain.StockScope.SCANNER)==com.rex.twboardingscanner.domain.StockDecision.ALLOW}
     }
     private fun publishLists(){
         val store=com.rex.twboardingscanner.data.StockPolicyStore(this);val policy=store.read()
-        val candidates=latest.filter{it.light!=SignalLight.NONE&&it.checks.filter{c->c.selected}.all{c->c.state==com.rex.twboardingscanner.domain.CheckState.PASS}}
+        val candidates=latest.filter{it.sector in enabledSectors&&it.light!=SignalLight.NONE&&it.checks.filter{c->c.selected}.all{c->c.state==com.rex.twboardingscanner.domain.CheckState.PASS}}
         val date=latestScanDate.ifBlank{java.time.LocalDate.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI).toString()}
         val rows=org.json.JSONArray(candidates.filter{policy.decision(it.code,it.snapshot.sourceStock?.close?:it.snapshot.price,com.rex.twboardingscanner.domain.StockScope.SCANNER)==com.rex.twboardingscanner.domain.StockDecision.LIMITED}.groupBy{it.code}.map{(code,all)->
             val r=all.first();org.json.JSONObject().put("date",date).put("code",code).put("name",r.name).put("price",r.snapshot.sourceStock?.close?:r.snapshot.price).put("radar",all.map{it.radarType.name.take(1)}.distinct().joinToString("/"))
@@ -379,7 +391,8 @@ class MainActivity: AppCompatActivity() {
         val current=org.json.JSONObject().put("marketGuard",guard.json()).put("date",date).put("rows",org.json.JSONArray(admitted().map{r->org.json.JSONObject().put("code",r.code).put("name",r.name).put("radar",r.radarType.name.take(1)).put("price",r.snapshot.sourceStock?.close?:r.snapshot.price).put("state",if(r.light!=SignalLight.NONE&&!guard.canBuy)"僅觀察 · 大盤保護暫停買入" else if(r.light!=SignalLight.NONE)"入選" else if(r.checks.any{it.selected&&it.state==com.rex.twboardingscanner.domain.CheckState.PENDING})"待查核" else "未通過")}))
         val file=java.io.File(filesDir,"scanner-search.json");val temp=java.io.File(file.path+".tmp");temp.writeText(current.toString());check(temp.renameTo(file))
         store.candidates(com.rex.twboardingscanner.domain.StockScope.SCANNER,rows,"主頁掃描 · $date",policy)
-        com.rex.twboardingscanner.paper.PaperRepository(this).publish(admitted(),latestScanAt)
+        // Publish all evaluated stocks; PaperRepository applies its OWN saved rule set.
+        com.rex.twboardingscanner.paper.PaperRepository(this).publish(latest,latestScanAt)
     }
     private fun render() {
         val groups = (0..4).map { ResultFilters.select(admitted(), it) }
