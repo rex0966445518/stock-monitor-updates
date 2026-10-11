@@ -187,7 +187,7 @@ class ScanArchiveActivity:AppCompatActivity(){
         ranked.adapter=HistoryAdapter{openChart(it)}.apply{submit(rows)}
     }
     private fun openChart(row:HistoryRow){
-        StockChartDialog(this,MarketDataProvider(this),row.code,row.name,bars=row.chartBars).show()
+        StockChartDialog(this,MarketDataProvider(this),row.code,row.name,initial=row.chartBars).show()
     }
     override fun onBackPressed(){
         if(selected!=null)showFolders()else super.onBackPressed()

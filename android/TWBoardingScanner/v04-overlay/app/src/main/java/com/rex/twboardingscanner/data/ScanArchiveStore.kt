@@ -89,7 +89,7 @@ class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationCont
             if(previous==null)return "首次條件快照 · ABC／產業與名單已保存"
             val lines=mutableListOf<String>()
             val older=previous.getJSONObject("rules");val newer=current.getJSONObject("rules")
-            fun strings(a:JSONArray):Set<String>=(0 until a.length()).map{a.getString(it)}.toSet()
+            fun strings(a:JSONArray):Set<String> = (0 until a.length()).map{a.getString(it)}.toSet()
             RadarType.entries.forEach{type->
                 val before=strings(older.getJSONArray(type.name))
                 val after=strings(newer.getJSONArray(type.name))
