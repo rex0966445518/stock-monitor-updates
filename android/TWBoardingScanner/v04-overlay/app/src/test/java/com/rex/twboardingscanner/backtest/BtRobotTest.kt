@@ -81,7 +81,15 @@ class BtRobotTest {
         assertEquals(250,seen.size)
         for(i in BtRobotSpace.slots.indices)assertTrue(BigInteger(base,16).flipBit(i).toString(16) in seen)
         val fixed=BtRobotSpace.settings();assertEquals(5000000.0,fixed.capital,0.0);assertEquals(25,fixed.maxHoldingStocks);assertEquals(4.0,fixed.targetNetPct,0.0)
-        listOf(fixed.copy(capital=5000001.0),fixed.copy(maxHoldingStocks=26),fixed.copy(targetNetPct=3.0),fixed.copy(codes="2330")).forEach{assertThrows(Exception::class.java){BtRobotSpace.validate(it)}}
+        // Different batch parameters are now valid and must remain frozen per session.
+        listOf(fixed.copy(capital=5000001.0),fixed.copy(maxHoldingStocks=26),
+            fixed.copy(targetNetPct=3.0),fixed.copy(codes="2330"),
+            fixed.copy(start=LocalDate.of(2025,8,1),end=LocalDate.of(2025,8,31))).forEach{BtRobotSpace.validate(it)}
+        listOf(fixed.copy(capital=-1.0),fixed.copy(capital=Double.NaN),
+            fixed.copy(maxHoldingStocks=0),fixed.copy(targetNetPct=0.0),
+            fixed.copy(targetNetPct=1001.0),fixed.copy(codes="bad")).forEach{
+            assertThrows(Exception::class.java){BtRobotSpace.validate(it)}
+        }
     }
     @Test fun precomputedConditionsMatchOrdinaryScannerForEveryRadarAndMissingData(){
         val data=series();val base=BtRobotSpace.settings().copy(end=LocalDate.of(2026,8,8))

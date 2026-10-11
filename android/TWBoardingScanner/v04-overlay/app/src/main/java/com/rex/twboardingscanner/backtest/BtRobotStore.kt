@@ -32,12 +32,13 @@ class BtRobotStore(private val c:Context){
     fun session(id:String=active()):JSONObject?=synchronized(lock){db.rawQuery("SELECT json FROM sessions WHERE id=?",arrayOf(id)).use{if(it.moveToFirst())JSONObject(it.getString(0))else null}}
     private fun putSession(o:JSONObject){check(db.update("sessions",ContentValues().apply{put("json",o.toString())},"id=?",arrayOf(o.getString("id")))==1)}
     fun sessions():List<JSONObject> = synchronized(lock){val out=mutableListOf<JSONObject>();db.rawQuery("SELECT json FROM sessions ORDER BY created DESC",null).use{while(it.moveToNext())out+=JSONObject(it.getString(0))};out}
-    fun create(s:BtSettings,required:String="0",forbidden:String="0"):String=synchronized(lock){
+    fun create(s:BtSettings,required:String="0",forbidden:String="0",sourceJournalId:String?=null):String=synchronized(lock){
         BtRobotSpace.validate(s);BtRobotSpace.validateConstraints(required,forbidden)
+        require(sourceJournalId==null||sourceJournalId.matches(Regex("[A-Za-z0-9_-]{1,100}"))){"日誌編號不合法"}
         session()?.let{if(it.optString("state") in setOf("RUNNING","RETRY"))putSession(it.put("state","PAUSED").put("token","").put("message","建立新測試；原進度已保存"))}
         val id=UUID.randomUUID().toString()
         val o=JSONObject().put("id",id).put("created",System.currentTimeMillis()).put("state","PAUSED").put("token","")
-            .put("settings",BtSettingsCodec.encode(s)).put("tested",0).put("bestKey","").put("bestSeq",0).put("ack",0)
+            .put("settings",BtSettingsCodec.encode(s)).put("sourceJournalId",sourceJournalId?:JSONObject.NULL).put("tested",0).put("bestKey","").put("bestSeq",0).put("ack",0)
             .put("seed",BigInteger(80,java.security.SecureRandom()).toString()).put("cursor","0").put("message","按開始測試啟動")
             .put("appVersion",c.packageManager.getPackageInfo(c.packageName,0).versionName).put("searchVersion",if(BtRobotSpace.required(forbidden).signum()==0)1 else 2).put("required",required).put("forbidden",forbidden).put("engineVersion",BtRobotCheckpoint.ENGINE).put("cleared",0)
         check(db.insertOrThrow("sessions",null,ContentValues().apply{put("id",id);put("created",o.getLong("created"));put("json",o.toString())})>0)

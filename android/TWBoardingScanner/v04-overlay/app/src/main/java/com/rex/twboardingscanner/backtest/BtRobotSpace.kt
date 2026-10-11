@@ -17,7 +17,13 @@ object BtRobotSpace {
         BtSettings(LocalDate.of(2026,8,1),LocalDate.of(2026,10,8),5000000.0,"",rules,sectors,maxHoldingStocks=25,targetNetPct=4.0)
     fun validate(s:BtSettings){
         s.validateTrading()
-        require(s.start==LocalDate.of(2026,8,1)&&s.end==LocalDate.of(2026,10,8)&&s.capital==5000000.0&&s.codes.isEmpty()&&s.maxHoldingStocks==25&&s.targetNetPct==4.0&&s.strategyVersion==4){"機器人交易參數必須固定"}
+        // Session parameters are immutable once a run starts, not globally hardcoded.
+        require(s.strategyVersion==4){"自動機器人需使用新版淨利及持倉策略"}
+        require(s.start<=s.end){"測試結束日期不得早於開始日期"}
+        require(s.capital.isFinite()&&s.capital>0){"本金須大於 0 元"}
+        require(s.maxHoldingStocks!=null&&s.maxHoldingStocks>0){"最高持倉須至少 1 檔"}
+        require(s.targetNetPct.isFinite()&&s.targetNetPct in 0.01..1000.0){"淨利下車須在 0.01%～1000%"}
+        require(s.codes.isBlank()||s.codes.split(Regex("[,，\\s]+")).filter{it.isNotBlank()}.all{it.matches(Regex("[0-9]{4}"))}){"股號範圍需為四位股票代碼"}
         require(s.sectors.isNotEmpty())
         require(s.rules.keys==RadarType.entries.toSet())
         key(s.rules).let{require(rules(it)==s.rules)}

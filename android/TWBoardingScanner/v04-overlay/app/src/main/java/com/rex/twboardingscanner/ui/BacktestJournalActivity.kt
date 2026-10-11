@@ -9,6 +9,10 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.rex.twboardingscanner.backtest.BacktestStore
+import com.rex.twboardingscanner.backtest.BtRobotJournalSync
+import com.rex.twboardingscanner.backtest.BtRobotStore
+import com.rex.twboardingscanner.backtest.BtRobotWorker
+import com.rex.twboardingscanner.data.StockPolicyStore
 import com.rex.twboardingscanner.domain.*
 import org.json.JSONArray
 import org.json.JSONObject
@@ -100,6 +104,44 @@ class BacktestJournalActivity:AppCompatActivity(){
             runOnUiThread{if(!isFinishing&&!isDestroyed)result.fold({reload();android.widget.Toast.makeText(this,"已匯入獨立日誌，原始績效保留",android.widget.Toast.LENGTH_LONG).show()},{status.text="匯入失敗：請選擇匯出的完整回測報告 JSON。${it.message}"})}
         }.start()
     }
+    private fun syncToRobot(id:String,row:JSONObject){
+        val desired=runCatching{BtRobotJournalSync.fromJournal(row)}.getOrElse{
+            android.widget.Toast.makeText(this,"無法同步：${it.message}",android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        val current=StockPolicyStore(this).read()
+        val policyChange=current!=desired.stockPolicy
+        val explanation="將本次日誌的 ABC 勾選、產業、股號範圍、日期、本金、持倉、獲利、5 組下車條件和大盤保護帶入機器人新批次。\n\n"+
+            "原回測績效與舊機器人測試紀錄保持不變。切換後按「開始測試」才會運算。"+
+            if(policyChange)"\n\n注意：日誌的禁買／限價名單與目前設定不同；確認同步會同步更新三區共用名單，並暫停目前測試。" else
+                "\n\n本次禁買／限價與目前共用名單一致。"
+        MaterialAlertDialogBuilder(this)
+            .setTitle("同步至自動機器人 · ${id.take(8)}")
+            .setMessage(explanation)
+            .setNegativeButton("取消",null)
+            .setPositiveButton("同步並前往機器人"){_,_->
+                status.text="正在同步日誌 ${id.take(8)} 的條件快照…"
+                Thread{
+                    val result=runCatching{
+                        val robot=BtRobotStore(this)
+                        val old=robot.active()
+                        if(old.isNotBlank())BtRobotWorker.pause(this,old)
+                        val policy=StockPolicyStore(this)
+                        if(policy.read()!=desired.stockPolicy)policy.change{desired.stockPolicy}
+                        // Baseline ABC matches this exact journal. The robot is then free to
+                        // test adjacent configurations; no historical profit is copied.
+                        robot.create(desired,"0","0",id)
+                    }
+                    runOnUiThread{if(!isFinishing&&!isDestroyed)result.fold({newId->
+                        android.widget.Toast.makeText(this,"已套用日誌 ${id.take(8)}；按開始測試才執行",android.widget.Toast.LENGTH_LONG).show()
+                        startActivity(Intent(this,BtRobotActivity::class.java).putExtra("syncedJournal",id).putExtra("robotSession",newId))
+                    },{error->
+                        status.text="同步失敗：${error.message}"
+                        android.widget.Toast.makeText(this,"同步失敗：${error.message}",android.widget.Toast.LENGTH_LONG).show()
+                    })}
+                }.start()
+            }.show()
+    }
     internal fun renderEntries(data:List<JSONObject>){
         rows=data.sortedWith(compareByDescending<JSONObject>{it.optLong("startedAt").takeIf{t->t>0}?:it.optLong("finishedAt")}.thenByDescending{it.optString("id")})
         expandedDiffs.retainAll(rows.map{it.optString("id")}.toSet());shown=20;renderPage()
@@ -129,6 +171,12 @@ class BacktestJournalActivity:AppCompatActivity(){
             panel.addView(BacktestDiffView(this,row,rows.getOrNull(index+1),id in expandedDiffs){open->if(open)expandedDiffs.add(id) else expandedDiffs.remove(id)})
             panel.addView(NeonUi.gap(this,8))
             panel.addView(NeonUi.row(this,listOf(NeonUi.button(this,"條件快照"){BtSnapshotDialog.show(this,s,"回測條件 · ${id.take(8)}")},NeonUi.button(this,"檢閱日誌",color){startActivity(Intent(this,BacktestActivity::class.java).putExtra("journalId",id))})))
+            panel.addView(NeonUi.gap(this,6))
+            panel.addView(NeonUi.primary(this,"同步至自動機器人"){syncToRobot(id,row)}.apply{
+                tag="journal-sync-$id"
+                isEnabled=complete
+                contentDescription="將日誌 ${id.take(8)} 保存的完整條件套用到自動測試機器人"
+            })
             entries.addView(panel);entries.addView(NeonUi.gap(this,10))
         }
         if(shown<rows.size)entries.addView(NeonUi.button(this,"載入更多（已顯示 $shown / ${rows.size}）"){shown+=20;renderPage()}.apply{tag="journal-load-more"})

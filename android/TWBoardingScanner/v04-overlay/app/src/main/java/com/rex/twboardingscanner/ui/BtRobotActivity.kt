@@ -5,6 +5,8 @@ import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.InputType
+import android.view.Gravity
 import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
@@ -24,6 +26,12 @@ class BtRobotActivity:AppCompatActivity(){
     private lateinit var records:LinearLayout
     private lateinit var requiredButton:com.google.android.material.button.MaterialButton
     private lateinit var spaceLabel:TextView
+    private lateinit var robotRange:TextView
+    private lateinit var robotCapital:EditText
+    private lateinit var robotHoldings:EditText
+    private lateinit var robotProfit:EditText
+    private lateinit var paramNotice:TextView
+    private var fieldsSession=""
     private var busy=false;private var recovering=false;private var exportId=""
     private var stamp="";private var lastId="";private var page=0
     private var visible=false
@@ -35,6 +43,52 @@ class BtRobotActivity:AppCompatActivity(){
     private fun num(v:Any)=java.text.DecimalFormat("#,###").format(v)
     private fun color(v:Double)=if(v>=0)NeonUi.pink else NeonUi.mint
     private fun panel(accent:Int)=NeonUi.vertical(this).apply{background=NeonUi.panel(this@BtRobotActivity,accent);setPadding(NeonUi.dp(context,12),NeonUi.dp(context,12),NeonUi.dp(context,12),NeonUi.dp(context,12))}
+    private fun paramBox(title:String,hint:String,accent:Int,code:String,decimal:Boolean):Pair<LinearLayout,EditText>{
+        val field=EditText(this).apply{
+            tag=code
+            inputType=InputType.TYPE_CLASS_NUMBER or (if(decimal)InputType.TYPE_NUMBER_FLAG_DECIMAL else 0)
+            textSize=17f;setTextColor(NeonUi.ink);setHintTextColor(NeonUi.muted)
+            gravity=Gravity.CENTER_VERTICAL or Gravity.CENTER_HORIZONTAL
+            setSingleLine(true);setSelectAllOnFocus(true)
+            background=NeonUi.panel(this@BtRobotActivity,accent)
+            setPadding(NeonUi.dp(context,3),NeonUi.dp(context,6),NeonUi.dp(context,3),NeonUi.dp(context,6))
+            minHeight=NeonUi.dp(context,48)
+            contentDescription="$title，可自行輸入"
+        }
+        val card=NeonUi.vertical(this).apply{
+            background=NeonUi.panel(this@BtRobotActivity,accent)
+            setPadding(NeonUi.dp(context,6),NeonUi.dp(context,9),NeonUi.dp(context,6),NeonUi.dp(context,9))
+            addView(label(title,12f,NeonUi.ink,true))
+            addView(NeonUi.gap(this@BtRobotActivity,6))
+            addView(field,LinearLayout.LayoutParams(-1,NeonUi.dp(this@BtRobotActivity,48)))
+            addView(label(hint,10f,NeonUi.muted))
+        }
+        return card to field
+    }
+    private fun parameters():RobotTradingParams=RobotTradingParams.parse(robotCapital.text.toString(),robotHoldings.text.toString(),robotProfit.text.toString())
+    private fun displayParameters(settings:BtSettings,restoreDraft:Boolean=false){
+        val values=RobotTradingParams.of(settings)
+        val prefs=getSharedPreferences("robot-params-draft",0)
+        val useDraft=restoreDraft&&prefs.getString("session",null)==store.active()
+        fun candidate(key:String,default:String)=if(useDraft)prefs.getString(key,default).orEmpty() else default
+        robotCapital.setText(candidate("capital",btPercent(values.capital)))
+        robotHoldings.setText(candidate("holdings",values.maxHoldings.toString()))
+        robotProfit.setText(candidate("profit",btPercent(values.targetPct)))
+        robotRange.text="測試日期：${settings.start} → ${settings.end}"
+        fieldsSession=store.active()
+    }
+    private fun refreshParameterHint(){
+        val active=store.session()
+        val parsed=runCatching{parameters()}.getOrNull()
+        paramNotice.text=when{
+            parsed==null->"參數有誤：本金須大於 0、持倉為正整數、獲利目標 0.01～1000%。"
+            active==null->"填寫後按「開始測試」即建立新批次；結果獨立保存。"
+            RobotTradingParams.of(BtSettingsCodec.decode(active.getJSONObject("settings")))!=parsed->
+                "已修改測試參數；按「開始測試」會建立新批次，原有測試紀錄保留。"
+            else->"每個批次獨立保存設定；改動參數後下次開始會另建批次。"
+        }
+        paramNotice.setTextColor(if(parsed==null)NeonUi.amber else NeonUi.muted)
+    }
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState);store=BtRobotStore(this);exportId=savedInstanceState?.getString("exportId").orEmpty()
         val root=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(context,16),NeonUi.dp(context,16),NeonUi.dp(context,16),NeonUi.dp(context,28))}
@@ -46,11 +100,20 @@ class BtRobotActivity:AppCompatActivity(){
         root.addView(label("自動增減 ABC 條件 · 持續搜尋更高總收益",12f,NeonUi.cyan))
         root.addView(NeonUi.gap(this,12))
         val fixed=panel(NeonUi.cyan)
-        fixed.addView(label("固定測試範圍",15f,NeonUi.ink,true));fixed.addView(NeonUi.gap(this,6))
-        fixed.addView(label("2026 / 08 / 01 → 2026 / 10 / 08",19f,NeonUi.cyan,true))
+        fixed.addView(label("測試範圍與可調整參數",15f,NeonUi.ink,true));fixed.addView(NeonUi.gap(this,6))
+        robotRange=label("",14f,NeonUi.cyan,true).apply{tag="robot-date-range"}
+        fixed.addView(robotRange)
         fixed.addView(NeonUi.gap(this,10))
-        fixed.addView(NeonUi.row(this,listOf(NeonUi.tile(this,"初始本金","500 萬","不融資",NeonUi.cyan),NeonUi.tile(this,"持倉上限","25 檔","不同股號",NeonUi.amber),NeonUi.tile(this,"淨利下車","4%","扣買賣費稅",NeonUi.pink))))
-        fixed.addView(NeonUi.gap(this,8));fixed.addView(label("每次各買 1,000 股；沿用超過 5 天可保本賣出與折讓金。產業沿用建立測試時的回測設定，股號範圍不限。",11f))
+        val cash=paramBox("初始本金","元 · 不融資",NeonUi.cyan,"robot-capital-input",true)
+        val holding=paramBox("持倉上限","檔 · 不同股號",NeonUi.amber,"robot-holdings-input",false)
+        val profit=paramBox("淨利下車","% · 扣費稅",NeonUi.pink,"robot-profit-input",true)
+        robotCapital=cash.second;robotHoldings=holding.second;robotProfit=profit.second
+        fixed.addView(NeonUi.row(this,listOf(cash.first,holding.first,profit.first)))
+        paramNotice=label("",11f).apply{tag="robot-parameter-notice"}
+        fixed.addView(NeonUi.gap(this,8));fixed.addView(paramNotice)
+        fixed.addView(NeonUi.gap(this,6));fixed.addView(label("每次各買 1,000 股；超過 5 天可保本賣出，保留折讓金。測試日期、股票範圍、ABC 與產業採用目前批次快照；可從回測日誌完整同步。",11f))
+        val snapshot=store.session()?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()
+        displayParameters(snapshot,restoreDraft=true)
         root.addView(fixed)
         root.addView(NeonUi.button(this,"下車賣出條件 · 5 組選填",NeonUi.amber){
             if(!busy){
@@ -83,8 +146,28 @@ class BtRobotActivity:AppCompatActivity(){
         root.addView(NeonUi.gap(this,6))
         root.addView(NeonUi.row(this,listOf(NeonUi.button(this,"匯出結果／斷點"){exportCheckpoint()},NeonUi.button(this,"匯入並續跑"){importCheckpoint()})))
         root.addView(NeonUi.gap(this,6));root.addView(NeonUi.button(this,"建立新測試",NeonUi.amber){
-            if(!busy)MaterialAlertDialogBuilder(this).setTitle("建立新的測試批次").setMessage("會暂停目前批次並保留所有紀錄；新批次沿用目前回測的 ABC 與產業及必選／排除設定，重新取得歷史資料。")
-                .setNegativeButton("取消",null).setPositiveButton("建立"){_,_->BtRobotWorker.pause(this,store.active());store.create(base(),required(),forbidden());stamp="";render()}.show()
+            if(!busy){
+                val entered=runCatching{parameters()}.getOrElse{
+                    Toast.makeText(this,"請先修正測試參數：${it.message}",Toast.LENGTH_LONG).show()
+                    return@button
+                }
+                MaterialAlertDialogBuilder(this).setTitle("建立新的測試批次")
+                    .setMessage("會暫停目前批次並保留所有紀錄；新批次沿用目前的 ABC、產業、日期、股號範圍及下車條件，採用上方填寫的本金、持倉與淨利目標。建立後按「開始測試」才執行。")
+                    .setNegativeButton("取消",null).setPositiveButton("建立"){_,_->
+                        runTask("正在建立新的測試批次…"){
+                            val previous=store.session()
+                            val settings=entered.applyTo(previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base())
+                                .copy(stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(this).read(),
+                                    stockScope=StockScope.ROBOT,marketGuardVersion=MarketCrashGuard.VERSION)
+                            BtRobotSpace.validate(settings)
+                            val original=store.active()
+                            val mustHave=required();val excludes=forbidden()
+                            if(original.isNotBlank())BtRobotWorker.pause(this,original)
+                            store.create(settings,mustHave,excludes)
+                            "已建立新批次，請按開始測試；舊結果保留"
+                        }
+                    }.show()
+            }
         })
         root.addView(NeonUi.gap(this,10))
         spaceLabel=label("",12f);root.addView(spaceLabel)
@@ -99,39 +182,70 @@ class BtRobotActivity:AppCompatActivity(){
         repeat(end-from+1){val child=root.getChildAt(from);root.removeViewAt(from);controls.addView(child)}
         root.addView(controls,1)
         root.removeView(toolsRow);fixed.addView(NeonUi.gap(this,8));fixed.addView(toolsRow)
-        NeonUi.group(root,fixed,configLast,"測試參數與下車條件","固定區間、資金、5 組認賠條件","robot-settings")
+        NeonUi.group(root,fixed,configLast,"測試參數與下車條件","本金、持倉、淨利可編輯；沿用快照日期及 5 組認賠條件","robot-settings")
         NeonUi.group(root,manageFirst,manageLast,"條件選單與批次管理","必選／排除、匯入匯出與續跑","robot-management")
         render()
     }
     override fun onResume(){super.onResume();visible=true;handler.post(poll)}
-    override fun onPause(){visible=false;handler.removeCallbacks(poll);super.onPause()}
+    override fun onPause(){
+        visible=false;handler.removeCallbacks(poll)
+        if(::robotCapital.isInitialized)getSharedPreferences("robot-params-draft",0).edit()
+            .putString("session",store.active()).putString("capital",robotCapital.text.toString())
+            .putString("holdings",robotHoldings.text.toString()).putString("profit",robotProfit.text.toString()).apply()
+        super.onPause()
+    }
     private fun base():BtSettings {
         val saved=runCatching{BtSettingsCodec.decode(BacktestStore(this).configuration()!!)}.getOrNull()
             ?:BtSettingsCodec.capture(this,java.time.LocalDate.of(2026,8,1),java.time.LocalDate.of(2026,10,8),5000000.0,"")
         return BtRobotSpace.settings(saved.rules,saved.sectors.ifEmpty{StockSector.entries.toSet()}).copy(stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(this).read(),stockScope=StockScope.ROBOT,exitRules=com.rex.twboardingscanner.data.ExitRuleStore(this).read(StockScope.ROBOT),marketGuardVersion=MarketCrashGuard.VERSION)
     }
-    private fun policySession():String {
-        val old=store.session()?:return store.create(base(),required(),forbidden())
-        val settings=BtSettingsCodec.decode(old.getJSONObject("settings"))
+    /** Changed money/holding/exit targets must always become a NEW independent batch. */
+    private fun policySession(params:RobotTradingParams):String {
+        val old=store.session()
+        val saved=old?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}
+        val original=saved?:base()
         val policy=com.rex.twboardingscanner.data.StockPolicyStore(this).read()
-        if(settings.marketGuardVersion==0){BtRobotWorker.pause(this,old.getString("id"));return store.create(settings.copy(stockPolicy=policy,stockScope=StockScope.ROBOT,marketGuardVersion=MarketCrashGuard.VERSION),old.optString("required","0"),old.optString("forbidden","0"))}
-        if(settings.stockPolicy==policy)return old.getString("id")
-        val id=store.create(settings.copy(stockPolicy=policy,stockScope=StockScope.ROBOT),old.optString("required","0"),old.optString("forbidden","0"))
-        BtRobotCheckpoint.cloneData(store,old.getString("id"),id)
-        return id
+        val next=params.applyTo(original).copy(stockPolicy=policy,stockScope=StockScope.ROBOT,marketGuardVersion=MarketCrashGuard.VERSION)
+        BtRobotSpace.validate(next)
+        if(old!=null&&next==saved)return old.getString("id")
+        val oldId=old?.optString("id").orEmpty()
+        val required=old?.optString("required","0")?:required()
+        val forbidden=old?.optString("forbidden","0")?:forbidden()
+        if(oldId.isNotBlank())BtRobotWorker.pause(this,oldId)
+        val source=old?.takeIf{!it.isNull("sourceJournalId")}?.optString("sourceJournalId")?.takeIf{it.isNotBlank()}
+        val created=store.create(next,required,forbidden,source)
+        // Money and exit targets do not affect raw OHLCV data. Reuse only matching
+        // universe/date/index snapshots; never carry forward old trial profits.
+        if(oldId.isNotBlank()&&saved!=null&&saved.start==next.start&&saved.end==next.end
+            &&saved.codes==next.codes&&saved.sectors==next.sectors&&saved.marketGuardVersion==next.marketGuardVersion)
+            BtRobotCheckpoint.cloneData(store,oldId,created)
+        return created
     }
     private fun startTesting(){
         if(busy)return
-        startButton.isEnabled=false
+        val params=runCatching{parameters()}.getOrElse{
+            Toast.makeText(this,"參數錯誤：${it.message}",Toast.LENGTH_LONG).show()
+            refreshParameterHint();return
+        }
+        busy=true;startButton.isEnabled=false
         Thread{
-            val result=runCatching{val id=policySession();BtRobotWorker.start(this,id)}
-            runOnUiThread{if(!isFinishing&&!isDestroyed){result.onFailure{Toast.makeText(this,"無法開始：${it.message}",Toast.LENGTH_LONG).show()};render()}}
+            val result=runCatching{val id=policySession(params);BtRobotWorker.start(this,id)}
+            runOnUiThread{if(!isFinishing&&!isDestroyed){
+                busy=false
+                result.onFailure{Toast.makeText(this,"無法開始：${it.message}",Toast.LENGTH_LONG).show()}
+                render()
+            }}
         }.start()
     }
     internal fun render(){
         if(busy)return
         val s=store.session();val id=s?.optString("id").orEmpty()
         if(lastId!=id){lastId=id;page=0;stamp=""}
+        if(fieldsSession!=id){
+            val source=s?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()
+            displayParameters(source)
+        }
+        refreshParameterHint()
         val tested=s?.optLong("tested")?:0L;val total=BtRobotSpace.total(required(),forbidden());val remaining=total-BigInteger.valueOf(tested)
         val fixed=BtRobotSpace.required(required()).bitCount();val blocked=BtRobotSpace.required(forbidden()).bitCount()
         requiredButton.text="條件選單 · 必選 $fixed／排除 $blocked"
@@ -139,17 +253,41 @@ class BtRobotActivity:AppCompatActivity(){
         val policyChanged=s?.let{BtSettingsCodec.decode(it.getJSONObject("settings")).stockPolicy!=com.rex.twboardingscanner.data.StockPolicyStore(this).read()}?:false
         val guardChanged=s?.getJSONObject("settings")?.optInt("marketGuardVersion",0)==0
         val running=!guardChanged&&s?.optString("state") in setOf("RUNNING","RETRY")
-        status.text=if(guardChanged)"此舊批次未啟用大盤保護；按開始建立受保護新批次，舊績效保留" else if(policyChanged)"禁股／限價已更新；按開始將建立新批次並沿用快取" else s?.optString("message")?:"按開始測試，自動尋找更高收益組合"
+        val entered=runCatching{parameters()}.getOrNull()
+        val changed=s!=null&&entered!=null&&RobotTradingParams.of(BtSettingsCodec.decode(s.getJSONObject("settings")))!=entered
+        val invalid=entered==null
+        status.text=when{
+            invalid->"本金／持倉／淨利下車有無效數字，請修改後再開始"
+            changed->"參數已修改；按開始將建立新批次並保留舊績效"
+            guardChanged->"此舊批次未啟用大盤保護；按開始建立受保護新批次，舊績效保留"
+            policyChanged->"禁股／限價已更新；按開始將建立新批次並沿用快取"
+            else->s?.optString("message")?:"按開始測試，自動尋找更高收益組合"
+        }
         counts.text="已測試 ${num(tested)} 組\n未測試 ${num(remaining)} 組\n已清理 ${num(s?.optLong("cleared")?:0L)} 組零收益"
         val key=s?.optString("bestKey").orEmpty()
         best.text=if(key.isEmpty())"目前已測最佳：—" else "目前已測最佳\n${signed(s!!.getDouble("bestProfit"))} 元"
         if(key.isNotEmpty())best.setTextColor(color(s!!.getDouble("bestProfit")))
         coverage.text=if(s==null)"首次載入資料後固定樣本；結果逐組保存" else {
             val settings=BtSettingsCodec.decode(s.getJSONObject("settings"))
-            "批次 ${id.take(8)} · "+(if(s.has("loaded"))"資料 ${s.getInt("loaded")} / ${s.getInt("requested")} 檔"else"資料尚未備妥")+"\n產業："+settings.sectors.sortedBy{it.ordinal}.joinToString("、"){it.label}
+            "批次 ${id.take(8)} · "+(if(s.has("loaded"))"資料 ${s.getInt("loaded")} / ${s.getInt("requested")} 檔"else"資料尚未備妥")+
+            "\n日期：${settings.start} → ${settings.end}"+
+            "\n本金 ${num(settings.capital)} 元 · 持倉 ${settings.maxHoldingStocks} 檔 · 淨利 ${btPercent(settings.targetNetPct)}%"+
+            "\n產業："+settings.sectors.sortedBy{it.ordinal}.joinToString("、"){it.label}+
+            (if(!s.isNull("sourceJournalId"))"\n來源回測日誌：${s.optString("sourceJournalId").take(8)}" else "")
         }
-        startButton.text=when{guardChanged->"啟用大盤保護並開始新批次";policyChanged->"套用新名單並開始";running->"測試進行中…";s?.optString("state")=="DONE"->"全部測試完成";tested>0->"繼續／重試";else->"開始測試"}
-        startButton.isEnabled=!busy&&!running&&(guardChanged||policyChanged||s?.optString("state")!="DONE");pauseButton.isEnabled=running;bestButton.isEnabled=key.isNotEmpty()
+        startButton.text=when{
+            invalid->"請先修正測試參數"
+            changed->"套用新參數並開始"
+            guardChanged->"啟用大盤保護並開始新批次"
+            policyChanged->"套用新名單並開始"
+            running->"測試進行中…"
+            s?.optString("state")=="DONE"->"全部測試完成"
+            tested>0->"繼續／重試"
+            else->"開始測試"
+        }
+        startButton.isEnabled=!busy&&!invalid&&(!running||changed||guardChanged||policyChanged)&&
+            (changed||guardChanged||policyChanged||s?.optString("state")!="DONE")
+        pauseButton.isEnabled=running;bestButton.isEnabled=key.isNotEmpty()
         val signature="$id-$tested-${s?.optLong("cleared")?:0}-$page"
         if(stamp!=signature){stamp=signature;renderTrials(id)}
         if(visible&&s!=null&&key.isNotEmpty()&&s.optLong("bestSeq")>s.optLong("ack")&&alert?.isShowing!=true){
@@ -203,11 +341,14 @@ class BtRobotActivity:AppCompatActivity(){
     internal fun applyRequired(key:String,forbiddenKey:String=forbidden()){
         BtRobotSpace.validateConstraints(key,forbiddenKey)
         if(key==required()&&forbiddenKey==forbidden())return
+        val entered=runCatching{parameters()}.getOrElse{
+            Toast.makeText(this,"請修正測試參數：${it.message}",Toast.LENGTH_LONG).show();return
+        }
         val old=store.active();val previous=store.session()
-        val settings=previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()
+        val settings=entered.applyTo(previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base())
         runTask("正在保存必選／排除條件並沿用快取…"){
             if(old.isNotBlank())BtRobotWorker.pause(this,old)
-            val id=store.create(settings,key,forbiddenKey)
+            val id=store.create(settings,key,forbiddenKey,previous?.takeIf{!it.isNull("sourceJournalId")}?.optString("sourceJournalId"))
             if(old.isNotBlank())BtRobotCheckpoint.cloneData(store,old,id)
             getSharedPreferences("backtest_robot",0).edit().putString("requiredDraft",key).putString("forbiddenDraft",forbiddenKey).commit()
             "必選／排除條件已保存；按開始測試，新批次沿用原歷史快取"
@@ -215,12 +356,16 @@ class BtRobotActivity:AppCompatActivity(){
     }
     internal fun applyExitRules(rules:List<ExitRule>){
         ExitRules.validate(rules)
+        val entered=runCatching{parameters()}.getOrElse{
+            Toast.makeText(this,"請修正測試參數：${it.message}",Toast.LENGTH_LONG).show();return
+        }
         val previous=store.session();val old=previous?.getString("id").orEmpty()
-        val settings=previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()
-        if(settings.exitRules==rules)return
+        val settings=entered.applyTo(previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base())
+        if(settings.exitRules==rules&&
+           (previous==null||RobotTradingParams.of(BtSettingsCodec.decode(previous.getJSONObject("settings")))==entered))return
         runTask("正在保存下車條件與新測試批次…"){
             if(old.isNotBlank())BtRobotWorker.pause(this,old)
-            val id=store.create(settings.copy(exitRules=rules),required(),forbidden())
+            val id=store.create(settings.copy(exitRules=rules),required(),forbidden(),previous?.takeIf{!it.isNull("sourceJournalId")}?.optString("sourceJournalId"))
             if(old.isNotBlank())BtRobotCheckpoint.cloneData(store,old,id)
             com.rex.twboardingscanner.data.ExitRuleStore(this).save(StockScope.ROBOT,rules)
             "下車條件已保存；按開始測試，新批次沿用歷史資料"
