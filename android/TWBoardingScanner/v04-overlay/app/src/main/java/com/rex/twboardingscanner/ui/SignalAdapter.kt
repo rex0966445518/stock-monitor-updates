@@ -71,8 +71,8 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
         h.b.chartView.setBars(s.bars)
         VolumeStrip.bind(h.b.volumeSummary, h.b.recentVolumes, s.bars)
 
-        h.b.dEvidence.visibility=if(r.radarType==RadarType.D_MAIN_FORCE)android.view.View.VISIBLE else android.view.View.GONE
-        h.b.dEvidence.text=r.dEvidence.orEmpty()
+        h.b.dEvidence?.visibility=if(r.radarType==RadarType.D_MAIN_FORCE)android.view.View.VISIBLE else android.view.View.GONE
+        h.b.dEvidence?.text=r.dEvidence.orEmpty()
         h.b.closingAuction.bind(s.sourceStock?.closingAuction)
         h.b.financialPanel.bind(s.sourceStock?.financials,RuleMetrics(s).today)
         h.b.financialButton.setOnClickListener { onFinancial(r) }

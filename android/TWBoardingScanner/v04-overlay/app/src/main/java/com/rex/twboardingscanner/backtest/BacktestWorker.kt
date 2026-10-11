@@ -9,6 +9,8 @@ import androidx.core.app.NotificationCompat
 import androidx.work.*
 import org.json.JSONArray
 import org.json.JSONObject
+import com.rex.twboardingscanner.domain.RadarType
+import com.rex.twboardingscanner.domain.DPatternConfig
 import java.time.LocalDate
 
 object BtSettingsCodec {

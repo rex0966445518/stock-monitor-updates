@@ -56,6 +56,7 @@ object ScanConditions {
                 ScanCondition("declineVolume", "近 10 日下跌日均量 < 前 10 日下跌日均量（兩段都須有下跌日）") { it.declineContracting },
                 ScanCondition("ma5", "收盤價 > 5 日均線") { it.aboveMa5 }
             )
+            RadarType.D_MAIN_FORCE -> emptyList()
             RadarType.C_LONG_RED_VOLUME -> listOf(
                 ScanCondition("red", "紅 K：收盤價 > 開盤價") { it.last?.let { b -> b.close > b.open } },
                 ScanCondition("gain", "相較前一日收盤價，上漲 ≥ 3%") { it.dayGain?.let { v -> v >= 3.0 - 1e-9 } },

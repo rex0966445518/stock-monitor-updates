@@ -26,6 +26,8 @@ import com.rex.twboardingscanner.data.SignalHistoryDb
 import com.rex.twboardingscanner.databinding.ActivityMainBinding
 import com.rex.twboardingscanner.domain.DailyBar
 import com.rex.twboardingscanner.domain.RadarType
+import com.rex.twboardingscanner.domain.DPattern
+import com.rex.twboardingscanner.domain.DPatternConfig
 import com.rex.twboardingscanner.domain.ScanConditions
 import com.rex.twboardingscanner.domain.ScoringEngine
 import com.rex.twboardingscanner.domain.SignalLight
@@ -135,7 +137,7 @@ class MainActivity: AppCompatActivity() {
                 }.apply{tag="scanner-enabled-${type.name}";textSize=11f}.also{radarSwitches[type]=it}
             }))
         }
-        val conditionRow=b.conditionAButton.parent as View
+        val conditionRow=b.conditionAButton.parent as android.view.View
         b.settingsPanel.addView(switchRow,b.settingsPanel.indexOfChild(conditionRow)+1)
         refreshRadarSwitches()
         b.scanConditionButton.setOnClickListener { showScanConditionsDialog() }
