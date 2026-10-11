@@ -69,13 +69,17 @@ class RobotBacktestDatesTest{
         val first=ShadowDialog.getLatestDialog() as DatePickerDialog
         assertEquals(2026,first.datePicker.year)
         first.datePicker.updateDate(2026,6,1)
-        first.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
-        assertTrue(start.text.toString().contains("2026-07-01"))
+        // Robolectric does not always forward synthetic AlertDialog button clicks to
+        // DatePickerDialog's date-set listener. Call the same platform positive handler.
+        first.onClick(first,DialogInterface.BUTTON_POSITIVE)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertTrue("Expected July 1, actual: ${start.text}",start.text.toString().contains("2026-07-01"))
         assertTrue(label.text.toString().contains("2026-07-01 → 2026-10-08"))
         assertTrue(end.performClick())
         val last=ShadowDialog.getLatestDialog() as DatePickerDialog
         last.datePicker.updateDate(2026,8,30)
-        last.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        last.onClick(last,DialogInterface.BUTTON_POSITIVE)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
         assertTrue(label.text.toString().contains("2026-07-01 → 2026-09-30"))
         assertEquals(id,store.active())
         assertEquals(before,store.session(id)!!.getJSONObject("settings").toString())
@@ -83,7 +87,8 @@ class RobotBacktestDatesTest{
         start.performClick()
         val invalid=ShadowDialog.getLatestDialog() as DatePickerDialog
         invalid.datePicker.updateDate(2026,9,5)
-        invalid.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        invalid.onClick(invalid,DialogInterface.BUTTON_POSITIVE)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
         assertTrue((getByTag(root,"robot-parameter-notice") as TextView).text.toString().contains("結束日期不可早於起始日期"))
         val starts=(getByTag(root,"robot-date-range") as TextView).text.toString()
         assertTrue(starts.contains("2026-10-05 → 2026-09-30"))
