@@ -29,6 +29,7 @@ class PaperStrategyActivity:AppCompatActivity() {
     private lateinit var capital:EditText
     private lateinit var maxHoldings:EditText
     private lateinit var targetNet:EditText
+    private lateinit var trendHoldCheck:CheckBox
     private lateinit var codes:EditText
     private lateinit var sectorButton:com.google.android.material.button.MaterialButton
     private lateinit var policySummary:TextView
@@ -83,6 +84,12 @@ class PaperStrategyActivity:AppCompatActivity() {
         targetNet=input(btPercent(preset.targetNetPct),"0.01～1000",true).apply{tag="paper-net-target"}
         second.addView(targetNet)
         trade.addView(NeonUi.row(this,listOf(first,second)))
+        trendHoldCheck=CheckBox(this).apply{
+            tag="paper-profit-trend-hold";textSize=13f;setTextColor(NeonUi.cyan)
+            text="淨利達標且 RSI(14)>50／日K未跌破5MA 續抱；收盤跌破5MA 後依有效報價賣出"
+            isChecked=preset.holdProfitUntilMa5Break
+        }
+        trade.addView(trendHoldCheck)
         exitButton=NeonUi.button(this,"",NeonUi.amber){
             ExitRulesEditor.show(this,"自買自投",exitRules){selected->
                 exitRules=selected
@@ -150,6 +157,7 @@ class PaperStrategyActivity:AppCompatActivity() {
             capital.setText(if(book.trades.isEmpty())btPercent(s.capital) else btPercent(book.capital))
             maxHoldings.setText((s.maxHoldingStocks?:5).toString())
             targetNet.setText(btPercent(s.targetNetPct))
+            trendHoldCheck.isChecked=s.holdProfitUntilMa5Break
             codes.setText(s.codes)
             refreshControls()
         }
@@ -223,6 +231,7 @@ class PaperStrategyActivity:AppCompatActivity() {
             start=start,end=end,capital=cash,codes=codes.text.toString().trim(),
             rules=rules.mapValues{it.value.toSet()},sectors=sectors.toSet(),
             maxHoldingStocks=max,targetNetPct=target,exitRules=exitRules.toList(),
+            holdProfitUntilMa5Break=trendHoldCheck.isChecked,
             stockPolicy=StockPolicyStore(this).read(),stockScope=StockScope.SCANNER,
             marketGuardVersion=MarketCrashGuard.VERSION
         ).also{PaperStrategyConfig.validate(it)}

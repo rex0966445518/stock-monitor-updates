@@ -35,7 +35,7 @@ internal object BacktestJournalUi {
         val limit=if(version>=4&&!s.isNull("maxHoldingStocks"))"最高持倉 ${s.optInt("maxHoldingStocks")} 檔" else if(version<4)"持倉檔數不限" else "持倉上限未記錄"
         val target=s.optDouble("targetNetPct",if(version<4)3.0 else Double.NaN)
         val profit=if(target.isFinite())"獲利賣出 ${com.rex.twboardingscanner.backtest.btPercent(target)}%（扣費稅）" else "獲利目標未記錄"
-        return "$limit · $profit"
+        return "$limit · $profit" + (if(s.optBoolean("holdProfitUntilMa5Break",false))" · RSI>50／5MA 達標續抱" else "")
     }
     fun describe(s:JSONObject):String {
         val rules=s.optJSONObject("rules");val labels=s.optJSONObject("ruleLabels")

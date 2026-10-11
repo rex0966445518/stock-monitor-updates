@@ -29,6 +29,7 @@ class BacktestActivity:AppCompatActivity(){
     private lateinit var capital:EditText;private lateinit var codes:EditText
     private lateinit var maxHoldings:EditText;private lateinit var profitTarget:EditText
     private var exitRules:List<ExitRule> = emptyList()
+    private lateinit var trendHoldCheck:CheckBox
     private lateinit var exitButton:com.google.android.material.button.MaterialButton
     private var lastLimit=25;private var lastTarget=3.0
     private lateinit var status:TextView;private lateinit var results:LinearLayout
@@ -93,6 +94,13 @@ class BacktestActivity:AppCompatActivity(){
             }
         }.apply{tag="backtest-exit-rules"}
         trading.addView(exitButton)
+        trendHoldCheck=CheckBox(this).apply{
+            tag="backtest-profit-trend-hold";textSize=13f;setTextColor(NeonUi.cyan)
+            text="達標 RSI(14)>50 且日K未跌破5MA 則續抱；日K收盤跌破5MA 後下一交易日開盤賣出"
+            isChecked=saved.holdProfitUntilMa5Break
+            setOnCheckedChangeListener{_,_->if(::codes.isInitialized)store.saveDraft(draft())}
+        }
+        trading.addView(trendHoldCheck)
         root.addView(trading);NeonUi.group(root,trading,trading,"02  交易與下車條件","持倉上限、獲利目標、5 組認賠條件","backtest-trading")
 
         val universe=NeonUi.vertical(this)
@@ -158,7 +166,7 @@ class BacktestActivity:AppCompatActivity(){
         if(cash==null||!cash.isFinite()||cash !in 50000.0..100000000.0){capital.error="本金限 50,000～100,000,000";NeonUi.reveal(capital);return}
         val trading=readTrading(true)?:return
         if(raw.split(Regex("[,，\\s]+" )).filter{it.isNotBlank()}.any{!it.matches(Regex("[1-9][0-9]{3}"))}){codes.error="請輸入四碼股票代號，以逗號分隔";NeonUi.reveal(codes);return}
-        val id=UUID.randomUUID().toString();val s=BtSettingsCodec.capture(this,start,end,cash,raw).copy(rules=btRules.mapValues{it.value.toSet()},sectors=btSectors.toSet(),maxHoldingStocks=trading.first,targetNetPct=trading.second,exitRules=exitRules)
+        val id=UUID.randomUUID().toString();val s=BtSettingsCodec.capture(this,start,end,cash,raw).copy(rules=btRules.mapValues{it.value.toSet()},sectors=btSectors.toSet(),maxHoldingStocks=trading.first,targetNetPct=trading.second,exitRules=exitRules,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
         if(s.sectors.isEmpty()){Toast.makeText(this,"請至少選擇一個產業類型",Toast.LENGTH_LONG).show();return}
         if(s.rules.values.all{it.isEmpty()}){Toast.makeText(this,"請至少勾選一區的掃描條件",Toast.LENGTH_LONG).show();return}
         val data=workDataOf("id" to id)
@@ -177,7 +185,7 @@ class BacktestActivity:AppCompatActivity(){
     }
     private fun draft():BtSettings {
         readTrading(false)
-        return BtSettingsCodec.capture(this,start,end,capital.text.toString().toDoubleOrNull()?.takeIf{it.isFinite()&&it>0}?:3000000.0,codes.text.toString().trim()).copy(rules=btRules.mapValues{it.value.toSet()},sectors=btSectors.toSet(),maxHoldingStocks=lastLimit,targetNetPct=lastTarget,exitRules=exitRules)
+        return BtSettingsCodec.capture(this,start,end,capital.text.toString().toDoubleOrNull()?.takeIf{it.isFinite()&&it>0}?:3000000.0,codes.text.toString().trim()).copy(rules=btRules.mapValues{it.value.toSet()},sectors=btSectors.toSet(),maxHoldingStocks=lastLimit,targetNetPct=lastTarget,exitRules=exitRules,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
     }
     private fun refreshRuleButtons(){ruleButtons.forEach{(type,button)->button.text="${type.name.take(1)} 條件 (${btRules[type].orEmpty().size})"}}
     internal fun applyRules(type:RadarType,selected:Set<String>){
@@ -249,6 +257,7 @@ class BacktestActivity:AppCompatActivity(){
         startButton.text="起始 $start";endButton.text="結束 $end";capital.setText(saved.capital.toLong().toString());codes.setText(saved.codes)
         lastLimit=saved.maxHoldingStocks?:25;lastTarget=saved.targetNetPct
         maxHoldings.setText(lastLimit.toString());profitTarget.setText(btPercent(saved.targetNetPct))
+        trendHoldCheck.isChecked=saved.holdProfitUntilMa5Break
         exitButton.text="下車賣出條件 · ${exitRules.count{it.active}} / 5 組"
         refreshRuleButtons();refreshSectorButton();store.saveDraft(saved)
     }

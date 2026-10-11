@@ -31,6 +31,7 @@ import com.rex.twboardingscanner.domain.ScoringEngine
 import com.rex.twboardingscanner.domain.SignalLight
 import com.rex.twboardingscanner.domain.SignalResult
 import com.rex.twboardingscanner.domain.StockSector
+import com.rex.twboardingscanner.domain.StockScope
 import com.rex.twboardingscanner.domain.TechnicalCalculator
 import java.util.Calendar
 import java.util.Collections
@@ -42,6 +43,7 @@ import java.util.concurrent.atomic.AtomicInteger
 class MainActivity: AppCompatActivity() {
     private lateinit var b: ActivityMainBinding
     private lateinit var paperLoop: com.rex.twboardingscanner.paper.PaperLoop
+    private lateinit var trendHoldCheck:CheckBox
     private lateinit var posterExport: PosterExport
     private var chartDialog: StockChartDialog? = null
     private val adapter = SignalAdapter(onClick = { result ->
@@ -128,6 +130,17 @@ class MainActivity: AppCompatActivity() {
             }
         }
         b.exitRulesButton.text="下車賣出條件 · ${com.rex.twboardingscanner.data.ExitRuleStore(this).read(com.rex.twboardingscanner.domain.StockScope.SCANNER).count{it.active}} / 5 組"
+        trendHoldCheck=CheckBox(this).apply{
+            tag="scanner-profit-trend-hold";textSize=13f;setTextColor(NeonUi.cyan)
+            text="淨利達標 RSI(14)>50 且日K未跌破5MA 續抱；日K收盤跌破5MA才賣出"
+            isChecked=com.rex.twboardingscanner.data.ExitRuleStore(this@MainActivity).readProfitTrendHold(StockScope.SCANNER)
+            setOnCheckedChangeListener{_,enabled->
+                runCatching{com.rex.twboardingscanner.data.ExitRuleStore(this@MainActivity).saveProfitTrendHold(StockScope.SCANNER,enabled)}
+                    .onFailure{Toast.makeText(this@MainActivity,"規則保存失敗：${it.message}",Toast.LENGTH_LONG).show()}
+            }
+        }
+        val exitSettingsRow=b.exitRulesButton.parent as android.view.View
+        b.settingsPanel.addView(trendHoldCheck,b.settingsPanel.indexOfChild(exitSettingsRow)+1)
         b.banButton.setOnClickListener { StockToolsActivity.open(this,"BAN") }
         b.limitButton.setOnClickListener { StockToolsActivity.open(this,"LIMIT") }
         b.versionText.text="v${packageManager.getPackageInfo(packageName,0).versionName} · 作者：雷允澤"
@@ -186,7 +199,7 @@ class MainActivity: AppCompatActivity() {
         dialog.behavior.state=com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
     }
 
-    override fun onResume() { super.onResume();guardHandler.post(guardPoll);loadScanSettings();b.exitRulesButton.text="下車賣出條件 · ${com.rex.twboardingscanner.data.ExitRuleStore(this).read(com.rex.twboardingscanner.domain.StockScope.SCANNER).count{it.active}} / 5 組";if(::paperLoop.isInitialized){paperLoop.start();render();if(latest.isNotEmpty())coordinator.submit{runCatching{publishLists()}}} }
+    override fun onResume() { super.onResume();guardHandler.post(guardPoll);loadScanSettings();if(::trendHoldCheck.isInitialized)trendHoldCheck.isChecked=com.rex.twboardingscanner.data.ExitRuleStore(this).readProfitTrendHold(StockScope.SCANNER);b.exitRulesButton.text="下車賣出條件 · ${com.rex.twboardingscanner.data.ExitRuleStore(this).read(com.rex.twboardingscanner.domain.StockScope.SCANNER).count{it.active}} / 5 組";if(::paperLoop.isInitialized){paperLoop.start();render();if(latest.isNotEmpty())coordinator.submit{runCatching{publishLists()}}} }
     override fun onPause() { guardHandler.removeCallbacks(guardPoll);if(::paperLoop.isInitialized)paperLoop.stop();super.onPause() }
 
     private fun startFullScan() {
