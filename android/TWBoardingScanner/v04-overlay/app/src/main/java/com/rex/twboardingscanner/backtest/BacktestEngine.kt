@@ -8,10 +8,13 @@ import java.time.temporal.ChronoUnit
 import kotlin.math.*
 
 fun defaultBtRules()=RadarType.entries.associateWith{type->ScanConditions.forRadar(type).filter{it.defaultEnabled}.map{it.id}.toSet()}
+fun defaultActiveRadars()=setOf(RadarType.A_EARLY_BREAKOUT,RadarType.B_DEEP_REVERSAL,RadarType.C_LONG_RED_VOLUME)
 fun btPercent(value:Double)=java.math.BigDecimal.valueOf(value).stripTrailingZeros().toPlainString()
 data class BtSettings(val start:LocalDate,val end:LocalDate,val capital:Double=3000000.0,val codes:String="",val rules:Map<RadarType,Set<String>> = defaultBtRules(),val sectors:Set<StockSector> = StockSector.entries.toSet(),val strategyVersion:Int=4,
     val maxHoldingStocks:Int?=if(strategyVersion>=4)25 else null,val targetNetPct:Double=3.0,
-    val stockPolicy:StockPolicy=StockPolicy(),val stockScope:StockScope=StockScope.BACKTEST,val exitRules:List<ExitRule> = emptyList(),val marketGuardVersion:Int=0,val holdProfitUntilMa5Break:Boolean=false){
+    val stockPolicy:StockPolicy=StockPolicy(),val stockScope:StockScope=StockScope.BACKTEST,val exitRules:List<ExitRule> = emptyList(),val marketGuardVersion:Int=0,val holdProfitUntilMa5Break:Boolean=false,
+    val enabledRadars:Set<RadarType> = defaultActiveRadars(),
+    val dConfig:DPatternConfig=DPatternConfig.DEFAULT){
     fun validateTrading(){
         require(marketGuardVersion in 0..MarketCrashGuard.VERSION){"大盤保護版本不相容"}
         stockPolicy.validate()
@@ -21,10 +24,12 @@ data class BtSettings(val start:LocalDate,val end:LocalDate,val capital:Double=3
         if(strategyVersion>=4)require(maxHoldingStocks!=null&&maxHoldingStocks>0){"最高持倉請填 1 以上的整數"}
         else require(maxHoldingStocks==null&&targetNetPct==3.0){"舊策略必須保留原持倉及獲利規則"}
         require(targetNetPct.isFinite()&&targetNetPct in 0.01..1000.0){"獲利賣出請填 0.01～1000%"}
+        require(enabledRadars.all{it in RadarType.entries}){"啟用區域不存在"}
+        dConfig.validated()
     }
 }
 data class BtSeries(val code:String,val name:String,val market:Market,val bars:List<DailyBar>,val dividends:Map<LocalDate,Double> = emptyMap())
-data class BtSignal(val code:String,val radar:String,val dataDate:LocalDate?=null)
+data class BtSignal(val code:String,val radar:String,val dataDate:LocalDate?=null,val dEvidence:String="")
 data class BtTrade(val date:LocalDate,val signalDate:LocalDate,val code:String,val name:String,val radar:String,val side:String,val price:Double,val fee:Double,val tax:Double,val pnl:Double,val reason:String,val shares:Int=1000,val time:String="",val timeKind:String="",val lotId:String="",val target:Double=0.0,val dataDate:LocalDate=signalDate,val dayClose:Double?=null,val previousClose:Double?=null)
 data class BtHolding(val code:String,val name:String,val radar:String,val entry:Double,val cost:Double,val entryDate:LocalDate,val signalDate:LocalDate,var mark:Double,var markDate:LocalDate,val lotId:String,val target:Double,val dataDate:LocalDate,var trendHoldActivated:Boolean=false)
 data class BtDay(val date:LocalDate,val equity:Double,val selected:Int=0,val buys:Int=0,val sells:Int=0,val skipped:Int=0,
@@ -56,7 +61,8 @@ object BacktestEngine {
     private val calculator=TechnicalCalculator()
     private fun date(b:DailyBar)=RuleMetrics.tradingDate(b.time)
     fun prepare(series:List<BtSeries>,settings:BtSettings,progress:(String)->Unit={},cancel:()->Boolean={false},
-        flowFor:(String,LocalDate)->TradeSideVolume?={_,_->null}):BtPrepared {
+        flowFor:(String,LocalDate)->TradeSideVolume?={_,_->null},
+        benchmark:Map<LocalDate,Double>?=null):BtPrepared {
         val signals=mutableMapOf<LocalDate,MutableList<BtSignal>>();var pending=0
         series.forEachIndexed{index,s->
             check(!cancel()){ "已取消回測" }
@@ -65,23 +71,30 @@ object BacktestEngine {
                 if(j%20==0)check(!cancel()){ "已取消回測" }
                 val day=date(bars[j]);if(day<settings.start||day>settings.end)return@forEach
                 val matches=mutableListOf<Pair<RadarType,LocalDate>>()
+                var dDetails=""
                 RadarType.entries.forEach radarLoop@{type->
+                    if(type !in settings.enabledRadars)return@radarLoop
                     val ids=settings.rules[type].orEmpty();if(ids.isEmpty())return@radarLoop
                     // Match live scanner timing: A/B exclude today's candle; C includes it.
-                    val end=if(type==RadarType.C_LONG_RED_VOLUME)j+1 else j
+                    val end=if(type==RadarType.C_LONG_RED_VOLUME||type==RadarType.D_MAIN_FORCE)j+1 else j
                     if(end<60)return@radarLoop
                     val known=bars.subList(max(0,end-320),end);val bar=known.last()
                     val stock=MarketStock(s.code,s.name,s.market,StockSector.UNKNOWN,bar.open,bar.high,bar.low,bar.close,0.0,(bar.volumeShares/1000).toInt(),null,null,
                         tradeSideVolume=flowFor(s.code,day))
-                    val snap=calculator.build(stock,known).copy(timestamp=day.atTime(13,30).atZone(RuleMetrics.TAIPEI).toInstant().toEpochMilli())
+                    val snap=calculator.build(stock,known).copy(
+                        timestamp=day.atTime(13,30).atZone(RuleMetrics.TAIPEI).toInstant().toEpochMilli(),
+                        dConfig=settings.dConfig,marketIndexCloses=benchmark)
                     val metrics=RuleMetrics(snap)
                     val checks=ScanConditions.forRadar(type).filter{it.id in ids}.map{it.test(metrics)}
                     pending+=checks.count{it==null}
-                    if(checks.size==ids.size&&checks.all{it==true})matches.add(type to date(bar))
+                    if(checks.size==ids.size&&checks.all{it==true}){
+                        matches.add(type to date(bar))
+                        if(type==RadarType.D_MAIN_FORCE)dDetails=metrics.dPattern.format()
+                    }
                 }
-                if(matches.isNotEmpty())signals.getOrPut(day){mutableListOf()}.add(BtSignal(s.code,matches.joinToString("/"){it.first.name.take(1)},matches.maxOf{it.second}))
+                if(matches.isNotEmpty())signals.getOrPut(day){mutableListOf()}.add(BtSignal(s.code,matches.joinToString("/"){it.first.name.take(1)},matches.maxOf{it.second},dDetails))
             }
-            if(index%10==0||index==series.lastIndex)progress("依目前 ABC 勾選條件掃描 ${index+1} / ${series.size} 檔")
+            if(index%10==0||index==series.lastIndex)progress("依目前 ABCD 亮燈與勾選條件掃描 ${index+1} / ${series.size} 檔")
         }
         return BtPrepared(series,signals,series.flatMap{it.bars.map(::date)}.distinct().sorted(),pending)
     }
@@ -208,7 +221,9 @@ object BacktestEngine {
             val dataDate=matched.mapNotNull{it.dataDate}.maxOrNull()?:day
             val name=meta[code]?.name?:code;val target=targetPrice(cost,targetFraction);b.cash-=cost;usedShares[code]=(usedShares[code]?:0)+1000
             b.holdings.add(BtHolding(code,name,radar,px,cost,day,day,bar.close,day,lotId,target,dataDate))
-            b.trades.add(BtTrade(day,day,code,name,radar,"BUY",px,fee,0.0,0.0,"當日入選，收盤各買一張",time="13:30",timeKind="收盤價模擬時間，非逐筆成交",lotId=lotId,target=target,dataDate=dataDate,dayClose=bar.close,previousClose=previous[code]?.get(day)))
+            b.trades.add(BtTrade(day,day,code,name,radar,"BUY",px,fee,0.0,0.0,
+                "當日入選，收盤各買一張"+matched.mapNotNull{it.dEvidence.takeIf(String::isNotBlank)}
+                    .distinct().joinToString("\n",prefix="\n"),time="13:30",timeKind="收盤價模擬時間，非逐筆成交",lotId=lotId,target=target,dataDate=dataDate,dayClose=bar.close,previousClose=previous[code]?.get(day)))
         }
         b.holdings.forEach{p->bars[p.code]?.get(day)?.let{p.mark=it.close;p.markDate=day}}
         val today=b.trades.drop(tradesBefore)

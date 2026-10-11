@@ -42,6 +42,7 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
             RadarType.A_EARLY_BREAKOUT -> NeonUi.pink
             RadarType.B_DEEP_REVERSAL -> NeonUi.amber
             RadarType.C_LONG_RED_VOLUME -> NeonUi.cyan
+            RadarType.D_MAIN_FORCE -> NeonUi.mint
         }
 
         h.b.root.strokeColor = NeonUi.border
@@ -52,6 +53,7 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
             RadarType.A_EARLY_BREAKOUT -> "A 起漲"
             RadarType.B_DEEP_REVERSAL -> "B 反轉"
             RadarType.C_LONG_RED_VOLUME -> "C 長紅爆量"
+            RadarType.D_MAIN_FORCE -> "D 主力進場"
         }
         h.b.badge.setTextColor(accent)
         h.b.badge.background = GradientDrawable().apply {
@@ -69,6 +71,8 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
         h.b.chartView.setBars(s.bars)
         VolumeStrip.bind(h.b.volumeSummary, h.b.recentVolumes, s.bars)
 
+        h.b.dEvidence.visibility=if(r.radarType==RadarType.D_MAIN_FORCE)android.view.View.VISIBLE else android.view.View.GONE
+        h.b.dEvidence.text=r.dEvidence.orEmpty()
         h.b.closingAuction.bind(s.sourceStock?.closingAuction)
         h.b.financialPanel.bind(s.sourceStock?.financials,RuleMetrics(s).today)
         h.b.financialButton.setOnClickListener { onFinancial(r) }
@@ -82,13 +86,17 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
                 "floor" to "底部守住", "higherLow" to "低點墊高", "declineVolume" to "下跌量縮",
                 "ma5" to "站回5日線", "red" to "紅K", "gain" to "日漲≥3%", "body" to "實體≥3%",
                 "closeHigh" to "收在高檔", "extra_eps" to "EPS／營收", "extra_flow" to "法人",
-                "extra_risk" to "風險結構", "extra_high" to "避開高點", "extra_limit" to "避開漲停"
+                "extra_risk" to "風險結構", "extra_high" to "避開高點", "extra_limit" to "避開漲停",
+                "d_limit" to "曾觸漲停", "d_green" to "連陽", "d_gap" to "向上缺口",
+                "d_unfilled" to "缺口未回補", "d_volume" to "連續放量",
+                "d_relative" to "勝過大盤"
             )[check.id] ?: check.label.substringBefore("：")
             addCheck(h, short, check.state, check.selected)
         }
         val date = s.bars.lastOrNull()?.let { RuleMetrics.tradingDate(it.time).toString() } ?: "無資料"
         val upgraded = if (r.technicalUpgrade) "｜技術升級" else ""
-        val mode = if (r.radarType == RadarType.C_LONG_RED_VOLUME) "最新日K（可能更新）" else "排除當日"
+        val mode = if (r.radarType == RadarType.C_LONG_RED_VOLUME||r.radarType==RadarType.D_MAIN_FORCE)
+            "截至最新可得日K（當日資料可能未完成）" else "排除當日"
         h.b.trigger.text = "$date · $mode$upgraded" +
             if(r.radarType==RadarType.C_LONG_RED_VOLUME) "\n長紅爆量觀察訊號 · 無隔日續漲保證" else ""
 

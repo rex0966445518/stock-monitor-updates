@@ -99,7 +99,7 @@ internal class PosterExport(private val activity:AppCompatActivity) {
             val uris=ArrayList(files.map {FileProvider.getUriForFile(activity,activity.packageName+".posters",it)})
             val intent=Intent(Intent.ACTION_SEND_MULTIPLE).apply {
                 type="image/png";putParcelableArrayListExtra(Intent.EXTRA_STREAM,uris);addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                clipData=ClipData.newUri(activity.contentResolver,"ABC 海報",uris.first()).apply{uris.drop(1).forEach{addItem(ClipData.Item(it))}}
+                clipData=ClipData.newUri(activity.contentResolver,"ABCD 海報",uris.first()).apply{uris.drop(1).forEach{addItem(ClipData.Item(it))}}
             }
             activity.startActivity(Intent.createChooser(intent,"分享三張掃描海報"))
         }.onFailure {toast("無法開啟分享：${it.message}")}

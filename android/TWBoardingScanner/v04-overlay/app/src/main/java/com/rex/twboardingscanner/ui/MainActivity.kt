@@ -83,6 +83,17 @@ class MainActivity: AppCompatActivity() {
             "本次可掃描 ${sectorCounts.values.sum()} 檔 · 已選 ${openSectorBoxes?.filterValues { it.isChecked }?.keys?.sumOf { sectorCounts[it] ?: 0 } ?: 0} 檔\n按官方產業別合併顯示；電腦／資訊／雲端不等同純 AI 題材。"
     }
     private val radarSelections = mutableMapOf<RadarType, Set<String>>()
+    private var radarEnabled:Set<RadarType> = com.rex.twboardingscanner.backtest.defaultActiveRadars()
+    private var dConfig:DPatternConfig=DPatternConfig.DEFAULT
+    private val radarSwitches=mutableMapOf<RadarType,com.google.android.material.button.MaterialButton>()
+    private fun refreshRadarSwitches(){
+        radarSwitches.forEach{(type,button)->
+            val on=type in radarEnabled
+            button.text="${type.name.take(1)} ${if(on)"● 分析" else "○ 停用"}"
+            NeonUi.selected(button,on)
+            button.contentDescription="${type.name.take(1)} 區${if(on)"已啟用，參與篩選" else "已停用，不參與篩選"}"
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -112,6 +123,21 @@ class MainActivity: AppCompatActivity() {
         b.conditionAButton.setOnClickListener { showRadarConditions(RadarType.A_EARLY_BREAKOUT) }
         b.conditionBButton.setOnClickListener { showRadarConditions(RadarType.B_DEEP_REVERSAL) }
         b.conditionCButton.setOnClickListener { showRadarConditions(RadarType.C_LONG_RED_VOLUME) }
+        b.conditionDButton.setOnClickListener { showRadarConditions(RadarType.D_MAIN_FORCE) }
+        // The four on/off buttons control computation, without deleting checked rules.
+        val switchRow=NeonUi.vertical(this).apply{
+            tag="scanner-radar-toggles"
+            addView(NeonUi.label(this@MainActivity,"ABCD 參與分析：亮起才會跑該區條件",12f,NeonUi.cyan,true))
+            addView(NeonUi.row(this@MainActivity,RadarType.entries.map{type->
+                NeonUi.button(this@MainActivity,"",NeonUi.cyan){
+                    radarEnabled=if(type in radarEnabled)radarEnabled-type else radarEnabled+type
+                    saveScanSettings();refreshRadarSwitches();requestConfiguredScan()
+                }.apply{tag="scanner-enabled-${type.name}";textSize=11f}.also{radarSwitches[type]=it}
+            }))
+        }
+        val conditionRow=b.conditionAButton.parent as View
+        b.settingsPanel.addView(switchRow,b.settingsPanel.indexOfChild(conditionRow)+1)
+        refreshRadarSwitches()
         b.scanConditionButton.setOnClickListener { showScanConditionsDialog() }
         posterExport=PosterExport(this)
         b.refreshButton.text="導出海報"
@@ -212,6 +238,8 @@ class MainActivity: AppCompatActivity() {
         latestScanDate=scanDate.toString()
         latestScanAt=System.currentTimeMillis()
         val scanRules = radarSelections.mapValues { it.value.toSet() }
+        val scanEnabled=radarEnabled.toSet()
+        val scanDConfig=dConfig
         val flowStore=com.rex.twboardingscanner.data.TradeSideVolumeStore(this)
         val flowRevision=flowStore.revision()
         val scanPolicy=com.rex.twboardingscanner.data.StockPolicyStore(this).read()
@@ -235,6 +263,14 @@ class MainActivity: AppCompatActivity() {
         coordinator.submit {
             val guard=runCatching{com.rex.twboardingscanner.data.MarketIndexData(this).live()}.getOrElse{com.rex.twboardingscanner.domain.MarketCrashGuard.unknown("大盤檢查失敗，暫停買入")}
             runOnUiThread{b.marketGuardButton.text=guard.title+"  ›";b.marketGuardButton.setTextColor(if(guard.canBuy)NeonUi.cyan else NeonUi.amber)}
+            val indexHistory=if(
+                (RadarType.D_MAIN_FORCE in scanEnabled&&DPattern.RELATIVE in scanRules[RadarType.D_MAIN_FORCE].orEmpty())||
+                (paperSettings?.enabledRadars?.contains(RadarType.D_MAIN_FORCE)==true&&
+                    DPattern.RELATIVE in paperSettings.rules[RadarType.D_MAIN_FORCE].orEmpty())
+            )runCatching{
+                com.rex.twboardingscanner.data.MarketIndexData(this).load(scanDate.minusDays(160),scanDate)
+                    .associate{it.date to it.close}
+            }.getOrNull() else null
             val universe = provider.loadUniverse { msg ->
                 runOnUiThread { b.progressTitle.text = msg }
             }
@@ -288,13 +324,16 @@ class MainActivity: AppCompatActivity() {
                                 run {
                                     analyzed.incrementAndGet()
                                     fun evaluate(stockToUse: com.rex.twboardingscanner.domain.MarketStock) = RadarType.entries.mapNotNull { type ->
+                                        if(type !in scanEnabled&&type !in (paperSettings?.enabledRadars?:emptySet()))return@mapNotNull null
                                         val datedBars = calculator.barsForRadar(bars, type, scanDate)
                                         if (datedBars.isEmpty()) null else {
                                             val snap = calculator.build(stockToUse, datedBars)
+                                                .copy(dConfig=scanDConfig,marketIndexCloses=indexHistory)
                                             when(type) {
                                                 RadarType.A_EARLY_BREAKOUT -> engine.evaluateA(snap, scanRules.getValue(type))
                                                 RadarType.B_DEEP_REVERSAL -> engine.evaluateB(snap, scanRules.getValue(type))
                                                 RadarType.C_LONG_RED_VOLUME -> engine.evaluateC(snap, scanRules.getValue(type))
+                                                RadarType.D_MAIN_FORCE -> engine.evaluateD(snap,scanRules.getValue(type))
                                             }
                                         }
                                     }
@@ -360,7 +399,8 @@ class MainActivity: AppCompatActivity() {
                 }
                 val snapshot=com.rex.twboardingscanner.data.ScanArchiveStore.snapshot(
                     scanDate.toString(),latestScanAt,scanRules,mainSectors,scanPolicy,
-                    flowRevision,total,analyzed.get(),failed.get())
+                    flowRevision,total,analyzed.get(),failed.get(),
+                    enabledRadars=scanEnabled,dConfig=scanDConfig)
                 com.rex.twboardingscanner.data.ScanArchiveStore(this).use{store->
                     store.addCompleteScan(scanDate.toString(),latestScanAt,snapshot,copy)
                 }
@@ -432,7 +472,7 @@ class MainActivity: AppCompatActivity() {
         com.rex.twboardingscanner.paper.PaperRepository(this).publish(latest,latestScanAt)
     }
     private fun render() {
-        val groups = (0..4).map { ResultFilters.select(admitted(), it) }
+        val groups = (0..5).map { ResultFilters.select(admitted(), it) }
         b.resultFilters.update(groups.map { it.size }, selectedTab)
         adapter.submit(groups[selectedTab])
         b.emptyState.visibility=if(groups[selectedTab].isEmpty())android.view.View.VISIBLE else android.view.View.GONE
@@ -455,9 +495,16 @@ class MainActivity: AppCompatActivity() {
             RadarType.entries.forEach { remove("rules_${it.name}") }
             remove("avoid_hot"); remove("avoid_limit_up"); remove("avoid_negative_eps")
         }.apply()
+        radarEnabled=prefs.getStringSet("enabled_radars",null)?.mapNotNull{
+            runCatching{RadarType.valueOf(it)}.getOrNull()
+        }?.toSet()?:com.rex.twboardingscanner.backtest.defaultActiveRadars()
+        dConfig=runCatching{DPatternConfig.read(org.json.JSONObject(prefs.getString("d_pattern_config",null)?:"{}"))}
+            .getOrDefault(DPatternConfig.DEFAULT)
+        refreshRadarSwitches()
         RadarType.entries.forEach { type ->
             val rules = ScanConditions.forRadar(type)
             val savedRules = prefs.getStringSet("rules_${ScanConditions.VERSION}_${type.name}", null)
+                ?:prefs.getStringSet("rules_${ScanConditions.PREVIOUS_VERSION}_${type.name}",null)
                 ?:prefs.getStringSet("rules_${ScanConditions.LEGACY_VERSION}_${type.name}",null)
             radarSelections[type] = savedRules?.intersect(rules.map { it.id }.toSet())
                 ?: rules.filter { it.defaultEnabled }.map { it.id }.toSet()
@@ -467,6 +514,8 @@ class MainActivity: AppCompatActivity() {
     private fun saveScanSettings() {
         prefs.edit()
             .putStringSet("enabled_sectors", enabledSectors.map { it.name }.toSet())
+            .putStringSet("enabled_radars",radarEnabled.map{it.name}.toSet())
+            .putString("d_pattern_config",dConfig.json().toString())
             .apply()
     }
 
@@ -540,6 +589,7 @@ class MainActivity: AppCompatActivity() {
             RadarType.A_EARLY_BREAKOUT -> "A｜起漲掃描條件"
             RadarType.B_DEEP_REVERSAL -> "B｜深跌反轉掃描條件"
             RadarType.C_LONG_RED_VOLUME -> "C｜長紅爆量掃描條件"
+            RadarType.D_MAIN_FORCE -> "D｜主力進場六大條件"
         }
         val rules = ScanConditions.forRadar(type)
         val box = LinearLayout(this).apply {
@@ -550,6 +600,13 @@ class MainActivity: AppCompatActivity() {
             text = "勾選條件全部滿足才入選；未勾選不限制。基本條件預設全選，額外查核預設關閉。\nA/B 排除台灣當日日線；C 使用最新日 K。\nB 通過後若 RSI>50 且收盤>20日線，另標示技術升級；不辨識 W 底形狀。\n額外資料不足標示待查核，勾選後會阻擋入選。5日／10日線碰觸以差距1%內且前一日差距較大定義；主動買賣比需提供來源可靠的內外盤成交量CSV，不能使用五檔委買委賣掛單量。HiStock 財報會查核技術候選股，快取24小時；HTTP403/429、格式變更、資料過期均待查核。逐日法人尚未接入。分數為所選條件通過率，不是公司評級。\n財務條件共用於ABC、可各自勾選；EPS為正不代表現金流為正。產業EPS範圍不是通用及格線，未設成硬門檻。\n現金流使用原站最新列示期間，不跨季加總；金融業現金流需另行解讀。營業利益率為正不能排除一次性業外收益。\n風險估算：前20日最低價為支撐，支撐下1%為失效價，前60日最高價為壓力；(壓力−現價)/(現價−失效價)≥2。\n漲停估算：前收盤×1.1，按台股跳動單位向下取整；非交易所公告漲停價。\nC 為觀察訊號，尚無回測證明隔天一定續漲。"
             setTextColor(Color.parseColor("#9FBAD0"))
         })
+        if(type==RadarType.D_MAIN_FORCE){
+            box.addView(NeonUi.button(this,"D 數值門檻 · 20日／1次漲停／4根陽線／3日2倍"){
+                DPatternEditor.show(this,dConfig){chosen->
+                    dConfig=chosen;saveScanSettings();requestConfiguredScan()
+                }
+            }.apply{tag="scanner-d-parameters"})
+        }
         var extraHeadingShown = false
         val checks = rules.associate { rule ->
             if (rule.extra && !extraHeadingShown) {

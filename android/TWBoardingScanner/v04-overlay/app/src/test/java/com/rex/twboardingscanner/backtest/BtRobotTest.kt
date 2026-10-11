@@ -67,7 +67,7 @@ class BtRobotTest {
     @Test fun sixtyFiveIndependentSwitchesRoundTripAndSearchNeverRepeats(){
         assertEquals(65,BtRobotSpace.legacySlots.size)
         assertEquals(71,BtRobotSpace.slots.size)
-        assertEquals(BigInteger.ONE.shiftLeft(BtRobotSpace.slots.size),BtRobotSpace.total)
+        assertEquals(BigInteger.ONE.shiftLeft(BtRobotSpace.allSlots.size),BtRobotSpace.total)
         BtRobotSpace.slots.forEachIndexed{i,slot->
             val rules=BtRobotSpace.rules(BigInteger.ONE.shiftLeft(i).toString(16))
             assertEquals(setOf(slot.second),rules[slot.first]);assertEquals(1,rules.values.sumOf{it.size})

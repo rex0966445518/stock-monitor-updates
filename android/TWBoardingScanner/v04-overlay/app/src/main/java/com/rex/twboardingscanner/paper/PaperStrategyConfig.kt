@@ -39,7 +39,7 @@ object PaperStrategyConfig {
         // Do NOT reject dates before today: keep an imported backtest snapshot visible,
         // but no paper buys may occur outside its activation dates.
         require(settings.sectors.isNotEmpty()){"至少選擇一種產業"}
-        require(settings.rules.values.any{it.isNotEmpty()}){"請至少勾選一個 ABC 區域"}
+        require(settings.enabledRadars.any{settings.rules[it].orEmpty().isNotEmpty()}){"請至少開啟一個含條件的入場區域"}
         require(settings.rules.keys==RadarType.entries.toSet()){"ABC 條件不完整"}
         settings.rules.forEach{(type,ids)->
             require(ids.all{it in ScanConditions.forRadar(type).map{r->r.id}}){"ABC 條件版本不符"}
@@ -50,6 +50,7 @@ object PaperStrategyConfig {
     fun allowedCodes(settings:BtSettings):Set<String> =
         settings.codes.split(Regex("[,，\\s]+")).filter{it.isNotBlank()}.toSet()
     fun matches(r:SignalResult,settings:BtSettings):Boolean {
+        if(r.radarType !in settings.enabledRadars)return false
         if(r.sector !in settings.sectors)return false
         val codes=allowedCodes(settings)
         if(codes.isNotEmpty()&&r.code !in codes)return false

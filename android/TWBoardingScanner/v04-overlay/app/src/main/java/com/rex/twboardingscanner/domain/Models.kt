@@ -1,6 +1,6 @@
 package com.rex.twboardingscanner.domain
 
-enum class RadarType { A_EARLY_BREAKOUT, B_DEEP_REVERSAL, C_LONG_RED_VOLUME }
+enum class RadarType { A_EARLY_BREAKOUT, B_DEEP_REVERSAL, C_LONG_RED_VOLUME, D_MAIN_FORCE }
 enum class SignalLight { NONE, YELLOW, ORANGE, RED, WEAKENING }
 enum class Market { TWSE, TPEX }
 
@@ -152,7 +152,9 @@ data class StockSnapshot(
     val bars: List<DailyBar>,
     val timestamp: Long,
     val sourceStock: MarketStock? = null,
-    val tradeSideVolume:TradeSideVolume? = null
+    val tradeSideVolume:TradeSideVolume? = null,
+    val dConfig:DPatternConfig=DPatternConfig.DEFAULT,
+    val marketIndexCloses:Map<java.time.LocalDate,Double>?=null
 )
 
 data class SignalResult(
@@ -166,7 +168,8 @@ data class SignalResult(
     val blockers: List<String>,
     val snapshot: StockSnapshot,
     val checks: List<ConditionCheck> = emptyList(),
-    val technicalUpgrade: Boolean = false
+    val technicalUpgrade: Boolean = false,
+    val dEvidence:String?=null
 )
 
 // Optional evidence is never synthesized from a single reported EPS or partial flow series.

@@ -39,6 +39,17 @@ class BacktestActivity:AppCompatActivity(){
     private var appliedRevision=""
     private var btRules:Map<RadarType,Set<String>> = emptyMap()
     private var btSectors:Set<StockSector> = emptySet()
+    private var btEnabled:Set<RadarType> = defaultActiveRadars()
+    private var btDConfig:DPatternConfig = DPatternConfig.DEFAULT
+    private val radarModeButtons=mutableMapOf<RadarType,com.google.android.material.button.MaterialButton>()
+    private fun updateRadarModes(){
+        radarModeButtons.forEach{(type,button)->
+            val on=type in btEnabled
+            button.text="${type.name.take(1)} ${if(on)"●" else "○"}"
+            NeonUi.selected(button,on)
+            button.contentDescription="${type.name.take(1)} ${if(on)"開啟分析" else "停止分析"}"
+        }
+    }
     private lateinit var sectorButton:com.google.android.material.button.MaterialButton
     private val ruleButtons=mutableMapOf<RadarType,com.google.android.material.button.MaterialButton>()
     private val handler=Handler(Looper.getMainLooper())
@@ -57,6 +68,7 @@ class BacktestActivity:AppCompatActivity(){
         val config=store.configuration()
         val saved=runCatching{BtSettingsCodec.decode(config!!)}.getOrElse{BtSettingsCodec.capture(this,start,end,3000000.0,"")}
         btRules=saved.rules;btSectors=saved.sectors;exitRules=saved.exitRules
+        btEnabled=saved.enabledRadars;btDConfig=saved.dConfig
         lastLimit=saved.maxHoldingStocks?:25;lastTarget=saved.targetNetPct
         start=runCatching{LocalDate.parse(config?.getString("start"))}.getOrDefault(start);end=runCatching{LocalDate.parse(config?.getString("end"))}.getOrDefault(end)
         val root=NeonUi.vertical(this).apply{setPadding(dp(16),dp(16),dp(16),dp(28))}
@@ -108,7 +120,15 @@ class BacktestActivity:AppCompatActivity(){
         codes=NeonUi.field(EditText(this).apply{setText(config?.optString("codes")?:"");hint="全部股票，或 2330, 3661…";contentDescription="回測股票代號"})
         universe.addView(codes);universe.addView(label("留空掃描現存上市櫃；首次下載需較長時間。",11f))
         sectorButton=NeonUi.button(this,""){editSectors()};refreshSectorButton();universe.addView(sectorButton)
-        universe.addView(NeonUi.gap(this,12));universe.addView(label("回測專用 ABC 條件",15f,NeonUi.ink,true))
+        universe.addView(NeonUi.gap(this,12));universe.addView(label("回測專用 ABCD 條件",15f,NeonUi.ink,true))
+        universe.addView(label("按鈕亮起才參與分析；關閉不會刪除該區勾選",11f))
+        universe.addView(NeonUi.row(this,RadarType.entries.map{type->
+            NeonUi.button(this,"",NeonUi.cyan){
+                btEnabled=if(type in btEnabled)btEnabled-type else btEnabled+type
+                store.saveDraft(draft());updateRadarModes()
+            }.apply{tag="backtest-enabled-${type.name}";textSize=12f}.also{radarModeButtons[type]=it}
+        }))
+        updateRadarModes()
         universe.addView(NeonUi.row(this,RadarType.entries.map{type->NeonUi.button(this,"",when(type){RadarType.A_EARLY_BREAKOUT->NeonUi.pink;RadarType.B_DEEP_REVERSAL->NeonUi.amber;else->NeonUi.cyan}){editRules(type)}.also{ruleButtons[type]=it}}))
         refreshRuleButtons()
         universe.addView(label("首次沿用主頁，之後獨立保存回測設定。",11f))
@@ -166,9 +186,12 @@ class BacktestActivity:AppCompatActivity(){
         if(cash==null||!cash.isFinite()||cash !in 50000.0..100000000.0){capital.error="本金限 50,000～100,000,000";NeonUi.reveal(capital);return}
         val trading=readTrading(true)?:return
         if(raw.split(Regex("[,，\\s]+" )).filter{it.isNotBlank()}.any{!it.matches(Regex("[1-9][0-9]{3}"))}){codes.error="請輸入四碼股票代號，以逗號分隔";NeonUi.reveal(codes);return}
-        val id=UUID.randomUUID().toString();val s=BtSettingsCodec.capture(this,start,end,cash,raw).copy(rules=btRules.mapValues{it.value.toSet()},sectors=btSectors.toSet(),maxHoldingStocks=trading.first,targetNetPct=trading.second,exitRules=exitRules,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
+        val id=UUID.randomUUID().toString();val s=BtSettingsCodec.capture(this,start,end,cash,raw).copy(rules=btRules.mapValues{it.value.toSet()},sectors=btSectors.toSet(),
+            enabledRadars=btEnabled,dConfig=btDConfig,maxHoldingStocks=trading.first,targetNetPct=trading.second,exitRules=exitRules,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
         if(s.sectors.isEmpty()){Toast.makeText(this,"請至少選擇一個產業類型",Toast.LENGTH_LONG).show();return}
-        if(s.rules.values.all{it.isEmpty()}){Toast.makeText(this,"請至少勾選一區的掃描條件",Toast.LENGTH_LONG).show();return}
+        if(s.enabledRadars.none{ s.rules[it].orEmpty().isNotEmpty() }){
+            Toast.makeText(this,"請至少亮起一區且該區有勾選條件",Toast.LENGTH_LONG).show();return
+        }
         val data=workDataOf("id" to id)
         val request=OneTimeWorkRequestBuilder<BacktestWorker>().setInputData(data).setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build()
         // REPLACE also handles a process stopped before the old progress label was saved.
@@ -185,7 +208,8 @@ class BacktestActivity:AppCompatActivity(){
     }
     private fun draft():BtSettings {
         readTrading(false)
-        return BtSettingsCodec.capture(this,start,end,capital.text.toString().toDoubleOrNull()?.takeIf{it.isFinite()&&it>0}?:3000000.0,codes.text.toString().trim()).copy(rules=btRules.mapValues{it.value.toSet()},sectors=btSectors.toSet(),maxHoldingStocks=lastLimit,targetNetPct=lastTarget,exitRules=exitRules,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
+        return BtSettingsCodec.capture(this,start,end,capital.text.toString().toDoubleOrNull()?.takeIf{it.isFinite()&&it>0}?:3000000.0,codes.text.toString().trim()).copy(rules=btRules.mapValues{it.value.toSet()},sectors=btSectors.toSet(),
+            enabledRadars=btEnabled,dConfig=btDConfig,maxHoldingStocks=lastLimit,targetNetPct=lastTarget,exitRules=exitRules,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
     }
     private fun refreshRuleButtons(){ruleButtons.forEach{(type,button)->button.text="${type.name.take(1)} 條件 (${btRules[type].orEmpty().size})"}}
     internal fun applyRules(type:RadarType,selected:Set<String>){
@@ -195,6 +219,9 @@ class BacktestActivity:AppCompatActivity(){
     private fun editRules(type:RadarType){
         val options=ScanConditions.forRadar(type);val selected=btRules[type].orEmpty()
         val content=NeonUi.vertical(this).apply{setPadding(dp(14),dp(10),dp(14),dp(10))}
+        if(type==RadarType.D_MAIN_FORCE)content.addView(NeonUi.button(this,"D 數值門檻 · 可調整觀察日、連陽、漲停與量比",NeonUi.mint){
+            DPatternEditor.show(this,btDConfig){cfg->btDConfig=cfg;store.saveDraft(draft())}
+        }.apply{tag="backtest-d-parameters"})
         content.addView(label("勾選才列入本區門檻；全部取消則該區不入選。",12f,NeonUi.ink))
         val boxes=options.map{rule->
             CheckBox(this).apply{text=rule.label;textSize=13f;setTextColor(NeonUi.ink);isChecked=rule.id in selected;minHeight=dp(48);setPadding(0,dp(5),0,dp(5));buttonTintList=android.content.res.ColorStateList.valueOf(NeonUi.cyan)}.also{box->
@@ -254,6 +281,7 @@ class BacktestActivity:AppCompatActivity(){
         if(revision==appliedRevision||!::codes.isInitialized)return
         val saved=runCatching{BtSettingsCodec.decode(store.configuration()!!)}.getOrNull()?:return
         appliedRevision=revision;start=saved.start;end=saved.end;btRules=saved.rules;btSectors=saved.sectors;exitRules=saved.exitRules
+        btEnabled=saved.enabledRadars;btDConfig=saved.dConfig;updateRadarModes()
         startButton.text="起始 $start";endButton.text="結束 $end";capital.setText(saved.capital.toLong().toString());codes.setText(saved.codes)
         lastLimit=saved.maxHoldingStocks?:25;lastTarget=saved.targetNetPct
         maxHoldings.setText(lastLimit.toString());profitTarget.setText(btPercent(saved.targetNetPct))

@@ -14,9 +14,9 @@ internal class NeonPoster(private val radar:RadarType,private val stocks:List<Po
     private val white=Color.rgb(235,245,255);private val muted=Color.rgb(150,181,209)
     private val pink=Color.rgb(255,75,121);private val blue=Color.rgb(52,171,255)
     private val mint=Color.rgb(70,246,197);private val gold=Color.rgb(255,190,70)
-    private val accent=when(radar){RadarType.A_EARLY_BREAKOUT->pink;RadarType.B_DEEP_REVERSAL->gold;else->blue}
-    private val letter=when(radar){RadarType.A_EARLY_BREAKOUT->"A";RadarType.B_DEEP_REVERSAL->"B";else->"C"}
-    private val title=when(radar){RadarType.A_EARLY_BREAKOUT->"早期起漲";RadarType.B_DEEP_REVERSAL->"深跌反轉";else->"長紅爆量"}
+    private val accent=when(radar){RadarType.A_EARLY_BREAKOUT->pink;RadarType.B_DEEP_REVERSAL->gold;RadarType.C_LONG_RED_VOLUME->blue;else->mint}
+    private val letter=when(radar){RadarType.A_EARLY_BREAKOUT->"A";RadarType.B_DEEP_REVERSAL->"B";RadarType.C_LONG_RED_VOLUME->"C";else->"D"}
+    private val title=when(radar){RadarType.A_EARLY_BREAKOUT->"早期起漲";RadarType.B_DEEP_REVERSAL->"深跌反轉";RadarType.C_LONG_RED_VOLUME->"長紅爆量";else->"主力進場形態"}
     private val charts=stocks.map { ChartSeries.prepare(it.bars).takeLast(36) }
     private fun text(c:Canvas,s:String,x:Float,y:Float,size:Float,color:Int=white,bold:Boolean=false,maxWidth:Float=1000f) {
         p.shader=null;p.style=Paint.Style.FILL;p.color=color;p.textSize=size;p.typeface=Typeface.create("sans-serif",if(bold)Typeface.BOLD else Typeface.NORMAL)
@@ -52,10 +52,16 @@ internal class NeonPoster(private val radar:RadarType,private val stocks:List<Po
             text(c,"最新掃描快照",824f,63f,20f,blue)
             text(c,day,824f,97f,24f,white,true)
             text(c,"$time 台灣時間",824f,132f,20f,muted)
-            val labels=listOf("掃描狀態","已處理股數","A 早期起漲","B 深跌反轉","C 長紅爆量")
-            val values=listOf(if(scanning)"掃描中" else "已完成","$done / $total", "${counts.getOrElse(0){0}} 檔","${counts.getOrElse(1){0}} 檔","${counts.getOrElse(2){0}} 檔")
-            val colors=listOf(mint,blue,pink,gold,blue)
-            for(i in 0..4){val x=32f+i*206;panel(c,x,190f,192f,138f,colors[i]);text(c,labels[i],x+15,230f,22f,muted);text(c,values[i],x+15,279f,if(i==1)27f else 35f,colors[i],true,165f);text(c,if(i<2)"本輪掃描" else "目前符合條件",x+15,310f,17f,muted)}
+            val labels=listOf("掃描狀態","已處理股數","A 早期起漲","B 深跌反轉","C 長紅爆量","D 主力進場")
+            val values=listOf(if(scanning)"掃描中" else "已完成","$done / $total", "${counts.getOrElse(0){0}} 檔","${counts.getOrElse(1){0}} 檔","${counts.getOrElse(2){0}} 檔","${counts.getOrElse(3){0}} 檔")
+            val colors=listOf(mint,blue,pink,gold,blue,mint)
+            for(i in 0..5){
+                val x=32f+i*169
+                panel(c,x,190f,158f,138f,colors[i])
+                text(c,labels[i],x+10,230f,19f,muted,maxWidth=140f)
+                text(c,values[i],x+10,279f,if(i==1)23f else 29f,colors[i],true,137f)
+                text(c,if(i<2)"本輪掃描" else "目前符合條件",x+10,310f,15f,muted,maxWidth=138f)
+            }
             panel(c,32f,353f,1016f,176f,accent,true)
             val cx=119f;val cy=440f
             for(r in listOf(22f,42f,64f)){p.color=blue;p.alpha=170;p.style=Paint.Style.STROKE;p.strokeWidth=2f;c.drawCircle(cx,cy,r,p)};p.alpha=255;p.style=Paint.Style.FILL

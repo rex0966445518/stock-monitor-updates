@@ -36,7 +36,7 @@ class TrendTouchAndActiveFlowTest {
         assertEquals(71,BtRobotSpace.slots.size)
         assertEquals(BtRobotSpace.legacySlots,BtRobotSpace.slots.take(65))
         assertEquals(BigInteger.ONE.shiftLeft(65),BtRobotSpace.legacyTotal)
-        assertEquals(BigInteger.ONE.shiftLeft(71),BtRobotSpace.total)
+        assertEquals(BigInteger.ONE.shiftLeft(71),BigInteger.ONE.shiftLeft(BtRobotSpace.slots.size))
         val allLegacy=BtRobotSpace.legacyTotal-BigInteger.ONE
         assertEquals(allLegacy.toString(16),BtRobotSpace.key(BtRobotSpace.rules(allLegacy.toString(16))))
         val added=BtRobotSpace.key(RadarType.entries.associateWith{setOf(ScanConditions.MA5_TOUCH_MA10)})

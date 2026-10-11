@@ -14,6 +14,9 @@
         <TextView android:id="@+id/volumeSummary" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#6FDAEB" android:textSize="12sp" android:textStyle="bold" android:paddingTop="5dp" android:paddingBottom="3dp" />
         <LinearLayout android:id="@+id/recentVolumes" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:paddingBottom="6dp" />
         <com.rex.twboardingscanner.ui.ClosingAuctionView android:id="@+id/closingAuction" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:layout_marginBottom="4dp" />
+        <TextView android:id="@+id/dEvidence" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:visibility="gone" android:textColor="#89E1CE" android:textSize="12sp"
+            android:background="#162A33" android:padding="10dp" android:layout_marginTop="6dp"/>
         <TextView android:id="@+id/trigger" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="4dp" android:textColor="#B7C4D6" android:textSize="12sp" />
         <com.rex.twboardingscanner.ui.FinancialPanelView android:id="@+id/financialPanel" android:layout_width="match_parent" android:layout_height="wrap_content" />
         <com.google.android.material.button.MaterialButton android:id="@+id/financialButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="財務查核  ·  EPS 趨勢與明細  ›" android:textSize="12sp" android:textColor="#6FDAEB" app:backgroundTint="#142031" app:strokeColor="#243346" app:strokeWidth="1dp" app:cornerRadius="12dp" />

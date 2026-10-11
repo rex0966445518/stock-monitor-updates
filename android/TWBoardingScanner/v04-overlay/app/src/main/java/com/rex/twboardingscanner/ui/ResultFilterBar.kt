@@ -15,16 +15,17 @@ internal object ResultFilters {
             0 -> r.radarType == RadarType.A_EARLY_BREAKOUT && r.light != SignalLight.NONE
             1 -> r.radarType == RadarType.B_DEEP_REVERSAL && r.light != SignalLight.NONE
             2 -> r.radarType == RadarType.C_LONG_RED_VOLUME && r.light != SignalLight.NONE
-            3 -> r.checks.any { it.selected && it.state == CheckState.PENDING }
-            4 -> r.checks.any { it.selected && it.state == CheckState.FAIL }
+            3 -> r.radarType==RadarType.D_MAIN_FORCE && r.light!=SignalLight.NONE
+            4 -> r.checks.any { it.selected && it.state == CheckState.PENDING }
+            5 -> r.checks.any { it.selected && it.state == CheckState.FAIL }
             else -> false
         }}.sortedByDescending { it.score }
 }
 
 class ResultFilterBar @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) : LinearLayout(context, attrs) {
     var onSelected: ((Int) -> Unit)? = null
-    private val titles = listOf("A 起漲", "B 反轉", "C 爆量", "待查核", "未通過")
-    private val accents = listOf(NeonUi.pink, NeonUi.amber, NeonUi.cyan, NeonUi.amber, NeonUi.muted)
+    private val titles = listOf("A 起漲", "B 反轉", "C 爆量", "D 主力", "待查核", "未通過")
+    private val accents = listOf(NeonUi.pink, NeonUi.amber, NeonUi.cyan, NeonUi.mint, NeonUi.amber, NeonUi.muted)
     private val buttons = titles.mapIndexed { index, title ->
         NeonUi.button(context, title, accents[index]) { onSelected?.invoke(index) }.apply {
             textSize = 12f
@@ -40,10 +41,10 @@ class ResultFilterBar @JvmOverloads constructor(context: Context, attrs: Attribu
     }
     init {
         orientation = VERTICAL
-        addView(NeonUi.row(context, buttons.take(3)))
+        addView(NeonUi.row(context, buttons.take(4)))
         addView(NeonUi.gap(context, 3))
-        addView(NeonUi.row(context, buttons.drop(3)))
-        update(List(5) { 0 }, 0)
+        addView(NeonUi.row(context, buttons.drop(4)))
+        update(List(6) { 0 }, 0)
     }
     fun update(counts: List<Int>, selected: Int) {
         buttons.forEachIndexed { i, button ->

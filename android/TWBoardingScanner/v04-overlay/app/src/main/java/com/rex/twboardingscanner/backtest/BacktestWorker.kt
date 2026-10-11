@@ -24,7 +24,11 @@ object BtSettingsCodec {
         val saved=prefs.getStringSet("enabled_sectors",null)
         val sectors=saved?.mapNotNull {name->allSectors.firstOrNull{it.name==name}}?.toMutableSet()?:allSectors.toMutableSet()
         if(saved!=null&&allSectors.filter{it!=com.rex.twboardingscanner.domain.StockSector.UNKNOWN}.all{it.name in saved})sectors.add(com.rex.twboardingscanner.domain.StockSector.UNKNOWN)
-        return BtSettings(start,end,capital,codes,rules.mapValues{it.value.toSet()},sectors.ifEmpty{allSectors}.toSet(),stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(c).read(),exitRules=com.rex.twboardingscanner.data.ExitRuleStore(c).read(com.rex.twboardingscanner.domain.StockScope.BACKTEST),marketGuardVersion=com.rex.twboardingscanner.domain.MarketCrashGuard.VERSION,holdProfitUntilMa5Break=com.rex.twboardingscanner.data.ExitRuleStore(c).readProfitTrendHold(com.rex.twboardingscanner.domain.StockScope.BACKTEST))
+        val enabled=prefs.getStringSet("enabled_radars",null)?.mapNotNull{
+            runCatching{RadarType.valueOf(it)}.getOrNull()
+        }?.toSet()?:defaultActiveRadars()
+        val dConfig=runCatching{DPatternConfig.read(JSONObject(prefs.getString("d_pattern_config",null)?:"{}"))}.getOrDefault(DPatternConfig.DEFAULT)
+        return BtSettings(start,end,capital,codes,rules.mapValues{it.value.toSet()},sectors.ifEmpty{allSectors}.toSet(),enabledRadars=enabled,dConfig=dConfig,stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(c).read(),exitRules=com.rex.twboardingscanner.data.ExitRuleStore(c).read(com.rex.twboardingscanner.domain.StockScope.BACKTEST),marketGuardVersion=com.rex.twboardingscanner.domain.MarketCrashGuard.VERSION,holdProfitUntilMa5Break=com.rex.twboardingscanner.data.ExitRuleStore(c).readProfitTrendHold(com.rex.twboardingscanner.domain.StockScope.BACKTEST))
     }
     fun encode(s:BtSettings):JSONObject {
         s.validateTrading()
@@ -36,6 +40,8 @@ object BtSettingsCodec {
         .put("marketGuardVersion",s.marketGuardVersion).put("marketGuardSummary",if(s.marketGuardVersion>0)com.rex.twboardingscanner.domain.MarketCrashGuard.SUMMARY else "此舊策略未啟用大盤保護")
         .put("targetNetPct",s.targetNetPct).put("maxHoldingStocks",s.maxHoldingStocks?:JSONObject.NULL)
         .put("holdProfitUntilMa5Break",s.holdProfitUntilMa5Break)
+        .put("enabledRadars",JSONArray(s.enabledRadars.map{it.name}.sorted()))
+        .put("dConfig",s.dConfig.json())
         .put("holdingLimitBasis","不同股號計算檔數；同股不同日可加買一張；先賣後買；名額及資金競爭按股號排序")
         .put("rules",JSONObject().apply{s.rules.forEach{(type,ids)->put(type.name,JSONArray(ids.sorted()))}})
         .put("sectors",JSONArray(s.sectors.map{it.name}.sorted()))
@@ -48,8 +54,11 @@ object BtSettingsCodec {
         .put("costModel",JSONObject().put("buyFeeRate",0.001425).put("sellFeeRate",0.001425).put("minimumFee",20).put("sellTaxRate",0.003).put("slippageRate",0.001))
     }
     fun decode(o:JSONObject):BtSettings {
-        require(o.getInt("strategyVersion") in 2..4&&o.getString("rulesVersion") in setOf(com.rex.twboardingscanner.domain.ScanConditions.VERSION,com.rex.twboardingscanner.domain.ScanConditions.LEGACY_VERSION)){"回測條件版本已變更，請重新開始"}
-        val rules=com.rex.twboardingscanner.domain.RadarType.entries.associateWith{type->val a=o.getJSONObject("rules").getJSONArray(type.name);(0 until a.length()).map{a.getString(it)}.toSet()}
+        require(o.getInt("strategyVersion") in 2..4&&o.getString("rulesVersion") in setOf(com.rex.twboardingscanner.domain.ScanConditions.VERSION,com.rex.twboardingscanner.domain.ScanConditions.PREVIOUS_VERSION,com.rex.twboardingscanner.domain.ScanConditions.LEGACY_VERSION)){"回測條件版本已變更，請重新開始"}
+        val rules=com.rex.twboardingscanner.domain.RadarType.entries.associateWith{type->
+            val a=o.getJSONObject("rules").optJSONArray(type.name)
+            if(a==null)emptySet() else (0 until a.length()).map{a.getString(it)}.toSet()
+        }
         rules.forEach{(type,ids)->require(ids.all{id->com.rex.twboardingscanner.domain.ScanConditions.forRadar(type).any{it.id==id}})}
         val a=o.getJSONArray("sectors");val sectors=(0 until a.length()).map{com.rex.twboardingscanner.domain.StockSector.valueOf(a.getString(it))}.toSet()
         val version=o.getInt("strategyVersion")
@@ -59,7 +68,12 @@ object BtSettingsCodec {
             require(n.isFinite()&&n>=1&&n<=Int.MAX_VALUE&&n==kotlin.math.floor(n)){"持倉上限不是有效整數"}
             n.toInt()
         }else null
-        return BtSettings(LocalDate.parse(o.getString("start")),LocalDate.parse(o.getString("end")),o.getDouble("capital"),o.getString("codes"),rules,sectors,version,limit,if(version>=4)o.getDouble("targetNetPct")else 3.0,com.rex.twboardingscanner.domain.StockPolicy.read(o.optJSONObject("stockPolicy")),com.rex.twboardingscanner.domain.StockScope.valueOf(o.optString("stockScope","BACKTEST")),com.rex.twboardingscanner.domain.ExitRules.read(o.optJSONArray("exitRules")),o.optInt("marketGuardVersion",0),o.optBoolean("holdProfitUntilMa5Break",false)).also{it.validateTrading()}
+        return BtSettings(LocalDate.parse(o.getString("start")),LocalDate.parse(o.getString("end")),o.getDouble("capital"),o.getString("codes"),rules,sectors,version,limit,if(version>=4)o.getDouble("targetNetPct")else 3.0,com.rex.twboardingscanner.domain.StockPolicy.read(o.optJSONObject("stockPolicy")),com.rex.twboardingscanner.domain.StockScope.valueOf(o.optString("stockScope","BACKTEST")),com.rex.twboardingscanner.domain.ExitRules.read(o.optJSONArray("exitRules")),o.optInt("marketGuardVersion",0),o.optBoolean("holdProfitUntilMa5Break",false),
+            enabledRadars=run{
+                val x=o.optJSONArray("enabledRadars")
+                if(x==null)defaultActiveRadars() else (0 until x.length()).map{RadarType.valueOf(x.getString(it))}.toSet()
+            },
+            dConfig=DPatternConfig.read(o.optJSONObject("dConfig"))).also{it.validateTrading()}
     }
 }
 
@@ -82,12 +96,12 @@ class BacktestWorker(c:Context,p:WorkerParameters):Worker(c,p){
             val flowRevision=flows.revision()
             var lastCode=""
             var samples:Map<LocalDate,com.rex.twboardingscanner.domain.TradeSideVolume> = emptyMap()
-            val rawPrepared=BacktestEngine.prepare(data.series,s,progress,cancel){code,day->
+            val rawPrepared=BacktestEngine.prepare(data.series,s,progress,cancel,flowFor={code,day->
                 if(lastCode!=code){
                     lastCode=code;samples=flows.forCode(code,s.start,s.end,completed=true)
                 }
                 samples[day]
-            }
+            },benchmark=data.market.associate{it.date to it.close})
             check(flows.revision()==flowRevision){"交易日內外盤資料在回測中變動，結果不可混用"}
             val prepared=rawPrepared.copy(marketGuards=if(s.marketGuardVersion>0)com.rex.twboardingscanner.domain.MarketCrashGuard.forDays(data.market,rawPrepared.days) else emptyMap())
             val run=BacktestEngine.run(prepared,s,progress,cancel)

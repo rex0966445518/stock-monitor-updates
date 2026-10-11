@@ -38,6 +38,7 @@ class HistoryAdapter(private val onClick: (HistoryRow) -> Unit = {}): RecyclerVi
         val accent = when {
             r.radar.startsWith("A_") -> NeonUi.pink
             r.radar.startsWith("B_") -> NeonUi.amber
+            r.radar.startsWith("D_") -> NeonUi.mint
             else -> NeonUi.cyan
         }
 
@@ -45,6 +46,7 @@ class HistoryAdapter(private val onClick: (HistoryRow) -> Unit = {}): RecyclerVi
         h.b.badge.text = when {
             r.radar.startsWith("A_") -> "A"
             r.radar.startsWith("B_") -> "B"
+            r.radar.startsWith("D_") -> "D"
             else -> "C"
         }
         h.b.badge.setTextColor(accent)

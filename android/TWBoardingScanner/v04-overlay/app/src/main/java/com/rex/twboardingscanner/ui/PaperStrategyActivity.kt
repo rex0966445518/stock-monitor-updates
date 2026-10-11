@@ -108,7 +108,7 @@ class PaperStrategyActivity:AppCompatActivity() {
         universe.addView(codes)
         sectorButton=NeonUi.button(this,""){editSectors()}.apply{tag="paper-sectors"}
         universe.addView(sectorButton)
-        universe.addView(label("A／B／C 勾選條件（可全部取消一區）",13f,NeonUi.ink,true))
+        universe.addView(label("A／B／C／D 勾選條件（可全部取消一區）",13f,NeonUi.ink,true))
         val choices=RadarType.entries.map{type->
             NeonUi.button(this,"",when(type){
                 RadarType.A_EARLY_BREAKOUT->NeonUi.pink
@@ -214,7 +214,7 @@ class PaperStrategyActivity:AppCompatActivity() {
         val historical=runCatching{BtSettingsCodec.decode(BacktestStore(this).configuration()!!)}.getOrNull()
         if(historical==null){Toast.makeText(this,"找不到可載入的歷史回測設定，請先在歷史回測儲存條件",Toast.LENGTH_LONG).show();return}
         MaterialAlertDialogBuilder(this).setTitle("套用目前歷史回測設定？")
-            .setMessage("將載入回測的 ABC、產業、股號、日期、持倉上限、獲利及下車條件。禁買／限價仍讀取三區共用名單。\n\n請留意：自買自投不是歷史重播，若匯入的結束日已過去，將不會新增模擬買入。")
+            .setMessage("將載入回測的 ABCD、產業、股號、日期、持倉上限、獲利及下車條件。禁買／限價仍讀取三區共用名單。\n\n請留意：自買自投不是歷史重播，若匯入的結束日已過去，將不會新增模擬買入。")
             .setNegativeButton("取消",null).setPositiveButton("載入"){_,_->
                 loadDraft(historical.copy(stockScope=StockScope.SCANNER,
                     capital=if(book.trades.isEmpty())historical.capital else book.capital),true)

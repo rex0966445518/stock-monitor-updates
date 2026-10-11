@@ -12,12 +12,25 @@ data class ScanCondition(val id: String, val label: String, val extra: Boolean =
 }
 
 object ScanConditions {
-    const val VERSION = "20261012"
+    const val VERSION = "20261012-D1"
+    const val PREVIOUS_VERSION="20261012"
     const val LEGACY_VERSION = "20261009"
     const val MA5_TOUCH_MA10 = "ma5_touch_ma10"
     const val ACTIVE_BUY_SELL_15 = "active_buy_sell_15"
     val NEW_IDS=setOf(MA5_TOUCH_MA10,ACTIVE_BUY_SELL_15)
     fun forRadar(type: RadarType): List<ScanCondition> {
+        if(type==RadarType.D_MAIN_FORCE){
+            // Keep exactly six independent D predicates. Numeric thresholds are frozen
+            // inside StockSnapshot.dConfig and used by both scans and historical replay.
+            return listOf(
+                ScanCondition(DPattern.LIMIT,"近 N 交易日觸及估算漲停至少 K 次"){DPattern.checks(it.dPattern)[DPattern.LIMIT]},
+                ScanCondition(DPattern.GREEN,"近 N 交易日曾連續 K 根陽線"){DPattern.checks(it.dPattern)[DPattern.GREEN]},
+                ScanCondition(DPattern.GAP,"近 N 交易日曾有向上不重疊缺口"){DPattern.checks(it.dPattern)[DPattern.GAP]},
+                ScanCondition(DPattern.UNFILLED,"至少一個向上缺口至今未完全回補",true){DPattern.checks(it.dPattern)[DPattern.UNFILLED]},
+                ScanCondition(DPattern.VOLUME,"最近 K 日成交量各達先前 N 日均量 M 倍"){DPattern.checks(it.dPattern)[DPattern.VOLUME]},
+                ScanCondition(DPattern.RELATIVE,"連陽期間個股漲幅高於加權指數（需官方同期資料）",true){DPattern.checks(it.dPattern)[DPattern.RELATIVE]}
+            )
+        }
         val basic = listOf(
             ScanCondition("price", "股價 ≥ 50 元") { it.last?.close?.let { p -> p >= 50 } },
             ScanCondition("volume", "成交量 ≥ 500 張") { it.last?.volumeShares?.let { v -> v >= 500000L } }
@@ -79,6 +92,7 @@ class RuleMetrics(val s: StockSnapshot) {
     val financial = s.sourceStock?.financials
     val bars = s.bars
     val last = bars.lastOrNull()
+    val dPattern by lazy(LazyThreadSafetyMode.NONE){DPattern.inspect(bars,s.dConfig,s.marketIndexCloses)}
     private val previous = bars.dropLast(1)
     private val closes = bars.map { it.close }
     private fun avg(n: Int, skip: Int = 0): Double? = closes.dropLast(skip).takeIf { it.size >= n }?.takeLast(n)?.average()

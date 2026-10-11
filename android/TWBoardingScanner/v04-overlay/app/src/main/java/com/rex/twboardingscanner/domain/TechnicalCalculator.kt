@@ -5,7 +5,7 @@ import kotlin.math.abs
 class TechnicalCalculator {
     fun barsForRadar(input: List<DailyBar>, type: RadarType, today: java.time.LocalDate = java.time.LocalDate.now(RuleMetrics.TAIPEI)): List<DailyBar> =
         input.filter { RuleMetrics.tradingDate(it.time) <= today &&
-            (type == RadarType.C_LONG_RED_VOLUME || RuleMetrics.tradingDate(it.time) < today) }.sortedBy { it.time }.distinctBy { RuleMetrics.tradingDate(it.time) }
+            (type == RadarType.C_LONG_RED_VOLUME || type==RadarType.D_MAIN_FORCE || RuleMetrics.tradingDate(it.time) < today) }.sortedBy { it.time }.distinctBy { RuleMetrics.tradingDate(it.time) }
 
     fun build(stock: MarketStock, inputBars: List<DailyBar>): StockSnapshot {
         val bars = inputBars.sortedBy { it.time }.distinctBy { RuleMetrics.tradingDate(it.time) }

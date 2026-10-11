@@ -130,7 +130,7 @@ class ScanArchiveActivity:AppCompatActivity(){
             }
             card.addView(text("${dateOf(item.created)} · ${item.name}",15f,NeonUi.ink,true))
             card.addView(NeonUi.gap(this,6))
-            card.addView(text("A 起漲 ${item.a} 檔 · B 反轉 ${item.b} 檔 · C 長紅 ${item.c} 檔",14f,NeonUi.cyan,true))
+            card.addView(text("A 起漲 ${item.a} · B 反轉 ${item.b} · C 長紅 ${item.c} · D 主力 ${item.d} 檔",14f,NeonUi.cyan,true))
             card.addView(text("去重 ${item.uniqueStocks} 檔 · 估算資金 ${cash(item.estimatedCash)} 元",15f,NeonUi.amber,true))
             card.addView(NeonUi.gap(this,6))
             card.addView(text("與前次掃描條件比較",12f,NeonUi.muted,true))
@@ -150,7 +150,7 @@ class ScanArchiveActivity:AppCompatActivity(){
     private fun showSettings(id:String){
         val json=archive.settings(id)?:return
         val types=RadarType.entries.joinToString("\n\n"){type->
-            val a=json.getJSONObject("rules").getJSONArray(type.name)
+            val a=json.getJSONObject("rules").optJSONArray(type.name)?:org.json.JSONArray()
             val selected=(0 until a.length()).map{a.getString(it)}
             val options=ScanConditions.forRadar(type).associate{it.id to it.label}
             "${type.name.take(1)}（${selected.size} 項）：\n"+
@@ -160,6 +160,8 @@ class ScanArchiveActivity:AppCompatActivity(){
         val sectors=(0 until industry.length()).map{industry.getString(it)}
         val policy=StockPolicy.read(json.getJSONObject("policy"))
         val details=text("日期 ${json.getString("date")} · 版本 ${json.getString("rulesVersion")}\n"+
+            "參與分析區域：${json.optJSONArray("enabledRadars")?.let{a->(0 until a.length()).joinToString("、"){a.getString(it).take(1)}}?:"ABC"}\n"+
+            "D 門檻：${com.rex.twboardingscanner.domain.DPatternConfig.read(json.optJSONObject("dConfig"))}\n"+
             "檢查 ${json.optInt("analyzed")}／${json.optInt("requested")} 檔 · 失敗 ${json.optInt("failed")} 檔\n"+
             "產業：${sectors.joinToString("、")}\n"+
             "禁股限價：${policy.summary()}\n"+
@@ -178,7 +180,7 @@ class ScanArchiveActivity:AppCompatActivity(){
             tag="folder-back"
         })
         detailHead.addView(text("${dateOf(folder.created)} · AI 綜合技術評分排名",15f,NeonUi.ink,true))
-        detailHead.addView(text("A ${folder.a} · B ${folder.b} · C ${folder.c} · 去重 ${folder.uniqueStocks} 股",12f,NeonUi.cyan))
+        detailHead.addView(text("A ${folder.a} · B ${folder.b} · C ${folder.c} · D ${folder.d} · 去重 ${folder.uniqueStocks} 股",12f,NeonUi.cyan))
         detailHead.addView(text("一檔預計買 1 張 · 所需約 ${cash(folder.estimatedCash)} 元",12f,NeonUi.amber))
         detailHead.addView(text("排序：技術訊號分數由高至低；每張卡保留當時 K 線與勾選查核結果。",11f))
         detailHead.visibility=View.VISIBLE

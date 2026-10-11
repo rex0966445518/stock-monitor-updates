@@ -104,12 +104,12 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
                     progress("更新已保存歷史條件，缺失的外／內盤資料會標記待查核…")
                     var lastCode=""
                     var samples:Map<java.time.LocalDate,com.rex.twboardingscanner.domain.TradeSideVolume> = emptyMap()
-                    val compiled=BtConditionIndex.build(data.series,base,progress,cancel){code,day->
+                    val compiled=BtConditionIndex.build(data.series,base,progress,cancel,flowFor={code,day->
                         if(lastCode!=code){
                             lastCode=code;samples=flowSource.forCode(code,base.start,base.end,completed=true)
                         }
                         samples[day]
-                    }
+                    },benchmark=data.market.associate{it.date to it.close})
                     check(!cancel()){ "已暫停測試" };compiled.save(indexFile,fingerprint);compiled
                 }
                 Runtime(id,data,index,BacktestEngine.executionIndex(data.series),com.rex.twboardingscanner.domain.MarketCrashGuard.forDays(data.market,index.days)).also{cached=it}
