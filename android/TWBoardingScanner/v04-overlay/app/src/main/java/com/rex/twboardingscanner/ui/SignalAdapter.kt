@@ -62,6 +62,7 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
             RadarType.B_DEEP_REVERSAL -> NeonUi.amber
             RadarType.C_LONG_RED_VOLUME -> NeonUi.cyan
             RadarType.D_MAIN_FORCE -> NeonUi.mint
+            RadarType.E_DIF_TOUCH -> NeonUi.pink
         }
 
         h.b.root.strokeColor = NeonUi.border
@@ -73,6 +74,7 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
             RadarType.B_DEEP_REVERSAL -> "B 反轉"
             RadarType.C_LONG_RED_VOLUME -> "C 長紅爆量"
             RadarType.D_MAIN_FORCE -> "D 主力進場"
+            RadarType.E_DIF_TOUCH -> "E DIF 向上接觸"
         }
         h.b.badge.setTextColor(accent)
         h.b.badge.background = GradientDrawable().apply {
@@ -110,7 +112,7 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
         h.b.chartView.setBars(s.bars)
         VolumeStrip.bind(h.b.volumeSummary, h.b.recentVolumes, s.bars)
 
-        h.b.dEvidence?.visibility=if(r.radarType==RadarType.D_MAIN_FORCE)android.view.View.VISIBLE else android.view.View.GONE
+        h.b.dEvidence?.visibility=if(r.radarType in setOf(RadarType.D_MAIN_FORCE,RadarType.E_DIF_TOUCH))android.view.View.VISIBLE else android.view.View.GONE
         h.b.dEvidence?.text=r.dEvidence.orEmpty()
         h.b.closingAuction.bind(s.sourceStock?.closingAuction)
         h.b.financialPanel.bind(s.sourceStock?.financials,RuleMetrics(s).today)

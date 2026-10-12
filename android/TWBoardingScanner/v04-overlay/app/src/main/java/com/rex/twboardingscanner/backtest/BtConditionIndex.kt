@@ -8,8 +8,8 @@ import java.util.zip.GZIPOutputStream
 import kotlin.math.max
 
 /**
- * Frozen facts for ABCD. BTINDEX2 stores four distinct indicator vectors and
- * the D-event audit trail; older BTINDEX1 files are rejected and rebuilt from the
+ * Frozen facts for ABCDE. BTINDEX3 stores five distinct indicator vectors and
+ * the D/E audit trails; older BTINDEX1/2 files are rejected and rebuilt from the
  * same original price/index snapshots. Never interpret an ABC cache as D signals.
  */
 class BtConditionIndex private constructor(
@@ -19,7 +19,7 @@ class BtConditionIndex private constructor(
 ){
     private data class Record(
         val code:String,val day:LocalDate,val dataDates:Array<LocalDate?>,
-        val passed:LongArray,val pending:LongArray,val dEvidence:String
+        val passed:LongArray,val pending:LongArray,val dEvidence:String,val eEvidence:String
     )
     fun prepare(s:BtSettings,cancel:()->Boolean={false}):BtPrepared {
         val selected=RadarType.entries.map{type->
@@ -41,7 +41,7 @@ class BtConditionIndex private constructor(
             if(matches.isNotEmpty())signals.getOrPut(r.day){mutableListOf()}.add(
                 BtSignal(r.code,matches.joinToString("/"){RadarType.entries[it].name.take(1)},
                     matches.maxOf{r.dataDates[it]!!},
-                    if(RadarType.D_MAIN_FORCE.ordinal in matches)r.dEvidence else "")
+                    listOfNotNull(r.dEvidence.takeIf{RadarType.D_MAIN_FORCE.ordinal in matches},r.eEvidence.takeIf{RadarType.E_DIF_TOUCH.ordinal in matches}).joinToString("\n"))
             )
         }
         return BtPrepared(series,signals,days,missing)
@@ -49,14 +49,14 @@ class BtConditionIndex private constructor(
     fun save(file:File,fingerprint:String){
         file.parentFile?.mkdirs();val tmp=File(file.path+".tmp")
         DataOutputStream(BufferedOutputStream(GZIPOutputStream(tmp.outputStream()))).use{out->
-            out.writeUTF("BTINDEX2");out.writeUTF(fingerprint);out.writeInt(records.size)
+            out.writeUTF("BTINDEX3");out.writeUTF(fingerprint);out.writeInt(records.size)
             records.forEach{r->
                 out.writeUTF(r.code);out.writeLong(r.day.toEpochDay())
-                repeat(4){i->
+                repeat(RadarType.entries.size){i->
                     out.writeLong(r.dataDates[i]?.toEpochDay()?:Long.MIN_VALUE)
                     out.writeLong(r.passed[i]);out.writeLong(r.pending[i])
                 }
-                out.writeUTF(r.dEvidence.take(8000))
+                out.writeUTF(r.dEvidence.take(8000));out.writeUTF(r.eEvidence.take(8000))
             }
             out.writeInt(days.size);days.forEach{out.writeLong(it.toEpochDay())}
         }
@@ -67,18 +67,18 @@ class BtConditionIndex private constructor(
         fun fingerprint(digest:String,settings:BtSettings,flowRevision:String="none")=
             "$digest:${settings.start}:${settings.end}:${ScanConditions.VERSION}:$flowRevision:"+
             settings.enabledRadars.sortedBy{it.ordinal}.joinToString(","){it.name}+":"+
-            settings.dConfig.json().toString()+":"+BtRobotSpace.allSlots.joinToString(","){"${it.first.name}/${it.second}"}
+            settings.dConfig.json().toString()+":"+settings.eConfig.json().toString()+":"+BtRobotSpace.allSlots.joinToString(","){"${it.first.name}/${it.second}"}
         fun read(file:File,series:List<BtSeries>,fingerprint:String):BtConditionIndex=
             DataInputStream(BufferedInputStream(GZIPInputStream(file.inputStream()))).use{input->
-                require(input.readUTF()=="BTINDEX2"&&input.readUTF()==fingerprint){"歷史 ABCD 條件快取或版本不一致"}
+                require(input.readUTF()=="BTINDEX3"&&input.readUTF()==fingerprint){"歷史 ABCDE 條件快取或版本不一致"}
                 val count=input.readInt();require(count in 0..1000000)
                 val codes=series.map{it.code}.toSet()
                 val options=RadarType.entries.map{ScanConditions.forRadar(it)}
                 val records=List(count){
                     val code=input.readUTF();require(code in codes)
                     val day=LocalDate.ofEpochDay(input.readLong())
-                    val dates=arrayOfNulls<LocalDate>(4);val passed=LongArray(4);val pending=LongArray(4)
-                    repeat(4){i->
+                    val dates=arrayOfNulls<LocalDate>(RadarType.entries.size);val passed=LongArray(RadarType.entries.size);val pending=LongArray(RadarType.entries.size)
+                    repeat(RadarType.entries.size){i->
                         val date=input.readLong()
                         dates[i]=if(date==Long.MIN_VALUE)null else LocalDate.ofEpochDay(date)
                         passed[i]=input.readLong();pending[i]=input.readLong()
@@ -86,11 +86,11 @@ class BtConditionIndex private constructor(
                         require((passed[i] and allowed)==passed[i]&&(pending[i] and allowed)==pending[i]&&
                             (passed[i] and pending[i])==0L)
                     }
-                    Record(code,day,dates,passed,pending,input.readUTF())
+                    Record(code,day,dates,passed,pending,input.readUTF(),input.readUTF())
                 }
                 val n=input.readInt();require(n in 0..5000)
                 val days=List(n){LocalDate.ofEpochDay(input.readLong())}
-                require(days==days.distinct().sorted()&&input.read()==-1){"歷史 ABCD 條件快取不完整"}
+                require(days==days.distinct().sorted()&&input.read()==-1){"歷史 ABCDE 條件快取不完整"}
                 BtConditionIndex(series,records,days)
             }
         fun build(series:List<BtSeries>,settings:BtSettings,progress:(String)->Unit={},
@@ -107,8 +107,8 @@ class BtConditionIndex private constructor(
                     val day=RuleMetrics.tradingDate(bars[j].time)
                     if(day<settings.start||day>settings.end)return@dayLoop
                     check(!cancel()){"已暫停測試"}
-                    val pass=LongArray(4);val pending=LongArray(4);val dates=arrayOfNulls<LocalDate>(4)
-                    val metrics=mutableMapOf<Int,RuleMetrics>();var details=""
+                    val pass=LongArray(RadarType.entries.size);val pending=LongArray(RadarType.entries.size);val dates=arrayOfNulls<LocalDate>(RadarType.entries.size)
+                    val metrics=mutableMapOf<Int,RuleMetrics>();var details="";var eDetails=""
                     RadarType.entries.forEachIndexed radar@{i,type->
                         if(type !in settings.enabledRadars)return@radar
                         val end=if(type==RadarType.C_LONG_RED_VOLUME||type==RadarType.D_MAIN_FORCE)j+1 else j
@@ -121,7 +121,7 @@ class BtConditionIndex private constructor(
                                 tradeSideVolume=flowFor(s.code,day))
                             RuleMetrics(calc.build(stock,known).copy(
                                 timestamp=day.atTime(13,30).atZone(RuleMetrics.TAIPEI).toInstant().toEpochMilli(),
-                                dConfig=settings.dConfig,marketIndexCloses=benchmark))
+                                dConfig=settings.dConfig,eConfig=settings.eConfig,marketIndexCloses=benchmark))
                         }
                         dates[i]=RuleMetrics.tradingDate(m.last!!.time)
                         options[i].forEachIndexed{bit,condition->
@@ -132,10 +132,11 @@ class BtConditionIndex private constructor(
                             }
                         }
                         if(type==RadarType.D_MAIN_FORCE)details=m.dPattern.format()
+                        if(type==RadarType.E_DIF_TOUCH)eDetails=m.ePattern?.format().orEmpty()
                     }
-                    records+=Record(s.code,day,dates,pass,pending,details)
+                    records+=Record(s.code,day,dates,pass,pending,details,eDetails)
                 }
-                if(index%10==0||index==series.lastIndex)progress("預算歷史 ABCD 條件 ${index+1}/${series.size} 檔；完成後重複使用")
+                if(index%10==0||index==series.lastIndex)progress("預算歷史 ABCDE 條件 ${index+1}/${series.size} 檔；完成後重複使用")
             }
             return BtConditionIndex(series,records,
                 series.flatMap{it.bars.map{b->RuleMetrics.tradingDate(b.time)}}.distinct().sorted())

@@ -23,7 +23,7 @@ import kotlin.math.ceil
  */
 data class ScanArchiveFolder(
     val id:String,val date:String,val created:Long,val name:String,val a:Int,val b:Int,val c:Int,
-    val uniqueStocks:Int,val estimatedCash:Double,val changes:String,val signature:String,val d:Int=0
+    val uniqueStocks:Int,val estimatedCash:Double,val changes:String,val signature:String,val d:Int=0,val e:Int=0
 )
 data class ScanRank(val score:Int,val explanation:String)
 
@@ -54,32 +54,33 @@ object ScanRanker {
 }
 
 class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationContext,
-    "scanner-folders-v1.db",null,2){
+    "scanner-folders-v1.db",null,3){
     override fun onCreate(db:SQLiteDatabase){
         db.execSQL("""CREATE TABLE folders(
             id TEXT PRIMARY KEY,date TEXT NOT NULL,created INTEGER NOT NULL,name TEXT NOT NULL,
             signature TEXT NOT NULL,settings TEXT NOT NULL,details BLOB NOT NULL,
-            a INTEGER NOT NULL,b INTEGER NOT NULL,c INTEGER NOT NULL,d INTEGER NOT NULL DEFAULT 0,
+            a INTEGER NOT NULL,b INTEGER NOT NULL,c INTEGER NOT NULL,d INTEGER NOT NULL DEFAULT 0,e INTEGER NOT NULL DEFAULT 0,
             unique_count INTEGER NOT NULL,
             cash REAL NOT NULL,changes TEXT NOT NULL)""")
         db.execSQL("CREATE INDEX folders_date_idx ON folders(date,created DESC)")
     }
     override fun onUpgrade(db:SQLiteDatabase,oldVersion:Int,newVersion:Int){
+        if(oldVersion<3)db.execSQL("ALTER TABLE folders ADD COLUMN e INTEGER NOT NULL DEFAULT 0")
         if(oldVersion<2)db.execSQL("ALTER TABLE folders ADD COLUMN d INTEGER NOT NULL DEFAULT 0")
     }
     companion object{
         private val lock=Any()
-        const val RANK_NOTE="AI 綜合技術評分是透明規則模型，不是語言模型預測，也不是保證獲利；已通過 ABCD 篩選的股票，再依 MACD、均線、RSI、量能與過熱程度評分。"
+        const val RANK_NOTE="AI 綜合技術評分是透明規則模型，不是語言模型預測，也不是保證獲利；已通過 ABCDE 篩選的股票，再依 MACD、均線、RSI、量能與過熱程度評分。"
         const val CASH_NOTE="資金約估：每個不同股號買 1,000 股，使用掃描當時可得參考價、估計 0.1% 買入滑價及至少 20 元手續費；非即時委託報價，不含未來價格變動。"
         fun snapshot(date:String,time:Long,rules:Map<RadarType,Set<String>>,sectors:Set<StockSector>,
                      policy:StockPolicy,flowRevision:String,requested:Int,analyzed:Int,failed:Int,
                      enabledRadars:Set<RadarType> = com.rex.twboardingscanner.backtest.defaultActiveRadars(),
-                     dConfig:DPatternConfig=DPatternConfig.DEFAULT):JSONObject {
+                     dConfig:DPatternConfig=DPatternConfig.DEFAULT,eConfig:EPatternConfig=EPatternConfig.DEFAULT):JSONObject {
             require(Regex("\\d{4}-\\d{2}-\\d{2}").matches(date))
             return JSONObject().put("schema",1).put("date",date).put("created",time)
                 .put("rulesVersion",ScanConditions.VERSION)
                 .put("enabledRadars",JSONArray(enabledRadars.map{it.name}.sorted()))
-                .put("dConfig",dConfig.json())
+                .put("dConfig",dConfig.json()).put("eConfig",eConfig.json())
                 .put("rules",JSONObject().apply{RadarType.entries.forEach{put(it.name,JSONArray(rules[it].orEmpty().sorted()))}})
                 .put("sectors",JSONArray(sectors.map{it.name}.sorted()))
                 .put("policy",policy.json()).put("flowRevision",flowRevision)
@@ -88,7 +89,7 @@ class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationCont
         fun signature(settings:JSONObject):String{
             val stable=JSONObject().put("rules",settings.getJSONObject("rules"))
                 .put("enabledRadars",settings.optJSONArray("enabledRadars")?:JSONArray())
-                .put("dConfig",settings.optJSONObject("dConfig")?:DPatternConfig.DEFAULT.json())
+                .put("dConfig",settings.optJSONObject("dConfig")?:DPatternConfig.DEFAULT.json()).put("eConfig",settings.optJSONObject("eConfig")?:EPatternConfig.DEFAULT.json())
                 .put("sectors",settings.getJSONArray("sectors")).put("policy",settings.getJSONObject("policy"))
                 .put("flowRevision",settings.getString("flowRevision"))
             return MessageDigest.getInstance("SHA-256").digest(stable.toString().toByteArray(Charsets.UTF_8))
@@ -103,9 +104,10 @@ class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationCont
                 ?.let(::strings)?:com.rex.twboardingscanner.backtest.defaultActiveRadars().map{it.name}.toSet()
             val cEnabled=current.optJSONArray("enabledRadars")
                 ?.let(::strings)?:com.rex.twboardingscanner.backtest.defaultActiveRadars().map{it.name}.toSet()
-            if(pEnabled!=cEnabled)lines+="ABCD 開關 ＋${(cEnabled-pEnabled).joinToString("、")}／−${(pEnabled-cEnabled).joinToString("、")}"
+            if(pEnabled!=cEnabled)lines+="ABCDE 開關 ＋${(cEnabled-pEnabled).joinToString("、")}／−${(pEnabled-cEnabled).joinToString("、")}"
             val oldD=DPatternConfig.read(previous.optJSONObject("dConfig"))
             val newD=DPatternConfig.read(current.optJSONObject("dConfig"))
+            if(EPatternConfig.read(previous.optJSONObject("eConfig"))!=EPatternConfig.read(current.optJSONObject("eConfig")))lines+="E 線距／交叉門檻調整（詳見快照）"
             if(oldD!=newD)lines+="D 主力參數調整（詳見快照）"
             RadarType.entries.forEach{type->
                 val before=strings(older.optJSONArray(type.name)?:JSONArray())
@@ -185,12 +187,12 @@ class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationCont
     @Synchronized fun list(date:String?=null):List<ScanArchiveFolder> {
         val items=mutableListOf<ScanArchiveFolder>()
         readableDatabase.query("folders",arrayOf("id","date","created","name","a","b","c",
-            "unique_count","cash","changes","signature","d"),
+            "unique_count","cash","changes","signature","d","e"),
             if(date==null)null else "date=?",if(date==null)null else arrayOf(date),
             null,null,"created DESC").use{q->
             while(q.moveToNext())items+=ScanArchiveFolder(q.getString(0),q.getString(1),q.getLong(2),
                 q.getString(3),q.getInt(4),q.getInt(5),q.getInt(6),q.getInt(7),q.getDouble(8),
-                q.getString(9),q.getString(10),q.getInt(11))
+                q.getString(9),q.getString(10),q.getInt(11),q.getInt(12))
         }
         return items
     }
@@ -237,11 +239,11 @@ class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationCont
         val folder=ScanArchiveFolder(id,date,time,"掃描條件 · ${signature(settings)}",
             counts.getValue(RadarType.A_EARLY_BREAKOUT),counts.getValue(RadarType.B_DEEP_REVERSAL),
             counts.getValue(RadarType.C_LONG_RED_VOLUME),byStock.size,funding,diff,signature(settings),
-            counts.getValue(RadarType.D_MAIN_FORCE))
+            counts.getValue(RadarType.D_MAIN_FORCE),counts.getValue(RadarType.E_DIF_TOUCH))
         val row=ContentValues().apply{
             put("id",id);put("date",date);put("created",time);put("name",folder.name)
             put("settings",settings.toString());put("signature",folder.signature)
-            put("details",zipped(docs));put("a",folder.a);put("b",folder.b);put("c",folder.c);put("d",folder.d)
+            put("details",zipped(docs));put("a",folder.a);put("b",folder.b);put("c",folder.c);put("d",folder.d);put("e",folder.e)
             put("unique_count",folder.uniqueStocks);put("cash",folder.estimatedCash)
             put("changes",folder.changes)
         }

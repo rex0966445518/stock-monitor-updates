@@ -19,14 +19,15 @@ internal object ResultFilters {
             4 -> r.checks.any { it.selected && it.state == CheckState.PENDING }
             5 -> r.checks.any { it.selected && it.state == CheckState.FAIL }
              6 -> r.light != SignalLight.NONE
+            7 -> r.radarType==RadarType.E_DIF_TOUCH && r.light!=SignalLight.NONE
             else -> false
         }}.sortedByDescending { it.score }
 }
 
 class ResultFilterBar @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) : LinearLayout(context, attrs) {
     var onSelected: ((Int) -> Unit)? = null
-    private val titles = listOf("A 起漲", "B 反轉", "C 爆量", "D 主力", "待查核", "未通過", "全部入選")
-    private val accents = listOf(NeonUi.pink, NeonUi.amber, NeonUi.cyan, NeonUi.mint, NeonUi.amber, NeonUi.muted, NeonUi.cyan)
+    private val titles = listOf("A 起漲", "B 反轉", "C 爆量", "D 主力", "待查核", "未通過", "全部入選", "E DIF 接觸")
+    private val accents = listOf(NeonUi.pink, NeonUi.amber, NeonUi.cyan, NeonUi.mint, NeonUi.amber, NeonUi.muted, NeonUi.cyan, NeonUi.pink)
     private val buttons = titles.mapIndexed { index, title ->
         NeonUi.button(context, title, accents[index]) { onSelected?.invoke(index) }.apply {
             textSize = 12f
@@ -44,8 +45,8 @@ class ResultFilterBar @JvmOverloads constructor(context: Context, attrs: Attribu
         orientation = VERTICAL
         addView(NeonUi.row(context, buttons.take(4)))
         addView(NeonUi.gap(context, 3))
-        addView(NeonUi.row(context, listOf(buttons[6],buttons[4],buttons[5])))
-        update(List(7) { 0 }, 6)
+        addView(NeonUi.row(context, listOf(buttons[7],buttons[6],buttons[4],buttons[5])))
+        update(List(8) { 0 }, 6)
     }
     fun update(counts: List<Int>, selected: Int) {
         buttons.forEachIndexed { i, button ->

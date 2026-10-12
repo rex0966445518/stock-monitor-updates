@@ -1,6 +1,6 @@
 package com.rex.twboardingscanner.domain
 
-enum class RadarType { A_EARLY_BREAKOUT, B_DEEP_REVERSAL, C_LONG_RED_VOLUME, D_MAIN_FORCE }
+enum class RadarType { A_EARLY_BREAKOUT, B_DEEP_REVERSAL, C_LONG_RED_VOLUME, D_MAIN_FORCE, E_DIF_TOUCH }
 enum class SignalLight { NONE, YELLOW, ORANGE, RED, WEAKENING }
 enum class Market { TWSE, TPEX }
 
@@ -154,6 +154,7 @@ data class StockSnapshot(
     val sourceStock: MarketStock? = null,
     val tradeSideVolume:TradeSideVolume? = null,
     val dConfig:DPatternConfig=DPatternConfig.DEFAULT,
+    val eConfig:EPatternConfig=EPatternConfig.DEFAULT,
     val marketIndexCloses:Map<java.time.LocalDate,Double>?=null
 )
 

@@ -11,6 +11,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import com.rex.twboardingscanner.domain.RadarType
 import com.rex.twboardingscanner.domain.DPatternConfig
+import com.rex.twboardingscanner.domain.EPatternConfig
 import java.time.LocalDate
 
 object BtSettingsCodec {
@@ -19,6 +20,7 @@ object BtSettingsCodec {
         val rules=com.rex.twboardingscanner.domain.RadarType.entries.associateWith { type ->
             val all=com.rex.twboardingscanner.domain.ScanConditions.forRadar(type)
             (prefs.getStringSet("rules_${com.rex.twboardingscanner.domain.ScanConditions.VERSION}_${type.name}",null)
+                ?:prefs.getStringSet("rules_${com.rex.twboardingscanner.domain.ScanConditions.PRE_E_VERSION}_${type.name}",null)
                 ?:prefs.getStringSet("rules_${com.rex.twboardingscanner.domain.ScanConditions.PREVIOUS_VERSION}_${type.name}",null)
                 ?:prefs.getStringSet("rules_${com.rex.twboardingscanner.domain.ScanConditions.PREVIOUS_D_VERSION}_${type.name}",null)
                 ?:prefs.getStringSet("rules_${com.rex.twboardingscanner.domain.ScanConditions.PRE_D_VERSION}_${type.name}",null)
@@ -33,7 +35,7 @@ object BtSettingsCodec {
             runCatching{RadarType.valueOf(it)}.getOrNull()
         }?.toSet()?:defaultActiveRadars()
         val dConfig=runCatching{DPatternConfig.read(JSONObject(prefs.getString("d_pattern_config",null)?:"{}"))}.getOrDefault(DPatternConfig.DEFAULT)
-        return BtSettings(start,end,capital,codes,rules.mapValues{it.value.toSet()},sectors.ifEmpty{allSectors}.toSet(),enabledRadars=enabled,dConfig=dConfig,stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(c).read(),exitRules=com.rex.twboardingscanner.data.ExitRuleStore(c).read(com.rex.twboardingscanner.domain.StockScope.BACKTEST),marketGuardVersion=com.rex.twboardingscanner.domain.MarketCrashGuard.VERSION,holdProfitUntilMa5Break=com.rex.twboardingscanner.data.ExitRuleStore(c).readProfitTrendHold(com.rex.twboardingscanner.domain.StockScope.BACKTEST))
+        return BtSettings(start,end,capital,codes,rules.mapValues{it.value.toSet()},sectors.ifEmpty{allSectors}.toSet(),enabledRadars=enabled,dConfig=dConfig,eConfig=runCatching{EPatternConfig.read(JSONObject(prefs.getString("e_pattern_config",null)?:"{}"))}.getOrDefault(EPatternConfig.DEFAULT),stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(c).read(),exitRules=com.rex.twboardingscanner.data.ExitRuleStore(c).read(com.rex.twboardingscanner.domain.StockScope.BACKTEST),marketGuardVersion=com.rex.twboardingscanner.domain.MarketCrashGuard.VERSION,holdProfitUntilMa5Break=com.rex.twboardingscanner.data.ExitRuleStore(c).readProfitTrendHold(com.rex.twboardingscanner.domain.StockScope.BACKTEST))
     }
     fun encode(s:BtSettings):JSONObject {
         s.validateTrading()
@@ -46,7 +48,7 @@ object BtSettingsCodec {
         .put("targetNetPct",s.targetNetPct).put("maxHoldingStocks",s.maxHoldingStocks?:JSONObject.NULL)
         .put("holdProfitUntilMa5Break",s.holdProfitUntilMa5Break)
         .put("enabledRadars",JSONArray(s.enabledRadars.map{it.name}.sorted()))
-        .put("dConfig",s.dConfig.json())
+        .put("dConfig",s.dConfig.json()).put("eConfig",s.eConfig.json())
         .put("holdingLimitBasis","不同股號計算檔數；同股不同日可加買一張；先賣後買；名額及資金競爭按股號排序")
         .put("rules",JSONObject().apply{s.rules.forEach{(type,ids)->put(type.name,JSONArray(ids.sorted()))}})
         .put("sectors",JSONArray(s.sectors.map{it.name}.sorted()))
@@ -59,7 +61,7 @@ object BtSettingsCodec {
         .put("costModel",JSONObject().put("buyFeeRate",0.001425).put("sellFeeRate",0.001425).put("minimumFee",20).put("sellTaxRate",0.003).put("slippageRate",0.001))
     }
     fun decode(o:JSONObject):BtSettings {
-        require(o.getInt("strategyVersion") in 2..4&&o.getString("rulesVersion") in setOf(com.rex.twboardingscanner.domain.ScanConditions.VERSION,com.rex.twboardingscanner.domain.ScanConditions.PREVIOUS_VERSION,com.rex.twboardingscanner.domain.ScanConditions.PREVIOUS_D_VERSION,com.rex.twboardingscanner.domain.ScanConditions.PRE_D_VERSION,com.rex.twboardingscanner.domain.ScanConditions.LEGACY_VERSION)){"回測條件版本已變更，請重新開始"}
+        require(o.getInt("strategyVersion") in 2..4&&o.getString("rulesVersion") in setOf(com.rex.twboardingscanner.domain.ScanConditions.VERSION,com.rex.twboardingscanner.domain.ScanConditions.PRE_E_VERSION,com.rex.twboardingscanner.domain.ScanConditions.PREVIOUS_VERSION,com.rex.twboardingscanner.domain.ScanConditions.PREVIOUS_D_VERSION,com.rex.twboardingscanner.domain.ScanConditions.PRE_D_VERSION,com.rex.twboardingscanner.domain.ScanConditions.LEGACY_VERSION)){"回測條件版本已變更，請重新開始"}
         val rules=com.rex.twboardingscanner.domain.RadarType.entries.associateWith{type->
             val a=o.getJSONObject("rules").optJSONArray(type.name)
             if(a==null)emptySet() else (0 until a.length()).map{a.getString(it)}.toSet()
@@ -78,7 +80,7 @@ object BtSettingsCodec {
                 val x=o.optJSONArray("enabledRadars")
                 if(x==null)defaultActiveRadars() else (0 until x.length()).map{RadarType.valueOf(x.getString(it))}.toSet()
             },
-            dConfig=DPatternConfig.read(o.optJSONObject("dConfig"))).also{it.validateTrading()}
+            dConfig=DPatternConfig.read(o.optJSONObject("dConfig")),eConfig=EPatternConfig.read(o.optJSONObject("eConfig"))).also{it.validateTrading()}
     }
 }
 
@@ -111,7 +113,7 @@ class BacktestWorker(c:Context,p:WorkerParameters):Worker(c,p){
             val prepared=rawPrepared.copy(marketGuards=if(s.marketGuardVersion>0)com.rex.twboardingscanner.domain.MarketCrashGuard.forDays(data.market,rawPrepared.days) else emptyMap())
             val run=BacktestEngine.run(prepared,s,progress,cancel)
             check(!cancel()){ "已取消回測" }
-            val note="如勾選現價低於估算主力成本，使用訊號日當時可取得的近20個有效交易日日K典型價（高＋低＋收）／3依成交量加權；非真正主力帳戶成本，也不會等於其他軟體專有指標；OHLCV缺漏視為待查核、不通過。現存上市櫃與目前產業分類，存在樣本／存活偏差；拆併股原始價未核對者排除。已勾 EPS／財報／法人缺少歷史證據時視為待查核，不可入選。A/B 排除當日日線，C 包含當日；C 完整收盤訊號與同收盤成交屬理想化假設，可能高估績效。日線不提供精確盤中成交時刻；13:30／09:00 皆為模型時間，觸價只記錄時段。"+if(s.strategyVersion>=3)"股息與折讓金列應收，不再投資；持有超過 5 個日曆日可扣費稅保本賣出，仍虧損則續抱，已設定下車條件者以前一完整日線判斷並於下一可交易日開盤模擬賣出；截止日不強制平倉。"else"舊策略：股息列應收，不再投資；未達淨利 3% 續抱，截止日不強制平倉。"
+            val note="如勾選現價低於估算主力成本，使用訊號日當時可取得的近20個有效交易日日K典型價（高＋低＋收）／3依成交量加權；非真正主力帳戶成本，也不會等於其他軟體專有指標；OHLCV缺漏視為待查核、不通過。現存上市櫃與目前產業分類，存在樣本／存活偏差；拆併股原始價未核對者排除。已勾 EPS／財報／法人缺少歷史證據時視為待查核，不可入選。A/B/E 排除當日日線，C 包含當日；C 完整收盤訊號與同收盤成交屬理想化假設，可能高估績效。日線不提供精確盤中成交時刻；13:30／09:00 皆為模型時間，觸價只記錄時段。"+if(s.strategyVersion>=3)"股息與折讓金列應收，不再投資；持有超過 5 個日曆日可扣費稅保本賣出，仍虧損則續抱，已設定下車條件者以前一完整日線判斷並於下一可交易日開盤模擬賣出；截止日不強制平倉。"else"舊策略：股息列應收，不再投資；未達淨利 3% 續抱，截止日不強制平倉。"
             check(store.save(runId,BtResult(s,run,data.requested,data.series.size,data.excluded,note,prepared.pendingChecks))){"此回測已停止或歸零"};Result.success()
         }catch(e:Exception){store.update(runId,if(isStopped)"已取消；未完成結果不列為績效" else "回測中止：${e.message}",if(isStopped)"CANCELED" else "ERROR");Result.failure()}
     }

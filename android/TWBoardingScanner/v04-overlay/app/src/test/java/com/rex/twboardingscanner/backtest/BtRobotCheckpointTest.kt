@@ -163,9 +163,9 @@ class BtRobotCheckpointTest {
         val resumed=store.resume(id);assertEquals(expected,store.next(id));store.pause(id)
         assertFalse(store.current(id,resumed))
         val zip=File(app.cacheDir,"robot-exclusions.zip");BtRobotCheckpoint.export(app,id,zip)
-        ZipFile(zip).use{z->assertEquals(9,JSONObject(z.getInputStream(z.getEntry("manifest.json")).bufferedReader().readText()).getInt("version"))}
+        ZipFile(zip).use{z->assertEquals(10,JSONObject(z.getInputStream(z.getEntry("manifest.json")).bufferedReader().readText()).getInt("version"))}
         val restored=zip.inputStream().use{BtRobotCheckpoint.restore(app,it)}
-        assertEquals("2",store.session(restored)!!.getString("forbidden"));assertEquals(5,store.session(restored)!!.getInt("searchVersion"))
+        assertEquals("2",store.session(restored)!!.getString("forbidden"));assertEquals(6,store.session(restored)!!.getInt("searchVersion"))
         assertEquals(expected,store.next(restored));assertEquals(BigInteger.ONE.shiftLeft(72)-BigInteger.valueOf(2),store.remaining(restored))
         assertArrayEquals(store.conditionFile(id).readBytes(),store.conditionFile(restored).readBytes())
         val nextToken=store.resume(restored);repeat(30){val key=add(store,restored,nextToken,it.toDouble());assertTrue(BtRobotSpace.includes(key,"1","2"))};store.pause(restored)

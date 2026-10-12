@@ -16,12 +16,13 @@ class ScoringEngine {
         if (upgraded) reasons += "技術升級：RSI>50 且收盤站上20日線"
         val light = if (blockers.isNotEmpty()) SignalLight.NONE else if (upgraded) SignalLight.RED else SignalLight.ORANGE
         val evidence=if(type==RadarType.D_MAIN_FORCE)
-            metrics.dPattern.format() else null
+            metrics.dPattern.format() else if(type==RadarType.E_DIF_TOUCH) metrics.ePattern?.format()?:"E 日K資料不足，待查核" else null
         return SignalResult(s.code, s.name, s.sector, type, score, light, reasons, blockers, s, checks, upgraded,evidence)
     }
     fun evaluateA(s: StockSnapshot, selected: Set<String> = defaults(RadarType.A_EARLY_BREAKOUT)) = evaluate(s, RadarType.A_EARLY_BREAKOUT, selected)
     fun evaluateB(s: StockSnapshot, selected: Set<String> = defaults(RadarType.B_DEEP_REVERSAL)) = evaluate(s, RadarType.B_DEEP_REVERSAL, selected)
     fun evaluateC(s: StockSnapshot, selected: Set<String> = defaults(RadarType.C_LONG_RED_VOLUME)) = evaluate(s, RadarType.C_LONG_RED_VOLUME, selected)
     fun evaluateD(s: StockSnapshot, selected: Set<String> = defaults(RadarType.D_MAIN_FORCE)) = evaluate(s,RadarType.D_MAIN_FORCE,selected)
+    fun evaluateE(s: StockSnapshot, selected: Set<String> = defaults(RadarType.E_DIF_TOUCH)) = evaluate(s,RadarType.E_DIF_TOUCH,selected)
     private fun defaults(type: RadarType) = ScanConditions.forRadar(type).filter { it.defaultEnabled }.map { it.id }.toSet()
 }

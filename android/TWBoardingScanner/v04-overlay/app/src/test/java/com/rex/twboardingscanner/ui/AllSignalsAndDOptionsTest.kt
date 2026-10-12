@@ -70,7 +70,7 @@ class AllSignalsAndDOptionsTest {
         val oldSlots=BtRobotSpace.allSlots.take(77)
         assertEquals(BtRobotSpace.slots+old.map{RadarType.D_MAIN_FORCE to it},oldSlots)
         assertEquals(102,BtRobotSpace.v4Slots.size)
-        assertEquals(106,BtRobotSpace.allSlots.size)
+        assertEquals(106,BtRobotSpace.v5Slots.size)
     }
 
     @Test fun olderSnapshotReadsWithoutImplicitDFilterMutation(){
