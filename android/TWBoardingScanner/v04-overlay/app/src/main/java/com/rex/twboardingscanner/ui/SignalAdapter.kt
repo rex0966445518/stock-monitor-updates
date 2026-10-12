@@ -11,6 +11,9 @@ import com.google.android.material.chip.Chip
 import com.rex.twboardingscanner.databinding.ItemStockSignalBinding
 import com.rex.twboardingscanner.domain.CheckState
 import com.rex.twboardingscanner.domain.RuleMetrics
+import com.rex.twboardingscanner.domain.MainForceCost
+import java.util.Locale
+import kotlin.math.abs
 import com.rex.twboardingscanner.domain.RadarType
 import com.rex.twboardingscanner.domain.SignalLight
 import com.rex.twboardingscanner.domain.SignalResult
@@ -81,6 +84,26 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
         h.b.sector.text = s.sector.label
         h.b.price.text = String.format("%,.2f  %+.2f%%", s.price, s.changePct)
         h.b.price.setTextColor(if (s.changePct >= 0) NeonUi.pink else NeonUi.mint)
+        val approximateCost=MainForceCost.estimate(s.bars)
+        if(approximateCost==null){
+            h.b.mainForceCost.text="估算主力成本（20日） · 日K／量能資料不足"
+            h.b.mainForceCost.setTextColor(NeonUi.muted)
+            h.b.mainForceCostNote.text="需要20個有效交易日的OHLCV，缺資料不推算"
+        }else{
+            val difference=approximateCost.distancePct(s.price)
+            val relation=when{
+                difference==null->"現價資料不足"
+                difference<0.0->String.format(Locale.TAIWAN,"現價低 %.2f%%",abs(difference))
+                difference>0.0->String.format(Locale.TAIWAN,"現價高 %.2f%%",difference)
+                else->"現價等於估算成本"
+            }
+            h.b.mainForceCost.text=String.format(Locale.TAIWAN,
+                "估算主力成本（20日） %,.2f 元 · %s",approximateCost.price,relation)
+            h.b.mainForceCost.setTextColor(if(difference!=null&&difference<0.0)NeonUi.mint else NeonUi.cyan)
+            h.b.mainForceCostNote.text="以OHLC均價(H＋L＋C)/3按成交股數加權 · 至 ${approximateCost.to}；非實際大戶成本"
+        }
+        h.b.mainForceCost.contentDescription=h.b.mainForceCost.text.toString()+
+            "；這是量價推算而非券商提供的主力帳戶實際平均持股成本"
         h.b.scoreRing.setScore(r.score, accent)
         h.b.chartView.showAxes = true
         h.b.chartView.setWindow(60)
@@ -105,7 +128,8 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
                 "extra_risk" to "風險結構", "extra_high" to "避開高點", "extra_limit" to "避開漲停",
                 "d_limit" to "曾觸漲停", "d_green" to "連陽", "d_gap" to "向上缺口",
                 "d_unfilled" to "缺口未回補", "d_volume" to "連續放量",
-                "d_relative" to "勝過大盤"
+                "d_relative" to "勝過大盤",
+                "below_main_force_cost_20" to "低於估算主力成本"
             )[check.id] ?: check.label.substringBefore("：")
             addCheck(h, short, check.state, check.selected)
         }
