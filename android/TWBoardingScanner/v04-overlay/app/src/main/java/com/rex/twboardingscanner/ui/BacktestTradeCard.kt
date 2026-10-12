@@ -78,6 +78,17 @@ internal class BacktestTradeCard(c:Context,t:JSONObject,industry:String?=null):L
             addView(banButton,LayoutParams(NeonUi.dp(c,108),-2).apply{marginStart=NeonUi.dp(c,8)})
         })
         refreshBan()
+        val reason=text(t,"reason","舊紀錄未保存原因")
+        if(sell||t.optString("reason").isNotBlank()){
+            addView(NeonUi.gap(c,8))
+            addView(NeonUi.label(c,if(sell)"賣出理由" else "買入理由",13f,NeonUi.amber,true).apply{tag="trade-reason-title"})
+            addView(NeonUi.label(c,reason,13f,NeonUi.ink).apply{
+                tag="trade-reason";setLineSpacing(NeonUi.dp(c,3).toFloat(),1f)
+            })
+        }
+        addView(NeonUi.label(c,"點擊卡片 · 開啟籌碼K線個股日K ↗",11f,NeonUi.cyan).apply{tag="trade-open-chipk-hint"})
+        isFocusable=true
+        setOnClickListener{ChipKLauncher.open(c,code,name)}
         val change=n(t,"dayChange");val changePct=n(t,"dayChangePct")
         val dayTint=if(change==null||change==0.0)NeonUi.ink else if(change>0)NeonUi.pink else NeonUi.mint
         addView(NeonUi.gap(c,6))
@@ -99,9 +110,8 @@ internal class BacktestTradeCard(c:Context,t:JSONObject,industry:String?=null):L
         }else addView(NeonUi.label(c,"買入手續費 ${amount(n(t,"buyFee"))} 元",10f))
         val source=text(t,"costSource","")
         if(source!="原買入紀錄"&&source.isNotBlank())addView(NeonUi.label(c,source,10f,NeonUi.amber))
-        if(t.optString("reason").isNotBlank())addView(NeonUi.label(c,t.optString("reason"),10f))
         addView(NeonUi.gap(c,10))
         addView(BacktestFiveMinutePanel(c,code,t.optString("date"),if(sell)"SELL" else "BUY",n(t,"price"),t.optString("time"),t.optString("timeKind")))
-        contentDescription="${if(sell)"賣出" else "買入"} ${text(t,"code")} ${text(t,"name")} 產業分類 $sector 含費成本價 ${amount(n(t,"costPerShare"),3)} 賣出價 ${amount(n(t,"sellPrice"),2)} 淨利 ${if(sell)signed(profit)else "尚未實現"}"
+        contentDescription="${if(sell)"賣出" else "買入"} ${text(t,"code")} ${text(t,"name")}，${if(sell)"賣出理由" else "買入理由"} $reason，點擊開啟籌碼K線個股日K。產業分類 $sector 含費成本價 ${amount(n(t,"costPerShare"),3)} 賣出價 ${amount(n(t,"sellPrice"),2)} 淨利 ${if(sell)signed(profit)else "尚未實現"}"
     }
 }
