@@ -117,7 +117,7 @@ class BtRobotSweepTest {
                 val entry=zip.nextEntry?:break;entryNames+=entry.name
                 if(entry.name=="manifest.json"){
                     val json=JSONObject(zip.bufferedReader().readText())
-                    assertEquals(8,json.getInt("version"))
+                    assertEquals(9,json.getInt("version"))
                 }
                 zip.closeEntry()
             }}
