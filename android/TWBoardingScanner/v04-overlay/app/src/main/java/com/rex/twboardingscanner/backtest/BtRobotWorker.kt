@@ -77,6 +77,7 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
             setForegroundAsync(foreground()).get()
             val session=store.session(id)!!
             require(BtRobotCheckpoint.compatible(session)){"回測引擎版本不相容；原紀錄可檢閱，請建立新測試"}
+            require(session.optInt("analysisVersion")>=2){"條件快取檢核已更新；請按開始建立新批次，舊績效保留"}
             val base=BtSettingsCodec.decode(session.getJSONObject("settings"));BtRobotSpace.validate(base)
             val sweep=BtRobotSweep.read(session.optJSONObject("sweep"))
             require(base.marketGuardVersion>0){"舊批次未啟用大盤保護；按開始建立新批次，原紀錄保留"}
@@ -120,7 +121,7 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
                 val candidate=store.next(id)
                 if(candidate==null){
                     val end=store.session(id)!!
-                    val message=if(sweep==null)"所有 ABC 組合測試完成；最佳收益僅限本次歷史樣本"
+                    val message=if(sweep==null)"所有 ${base.enabledRadars.sortedBy{it.ordinal}.joinToString(""){it.name.take(1)}} 組合測試完成；最佳收益僅限本次歷史樣本"
                         else "參數範圍 ${sweep.total} 組全部完成；已測最佳 ${end.optString("bestKey").ifBlank{"無"}}，可於結果榜檢閱"
                     store.status(id,token,message,"DONE");cached=null;return@synchronized Result.success()
                 }
@@ -132,10 +133,14 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
                 val prepared=if(sweep==null)runtime.index.prepare(settings,cancel).copy(marketGuards=runtime.guards)
                     else runtime.gridPrepared?:runtime.index.prepare(base,cancel).copy(marketGuards=runtime.guards)
                         .also{runtime.gridPrepared=it}
+                val signalCounts=base.enabledRadars.associateWith{type->
+                    prepared.signals.values.sumOf{signals->signals.count{type.name.take(1) in it.radar.split("/")}}
+                }
+                val feedback=signalCounts.entries.joinToString(" · "){"${it.key.name.take(1)} 符合 ${it.value} 筆"}
                 val run=BacktestEngine.run(prepared,settings,cancel=cancel,execution=runtime.execution)
                 check(!cancel()){ "已暫停測試" }
-                val note=NOTE+if(sweep!=null)"本批次固定 ABC 條件，逐一測試持倉 ${sweep.holdingFrom}～${sweep.holdingTo} 檔 × 扣費稅淨利 ${sweep.profitFrom}%～${sweep.profitTo}% 的 ${sweep.total} 組有限範圍；每組使用相同歷史樣本，沒有再搜尋 ABC。" else ""
-                val better=store.commit(id,token,candidate,BtResult(settings,run,runtime.data.requested,runtime.data.series.size,runtime.data.excluded,note,prepared.pendingChecks),started)
+                val note="條件掃描回饋：$feedback；待查核 ${prepared.pendingChecks} 項。\n"+NOTE+if(sweep!=null)"本批次固定 ABCD 條件，逐一測試持倉 ${sweep.holdingFrom}～${sweep.holdingTo} 檔 × 扣費稅淨利 ${sweep.profitFrom}%～${sweep.profitTo}% 的 ${sweep.total} 組有限範圍；每組使用相同歷史樣本，沒有再搜尋 ABCD。" else ""
+                val better=store.commit(id,token,candidate,BtResult(settings,run,runtime.data.requested,runtime.data.series.size,runtime.data.excluded,note,prepared.pendingChecks),started,signalCounts)
                 if(better)notifyBest(seq,run.profit)
                 completed++
             }

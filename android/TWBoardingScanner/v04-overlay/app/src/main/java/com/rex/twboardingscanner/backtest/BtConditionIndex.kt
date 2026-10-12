@@ -66,6 +66,7 @@ class BtConditionIndex private constructor(
     companion object {
         fun fingerprint(digest:String,settings:BtSettings,flowRevision:String="none")=
             "$digest:${settings.start}:${settings.end}:${ScanConditions.VERSION}:$flowRevision:"+
+            settings.enabledRadars.sortedBy{it.ordinal}.joinToString(","){it.name}+":"+
             settings.dConfig.json().toString()+":"+BtRobotSpace.allSlots.joinToString(","){"${it.first.name}/${it.second}"}
         fun read(file:File,series:List<BtSeries>,fingerprint:String):BtConditionIndex=
             DataInputStream(BufferedInputStream(GZIPInputStream(file.inputStream()))).use{input->
