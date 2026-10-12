@@ -56,6 +56,17 @@ class MarketDataProvider(private val context: Context) {
         fun referenceTtlMs(url:String,now:Long)=
             if(url.contains("STOCK_DAY_ALL")||url.contains("tpex_mainboard_daily_close_quotes"))
                 historyTtlMs(now) else 6*60*60_000L
+        fun cacheFresh(savedAt:Long,now:Long,ttl:Long):Boolean {
+            if(now-savedAt !in 0 until ttl)return false
+            val local=Instant.ofEpochMilli(now).atZone(ZoneId.of("Asia/Taipei"))
+            val cached=Instant.ofEpochMilli(savedAt).atZone(ZoneId.of("Asia/Taipei"))
+            // The first scan after 09:00 must not reuse the 08:59 pre-open
+            // snapshot, even if it is less than five minutes old.
+            return !(local.dayOfWeek.value in 1..5
+                &&local.toLocalTime()>=LocalTime.of(9,0)
+                &&local.toLocalTime()<=LocalTime.of(15,30)
+                &&(cached.toLocalDate()!=local.toLocalDate()||cached.toLocalTime()<LocalTime.of(9,0)))
+        }
     }
 
     fun loadUniverse(onStatus: (String) -> Unit = {}): List<MarketStock> {
@@ -95,7 +106,7 @@ class MarketDataProvider(private val context: Context) {
         val cacheDir = File(context.cacheDir, "price_history_v044").apply { mkdirs() }
         val file = File(cacheDir, "${code}_${market.name}.json")
         val now=System.currentTimeMillis()
-        if (!forceRefresh && file.exists() && now-file.lastModified() in 0 until historyTtlMs(now)) {
+        if (!forceRefresh && file.exists() && cacheFresh(file.lastModified(),now,historyTtlMs(now))) {
             val cached = runCatching { parseYahoo(file.readText()) }.getOrDefault(emptyList())
             if (cached.isNotEmpty()){
                 cacheHits.incrementAndGet()
@@ -271,7 +282,7 @@ class MarketDataProvider(private val context: Context) {
         val dir=File(context.cacheDir,"scanner_official_v1").apply{mkdirs()}
         val file=File(dir,"$key.json")
         val now=System.currentTimeMillis()
-        if(file.exists()&&now-file.lastModified() in 0 until referenceTtlMs(url,now)){
+        if(file.exists()&&cacheFresh(file.lastModified(),now,referenceTtlMs(url,now))){
             runCatching{JSONArray(file.readText())}.getOrNull()?.let{if(it.length()>0)return it}
         }
         val raw=fetchText(url)?:return null
