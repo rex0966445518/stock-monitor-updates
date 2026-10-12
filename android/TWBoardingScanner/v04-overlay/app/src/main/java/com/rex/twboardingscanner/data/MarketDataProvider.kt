@@ -10,9 +10,47 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.time.Instant
+import java.time.LocalTime
+import java.time.ZoneId
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 
 class MarketDataProvider(private val context: Context) {
     private val ua = "Mozilla/5.0 (Android) TWBoardingScanner/0.4"
+
+    /** Bounded source requests; shared across the six scan workers on this Activity. */
+    private val yahooCooldownUntil=AtomicLong(0L)
+    private val negativeHistoryUntil=ConcurrentHashMap<String,Long>()
+    private val cacheHits=AtomicInteger()
+    private val historyDownloads=AtomicInteger()
+    private val historyFailures=AtomicInteger()
+    private val historyBlocked=AtomicInteger()
+    private val historyRequests=AtomicInteger()
+
+    data class HistoryStats(val cached:Int,val downloaded:Int,val failed:Int,val rateLimited:Int,val requests:Int)
+    fun historyStats()=HistoryStats(cacheHits.get(),historyDownloads.get(),historyFailures.get(),historyBlocked.get(),historyRequests.get())
+    fun resetHistoryStats(){
+        cacheHits.set(0);historyDownloads.set(0);historyFailures.set(0)
+        historyBlocked.set(0);historyRequests.set(0)
+    }
+    companion object {
+        /**
+         * Price history changes throughout the trading session; 5m is a bounded
+         * live cache, while finished daily candles can be reused across scans.
+         * Do not replace live C/D daily candles with yesterday's quote.
+         */
+        fun historyTtlMs(now:Long):Long {
+            val local=Instant.ofEpochMilli(now).atZone(ZoneId.of("Asia/Taipei"))
+            val working=local.dayOfWeek.value in 1..5
+            val intraday=local.toLocalTime()>=LocalTime.of(8,30)&&local.toLocalTime()<=LocalTime.of(15,30)
+            return if(working&&intraday)5*60_000L else 8*60*60_000L
+        }
+        fun referenceTtlMs(url:String,now:Long)=
+            if(url.contains("STOCK_DAY_ALL")||url.contains("tpex_mainboard_daily_close_quotes"))
+                historyTtlMs(now) else 6*60*60_000L
+    }
 
     fun loadUniverse(onStatus: (String) -> Unit = {}): List<MarketStock> {
         onStatus("下載上市櫃公司分類…")
@@ -49,20 +87,43 @@ class MarketDataProvider(private val context: Context) {
     private fun loadSymbolHistory(code: String, market: Market, forceRefresh: Boolean): List<DailyBar> {
         val cacheDir = File(context.cacheDir, "price_history_v044").apply { mkdirs() }
         val file = File(cacheDir, "${code}_${market.name}.json")
-        if (!forceRefresh && file.exists() && System.currentTimeMillis() - file.lastModified() < 60_000L) {
+        val now=System.currentTimeMillis()
+        if (!forceRefresh && file.exists() && now-file.lastModified() in 0 until historyTtlMs(now)) {
             val cached = runCatching { parseYahoo(file.readText()) }.getOrDefault(emptyList())
-            if (cached.isNotEmpty()) return cached.sortedBy { it.time }.takeLast(320)
+            if (cached.isNotEmpty()){
+                cacheHits.incrementAndGet()
+                return cached.sortedBy { it.time }.takeLast(320)
+            }
+        }
+        val key="${code}_${market.name}"
+        if(!forceRefresh&&negativeHistoryUntil[key]?.let{it>now}==true){
+            historyFailures.incrementAndGet()
+            return emptyList()
+        }
+        if(now<yahooCooldownUntil.get()){
+            historyBlocked.incrementAndGet();historyFailures.incrementAndGet()
+            return emptyList()
         }
         val suffix = if (market == Market.TWSE) ".TW" else ".TWO"
         for (host in listOf("query1.finance.yahoo.com", "query2.finance.yahoo.com")) {
             if (Thread.currentThread().isInterrupted) return emptyList()
+            if(System.currentTimeMillis()<yahooCooldownUntil.get())break
             val raw = fetchText("https://$host/v8/finance/chart/$code$suffix?range=2y&interval=1d&events=history") ?: continue
             val bars = parseYahoo(raw)
             if (bars.isEmpty()) continue
-            // A refresh never reports stale disk content as newly retrieved data.
-            runCatching { synchronized(cacheDir.absolutePath.intern()) { file.writeText(raw) } }
+            // Never pretend an old daily candle is a newly downloaded quote.
+            runCatching{
+                val temp=File(cacheDir,"${key}.${java.util.UUID.randomUUID()}.tmp")
+                temp.writeText(raw)
+                if(!temp.renameTo(file))temp.delete()
+            }
+            negativeHistoryUntil.remove(key)
+            historyDownloads.incrementAndGet()
             return bars.sortedBy { it.time }.takeLast(320)
         }
+        historyFailures.incrementAndGet()
+        // Do not let a bad endpoint cost two hosts times three retries per stock.
+        negativeHistoryUntil[key]=System.currentTimeMillis()+45_000L
         return emptyList()
     }
 
@@ -195,15 +256,51 @@ class MarketDataProvider(private val context: Context) {
         bars
     }.getOrElse { emptyList() }
 
-    private fun fetchArray(url: String): JSONArray? = fetchText(url)?.let { runCatching { JSONArray(it) }.getOrNull() }
+    private fun fetchArray(url: String): JSONArray? {
+        // Official sector, EPS and revenue tables do not need re-downloading on
+        // every full-market scan. Quote tables retain a short intraday TTL.
+        val key=java.security.MessageDigest.getInstance("SHA-256")
+            .digest(url.toByteArray(Charsets.UTF_8)).joinToString(""){"%02x".format(it)}
+        val dir=File(context.cacheDir,"scanner_official_v1").apply{mkdirs()}
+        val file=File(dir,"$key.json")
+        val now=System.currentTimeMillis()
+        if(file.exists()&&now-file.lastModified() in 0 until referenceTtlMs(url,now)){
+            runCatching{JSONArray(file.readText())}.getOrNull()?.let{if(it.length()>0)return it}
+        }
+        val raw=fetchText(url)?:return null
+        val data=runCatching{JSONArray(raw)}.getOrNull()?.takeIf{it.length()>0}?:return null
+        runCatching{
+            val temp=File(dir,"$key.${java.util.UUID.randomUUID()}.tmp")
+            temp.writeText(raw)
+            if(!temp.renameTo(file))temp.delete()
+        }
+        return data
+    }
 
     private fun fetchText(url: String): String? = runCatching {
+        val yahoo=url.contains("finance.yahoo.com")
+        if(yahoo){
+            if(System.currentTimeMillis()<yahooCooldownUntil.get()){
+                historyBlocked.incrementAndGet()
+                return@runCatching null
+            }
+            historyRequests.incrementAndGet()
+        }
         val c = URL(url).openConnection() as HttpURLConnection
-        c.connectTimeout = 8_000
-        c.readTimeout = 12_000
+        c.connectTimeout = if(yahoo)5_000 else 8_000
+        c.readTimeout = if(yahoo)8_000 else 12_000
         c.setRequestProperty("User-Agent", ua)
         c.setRequestProperty("Accept", "application/json")
-        try { c.inputStream.bufferedReader().use { it.readText() } } finally { c.disconnect() }
+        try {
+            val status=c.responseCode
+            if(yahoo&&status in listOf(403,429)){
+                yahooCooldownUntil.updateAndGet{old->maxOf(old,System.currentTimeMillis()+10*60_000L)}
+                historyBlocked.incrementAndGet()
+                return@runCatching null
+            }
+            if(status!=200)return@runCatching null
+            c.inputStream.bufferedReader().use { it.readText() }
+        } finally { c.disconnect() }
     }.getOrNull()
 
     private fun pick(o: JSONObject, vararg keys: String): String? {
