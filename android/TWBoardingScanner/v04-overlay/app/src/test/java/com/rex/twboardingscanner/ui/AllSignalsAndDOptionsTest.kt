@@ -66,10 +66,11 @@ class AllSignalsAndDOptionsTest {
         val a=ScanConditions.forRadar(RadarType.A_EARLY_BREAKOUT)
         assertEquals(old,d.take(6).map{it.id})
         assertEquals(a.map{it.id},d.drop(6).map{it.id})
-        assertEquals(31,d.size)
+        assertEquals(32,d.size)
         val oldSlots=BtRobotSpace.allSlots.take(77)
         assertEquals(BtRobotSpace.slots+old.map{RadarType.D_MAIN_FORCE to it},oldSlots)
-        assertEquals(102,BtRobotSpace.allSlots.size)
+        assertEquals(102,BtRobotSpace.v4Slots.size)
+        assertEquals(106,BtRobotSpace.allSlots.size)
     }
 
     @Test fun olderSnapshotReadsWithoutImplicitDFilterMutation(){
