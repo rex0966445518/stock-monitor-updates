@@ -25,6 +25,16 @@ internal object BtRobotRulesDialog {
             populate(a,body,type,selected.getValue(type),excluded.getValue(type)){summary()}
         }})
         root.addView(tabs)
+        root.addView(NeonUi.button(a,"一鍵把 A 的必選／排除同步到 D（保留 D 原有六項）",NeonUi.mint){
+            val aType=RadarType.A_EARLY_BREAKOUT
+            val dType=RadarType.D_MAIN_FORCE
+            selected.getValue(dType).removeAll(ScanConditions.A_RULE_IDS)
+            excluded.getValue(dType).removeAll(ScanConditions.A_RULE_IDS)
+            selected.getValue(dType).addAll(selected.getValue(aType))
+            excluded.getValue(dType).addAll(excluded.getValue(aType))
+            populate(a,body,dType,selected.getValue(dType),excluded.getValue(dType)){summary()}
+            summary()
+        }.apply{tag="robot-d-copy-a"})
         val scroll=ScrollView(a).apply{addView(body)};val height=minOf(240,(a.resources.displayMetrics.heightPixels/a.resources.displayMetrics.density).toInt()-500).coerceAtLeast(100)
         root.addView(scroll,LinearLayout.LayoutParams(-1,NeonUi.dp(a,height)))
         populate(a,body,RadarType.A_EARLY_BREAKOUT,selected.getValue(RadarType.A_EARLY_BREAKOUT),excluded.getValue(RadarType.A_EARLY_BREAKOUT)){summary()}
@@ -39,7 +49,13 @@ internal object BtRobotRulesDialog {
     }
     private fun populate(a:AppCompatActivity,body:LinearLayout,type:RadarType,selected:MutableSet<String>,excluded:MutableSet<String>,change:()->Unit){
         body.removeAllViews();body.addView(NeonUi.label(a,"${type.name.take(1)} 區 · 必選／排除",15f,NeonUi.cyan,true))
-        ScanConditions.forRadar(type).forEach{rule->
+        ScanConditions.forRadar(type).forEachIndexed{index,rule->
+            if(type==RadarType.D_MAIN_FORCE&&index in setOf(0,6,17))
+                body.addView(NeonUi.label(a,when(index){
+                    0->"D 原有主力形態"
+                    6->"A 同步技術條件"
+                    else->"A 同步額外查核"
+                },13f,NeonUi.amber,true))
             val state=when(rule.id){in selected->BtRuleChoice.Choice.REQUIRED;in excluded->BtRuleChoice.Choice.EXCLUDED;else->BtRuleChoice.Choice.FREE}
             body.addView(BtRuleChoice(a,rule.label,state){choice->
                 selected-=rule.id;excluded-=rule.id

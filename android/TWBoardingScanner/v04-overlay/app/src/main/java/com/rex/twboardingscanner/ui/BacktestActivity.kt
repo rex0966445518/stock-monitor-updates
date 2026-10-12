@@ -223,12 +223,23 @@ class BacktestActivity:AppCompatActivity(){
             DPatternEditor.show(this,btDConfig){cfg->btDConfig=cfg;store.saveDraft(draft())}
         }.apply{tag="backtest-d-parameters"})
         content.addView(label("勾選才列入本區門檻；全部取消則該區不入選。",12f,NeonUi.ink))
-        val boxes=options.map{rule->
+        val boxes=options.mapIndexed{index,rule->
             CheckBox(this).apply{text=rule.label;textSize=13f;setTextColor(NeonUi.ink);isChecked=rule.id in selected;minHeight=dp(48);setPadding(0,dp(5),0,dp(5));buttonTintList=android.content.res.ColorStateList.valueOf(NeonUi.cyan)}.also{box->
-                if(rule.id=="extra_eps")content.addView(label("額外查核 · 缺歷史資料時不通過",12f,NeonUi.amber,true))
+                val heading=when{
+                    type==RadarType.D_MAIN_FORCE&&index==0->"D 原有六項主力形態"
+                    type==RadarType.D_MAIN_FORCE&&index==6->"A 起漲同步條件（獨立勾選）"
+                    type==RadarType.D_MAIN_FORCE&&index==17->"A 額外查核 · 缺資料時不通過"
+                    type!=RadarType.D_MAIN_FORCE&&rule.id=="extra_eps"->"額外查核 · 缺歷史資料時不通過"
+                    else->null
+                }
+                if(heading!=null)content.addView(label(heading,13f,NeonUi.amber,true))
                 content.addView(box)
             }
         }
+        if(type==RadarType.D_MAIN_FORCE)content.addView(NeonUi.button(this,"同步 A 已勾選條件至 D",NeonUi.cyan){
+            val aSelected=btRules[RadarType.A_EARLY_BREAKOUT].orEmpty()
+            options.forEachIndexed{i,rule->if(rule.id in ScanConditions.A_RULE_IDS)boxes[i].isChecked=rule.id in aSelected}
+        }.apply{tag="backtest-d-copy-a"})
         content.addView(NeonUi.row(this,listOf(NeonUi.button(this,"全不選"){boxes.forEach{it.isChecked=false}},NeonUi.button(this,"恢復基本條件"){boxes.forEachIndexed{i,box->box.isChecked=options[i].defaultEnabled}})))
         showSelectionDialog("${type.name.take(1)} 區回測條件",content){applyRules(type,options.filterIndexed{i,_->boxes[i].isChecked}.map{it.id}.toSet())}
     }

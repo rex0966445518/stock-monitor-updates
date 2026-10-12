@@ -241,6 +241,8 @@ class MainActivity: AppCompatActivity() {
             return
         }
 
+        // Each new scan starts on the consolidated results view, not an empty A tab.
+        selectedTab=6
         val scanDate = java.time.LocalDate.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI)
         latestScanDate=scanDate.toString()
         latestScanAt=System.currentTimeMillis()
@@ -571,9 +573,21 @@ class MainActivity: AppCompatActivity() {
             val rules = ScanConditions.forRadar(type)
             val savedRules = prefs.getStringSet("rules_${ScanConditions.VERSION}_${type.name}", null)
                 ?:prefs.getStringSet("rules_${ScanConditions.PREVIOUS_VERSION}_${type.name}",null)
+                ?:prefs.getStringSet("rules_${ScanConditions.PRE_D_VERSION}_${type.name}",null)
                 ?:prefs.getStringSet("rules_${ScanConditions.LEGACY_VERSION}_${type.name}",null)
-            radarSelections[type] = savedRules?.intersect(rules.map { it.id }.toSet())
-                ?: rules.filter { it.defaultEnabled }.map { it.id }.toSet()
+            var chosen=savedRules?.intersect(rules.map{it.id}.toSet())
+                ?:rules.filter{it.defaultEnabled}.map{it.id}.toSet()
+            // On first upgrade, retain the customer's six original D checks and
+            // gently add five useful A guards. Never resurrect an intentionally
+            // blank D selection or overwrite a saved D2 selection.
+            if(type==RadarType.D_MAIN_FORCE&&savedRules!=null&&savedRules.isNotEmpty()&&
+                prefs.getStringSet("rules_${ScanConditions.VERSION}_${type.name}",null)==null&&
+                !prefs.getBoolean("d_a_filters_migrated_v048",false)){
+                chosen=chosen+ScanConditions.D_A_DEFAULT_IDS
+                prefs.edit().putStringSet("rules_${ScanConditions.VERSION}_${type.name}",chosen)
+                    .putBoolean("d_a_filters_migrated_v048",true).apply()
+            }
+            radarSelections[type]=chosen
         }
     }
 
@@ -655,7 +669,7 @@ class MainActivity: AppCompatActivity() {
             RadarType.A_EARLY_BREAKOUT -> "A｜起漲掃描條件"
             RadarType.B_DEEP_REVERSAL -> "B｜深跌反轉掃描條件"
             RadarType.C_LONG_RED_VOLUME -> "C｜長紅爆量掃描條件"
-            RadarType.D_MAIN_FORCE -> "D｜主力進場六大條件"
+            RadarType.D_MAIN_FORCE -> "D｜主力形態＋A 起漲條件"
         }
         val rules = ScanConditions.forRadar(type)
         val box = LinearLayout(this).apply {
@@ -674,14 +688,20 @@ class MainActivity: AppCompatActivity() {
             }.apply{tag="scanner-d-parameters"})
         }
         var extraHeadingShown = false
-        val checks = rules.associate { rule ->
-            if (rule.extra && !extraHeadingShown) {
-                extraHeadingShown = true
-                box.addView(TextView(this).apply {
-                    text = "額外查核（選填）"
-                    textSize = 18f
+        val checks=rules.mapIndexed { index,rule ->
+            val heading=when{
+                type==RadarType.D_MAIN_FORCE&&index==0->"D 原有六項主力形態"
+                type==RadarType.D_MAIN_FORCE&&index==6->"A 起漲同步條件（可獨立選擇）"
+                type==RadarType.D_MAIN_FORCE&&index==17->"A 額外財報／風險查核（選填）"
+                type!=RadarType.D_MAIN_FORCE&&rule.extra&&!extraHeadingShown->"額外查核（選填）"
+                else->null
+            }
+            if(heading!=null){
+                if(type!=RadarType.D_MAIN_FORCE)extraHeadingShown=true
+                box.addView(TextView(this).apply{
+                    text=heading;textSize=17f
                     setTextColor(Color.parseColor("#42BBFF"))
-                    setPadding(0, dp(16), 0, dp(8))
+                    setPadding(0,dp(16),0,dp(8))
                 })
             }
             val cb = CheckBox(this).apply {
@@ -692,7 +712,13 @@ class MainActivity: AppCompatActivity() {
             }
             box.addView(cb)
             rule.id to cb
-        }
+        }.toMap()
+        if(type==RadarType.D_MAIN_FORCE)box.addView(NeonUi.button(this,
+            "同步 A 已勾選選項至 D（不變更原 D 六項）",NeonUi.cyan){
+            val currentA=radarSelections[RadarType.A_EARLY_BREAKOUT].orEmpty()
+            ScanConditions.A_RULE_IDS.forEach{id->checks[id]?.isChecked=id in currentA}
+            Toast.makeText(this,"已將 A 的勾選帶到 D 編輯畫面；按儲存才套用",Toast.LENGTH_SHORT).show()
+        }.apply{tag="scanner-d-copy-a"})
         val scroll = ScrollView(this).apply { addView(box) }
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(title).setView(scroll)
