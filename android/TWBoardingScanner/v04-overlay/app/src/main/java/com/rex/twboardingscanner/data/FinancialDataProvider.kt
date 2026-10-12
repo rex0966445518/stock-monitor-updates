@@ -14,7 +14,7 @@ class FinancialDataProvider(context: Context) {
     private var blockedUntil = 0L
     private var nextRequest = 0L
     /** Keep requests rate-limited; fetch only statements needed by checked rules. */
-    @Synchronized fun load(code: String, topics:Set<String> = ALL_TOPICS): FinancialReport {
+    @Synchronized fun load(code: String, topics:Set<String> = ALL_TOPICS, forceRefresh:Boolean = false): FinancialReport {
         require(code.matches(Regex("[0-9]{4}")))
         val messages = mutableListOf<String>()
         val times = mutableListOf<Long>()
@@ -23,13 +23,13 @@ class FinancialDataProvider(context: Context) {
             val key = "${code}_$slug"
             val now = System.currentTimeMillis()
             return try {
-                if (file.exists() && now - file.lastModified() in 0 until 86_400_000L) {
+                if (!forceRefresh && file.exists() && now - file.lastModified() in 0 until 86_400_000L) {
                     val value = parse(file.readText())
                     times.add(file.lastModified())
                     value
                 } else {
                     if (now < blockedUntil) error("來源暫停服務（HTTP 403／429），稍後重試或開啟原站")
-                    failures[key]?.takeIf { now-it.first < 300_000 }?.let { error(it.second) }
+                    failures[key]?.takeIf { !forceRefresh && now-it.first < 300_000 }?.let { error(it.second) }
                     if (Thread.currentThread().isInterrupted) throw InterruptedException()
                     val wait = nextRequest - System.currentTimeMillis()
                     if (wait > 0) Thread.sleep(wait.coerceAtMost(1000))

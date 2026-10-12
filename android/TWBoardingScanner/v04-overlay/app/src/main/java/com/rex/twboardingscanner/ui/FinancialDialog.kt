@@ -82,6 +82,7 @@ class FinancialDialog(context:Context,private val provider:FinancialDataProvider
             insets
         }
         bind(initial)
+        if(initial == null || initial.eps.isEmpty() || initial.operatingCash.isEmpty() || initial.operatingMargin.isEmpty()) reload(false)
     }
     override fun onStart() {
         super.onStart()
@@ -94,12 +95,12 @@ class FinancialDialog(context:Context,private val provider:FinancialDataProvider
         meta.text="來源 HiStock  ·  " + (stamp?.let{"查核／快取 $it"}?:"尚未讀取") +
             if(report?.messages?.isNotEmpty()==true) "\n! 來源尚有待查核項目，可展開下方說明" else ""
         detail.text=(report?.messages?.takeIf{it.isNotEmpty()}?.joinToString("\n",postfix="\n\n")?:"") +
-            "資料快取 24 小時。顯示的是各指標最新可用期間，期間可能不同。\n\nEPS 為正不等於現金流為正；營業利益率為正亦不能排除一次性業外收益。\n\n現金流原站未明確標示單季／累計及單位，本版只查核最新列示值正負，不加總成年或自由現金流。金融業需另行解讀。\n\n勾選的條件缺資料或未通過，會阻擋入選；未勾選僅供觀察。查核結果不代表未來獲利。"
+            "資料快取 24 小時；按「更新財報」會重新向來源查核。顯示的是各指標最新可用期間，期間可能不同。\n\nEPS 為正不等於現金流為正；營業利益率為正亦不能排除一次性業外收益。\n\n現金流原站未明確標示單季／累計及單位，本版只查核最新列示值正負，不加總成年或自由現金流。金融業需另行解讀。\n\n勾選的條件缺資料或未通過，會阻擋入選；未勾選僅供觀察。查核結果不代表未來獲利。"
     }
-    private fun reload() {
+    private fun reload(forceRefresh:Boolean = true) {
         refresh.isEnabled=false;refresh.text="查核中…";progress.visibility=View.VISIBLE
         job=worker.submit {
-            val report=runCatching{provider.load(code)}.getOrElse{FinancialReport(messages=listOf("讀取失敗，請稍後再試"),fetchedAt=System.currentTimeMillis())}
+            val report=runCatching{provider.load(code, forceRefresh=forceRefresh)}.getOrElse{FinancialReport(messages=listOf("讀取失敗，請稍後再試"),fetchedAt=System.currentTimeMillis())}
             handler.post { if(!closed&&isShowing){bind(report);refresh.isEnabled=true;refresh.text="↻  更新財報";progress.visibility=View.GONE} }
         }
     }
