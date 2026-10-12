@@ -12,9 +12,11 @@ data class ScanCondition(val id: String, val label: String, val extra: Boolean =
 }
 
 object ScanConditions {
-    const val VERSION = "20261012-D2"
-    const val PREVIOUS_VERSION="20261012-D1"
+    const val VERSION = "20261012-D3"
+    const val PREVIOUS_VERSION="20261012-D2"
+    const val PREVIOUS_D_VERSION="20261012-D1"
     const val PRE_D_VERSION="20261012"
+    const val MAIN_FORCE_COST_20="below_main_force_cost_20"
     const val LEGACY_VERSION = "20261009"
     /** New D defaults are moderate: no forced breakout/convergence on top of D momentum. */
     val D_A_DEFAULT_IDS=setOf("price","volume","macd","rsi","ma5up")
@@ -95,6 +97,10 @@ object ScanConditions {
             ScanCondition(ACTIVE_BUY_SELL_15,
                 "當日主動買進成交量（外盤）≥ 主動賣出成交量（內盤）1.5 倍；需真實來源",true) {
                 it.activeBuySellAtLeast(1.5)
+            },
+            ScanCondition(MAIN_FORCE_COST_20,
+                "現價低於估算主力成本（近20日成交量加權價格；非真實主力持股成本）",true){
+                it.belowMainForceCost20
             }
         )
     }
@@ -105,6 +111,8 @@ class RuleMetrics(val s: StockSnapshot) {
     val financial = s.sourceStock?.financials
     val bars = s.bars
     val last = bars.lastOrNull()
+    val estimatedMainCost20 by lazy(LazyThreadSafetyMode.NONE){MainForceCost.estimate(bars)}
+    val belowMainForceCost20:Boolean? get() = MainForceCost.below(last?.close?:Double.NaN,estimatedMainCost20)
     val dPattern by lazy(LazyThreadSafetyMode.NONE){DPattern.inspect(bars,s.dConfig,s.marketIndexCloses)}
     private val previous = bars.dropLast(1)
     private val closes = bars.map { it.close }
