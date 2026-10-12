@@ -13,7 +13,8 @@ class FinancialDataProvider(context: Context) {
     private val failures = mutableMapOf<String, Pair<Long,String>>()
     private var blockedUntil = 0L
     private var nextRequest = 0L
-    @Synchronized fun load(code: String): FinancialReport {
+    /** Keep requests rate-limited; fetch only statements needed by checked rules. */
+    @Synchronized fun load(code: String, topics:Set<String> = ALL_TOPICS): FinancialReport {
         require(code.matches(Regex("[0-9]{4}")))
         val messages = mutableListOf<String>()
         val times = mutableListOf<Long>()
@@ -60,13 +61,20 @@ class FinancialDataProvider(context: Context) {
                 null
             }
         }
-        val eps = page("每股盈餘") { HistockParser.eps(it,code) }
-        val cash = page("現金流量表") { HistockParser.periodValues(it,code,"現金流量表","營業現金流") }
-        val margin = page("利潤比率") { HistockParser.periodValues(it,code,"利潤比率","營業利益率") }
+        val eps = if("每股盈餘" in topics)page("每股盈餘") { HistockParser.eps(it,code) } else null
+        val cash = if("現金流量表" in topics)page("現金流量表") { HistockParser.periodValues(it,code,"現金流量表","營業現金流") } else null
+        val margin = if("利潤比率" in topics)page("利潤比率") { HistockParser.periodValues(it,code,"利潤比率","營業利益率") } else null
         return FinancialReport(eps?.first.orEmpty(),eps?.second.orEmpty(),cash.orEmpty(),margin.orEmpty(),
             times.minOrNull() ?: System.currentTimeMillis(),messages)
     }
     companion object {
+        val ALL_TOPICS=setOf("每股盈餘","現金流量表","利潤比率")
+        /** A selected technical or liquidity rule NEVER triggers three financial HTTP pages. */
+        fun topicsForRuleIds(ids:Collection<String>):Set<String> = buildSet {
+            if(ids.any{it=="extra_eps"||it in setOf("fin_ttm","fin_positive","fin_growth","fin_year3","fin_year5")})add("每股盈餘")
+            if("fin_cash" in ids)add("現金流量表")
+            if("fin_margin" in ids)add("利潤比率")
+        }
         fun url(code: String, topic: String) = "https://histock.tw/stock/$code/" + URLEncoder.encode(topic,"UTF-8")
     }
 }
