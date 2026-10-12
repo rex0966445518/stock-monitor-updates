@@ -100,7 +100,7 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
             h.b.mainForceCost.text=String.format(Locale.TAIWAN,
                 "估算主力成本（20日） %,.2f 元 · %s",approximateCost.price,relation)
             h.b.mainForceCost.setTextColor(if(difference!=null&&difference<0.0)NeonUi.mint else NeonUi.cyan)
-            h.b.mainForceCostNote.text="以OHLC均價(H＋L＋C)/3按成交股數加權 · 至 ${approximateCost.to}；非實際大戶成本"
+            h.b.mainForceCostNote.text="以日K典型價(H＋L＋C)/3按成交股數加權 · 至 ${approximateCost.to}；非實際大戶成本"
         }
         h.b.mainForceCost.contentDescription=h.b.mainForceCost.text.toString()+
             "；這是量價推算而非券商提供的主力帳戶實際平均持股成本"

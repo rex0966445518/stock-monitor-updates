@@ -111,7 +111,7 @@ class BacktestWorker(c:Context,p:WorkerParameters):Worker(c,p){
             val prepared=rawPrepared.copy(marketGuards=if(s.marketGuardVersion>0)com.rex.twboardingscanner.domain.MarketCrashGuard.forDays(data.market,rawPrepared.days) else emptyMap())
             val run=BacktestEngine.run(prepared,s,progress,cancel)
             check(!cancel()){ "已取消回測" }
-            val note="現存上市櫃與目前產業分類，存在樣本／存活偏差；拆併股原始價未核對者排除。已勾 EPS／財報／法人缺少歷史證據時視為待查核，不可入選。A/B 排除當日日線，C 包含當日；C 完整收盤訊號與同收盤成交屬理想化假設，可能高估績效。日線不提供精確盤中成交時刻；13:30／09:00 皆為模型時間，觸價只記錄時段。"+if(s.strategyVersion>=3)"股息與折讓金列應收，不再投資；持有超過 5 個日曆日可扣費稅保本賣出，仍虧損則續抱，已設定下車條件者以前一完整日線判斷並於下一可交易日開盤模擬賣出；截止日不強制平倉。"else"舊策略：股息列應收，不再投資；未達淨利 3% 續抱，截止日不強制平倉。"
+            val note="如勾選現價低於估算主力成本，使用訊號日當時可取得的近20個有效交易日日K典型價（高＋低＋收）／3依成交量加權；非真正主力帳戶成本，也不會等於其他軟體專有指標；OHLCV缺漏視為待查核、不通過。現存上市櫃與目前產業分類，存在樣本／存活偏差；拆併股原始價未核對者排除。已勾 EPS／財報／法人缺少歷史證據時視為待查核，不可入選。A/B 排除當日日線，C 包含當日；C 完整收盤訊號與同收盤成交屬理想化假設，可能高估績效。日線不提供精確盤中成交時刻；13:30／09:00 皆為模型時間，觸價只記錄時段。"+if(s.strategyVersion>=3)"股息與折讓金列應收，不再投資；持有超過 5 個日曆日可扣費稅保本賣出，仍虧損則續抱，已設定下車條件者以前一完整日線判斷並於下一可交易日開盤模擬賣出；截止日不強制平倉。"else"舊策略：股息列應收，不再投資；未達淨利 3% 續抱，截止日不強制平倉。"
             check(store.save(runId,BtResult(s,run,data.requested,data.series.size,data.excluded,note,prepared.pendingChecks))){"此回測已停止或歸零"};Result.success()
         }catch(e:Exception){store.update(runId,if(isStopped)"已取消；未完成結果不列為績效" else "回測中止：${e.message}",if(isStopped)"CANCELED" else "ERROR");Result.failure()}
     }
