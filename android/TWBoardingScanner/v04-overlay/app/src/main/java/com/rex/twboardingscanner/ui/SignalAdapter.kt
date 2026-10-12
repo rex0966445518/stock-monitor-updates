@@ -15,6 +15,7 @@ import com.rex.twboardingscanner.domain.MainForceCost
 import java.util.Locale
 import kotlin.math.abs
 import com.rex.twboardingscanner.domain.RadarType
+import com.rex.twboardingscanner.domain.RsiGoldenCross
 import com.rex.twboardingscanner.domain.SignalLight
 import com.rex.twboardingscanner.domain.SignalResult
 
