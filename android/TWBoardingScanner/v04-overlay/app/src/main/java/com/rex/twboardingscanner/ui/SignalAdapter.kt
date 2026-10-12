@@ -15,6 +15,7 @@ import com.rex.twboardingscanner.domain.MainForceCost
 import java.util.Locale
 import kotlin.math.abs
 import com.rex.twboardingscanner.domain.RadarType
+import com.rex.twboardingscanner.domain.RsiGoldenCross
 import com.rex.twboardingscanner.domain.SignalLight
 import com.rex.twboardingscanner.domain.SignalResult
 
@@ -62,6 +63,7 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
             RadarType.B_DEEP_REVERSAL -> NeonUi.amber
             RadarType.C_LONG_RED_VOLUME -> NeonUi.cyan
             RadarType.D_MAIN_FORCE -> NeonUi.mint
+            RadarType.E_DIF_TOUCH -> NeonUi.pink
         }
 
         h.b.root.strokeColor = NeonUi.border
@@ -73,6 +75,7 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
             RadarType.B_DEEP_REVERSAL -> "B 反轉"
             RadarType.C_LONG_RED_VOLUME -> "C 長紅爆量"
             RadarType.D_MAIN_FORCE -> "D 主力進場"
+            RadarType.E_DIF_TOUCH -> "E DIF 向上接觸"
         }
         h.b.badge.setTextColor(accent)
         h.b.badge.background = GradientDrawable().apply {
@@ -110,7 +113,7 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
         h.b.chartView.setBars(s.bars)
         VolumeStrip.bind(h.b.volumeSummary, h.b.recentVolumes, s.bars)
 
-        h.b.dEvidence?.visibility=if(r.radarType==RadarType.D_MAIN_FORCE)android.view.View.VISIBLE else android.view.View.GONE
+        h.b.dEvidence?.visibility=if(r.dEvidence!=null)android.view.View.VISIBLE else android.view.View.GONE
         h.b.dEvidence?.text=r.dEvidence.orEmpty()
         h.b.closingAuction.bind(s.sourceStock?.closingAuction)
         h.b.financialPanel.bind(s.sourceStock?.financials,RuleMetrics(s).today)
@@ -129,10 +132,12 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
                 "d_limit" to "曾觸漲停", "d_green" to "連陽", "d_gap" to "向上缺口",
                 "d_unfilled" to "缺口未回補", "d_volume" to "連續放量",
                 "d_relative" to "勝過大盤",
-                "below_main_force_cost_20" to "低於估算主力成本"
+                "below_main_force_cost_20" to "低於估算主力成本",
+                RsiGoldenCross.ID to "RSI<35黃金交叉"
             )[check.id] ?: check.label.substringBefore("：")
             addCheck(h, short, check.state, check.selected)
         }
+        r.exclusionChecks.filter{it.selected}.forEach{check->addCheck(h,"排除規則1（未命中才通過）",check.state,true)}
         val date = s.bars.lastOrNull()?.let { RuleMetrics.tradingDate(it.time).toString() } ?: "無資料"
         val upgraded = if (r.technicalUpgrade) "｜技術升級" else ""
         val mode = if (r.radarType == RadarType.C_LONG_RED_VOLUME||r.radarType==RadarType.D_MAIN_FORCE)

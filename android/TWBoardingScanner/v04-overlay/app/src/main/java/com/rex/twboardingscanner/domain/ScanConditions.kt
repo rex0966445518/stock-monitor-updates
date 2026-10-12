@@ -12,7 +12,8 @@ data class ScanCondition(val id: String, val label: String, val extra: Boolean =
 }
 
 object ScanConditions {
-    const val VERSION = "20261012-D3"
+    const val VERSION = "20261012-E1"
+    const val PRE_E_VERSION="20261012-D3"
     const val PREVIOUS_VERSION="20261012-D2"
     const val PREVIOUS_D_VERSION="20261012-D1"
     const val PRE_D_VERSION="20261012"
@@ -26,6 +27,12 @@ object ScanConditions {
     const val ACTIVE_BUY_SELL_15 = "active_buy_sell_15"
     val NEW_IDS=setOf(MA5_TOUCH_MA10,ACTIVE_BUY_SELL_15)
     fun forRadar(type: RadarType): List<ScanCondition> {
+        if(type==RadarType.E_DIF_TOUCH){
+            return listOf(
+                ScanCondition(EPattern.EVENT,"DIF 向上接觸 MACD 訊號線（線距門檻可調）"){it.ePattern?.passes},
+                ScanCondition(EPattern.CROSS,"僅限本日剛向上交叉（同時須勾向上接觸）",true){it.ePattern?.let{e->e.passes&&e.crossed}}
+            )+forRadar(RadarType.A_EARLY_BREAKOUT).map{it.copy(extra=true)}
+        }
         if(type==RadarType.D_MAIN_FORCE){
             // Keep the original SIX D bit positions identical to v0.4.47.
             // Append an independent copy of EVERY A rule (same rule ID/formula,
@@ -70,7 +77,7 @@ object ScanConditions {
                 ScanCondition("declineVolume", "近 10 日下跌日均量 < 前 10 日下跌日均量（兩段都須有下跌日）") { it.declineContracting },
                 ScanCondition("ma5", "收盤價 > 5 日均線") { it.aboveMa5 }
             )
-            RadarType.D_MAIN_FORCE -> emptyList()
+            RadarType.D_MAIN_FORCE, RadarType.E_DIF_TOUCH -> emptyList()
             RadarType.C_LONG_RED_VOLUME -> listOf(
                 ScanCondition("red", "紅 K：收盤價 > 開盤價") { it.last?.let { b -> b.close > b.open } },
                 ScanCondition("gain", "相較前一日收盤價，上漲 ≥ 3%") { it.dayGain?.let { v -> v >= 3.0 - 1e-9 } },
@@ -101,6 +108,9 @@ object ScanConditions {
             ScanCondition(MAIN_FORCE_COST_20,
                 "現價低於估算主力成本（近20日成交量加權價格；非真實主力持股成本）",true){
                 it.belowMainForceCost20
+            },
+            ScanCondition(RsiGoldenCross.ID,"RSI(5)<35 且向上黃金交叉突破 RSI(10)（RSI5上升；Wilder）",true){
+                it.rsiGoldenCross?.passes
             }
         )
     }
@@ -113,6 +123,9 @@ class RuleMetrics(val s: StockSnapshot) {
     val last = bars.lastOrNull()
     val estimatedMainCost20 by lazy(LazyThreadSafetyMode.NONE){MainForceCost.estimate(bars)}
     val belowMainForceCost20:Boolean? get() = MainForceCost.below(last?.close?:Double.NaN,estimatedMainCost20)
+    val bearishTurn by lazy(LazyThreadSafetyMode.NONE){BearishTurn.inspect(bars.map{it.close})}
+    val rsiGoldenCross by lazy(LazyThreadSafetyMode.NONE){RsiGoldenCross.inspect(bars.map{it.close})}
+    val ePattern by lazy(LazyThreadSafetyMode.NONE){EPattern.inspect(bars.map{it.close},s.eConfig)}
     val dPattern by lazy(LazyThreadSafetyMode.NONE){DPattern.inspect(bars,s.dConfig,s.marketIndexCloses)}
     private val previous = bars.dropLast(1)
     private val closes = bars.map { it.close }

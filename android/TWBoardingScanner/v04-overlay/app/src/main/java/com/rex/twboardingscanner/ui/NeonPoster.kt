@@ -15,8 +15,8 @@ internal class NeonPoster(private val radar:RadarType,private val stocks:List<Po
     private val pink=Color.rgb(255,75,121);private val blue=Color.rgb(52,171,255)
     private val mint=Color.rgb(70,246,197);private val gold=Color.rgb(255,190,70)
     private val accent=when(radar){RadarType.A_EARLY_BREAKOUT->pink;RadarType.B_DEEP_REVERSAL->gold;RadarType.C_LONG_RED_VOLUME->blue;else->mint}
-    private val letter=when(radar){RadarType.A_EARLY_BREAKOUT->"A";RadarType.B_DEEP_REVERSAL->"B";RadarType.C_LONG_RED_VOLUME->"C";else->"D"}
-    private val title=when(radar){RadarType.A_EARLY_BREAKOUT->"早期起漲";RadarType.B_DEEP_REVERSAL->"深跌反轉";RadarType.C_LONG_RED_VOLUME->"長紅爆量";else->"主力進場形態"}
+    private val letter=when(radar){RadarType.A_EARLY_BREAKOUT->"A";RadarType.B_DEEP_REVERSAL->"B";RadarType.C_LONG_RED_VOLUME->"C";RadarType.D_MAIN_FORCE->"D";else->"E"}
+    private val title=when(radar){RadarType.A_EARLY_BREAKOUT->"早期起漲";RadarType.B_DEEP_REVERSAL->"深跌反轉";RadarType.C_LONG_RED_VOLUME->"長紅爆量";RadarType.D_MAIN_FORCE->"主力進場形態";else->"DIF 向上接觸 MACD"}
     private val charts=stocks.map { ChartSeries.prepare(it.bars).takeLast(36) }
     private fun text(c:Canvas,s:String,x:Float,y:Float,size:Float,color:Int=white,bold:Boolean=false,maxWidth:Float=1000f) {
         p.shader=null;p.style=Paint.Style.FILL;p.color=color;p.textSize=size;p.typeface=Typeface.create("sans-serif",if(bold)Typeface.BOLD else Typeface.NORMAL)
@@ -86,7 +86,7 @@ internal class NeonPoster(private val radar:RadarType,private val stocks:List<Po
         if(last>=first) for(i in first..last) card(c,stocks[i],charts[i],720f+i*350)
         if(stocks.isEmpty() && top+band>740 && top<1250){panel(c,32f,730f,1016f,470f,accent,true);badge(c,540f,858f,58f);text(c,"本輪目前沒有符合條件的股票",260f,987f,36f,white,true);text(c,if(scanning)"掃描仍在進行，稍後可再次匯出" else "調整條件並重新掃描後，可匯出新結果",270f,1042f,27f,muted)}
         val footer=height-144f
-        if(top+band>footer-15){panel(c,32f,footer,1016f,110f,blue);text(c,"最新結果快照  ·  $day $time",55f,footer+34,23f,white,true);text(c,"A/B 排除當日日K；C 使用最新日K。數值依卡片行情日期。",55f,footer+68,21f,muted);text(c,"條件通過率非投資評級；觀察訊號不保證後續漲幅。",55f,footer+96,20f,muted)}
+        if(top+band>footer-15){panel(c,32f,footer,1016f,110f,blue);text(c,"最新結果快照  ·  $day $time",55f,footer+34,23f,white,true);text(c,"A/B/E 排除當日日K；C 使用最新日K。數值依卡片行情日期。",55f,footer+68,21f,muted);text(c,"條件通過率非投資評級；觀察訊號不保證後續漲幅。",55f,footer+96,20f,muted)}
     }
     private fun card(c:Canvas,s:PosterStock,points:List<ChartPoint>,y:Float) {
         panel(c,32f,y,1016f,332f,accent,true);badge(c,82f,y+53,34f)

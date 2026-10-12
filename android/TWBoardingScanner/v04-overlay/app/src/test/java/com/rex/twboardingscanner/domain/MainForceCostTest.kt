@@ -59,6 +59,7 @@ class MainForceCostTest {
                 RadarType.B_DEEP_REVERSAL->ScoringEngine().evaluateB(unknown,setOf(id))
                 RadarType.C_LONG_RED_VOLUME->ScoringEngine().evaluateC(unknown,setOf(id))
                 RadarType.D_MAIN_FORCE->ScoringEngine().evaluateD(unknown,setOf(id))
+                RadarType.E_DIF_TOUCH->ScoringEngine().evaluateE(unknown,setOf(id))
             }
             assertEquals(CheckState.PENDING,result.checks.single{it.id==id}.state)
             assertEquals(SignalLight.NONE,result.light)
@@ -75,17 +76,17 @@ class MainForceCostTest {
     @Test fun robotKeysAppendNewCostBitsWithoutReinterpretingAnyPriorBits(){
         val oldLength=BtRobotSpace.v4Slots.size
         assertEquals(102,oldLength)
-        assertEquals(106,BtRobotSpace.allSlots.size)
-        assertEquals(RadarType.entries.map{it to ScanConditions.MAIN_FORCE_COST_20},
-            BtRobotSpace.allSlots.drop(oldLength))
+        assertEquals(106,BtRobotSpace.v5Slots.size)
+        assertEquals(RadarType.entries.take(4).map{it to ScanConditions.MAIN_FORCE_COST_20},
+            BtRobotSpace.v5Slots.drop(oldLength))
         val unchanged=BtRobotSpace.rules(BigInteger.ONE.shiftLeft(101).toString(16))
         assertFalse(unchanged.values.any{ScanConditions.MAIN_FORCE_COST_20 in it})
         val newOnly=RadarType.entries.associateWith{setOf(ScanConditions.MAIN_FORCE_COST_20)}
         val encoded=BtRobotSpace.key(newOnly)
         assertEquals(newOnly,BtRobotSpace.rules(encoded))
         assertEquals(BigInteger.ONE.shiftLeft(102),BtRobotSpace.total("0","0",includeCost=false))
-        assertEquals(BigInteger.ONE.shiftLeft(106),BtRobotSpace.total("0","0",includeCost=true))
-        assertEquals(BigInteger.ONE.shiftLeft(74),
+        assertEquals(BigInteger.ONE.shiftLeft(106),BtRobotSpace.total("0","0",includeCost=true,includeE=false))
+        assertEquals(BigInteger.ONE.shiftLeft(77),
             BtRobotSpace.total("0","0",enabled=defaultActiveRadars(),includeD=false))
     }
 

@@ -73,7 +73,7 @@ class StockPolicyTest{
         val c=store.next(id)!!
         assertTrue(runCatching{store.commit(id,token,c,BtResult(s.copy(rules=BtRobotSpace.rules(c.key),stockPolicy=StockPolicy()),BtRun(s.capital),0,0,emptyList(),"fixture"),0)}.isFailure)
         val file=File(app.cacheDir,"policy-checkpoint.zip");BtRobotCheckpoint.export(app,id,file)
-        ZipFile(file).use{assertEquals(9,JSONObject(it.getInputStream(it.getEntry("manifest.json")).bufferedReader().readText()).getInt("version"))}
+        ZipFile(file).use{assertEquals(10,JSONObject(it.getInputStream(it.getEntry("manifest.json")).bufferedReader().readText()).getInt("version"))}
         val restored=file.inputStream().use{BtRobotCheckpoint.restore(app,it)}
         assertEquals(s,BtSettingsCodec.decode(store.session(restored)!!.getJSONObject("settings")))
     }

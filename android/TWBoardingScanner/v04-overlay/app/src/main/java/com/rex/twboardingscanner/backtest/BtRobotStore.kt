@@ -34,7 +34,7 @@ class BtRobotStore(private val c:Context){
     fun sessions():List<JSONObject> = synchronized(lock){val out=mutableListOf<JSONObject>();db.rawQuery("SELECT json FROM sessions ORDER BY created DESC",null).use{while(it.moveToNext())out+=JSONObject(it.getString(0))};out}
     fun create(s:BtSettings,required:String="0",forbidden:String="0",sourceJournalId:String?=null,sweep:BtRobotSweep?=null):String=synchronized(lock){
         BtRobotSpace.validate(s);BtRobotSpace.validateConstraints(required,forbidden)
-        require(sweep==null||required=="0"&&forbidden=="0"){"參數網格固定本批次 ABCD，不可同時調整必選／排除條件"}
+        require(sweep==null||required=="0"&&forbidden=="0"){"參數網格固定本批次 ABCDE，不可同時調整必選／排除條件"}
         require(sourceJournalId==null||sourceJournalId.matches(Regex("[A-Za-z0-9_-]{1,100}"))){"日誌編號不合法"}
         session()?.let{if(it.optString("state") in setOf("RUNNING","RETRY"))putSession(it.put("state","PAUSED").put("token","").put("message","建立新測試；原進度已保存"))}
         val id=UUID.randomUUID().toString()
@@ -43,7 +43,7 @@ class BtRobotStore(private val c:Context){
             .put("sweep",sweep?.json()?:JSONObject.NULL)
             .put("flowRevision",com.rex.twboardingscanner.data.TradeSideVolumeStore(c).revision()).put("tested",0).put("bestKey","").put("bestSeq",0).put("ack",0)
             .put("seed",BigInteger(80,java.security.SecureRandom()).toString()).put("cursor","0").put("message","按開始測試啟動")
-            .put("analysisVersion",2).put("appVersion",c.packageManager.getPackageInfo(c.packageName,0).versionName).put("searchVersion",5).put("required",required).put("forbidden",forbidden).put("engineVersion",BtRobotCheckpoint.ENGINE).put("cleared",0)
+            .put("analysisVersion",2).put("appVersion",c.packageManager.getPackageInfo(c.packageName,0).versionName).put("searchVersion",6).put("required",required).put("forbidden",forbidden).put("engineVersion",BtRobotCheckpoint.ENGINE).put("cleared",0)
         check(db.insertOrThrow("sessions",null,ContentValues().apply{put("id",id);put("created",o.getLong("created"));put("json",o.toString())})>0)
         check(prefs.edit().putString("active",id).commit());id
     }
@@ -53,7 +53,7 @@ class BtRobotStore(private val c:Context){
         require(o.getString("state")!="DONE"){"此測試已完成"}
         BtRobotSpace.validate(BtSettingsCodec.decode(o.getJSONObject("settings")))
         BtRobotSpace.validateConstraints(o.optString("required","0"),o.optString("forbidden","0"))
-        require(o.optInt("searchVersion",1) in 1..5){"搜尋版本不相容"}
+        require(o.optInt("searchVersion",1) in 1..6){"搜尋版本不相容"}
         if(o.has("flowRevision"))require(o.getString("flowRevision")==com.rex.twboardingscanner.data.TradeSideVolumeStore(c).revision()){
             "盤中內外盤資料已更新；請以新條件建立新批次，原測試紀錄保留"
         }
@@ -86,7 +86,7 @@ class BtRobotStore(private val c:Context){
                 s.optString("required","0"),s.optString("forbidden","0"),
                 legacy=version<3,
                 enabled=if(version<4)defaultActiveRadars() else current.enabledRadars,
-                includeD=version>=4,includeCost=version>=5){seen(id,it)}
+                includeD=version>=4,includeCost=version>=5,includeE=version>=6){seen(id,it)}
         }
     }
     fun remaining(id:String):BigInteger {val s=session(id);return (BtRobotSweep.read(s?.optJSONObject("sweep"))?.total?.let{BigInteger.valueOf(it.toLong())}
@@ -95,7 +95,7 @@ class BtRobotStore(private val c:Context){
             enabled=if((s?.optInt("searchVersion",1)?:1)<4)defaultActiveRadars() else
                 s?.let{BtSettingsCodec.decode(it.getJSONObject("settings")).enabledRadars}?:defaultActiveRadars(),
             includeD=(s?.optInt("searchVersion",1)?:1)>=4,
-             includeCost=(s?.optInt("searchVersion",1)?:1)>=5))-BigInteger.valueOf(s?.optLong("tested")?:0L)}
+             includeCost=(s?.optInt("searchVersion",1)?:1)>=5,includeE=(s?.optInt("searchVersion",1)?:1)>=6))-BigInteger.valueOf(s?.optLong("tested")?:0L)}
     fun retained(id:String)=synchronized(lock){db.rawQuery("SELECT COUNT(*) FROM trials WHERE session=? AND cleared=0",arrayOf(id)).use{it.moveToFirst();it.getLong(0)}}
     fun clearZero(id:String):Int=synchronized(lock){
         val s=session(id)?:return@synchronized 0;var removed=0
@@ -133,7 +133,7 @@ class BtRobotStore(private val c:Context){
         val s=session(id)!!
         val sweep=BtRobotSweep.read(s.optJSONObject("sweep"))
         val base=BtSettingsCodec.decode(s.getJSONObject("settings"))
-        if(sweep==null)require(BtRobotSpace.key(result.settings.rules)==candidate.key){"ABCD 組合代碼不符"}
+        if(sweep==null)require(BtRobotSpace.key(result.settings.rules)==candidate.key){"ABCDE 組合代碼不符"}
         else require(candidate.cursor==BigInteger.valueOf(s.getLong("tested")+1)&&
             sweep.next(s.getLong("tested"))?.key==candidate.key){"參數網格游標／組合不一致"}
         val expected=if(sweep==null)base.copy(rules=BtRobotSpace.rules(candidate.key)) else sweep.settings(base,candidate.key)
@@ -149,7 +149,7 @@ class BtRobotStore(private val c:Context){
             .put("requested",result.requested).put("loaded",result.loaded).put("excluded",org.json.JSONArray(result.excluded))
             .put("signalCounts",feedback).put("pendingChecks",result.pendingChecks).put("note",result.note).put("run",BacktestStore(c).runJson(result.run))
         val summary=JSONObject().put("key",candidate.key).put("seq",seq).put("startedAt",started).put("finishedAt",finished)
-            .put("mode",if(sweep==null)"ABCD" else "GRID").put("signalCounts",feedback)
+            .put("mode",if(sweep==null)"ABCDE" else "GRID").put("signalCounts",feedback)
             .put("maxHoldingStocks",result.settings.maxHoldingStocks?:JSONObject.NULL)
             .put("targetNetPct",result.settings.targetNetPct)
             .put("profit",result.run.profit).put("drawdown",result.run.drawdown).put("buys",result.run.buys).put("closed",result.run.closed.size)

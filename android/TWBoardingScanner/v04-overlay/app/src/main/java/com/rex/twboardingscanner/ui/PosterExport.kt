@@ -20,7 +20,7 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.Executors
 
 /**
- * Generate ABCD from a single live snapshot. Keep the generated file list,
+ * Generate ABCDE from a single live snapshot. Keep the generated file list,
  * preview tabs, batch save and sharing aligned with the SAME poster catalog.
  */
 internal class PosterExport(private val activity:AppCompatActivity) {

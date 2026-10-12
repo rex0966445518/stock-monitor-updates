@@ -33,7 +33,7 @@ class RobotDStartTest {
         val store=BtRobotStore(app);val grid=BtRobotSweep(10,12,3,4)
         val old=store.create(initial,sweep=grid)
         val ctl=Robolectric.buildActivity(BtRobotActivity::class.java).setup();val a=ctl.get()
-        RadarType.entries.forEach{type->find(a.window.decorView,"robot-enabled-${type.name}")!!.performClick()}
+        RadarType.entries.take(4).forEach{type->find(a.window.decorView,"robot-enabled-${type.name}")!!.performClick()}
         val next=a.policySession(RobotTradingParams.of(initial),grid,RobotBacktestDates.of(initial))
         val actual=BtSettingsCodec.decode(store.session(next)!!.getJSONObject("settings"))
         assertEquals(setOf(RadarType.D_MAIN_FORCE),actual.enabledRadars)

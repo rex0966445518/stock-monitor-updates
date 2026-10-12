@@ -69,6 +69,7 @@ class FinancialReportTest {
                 RadarType.B_DEEP_REVERSAL -> engine.evaluateB(snap,ids)
                 RadarType.C_LONG_RED_VOLUME -> engine.evaluateC(snap,ids)
                 RadarType.D_MAIN_FORCE -> engine.evaluateD(snap,ids)
+                RadarType.E_DIF_TOUCH -> engine.evaluateE(snap,ids)
             }
             assertNotEquals(SignalLight.NONE,run(setOf("price","fin_positive")).light)
             assertEquals(SignalLight.NONE,run(setOf("price","fin_cash")).light)

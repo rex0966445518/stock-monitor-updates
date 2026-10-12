@@ -119,7 +119,7 @@ class PaperTradingActivity:AppCompatActivity() {
         }
         space()
         val candidatesTitle=label("最新候選池  ${b.candidates.size} 檔",17f,NeonUi.ink,true);content.addView(candidatesTitle)
-        content.addView(label("完成掃描 ${stamp(b.candidateAt)} · A ${b.candidates.count{it.radar=="A"}} / B ${b.candidates.count{it.radar=="B"}} / C ${b.candidates.count{it.radar=="C"}}",11f))
+        content.addView(label("完成掃描 ${stamp(b.candidateAt)} · A ${b.candidates.count{it.radar=="A"}} / B ${b.candidates.count{it.radar=="B"}} / C ${b.candidates.count{it.radar=="C"}} / D ${b.candidates.count{it.radar=="D"}} / E ${b.candidates.count{it.radar=="E"}}",11f))
         if(b.strategy!=null&&b.candidateAt==0L)
             content.addView(label("新條件已儲存：請回主頁重新執行一次全市場掃描後再啟動策略。",11f,NeonUi.amber))
         val candidates=panel()

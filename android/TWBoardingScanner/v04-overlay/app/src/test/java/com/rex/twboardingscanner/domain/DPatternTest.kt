@@ -33,8 +33,8 @@ class DPatternTest{
     @Test fun DDefaultsAndHistoricalBitsNeverChange(){
         val dOptions=ScanConditions.forRadar(RadarType.D_MAIN_FORCE)
         val aOptions=ScanConditions.forRadar(RadarType.A_EARLY_BREAKOUT)
-        assertEquals(32,dOptions.size)
-        assertEquals(26,aOptions.size)
+        assertEquals(33,dOptions.size)
+        assertEquals(27,aOptions.size)
         assertEquals(aOptions.map{it.id},dOptions.drop(6).map{it.id})
         assertEquals((setOf(DPattern.LIMIT,DPattern.GREEN,DPattern.GAP,DPattern.VOLUME)+ScanConditions.D_A_DEFAULT_IDS),
             dOptions.filter{it.defaultEnabled}.map{it.id}.toSet())
@@ -45,15 +45,15 @@ class DPatternTest{
         assertFalse(RadarType.D_MAIN_FORCE in defaultActiveRadars())
         assertEquals(65,BtRobotSpace.legacySlots.size)
         assertEquals(71,BtRobotSpace.slots.size)
-        assertEquals(106,BtRobotSpace.allSlots.size)
+        assertEquals(106,BtRobotSpace.v5Slots.size)
         assertEquals(102,BtRobotSpace.v4Slots.size)
-        assertEquals(RadarType.entries.map{it to ScanConditions.MAIN_FORCE_COST_20},BtRobotSpace.allSlots.takeLast(4))
+        assertEquals(RadarType.entries.take(4).map{it to ScanConditions.MAIN_FORCE_COST_20},BtRobotSpace.v5Slots.takeLast(4))
         assertEquals(BtRobotSpace.slots,BtRobotSpace.allSlots.take(71))
         assertEquals(BtRobotSpace.dSlots.take(6),BtRobotSpace.allSlots.drop(71).take(6))
         val fromOld=BtRobotSpace.key(defaultBtRules())
         val key=BtRobotSpace.key(BtRobotSpace.rules(fromOld))
         assertEquals(fromOld,key)
-        assertEquals(BigInteger.ONE.shiftLeft(74),BtRobotSpace.total("0","0",
+        assertEquals(BigInteger.ONE.shiftLeft(77),BtRobotSpace.total("0","0",
             enabled=defaultActiveRadars(),includeD=false))
     }
     @Test fun limitGreenGapAndVolumeProvideTraceableDatesAndPreciseRatios(){

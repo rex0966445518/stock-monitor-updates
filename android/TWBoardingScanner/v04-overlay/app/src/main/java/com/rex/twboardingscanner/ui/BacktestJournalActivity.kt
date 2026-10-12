@@ -55,8 +55,10 @@ internal object BacktestJournalUi {
             val items=if(labels?.has(type.name)==true)strings(labels.getJSONArray(type.name)) else ids.map{id->ScanConditions.forRadar(type).firstOrNull{it.id==id}?.label?:"條件代碼 $id"}
             "${type.name.take(1)} 區 · ${ids.size} 項\n"+if(ids.isEmpty())"未選條件，該區不入選" else items.joinToString("\n"){"✓ $it"}
         }
+        val excluded=com.rex.twboardingscanner.domain.ExclusionConditions.read(s.optJSONObject("exclusions"))
+        val exclusionText="\n\n排除區：\n"+excluded.entries.joinToString("\n"){(type,ids)->"${type.name.take(1)}："+if(ids.isEmpty())"未勾選" else com.rex.twboardingscanner.domain.ExclusionConditions.forRadar(type).filter{it.id in ids}.joinToString("；"){it.label}}
         val costs=s.optJSONObject("costModel")?.let{"\n\n買／賣手續費各 ${it.optDouble("buyFeeRate")*100}%／${it.optDouble("sellFeeRate")*100}%（最低 ${it.optInt("minimumFee")} 元）\n賣出稅 ${it.optDouble("sellTaxRate")*100}% · 滑價 ${it.optDouble("slippageRate")*100}%"}.orEmpty()
-        return intro+"\n\n"+body+costs+(if(labels==null)"\n\n舊版僅保存條件代碼；上列名稱依目前版本對照。" else "")
+        return intro+"\n\n"+body+exclusionText+costs+(if(labels==null)"\n\n舊版僅保存條件代碼；上列名稱依目前版本對照。" else "")
     }
 }
 
@@ -111,7 +113,7 @@ class BacktestJournalActivity:AppCompatActivity(){
         }
         val current=StockPolicyStore(this).read()
         val policyChange=current!=desired.stockPolicy
-        val explanation="將本次日誌的 ABCD 勾選與啟用開關、D 數值門檻、產業、股號範圍、日期、本金、持倉、獲利、5 組下車條件和大盤保護帶入機器人新批次。\n\n"+
+        val explanation="將本次日誌的 ABCDE 勾選與啟用開關、D／E 數值門檻、各區排除規則、產業、股號範圍、日期、本金、持倉、獲利、5 組下車條件和大盤保護帶入機器人新批次。\n\n"+
             "已勾選條件同步為必選，未勾選條件保持自由測試；不沿用舊批次的排除條件。原回測績效與舊機器人測試紀錄保持不變。切換後按「開始測試」才會運算。"+
             if(policyChange)"\n\n注意：日誌的禁買／限價名單與目前設定不同；確認同步會同步更新三區共用名單，並暫停目前測試。" else
                 "\n\n本次禁買／限價與目前共用名單一致。"
@@ -128,7 +130,7 @@ class BacktestJournalActivity:AppCompatActivity(){
                         if(old.isNotBlank())BtRobotWorker.pause(this,old)
                         val policy=StockPolicyStore(this)
                         if(policy.read()!=desired.stockPolicy)policy.change{desired.stockPolicy}
-                        // Persist both the archived seed AND its mandatory ABCD checks.
+                        // Persist both the archived seed AND its mandatory ABCDE checks.
                         BtRobotJournalSync.createBatch(robot,desired,id)
                     }
                     runOnUiThread{if(!isFinishing&&!isDestroyed)result.fold({newId->
