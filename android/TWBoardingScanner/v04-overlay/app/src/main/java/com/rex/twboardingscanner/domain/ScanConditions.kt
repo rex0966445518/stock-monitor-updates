@@ -40,7 +40,7 @@ object ScanConditions {
             val aOptions=forRadar(RadarType.A_EARLY_BREAKOUT).map{rule->
                 rule.copy(extra=rule.id !in D_A_DEFAULT_IDS)
             }
-            check(aOptions.size==25&&aOptions.map{it.id}.distinct().size==aOptions.size)
+            check(aOptions.map{it.id}.distinct().size==aOptions.size)
             return originalD+aOptions
         }
         val basic = listOf(

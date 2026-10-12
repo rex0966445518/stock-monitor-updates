@@ -534,6 +534,7 @@ class MainActivity: AppCompatActivity() {
         (b.emptyState.getChildAt(0) as TextView).text=when{
             isScanning->"正在整理市場訊號"
             selectedTab==6&&latestScanAt>0->"本次沒有符合條件的股票"
+            selectedTab==3&&RadarType.D_MAIN_FORCE !in radarEnabled->"D 主力進場尚未啟用"
             latestScanAt>0->"此分類尚無入選股票"
             else->"等待市場訊號"
         }
