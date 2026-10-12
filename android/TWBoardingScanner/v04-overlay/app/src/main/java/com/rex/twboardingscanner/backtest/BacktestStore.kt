@@ -82,6 +82,7 @@ class BacktestStore(private val c:Context){
         if(run!=null)entry.put("profit",run.getDouble("profit")).put("closed",run.getInt("closed"))
             .put("buys",run.optInt("buys",(run.optJSONArray("trades")?.length()?:0)-run.getInt("closed")))
             .put("holdings",run.getJSONArray("holdings").length()).put("state","DONE")
+        if(run!=null)entry.put("radarProfit",BacktestRadarProfit.summarize(run))
         return entry
     }
     /** Called on a background thread; import pre-journal reports without changing their content. */
@@ -89,7 +90,7 @@ class BacktestStore(private val c:Context){
         reports.listFiles()?.filter{it.extension=="json"&&valid(it.nameWithoutExtension)}?.forEach{file->
             val index=journalFile(file.nameWithoutExtension)
             val prior=read(index)
-            if(prior==null||prior.optString("state")!="DONE"){
+            if(prior==null||prior.optString("state")!="DONE"||prior.optJSONObject("radarProfit")?.optInt("version")!=BacktestRadarProfit.VERSION){
                 val data=read(file)
                 if(data?.optJSONObject("run")!=null){
                     val entry=summary(data).put("id",file.nameWithoutExtension)

@@ -168,7 +168,26 @@ class BacktestJournalActivity:AppCompatActivity(){
             panel.addView(NeonUi.label(this,BacktestJournalUi.tradingSummary(s),12f,NeonUi.cyan))
             panel.addView(NeonUi.label(this,if(s.optInt("marketGuardVersion")>0)"大盤暴跌保護 · 已啟用" else "大盤保護 · 舊紀錄未啟用",11f,NeonUi.amber))
             val rules=s.optJSONObject("rules")
-            panel.addView(NeonUi.label(this,if(rules==null)"舊版條件未完整記錄" else RadarType.entries.joinToString(" · "){"${it.name.take(1)} ${rules.optJSONArray(it.name)?.length()?:0} 項"},12f,NeonUi.cyan))
+            val profits=row.optJSONObject("radarProfit")
+            val values=profits?.optJSONObject("values")
+            RadarType.entries.chunked(3).forEach{group->
+                panel.addView(NeonUi.row(this,group.map{type->
+                    val code=type.name.take(1)
+                    val amount=if(!complete||values==null||values.isNull(code))null else values.optDouble(code,Double.NaN).takeIf{it.isFinite()}
+                    val caption=if(rules==null)"$code 條件未記錄" else "$code ${rules.optJSONArray(type.name)?.length()?:0} 項"
+                    val text=amount?.let{(if(it>0)"盈利 " else if(it<0)"虧損 " else "損益 ")+String.format(Locale.TAIWAN,"%,.0f",kotlin.math.abs(it))}?:"待查核"
+                    NeonUi.tile(this,caption,amount?.let{String.format(Locale.TAIWAN,"%+,.0f",it)}?:"待查核",
+                        if(amount==null)"元" else if(amount>0)"盈利（元）" else if(amount<0)"虧損（元）" else "損益（元）",if(amount==null)NeonUi.muted else if(amount>=0)NeonUi.pink else NeonUi.mint)
+                        .apply{tag="journal-radar-profit-$id-$code";contentDescription="$caption，$text 元"}
+                }))
+            }
+            panel.addView(NeonUi.label(this,"各類淨損益含留倉估值；共同入選的買入批次按類型均分，不重複加總。",10f))
+            if(complete&&profits!=null){
+                val extra=if(profits.isNull("otherProfit"))null else profits.optDouble("otherProfit",Double.NaN).takeIf{it.isFinite()}
+                if(extra!=null&&kotlin.math.abs(extra)>.005)panel.addView(NeonUi.label(this,"股息／折讓等未分攤損益："+String.format(Locale.TAIWAN,"%+,.0f 元",extra),11f,NeonUi.amber))
+                val unknown=profits.optDouble("unclassified",0.0)
+                if(kotlin.math.abs(unknown)>.005)panel.addView(NeonUi.label(this,"未記錄類型的交易損益："+String.format(Locale.TAIWAN,"%+,.0f 元",unknown),11f,NeonUi.amber))
+            }
             panel.addView(BacktestDiffView(this,row,rows.getOrNull(index+1),id in expandedDiffs){open->if(open)expandedDiffs.add(id) else expandedDiffs.remove(id)})
             panel.addView(NeonUi.gap(this,8))
             panel.addView(NeonUi.row(this,listOf(NeonUi.button(this,"條件快照"){BtSnapshotDialog.show(this,s,"回測條件 · ${id.take(8)}")},NeonUi.button(this,"檢閱日誌",color){startActivity(Intent(this,BacktestActivity::class.java).putExtra("journalId",id))})))
