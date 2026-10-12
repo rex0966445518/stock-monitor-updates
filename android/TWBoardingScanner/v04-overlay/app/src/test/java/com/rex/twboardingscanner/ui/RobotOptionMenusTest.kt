@@ -36,6 +36,14 @@ class RobotOptionMenusTest {
         Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
         assertNotEquals(old,store.active())
     }
+    @Test fun disabledRadarConstraintsDoNotRejectActiveRadarTrials(){
+        val type=RadarType.D_MAIN_FORCE
+        val on=BtRobotSpace.key(RadarType.entries.associateWith{if(it==type)setOf(ScanConditions.forRadar(type).first().id)else emptySet()})
+        val enabled=setOf(RadarType.A_EARLY_BREAKOUT)
+        assertTrue(BtRobotSpace.includes("0",on,"0",enabled))
+        assertFalse(BtRobotSpace.includes(on,on,"0",enabled))
+        assertFalse(BtRobotSpace.includes("0",on,"0",RadarType.entries.toSet()))
+    }
     @Test fun everyRadarOpensItsOwnRuleMenuEvenInGridMode(){
         val store=BtRobotStore(app);store.create(settings(),sweep=BtRobotSweep(10,12,3,4))
         val ctl=Robolectric.buildActivity(BtRobotActivity::class.java).setup();val a=ctl.get()

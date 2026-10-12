@@ -141,7 +141,7 @@ object BtRobotCheckpoint {
                         require(data.readUTF()=="BTTRIALS1"&&data.readLong()==tested)
                         repeat(tested.toInt()){i->
                             val key=data.readUTF()
-                            if(sweep==null)require(BtRobotSpace.key(BtRobotSpace.rules(key))==key&&BtRobotSpace.includes(key,required,forbidden))
+                            if(sweep==null)require(BtRobotSpace.key(BtRobotSpace.rules(key))==key&&BtRobotSpace.includes(key,required,forbidden,settings.enabledRadars))
                             else require(sweep.at(i).key==key){"網格斷點組合順序不正確"}
                             val length=data.readInt();require(length in 1..65536);val summary=ByteArray(length);data.readFully(summary);val r=JSONObject(String(summary,Charsets.UTF_8))
                             require(r.getString("key")==key&&r.getLong("seq")==i+1L&&r.getDouble("profit").isFinite())

@@ -63,9 +63,13 @@ object BtRobotSpace {
         val forced=BtRobotSpace.required(required).or(BtRobotSpace.required(forbidden))
         return BigInteger.ONE.shiftLeft(active.count{!forced.testBit(it.index)})
     }
-    fun includes(key:String,required:String,forbidden:String="0"):Boolean {
+    fun includes(key:String,required:String,forbidden:String="0",enabled:Set<RadarType> = RadarType.entries.toSet()):Boolean {
         validateConstraints(required,forbidden)
-        return BigInteger(key,16).and(BtRobotSpace.required(required))==BtRobotSpace.required(required)&&BigInteger(key,16).and(BtRobotSpace.required(forbidden))==BigInteger.ZERO
+        val allowed=allSlots.foldIndexed(BigInteger.ZERO){i,mask,pair->if(pair.first in enabled)mask.setBit(i)else mask}
+        val must=BtRobotSpace.required(required).and(allowed)
+        val blocked=BtRobotSpace.required(forbidden).and(allowed)
+        val candidate=BtRobotSpace.required(key)
+        return candidate.andNot(allowed)==BigInteger.ZERO&&candidate.and(must)==must&&candidate.and(blocked)==BigInteger.ZERO
     }
     fun next(base:String,best:String?,cursor:BigInteger,seed:BigInteger,required:String="0",forbidden:String="0",
         legacy:Boolean=false,enabled:Set<RadarType> = RadarType.entries.toSet(),

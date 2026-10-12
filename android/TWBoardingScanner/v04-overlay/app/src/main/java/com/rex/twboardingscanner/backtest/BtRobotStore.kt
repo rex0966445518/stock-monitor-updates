@@ -139,7 +139,7 @@ class BtRobotStore(private val c:Context){
         val expected=if(sweep==null)base.copy(rules=BtRobotSpace.rules(candidate.key)) else sweep.settings(base,candidate.key)
         require(result.settings==expected){"測試條件與批次不一致"}
         if(com.rex.twboardingscanner.data.StockPolicyStore(c).read()!=result.settings.stockPolicy)return@synchronized false
-        if(sweep==null)require(BtRobotSpace.includes(candidate.key,s.optString("required","0"),s.optString("forbidden","0")))
+        if(sweep==null)require(BtRobotSpace.includes(candidate.key,s.optString("required","0"),s.optString("forbidden","0"),base.enabledRadars))
         val finished=System.currentTimeMillis();val seq=s.getLong("tested")+1
         val report=JSONObject().put("id",UUID.nameUUIDFromBytes("$id:${candidate.key}".toByteArray(Charsets.UTF_8)).toString())
             .put("journalVersion",1).put("strategyVersion",result.settings.strategyVersion).put("robotSession",id).put("robotSequence",seq)
