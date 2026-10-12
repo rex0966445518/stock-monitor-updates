@@ -26,6 +26,7 @@ class BtRobotActivity:AppCompatActivity(){
     private lateinit var pauseButton:com.google.android.material.button.MaterialButton
     private lateinit var bestButton:com.google.android.material.button.MaterialButton
     private lateinit var records:LinearLayout
+    private lateinit var sectorButton:com.google.android.material.button.MaterialButton
     private lateinit var requiredButton:com.google.android.material.button.MaterialButton
     private lateinit var spaceLabel:TextView
     private lateinit var robotRange:TextView
@@ -248,6 +249,11 @@ class BtRobotActivity:AppCompatActivity(){
                 refreshRadarModes()
             }.apply{tag="robot-enabled-${type.name}";textSize=12f}.also{radarModeButtons[type]=it}
         }))
+        root.addView(NeonUi.row(this,RadarType.entries.map{type->
+            NeonUi.button(this,"${type.name.take(1)} 條件 ▾",NeonUi.mint){openRuleOptions(type)}
+                .apply{tag="robot-rules-${type.name}";textSize=12f}
+        }))
+        root.addView(label("各區條件：單點必選、空白自由測試、雙擊排除；設定不會改變上方啟停開關。",11f))
         root.addView(NeonUi.button(this,"D 主力進場 · 數值門檻",NeonUi.mint){
             DPatternEditor.show(this,robotDConfig){cfg->robotDConfig=cfg;refreshRadarModes()}
         }.apply{tag="robot-d-parameters"})
@@ -313,7 +319,11 @@ class BtRobotActivity:AppCompatActivity(){
         root.addView(NeonUi.gap(this,6))
         val manageFirst=NeonUi.row(this,listOf(NeonUi.button(this,"未測組合"){untested()},NeonUi.button(this,"測試紀錄"){sessions()}));root.addView(manageFirst)
         root.addView(NeonUi.gap(this,6))
-        requiredButton=NeonUi.button(this,"條件選單",NeonUi.cyan){if(!busy)BtRobotRulesDialog.show(this,required(),forbidden(),enabledRadars){required,forbidden->applyRequired(required,forbidden)}};requiredButton.tag="robot-required";root.addView(requiredButton)
+        requiredButton=NeonUi.button(this,"條件選單",NeonUi.cyan){openRuleOptions(RadarType.A_EARLY_BREAKOUT)};requiredButton.tag="robot-required";root.addView(requiredButton)
+        sectorButton=NeonUi.button(this,"產業保留／排除",NeonUi.mint){
+            if(!busy){hideInput();val settings=store.session()?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()
+                RobotSectorDialog.show(this,settings.sectors){applySectors(it)}}
+        }.apply{tag="robot-sectors"};root.addView(sectorButton)
         root.addView(NeonUi.gap(this,6))
         root.addView(NeonUi.button(this,"一鍵清除零收益",NeonUi.amber){clearZeros()}.apply{tag="robot-clear-zero"})
         root.addView(NeonUi.gap(this,6))
@@ -464,7 +474,10 @@ class BtRobotActivity:AppCompatActivity(){
         val remaining=total-BigInteger.valueOf(tested)
         val fixed=BtRobotSpace.required(required()).bitCount();val blocked=BtRobotSpace.required(forbidden()).bitCount()
         requiredButton.text="條件選單 · 必選 $fixed／排除 $blocked"
-        requiredButton.isEnabled=!busy&&!sweepCheck.isChecked
+        requiredButton.isEnabled=!busy
+        val sectors=s?.let{BtSettingsCodec.decode(it.getJSONObject("settings")).sectors}?:base().sectors
+        sectorButton.text="產業選單 · 保留 ${sectors.size}／排除 ${StockSector.entries.size-sectors.size}"
+        sectorButton.isEnabled=!busy
         val effectiveSweep=sessionSweep?:if(s==null)desiredSweep else null
         spaceLabel.text=if(effectiveSweep!=null)
             "持倉 ${effectiveSweep.holdingFrom}～${effectiveSweep.holdingTo} 檔 × 淨利 ${effectiveSweep.profitFrom}%～${effectiveSweep.profitTo}% · 共 ${effectiveSweep.total} 組。當前 ABCD 啟用區域固定，逐組測試直到全部完成."
@@ -612,15 +625,38 @@ class BtRobotActivity:AppCompatActivity(){
         val wrap=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(context,16),NeonUi.dp(context,10),NeonUi.dp(context,16),NeonUi.dp(context,10));addView(label("未測試 ${num(store.remaining(id))} 組\n以下預覽最多 10 組；${if(grid!=null)"依持倉、淨利數值逐一掃描，全部測完即結束。"else"找到新最佳後順序可能調整。"}",12f,NeonUi.ink));addView(content)}
         MaterialAlertDialogBuilder(this).setTitle("未測試組合").setView(ScrollView(this).apply{addView(wrap)}).setPositiveButton("關閉",null).show()
     }
+    private fun hideInput(){
+        currentFocus?.let{(getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(it.windowToken,0);it.clearFocus()}
+    }
+    private fun openRuleOptions(type:RadarType){
+        if(busy)return
+        hideInput()
+        BtRobotRulesDialog.show(this,required(),forbidden(),enabledRadars,type){on,off->applyRequired(on,off)}
+    }
+    internal fun applySectors(sectors:Set<StockSector>){
+        if(busy)return
+        if(sectors.isEmpty()){Toast.makeText(this,"請至少保留一個產業",Toast.LENGTH_LONG).show();return}
+        val previous=store.session()
+        val saved=previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()
+        if(saved.sectors==sectors)return
+        val entered=runCatching{parameters()}.getOrElse{Toast.makeText(this,it.message,Toast.LENGTH_LONG).show();return}
+        val range=runCatching{dates().validated()}.getOrElse{Toast.makeText(this,it.message,Toast.LENGTH_LONG).show();return}
+        val grid=runCatching{selectedSweep()}.getOrElse{Toast.makeText(this,it.message,Toast.LENGTH_LONG).show();return}
+        val settings=range.applyTo(entered.applyTo(saved)).copy(sectors=sectors,
+            enabledRadars=enabledRadars,dConfig=robotDConfig,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
+        val old=store.active()
+        runTask("正在儲存產業範圍…"){
+            if(old.isNotBlank())BtRobotWorker.pause(this,old)
+            store.create(settings,if(grid!=null)"0" else required(),if(grid!=null)"0" else forbidden(),
+                previous?.takeIf{!it.isNull("sourceJournalId")}?.optString("sourceJournalId"),grid)
+            "產業範圍已保存；舊批次保留，按開始測試重新取得所選產業資料"
+        }
+    }
     private fun required()=store.session()?.optString("required","0")?:getSharedPreferences("backtest_robot",0).getString("requiredDraft","0").orEmpty()
     private fun forbidden()=store.session()?.optString("forbidden","0")?:getSharedPreferences("backtest_robot",0).getString("forbiddenDraft","0").orEmpty()
     internal fun applyRequired(key:String,forbiddenKey:String=forbidden()){
-        if(sweepCheck.isChecked){
-            Toast.makeText(this,"範圍測試會固定 ABC 條件；請先取消勾選範圍模式，才能編輯必選／排除",Toast.LENGTH_LONG).show()
-            return
-        }
         BtRobotSpace.validateConstraints(key,forbiddenKey)
-        if(key==required()&&forbiddenKey==forbidden())return
+        if(key==required()&&forbiddenKey==forbidden()&&!sweepCheck.isChecked)return
         val entered=runCatching{parameters()}.getOrElse{
             Toast.makeText(this,"請修正測試參數：${it.message}",Toast.LENGTH_LONG).show();return
         }
@@ -630,12 +666,13 @@ class BtRobotActivity:AppCompatActivity(){
         val old=store.active();val previous=store.session()
         val settings=range.applyTo(entered.applyTo(previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()))
             .copy(enabledRadars=enabledRadars,dConfig=robotDConfig,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
+        sweepCheck.isChecked=false
         runTask("正在保存必選／排除條件並沿用快取…"){
             if(old.isNotBlank())BtRobotWorker.pause(this,old)
             val id=store.create(settings,key,forbiddenKey,previous?.takeIf{!it.isNull("sourceJournalId")}?.optString("sourceJournalId"))
             if(old.isNotBlank())BtRobotCheckpoint.cloneData(store,old,id)
             getSharedPreferences("backtest_robot",0).edit().putString("requiredDraft",key).putString("forbiddenDraft",forbiddenKey).commit()
-            "必選／排除條件已保存；按開始測試，新批次沿用原歷史快取"
+            "必選／自由測試／排除已保存，已切換條件組合測試；舊批次保留，按開始測試執行"
         }
     }
     internal fun applyExitRules(rules:List<ExitRule>){

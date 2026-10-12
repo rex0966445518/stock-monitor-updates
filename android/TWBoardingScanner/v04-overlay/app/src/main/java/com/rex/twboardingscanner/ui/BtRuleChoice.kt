@@ -10,7 +10,7 @@ import androidx.core.view.ViewCompat
 
 /** Immediate single-tap feedback; a second tap on this same row locks the condition off. */
 internal class BtRuleChoice(c:Context,private val title:String,initial:Choice,private val changed:(Choice)->Unit):AppCompatCheckBox(c){
-    enum class Choice(val label:String){FREE("自由調整"),REQUIRED("必選"),EXCLUDED("排除")}
+    enum class Choice(val label:String){FREE("機器人自由測試"),REQUIRED("必選"),EXCLUDED("排除")}
     var choice=initial;private set
     private var lastTap:Long?=null
     private val marker=Marker()
@@ -31,6 +31,7 @@ internal class BtRuleChoice(c:Context,private val title:String,initial:Choice,pr
     override fun toggle(){ /* The three-state model, not CompoundButton's two-state toggle, owns changes. */ }
     private fun select(next:Choice){choice=next;render();changed(next)}
     private fun render(){
+        text="$title  ·  ${choice.label}"
         isChecked=choice==Choice.REQUIRED
         setTextColor(if(choice==Choice.EXCLUDED)NeonUi.pink else NeonUi.ink)
         ViewCompat.setStateDescription(this,choice.label)
