@@ -21,6 +21,17 @@ class PaperTradingActivity:AppCompatActivity() {
     private lateinit var content:LinearLayout
     private lateinit var scroll:ScrollView
     private var error:String?=null
+    private val holdingCharts=mutableMapOf<String,WantGooInlineChartView>()
+    private var chartsResumed=false
+    private fun updateChartVisibility(){
+        var activeCount=0
+        holdingCharts.values.forEach { chart ->
+            val rect=android.graphics.Rect()
+            val visible=chartsResumed && chart.isAttachedToWindow && chart.getGlobalVisibleRect(rect) && rect.height()>dp(48)
+            chart.setActive(visible && activeCount++<2)
+        }
+    }
+    override fun onDestroy(){holdingCharts.values.forEach{it.dispose()};holdingCharts.clear();super.onDestroy()}
     override fun onCreate(savedInstanceState:Bundle?) {
         super.onCreate(savedInstanceState);repo=PaperRepository(this)
         scroll=ScrollView(this).apply{setBackgroundColor(NeonUi.canvas);isFillViewport=true}
@@ -28,10 +39,11 @@ class PaperTradingActivity:AppCompatActivity() {
         scroll.addView(content);setContentView(scroll)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->
             val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
+        scroll.setOnScrollChangeListener { _:View, _:Int, _:Int, _:Int, _:Int -> updateChartVisibility() }
         loop=PaperLoop(this){error=it;render()};render()
     }
-    override fun onResume(){super.onResume();loop.start();if(::content.isInitialized)render()}
-    override fun onPause(){loop.stop();super.onPause()}
+    override fun onResume(){super.onResume();chartsResumed=true;loop.start();if(::content.isInitialized)render()}
+    override fun onPause(){chartsResumed=false;holdingCharts.values.forEach{it.setActive(false)};loop.stop();super.onPause()}
     private fun dp(n:Int)=NeonUi.dp(this,n)
     private fun money(n:Double)=String.format(Locale.TAIWAN,"%,.0f",n)
     private fun signed(n:Double)=(if(n>=0)"+" else "−")+money(kotlin.math.abs(n))
@@ -42,6 +54,7 @@ class PaperTradingActivity:AppCompatActivity() {
     private fun panel(accent:Int=NeonUi.blue)=NeonUi.vertical(this).apply{background=NeonUi.panel(this@PaperTradingActivity,accent);setPadding(dp(14),dp(14),dp(14),dp(14))}
     private fun render(){
         val y=scroll.scrollY;content.removeAllViews()
+        scroll.post{updateChartVisibility()}
         content.addView(NeonUi.header(this,"自買自投","PAPER PORTFOLIO"){finish()})
         content.addView(label("模擬資金・不連接券商",12f,NeonUi.mint));space()
         content.addView(NeonUi.primary(this,"自訂所有交易參數 · 與歷史回測相同欄位"){
@@ -86,6 +99,8 @@ class PaperTradingActivity:AppCompatActivity() {
         space()
         content.addView(label("模擬持股  ${b.positions.size}",17f,NeonUi.ink,true));space(6)
         if(b.positions.isEmpty())content.addView(NeonUi.empty(this,"目前空手","啟動策略並完成主頁掃描後，等待符合規則的入場機會。"))
+        val currentCodes=b.positions.map{it.code}.toSet()
+        holdingCharts.keys.filter{it !in currentCodes}.toList().forEach{holdingCharts.remove(it)?.dispose()}
         b.positions.forEach {p->
             val gain=PaperEngine.netSell(p.mark)-p.cost
             val card=panel(color(gain))
@@ -93,11 +108,14 @@ class PaperTradingActivity:AppCompatActivity() {
             card.addView(label("1,000 股  ·  成交 ${p.entry}  →  最近價 ${p.mark}",13f))
             card.addView(label(signed(gain),25f,color(gain),true))
             card.addView(label("報價 ${stamp(p.markAt)}${if(System.currentTimeMillis()-p.markAt>90000) " · 非即時估值" else ""}",11f))
-            card.addView(label("點擊開啟籌碼K線 ↗",11f,NeonUi.cyan))
+            val inline=holdingCharts.getOrPut(p.code){WantGooInlineChartView(this,p.code)}
+            (inline.parent as? android.view.ViewGroup)?.removeView(inline)
+            card.addView(inline)
+            card.addView(NeonUi.button(this,"開啟籌碼K線 App ↗",NeonUi.muted){ChipKLauncher.open(this,p.code,p.name)})
             card.tag="paper-stock-${p.code}"
             card.contentDescription="${p.code} ${p.name}，開啟股市籌碼K線"
             card.isFocusable=true
-            card.setOnClickListener { ChipKLauncher.open(this,p.code,p.name) }
+
             content.addView(card);space(6)
         }
         space()
