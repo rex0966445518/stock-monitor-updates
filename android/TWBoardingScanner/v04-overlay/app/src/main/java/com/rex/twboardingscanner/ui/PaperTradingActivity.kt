@@ -93,6 +93,11 @@ class PaperTradingActivity:AppCompatActivity() {
             card.addView(label("1,000 股  ·  成交 ${p.entry}  →  最近價 ${p.mark}",13f))
             card.addView(label(signed(gain),25f,color(gain),true))
             card.addView(label("報價 ${stamp(p.markAt)}${if(System.currentTimeMillis()-p.markAt>90000) " · 非即時估值" else ""}",11f))
+            card.addView(label("點擊開啟籌碼K線 ↗",11f,NeonUi.cyan))
+            card.tag="paper-stock-${p.code}"
+            card.contentDescription="${p.code} ${p.name}，開啟股市籌碼K線"
+            card.isFocusable=true
+            card.setOnClickListener { ChipKLauncher.open(this,p.code,p.name) }
             content.addView(card);space(6)
         }
         space()
