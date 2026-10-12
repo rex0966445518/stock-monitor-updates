@@ -60,13 +60,75 @@ class RobotJournalSyncTest {
         assertEquals("2330,2454",settings.codes)
         assertEquals(before,original.toString())
         val store=BtRobotStore(app)
-        val id=store.create(settings,sourceJournalId="7e67cf98")
+        val id=BtRobotJournalSync.createBatch(store,settings,"7e67cf98")
         val saved=store.session(id)!!
         assertEquals("PAUSED",saved.getString("state"))
+        assertEquals(BtRobotSpace.key(settings.rules),saved.getString("required"))
+        assertEquals("0",saved.getString("forbidden"))
         assertEquals("7e67cf98",saved.getString("sourceJournalId"))
         assertEquals(settings,BtSettingsCodec.decode(saved.getJSONObject("settings")))
         assertEquals(BtRobotSpace.key(settings.rules),store.next(id)!!.key)
         assertEquals(0L,saved.getLong("tested"))
+    }
+    @Test fun archivedAbcdChecksAppearInMenusAndStayRequiredDuringExploration(){
+        val counts=listOf(12,9,5,9)
+        val archived=archive().copy(rules=RadarType.entries.associateWith{type->
+            ScanConditions.forRadar(type).take(counts[type.ordinal]).map{it.id}.toSet()
+        },enabledRadars=RadarType.entries.toSet())
+        val original=row(archived);val before=original.toString()
+        val store=BtRobotStore(app)
+        // A prior robot's excluded checks must not contaminate the new journal batch.
+        val old=store.create(archive().copy(stockScope=StockScope.ROBOT),forbidden=BtRobotSpace.key(archived.rules))
+        val desired=BtRobotJournalSync.fromJournal(original)
+        com.rex.twboardingscanner.data.StockPolicyStore(app).change{desired.stockPolicy}
+        val id=BtRobotJournalSync.createBatch(store,desired,"7e67cf98")
+        val session=store.session(id)!!
+        assertEquals("0",session.getString("forbidden"))
+        assertEquals(archived.rules,BtRobotSpace.rules(session.getString("required")))
+        assertEquals(before,original.toString())
+        assertEquals(BtRobotSpace.key(archived.rules),store.session(old)!!.getString("forbidden"))
+        val ctl=Robolectric.buildActivity(BtRobotActivity::class.java).setup()
+        val a=ctl.get()
+        RadarType.entries.forEach{type->
+            val button=find(a.window.decorView,"robot-rules-${type.name}") as TextView
+            assertTrue(button.text.toString().contains("必選 ${counts[type.ordinal]}／排除 0"))
+            val toggle=find(a.window.decorView,"robot-enabled-${type.name}") as TextView
+            assertTrue(toggle.text.toString().contains("●"))
+        }
+        val retained=a.policySession(RobotTradingParams.of(desired),null,RobotBacktestDates.of(desired))
+        assertEquals(id,retained)
+        assertEquals(archived.rules,BtRobotSpace.rules(store.session(retained)!!.getString("required")))
+        val seen=mutableSetOf<String>();var cursor=java.math.BigInteger.ZERO
+        repeat(20){
+            val candidate=BtRobotSpace.next(session.getString("required"),null,cursor,
+                java.math.BigInteger.valueOf(19),session.getString("required"),enabled=desired.enabledRadars){it in seen}!!
+            cursor=candidate.cursor;seen+=candidate.key
+            val rules=BtRobotSpace.rules(candidate.key)
+            RadarType.entries.forEach{assertTrue(rules.getValue(it).containsAll(archived.rules.getValue(it)))}
+        }
+        ctl.pause().stop().destroy()
+        val reopened=Robolectric.buildActivity(BtRobotActivity::class.java).setup()
+        assertTrue((find(reopened.get().window.decorView,"robot-rules-${RadarType.D_MAIN_FORCE.name}") as TextView)
+            .text.toString().contains("必選 9／排除 0"))
+        reopened.pause().stop().destroy()
+    }
+    @Test fun journalSyncKeepsInactiveRadarsAndDThresholdsInsteadOfOldDraft(){
+        val archived=archive().copy(enabledRadars=setOf(RadarType.D_MAIN_FORCE),
+            dConfig=DPatternConfig(lookback=35,bullishBars=5,volumeMultiple=2.5),
+            rules=RadarType.entries.associateWith{ScanConditions.forRadar(it).take(3).map{r->r.id}.toSet()})
+        val store=BtRobotStore(app);val old=store.create(archive().copy(stockScope=StockScope.ROBOT))
+        app.getSharedPreferences("robot-params-draft",0).edit().putString("session",old)
+            .putStringSet("activeRadars",setOf(RadarType.A_EARLY_BREAKOUT.name)).commit()
+        val desired=BtRobotJournalSync.fromJournal(row(archived))
+        val id=BtRobotJournalSync.createBatch(store,desired,"7e67cf98")
+        val ctl=Robolectric.buildActivity(BtRobotActivity::class.java).setup()
+        RadarType.entries.forEach{type->
+            val button=find(ctl.get().window.decorView,"robot-enabled-${type.name}") as TextView
+            assertEquals(type==RadarType.D_MAIN_FORCE,button.text.toString().contains("●"))
+        }
+        assertEquals(desired,BtSettingsCodec.decode(store.session(id)!!.getJSONObject("settings")))
+        assertEquals(desired.dConfig,BtSettingsCodec.decode(store.session(id)!!.getJSONObject("settings")).dConfig)
+        ctl.pause().stop().destroy()
     }
     @Test fun legacyOrIncompleteJournalIsRejectedRatherThanSilentlyDroppingRules(){
         assertThrows(Exception::class.java){BtRobotJournalSync.fromJournal(row(state="ERROR"))}
