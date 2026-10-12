@@ -13,7 +13,10 @@ object RsiGoldenCross{
     }
     fun inspect(closes:List<Double>):Evidence?{
         if(closes.size<12||closes.any{!it.isFinite()||it<=0.0})return null
-        fun series(period:Int):List<Double>{
+        val short=values(closes,5);val long=values(closes,10)
+        return Evidence(short.last(),long.last(),short[short.lastIndex-1],long[long.lastIndex-1])
+    }
+    internal fun values(closes:List<Double>,period:Int):List<Double>{
             var gain=0.0;var loss=0.0
             for(i in 1..period){val delta=closes[i]-closes[i-1];gain+=maxOf(delta,0.0);loss+=maxOf(-delta,0.0)}
             gain/=period;loss/=period
@@ -27,7 +30,5 @@ object RsiGoldenCross{
             }
             return out
         }
-        val short=series(5);val long=series(10)
-        return Evidence(short.last(),long.last(),short[short.lastIndex-1],long[long.lastIndex-1])
-    }
+
 }

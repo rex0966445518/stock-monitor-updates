@@ -14,7 +14,7 @@ internal object ExitRulesEditor {
         val viewport=NeonUi.vertical(c).apply{
             setPadding(NeonUi.dp(c,16),NeonUi.dp(c,20),NeonUi.dp(c,16),NeonUi.dp(c,16))
             addView(NeonUi.label(c,"下車賣出條件",23f,NeonUi.ink,true))
-            addView(NeonUi.gap(c,6));addView(NeonUi.label(c,"$title · 最多 5 組，空白不限制",12f))
+            addView(NeonUi.gap(c,6));addView(NeonUi.label(c,"$title · 原5組＋技術風險退出，空白不限制",12f))
             addView(NeonUi.gap(c,12))
             addView(ScrollView(c).apply{addView(form);isFillViewport=false},LinearLayout.LayoutParams(-1,0,1f))
             addView(NeonUi.gap(c,12))
@@ -36,9 +36,10 @@ internal object ExitRulesEditor {
     }
     internal class Form(c:Context,rules:List<ExitRule>):LinearLayout(c) {
         private val fields=mutableListOf<Fields>()
+        private val bearish=CheckBox(c).apply{tag="exit-bearish-turn";text="獨立風險退出："+BearishTurn.LABEL+"（不限盈虧）";setTextColor(NeonUi.pink)}
         init {
             orientation=VERTICAL;setPadding(NeonUi.dp(c,16),NeonUi.dp(c,8),NeonUi.dp(c,16),NeonUi.dp(c,16));setBackgroundColor(NeonUi.canvas)
-            addView(NeonUi.label(c,"同組已填項目全部成立才賣出；任一組成立即可。空白不限制，全空白不啟用。僅限虧損持股，虧損以扣買賣費稅後的正數幅度計算。",12f))
+            addView(NeonUi.label(c,"同組已填項目全部成立才賣出；任一組成立即可。空白不限制，全空白不啟用。原五組僅限虧損持股；獨立技術風險退出不限盈虧。虧損以扣買賣費稅後的正數幅度計算。",12f))
             addView(NeonUi.label(c,"比較方式＋百分比需同時填寫；只填一項時，整個虧損幅度條件略過。天數為日曆日；MACD 指 DIF 較前日升降；跌破指收盤低於均線。",12f,NeonUi.cyan))
             addView(NeonUi.label(c,"回測／機器人：完成日線判斷，下一個可交易日開盤模擬賣出。主頁：套用到模擬持倉；原有停利、保本與其他出場規則仍有效。資料不足的已填指標不會通過。",12f))
             addView(NeonUi.label(c,"例如虧損小於 3%：虧損 2% 符合，虧損 5% 不符合。",12f,NeonUi.amber))
@@ -70,14 +71,14 @@ internal object ExitRulesEditor {
                 card.removeViewAt(0)
                 NeonUi.group(this,card,card,"第 ${i+1} 組 · 認賠賣出",key="",expanded=i==0||rules.getOrNull(i)?.active==true)
             }
-            bind(rules)
+            addView(bearish);addView(NeonUi.label(c,"技術風險退出為獨立 OR 條件；回測／機器人用完整日K確認後，次一可交易日開盤賣出，不以觸發日收盤偷跑。MACD指EMA9訊號線，RSI14採Wilder平滑。",12f));bind(rules)
         }
         private fun bindRow(i:Int,r:ExitRule){val f=fields[i];f.days.setText(r.days?.toString().orEmpty());f.compare.setSelection(r.compare?.ordinal?.plus(1)?:0);f.loss.setText(r.lossPct?.let{java.math.BigDecimal.valueOf(it).stripTrailingZeros().toPlainString()}.orEmpty());f.macd.setSelection(r.macd?.ordinal?.plus(1)?:0);f.ma.setText(r.maDays?.toString().orEmpty())}
-        fun bind(rules:List<ExitRule>){fields.indices.forEach{bindRow(it,rules.getOrNull(it)?:ExitRule())}}
+        fun bind(rules:List<ExitRule>){bearish.isChecked=rules.any{it.bearishExit};fields.indices.forEach{bindRow(it,rules.getOrNull(it)?:ExitRule())}}
         fun read():List<ExitRule> = fields.mapIndexed{i,f->
             fun integer(e:EditText):Int? {val raw=e.text.toString().trim();if(raw.isBlank())return null;return raw.toIntOrNull()?:error("第 ${i+1} 組請填有效整數")}
             val raw=f.loss.text.toString().trim();val loss=if(raw.isBlank())null else raw.toDoubleOrNull()?:error("第 ${i+1} 組虧損幅度無效")
             ExitRule(integer(f.days),LossCompare.entries.getOrNull(f.compare.selectedItemPosition-1),loss,ExitMacd.entries.getOrNull(f.macd.selectedItemPosition-1),integer(f.ma)).also{it.validate()}
-        }.also(ExitRules::validate)
+        }.let{it+if(bearish.isChecked)listOf(ExitRule(bearishExit=true))else emptyList()}.also(ExitRules::validate)
     }
 }

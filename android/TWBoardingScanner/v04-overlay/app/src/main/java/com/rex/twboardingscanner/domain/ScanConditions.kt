@@ -123,6 +123,7 @@ class RuleMetrics(val s: StockSnapshot) {
     val last = bars.lastOrNull()
     val estimatedMainCost20 by lazy(LazyThreadSafetyMode.NONE){MainForceCost.estimate(bars)}
     val belowMainForceCost20:Boolean? get() = MainForceCost.below(last?.close?:Double.NaN,estimatedMainCost20)
+    val bearishTurn by lazy(LazyThreadSafetyMode.NONE){BearishTurn.inspect(bars.map{it.close})}
     val rsiGoldenCross by lazy(LazyThreadSafetyMode.NONE){RsiGoldenCross.inspect(bars.map{it.close})}
     val ePattern by lazy(LazyThreadSafetyMode.NONE){EPattern.inspect(bars.map{it.close},s.eConfig)}
     val dPattern by lazy(LazyThreadSafetyMode.NONE){DPattern.inspect(bars,s.dConfig,s.marketIndexCloses)}

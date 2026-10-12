@@ -54,6 +54,7 @@ object PaperStrategyConfig {
         if(r.sector !in settings.sectors)return false
         val codes=allowedCodes(settings)
         if(codes.isNotEmpty()&&r.code !in codes)return false
+        if(!ExclusionConditions.allowed(r.snapshot,r.radarType,settings.exclusions.getValue(r.radarType)))return false
         val selected=settings.rules[r.radarType].orEmpty()
         if(selected.isEmpty())return false
         val checks=if(r.radarType==RadarType.E_DIF_TOUCH)ScoringEngine().evaluateE(r.snapshot.copy(eConfig=settings.eConfig),selected).checks else r.checks

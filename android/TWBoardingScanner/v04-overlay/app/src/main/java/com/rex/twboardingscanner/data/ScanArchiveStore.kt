@@ -75,19 +75,19 @@ class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationCont
         fun snapshot(date:String,time:Long,rules:Map<RadarType,Set<String>>,sectors:Set<StockSector>,
                      policy:StockPolicy,flowRevision:String,requested:Int,analyzed:Int,failed:Int,
                      enabledRadars:Set<RadarType> = com.rex.twboardingscanner.backtest.defaultActiveRadars(),
-                     dConfig:DPatternConfig=DPatternConfig.DEFAULT,eConfig:EPatternConfig=EPatternConfig.DEFAULT):JSONObject {
+                     dConfig:DPatternConfig=DPatternConfig.DEFAULT,eConfig:EPatternConfig=EPatternConfig.DEFAULT,exclusions:Map<RadarType,Set<String>> = ExclusionConditions.empty()):JSONObject {
             require(Regex("\\d{4}-\\d{2}-\\d{2}").matches(date))
             return JSONObject().put("schema",1).put("date",date).put("created",time)
                 .put("rulesVersion",ScanConditions.VERSION)
                 .put("enabledRadars",JSONArray(enabledRadars.map{it.name}.sorted()))
-                .put("dConfig",dConfig.json()).put("eConfig",eConfig.json())
+                .put("dConfig",dConfig.json()).put("eConfig",eConfig.json()).put("exclusions",ExclusionConditions.json(exclusions))
                 .put("rules",JSONObject().apply{RadarType.entries.forEach{put(it.name,JSONArray(rules[it].orEmpty().sorted()))}})
                 .put("sectors",JSONArray(sectors.map{it.name}.sorted()))
                 .put("policy",policy.json()).put("flowRevision",flowRevision)
                 .put("requested",requested).put("analyzed",analyzed).put("failed",failed)
         }
         fun signature(settings:JSONObject):String{
-            val stable=JSONObject().put("rules",settings.getJSONObject("rules"))
+            val stable=JSONObject().put("rules",settings.getJSONObject("rules")).put("exclusions",settings.optJSONObject("exclusions")?:ExclusionConditions.json(ExclusionConditions.empty()))
                 .put("enabledRadars",settings.optJSONArray("enabledRadars")?:JSONArray())
                 .put("dConfig",settings.optJSONObject("dConfig")?:DPatternConfig.DEFAULT.json()).put("eConfig",settings.optJSONObject("eConfig")?:EPatternConfig.DEFAULT.json())
                 .put("sectors",settings.getJSONArray("sectors")).put("policy",settings.getJSONObject("policy"))
@@ -98,6 +98,7 @@ class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationCont
         fun differences(previous:JSONObject?,current:JSONObject):String {
             if(previous==null)return "首次條件快照 · ABC／產業與名單已保存"
             val lines=mutableListOf<String>()
+            if(ExclusionConditions.read(previous.optJSONObject("exclusions"))!=ExclusionConditions.read(current.optJSONObject("exclusions")))lines+="排除區規則調整（详見快照）"
             val older=previous.getJSONObject("rules");val newer=current.getJSONObject("rules")
             fun strings(a:JSONArray):Set<String> = (0 until a.length()).map{a.getString(it)}.toSet()
             val pEnabled=previous.optJSONArray("enabledRadars")
@@ -132,7 +133,7 @@ class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationCont
         private fun report(r:SignalResult,rank:ScanRank):String =
             "AI 技術訊號排名 ${rank.score}/100（規則模型）\n${rank.explanation}\n"+
             (r.dEvidence?.let{it+"\n"}?:"")+
-            r.checks.filter{it.selected}.joinToString("\n"){ "${it.label}："+when(it.state){
+            (r.checks+r.exclusionChecks.map{it.copy(label="排除區："+it.label)}).filter{it.selected}.joinToString("\n"){ "${it.label}："+when(it.state){
                 CheckState.PASS->"通過";CheckState.FAIL->"不通過";CheckState.PENDING->"待查核"
             }}
         private fun encode(r:SignalResult,rank:ScanRank):JSONObject {

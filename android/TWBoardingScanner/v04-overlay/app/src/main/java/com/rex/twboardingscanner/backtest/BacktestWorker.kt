@@ -12,6 +12,7 @@ import org.json.JSONObject
 import com.rex.twboardingscanner.domain.RadarType
 import com.rex.twboardingscanner.domain.DPatternConfig
 import com.rex.twboardingscanner.domain.EPatternConfig
+import com.rex.twboardingscanner.domain.ExclusionConditions
 import java.time.LocalDate
 
 object BtSettingsCodec {
@@ -35,7 +36,7 @@ object BtSettingsCodec {
             runCatching{RadarType.valueOf(it)}.getOrNull()
         }?.toSet()?:defaultActiveRadars()
         val dConfig=runCatching{DPatternConfig.read(JSONObject(prefs.getString("d_pattern_config",null)?:"{}"))}.getOrDefault(DPatternConfig.DEFAULT)
-        return BtSettings(start,end,capital,codes,rules.mapValues{it.value.toSet()},sectors.ifEmpty{allSectors}.toSet(),enabledRadars=enabled,dConfig=dConfig,eConfig=runCatching{EPatternConfig.read(JSONObject(prefs.getString("e_pattern_config",null)?:"{}"))}.getOrDefault(EPatternConfig.DEFAULT),stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(c).read(),exitRules=com.rex.twboardingscanner.data.ExitRuleStore(c).read(com.rex.twboardingscanner.domain.StockScope.BACKTEST),marketGuardVersion=com.rex.twboardingscanner.domain.MarketCrashGuard.VERSION,holdProfitUntilMa5Break=com.rex.twboardingscanner.data.ExitRuleStore(c).readProfitTrendHold(com.rex.twboardingscanner.domain.StockScope.BACKTEST))
+        return BtSettings(start,end,capital,codes,rules.mapValues{it.value.toSet()},sectors.ifEmpty{allSectors}.toSet(),enabledRadars=enabled,dConfig=dConfig,eConfig=runCatching{EPatternConfig.read(JSONObject(prefs.getString("e_pattern_config",null)?:"{}"))}.getOrDefault(EPatternConfig.DEFAULT),exclusions=ExclusionConditions.read(prefs.getString("scan_exclusions",null)?.let{JSONObject(it)}),stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(c).read(),exitRules=com.rex.twboardingscanner.data.ExitRuleStore(c).read(com.rex.twboardingscanner.domain.StockScope.BACKTEST),marketGuardVersion=com.rex.twboardingscanner.domain.MarketCrashGuard.VERSION,holdProfitUntilMa5Break=com.rex.twboardingscanner.data.ExitRuleStore(c).readProfitTrendHold(com.rex.twboardingscanner.domain.StockScope.BACKTEST))
     }
     fun encode(s:BtSettings):JSONObject {
         s.validateTrading()
@@ -48,7 +49,7 @@ object BtSettingsCodec {
         .put("targetNetPct",s.targetNetPct).put("maxHoldingStocks",s.maxHoldingStocks?:JSONObject.NULL)
         .put("holdProfitUntilMa5Break",s.holdProfitUntilMa5Break)
         .put("enabledRadars",JSONArray(s.enabledRadars.map{it.name}.sorted()))
-        .put("dConfig",s.dConfig.json()).put("eConfig",s.eConfig.json())
+        .put("dConfig",s.dConfig.json()).put("eConfig",s.eConfig.json()).put("exclusions",ExclusionConditions.json(s.exclusions))
         .put("holdingLimitBasis","不同股號計算檔數；同股不同日可加買一張；先賣後買；名額及資金競爭按股號排序")
         .put("rules",JSONObject().apply{s.rules.forEach{(type,ids)->put(type.name,JSONArray(ids.sorted()))}})
         .put("sectors",JSONArray(s.sectors.map{it.name}.sorted()))
@@ -80,7 +81,7 @@ object BtSettingsCodec {
                 val x=o.optJSONArray("enabledRadars")
                 if(x==null)defaultActiveRadars() else (0 until x.length()).map{RadarType.valueOf(x.getString(it))}.toSet()
             },
-            dConfig=DPatternConfig.read(o.optJSONObject("dConfig")),eConfig=EPatternConfig.read(o.optJSONObject("eConfig"))).also{it.validateTrading()}
+            dConfig=DPatternConfig.read(o.optJSONObject("dConfig")),eConfig=EPatternConfig.read(o.optJSONObject("eConfig")),exclusions=ExclusionConditions.read(o.optJSONObject("exclusions"))).also{it.validateTrading()}
     }
 }
 

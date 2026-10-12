@@ -55,4 +55,22 @@ class EControlsTest{
         assertTrue(EPattern.EVENT in settings.rules.getValue(RadarType.E_DIF_TOUCH))
         ctl.pause().stop().destroy()
     }
+    @Test fun actualExclusionCheckboxPersistsSeparatelyFromEntryAndRobotFreeRules(){
+        val ctl=Robolectric.buildActivity(MainActivity::class.java).setup();val host=ctl.get()
+        host.findViewById<android.view.View>(com.rex.twboardingscanner.R.id.conditionAButton).performClick()
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        val menu=ShadowDialog.getLatestDialog() as AlertDialog
+        (find(menu.window!!.decorView,"exclusion-A_EARLY_BREAKOUT-"+BearishTurn.ID) as CheckBox).isChecked=true
+        menu.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick()
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        val saved=ExclusionConditions.read(JSONObject(host.getSharedPreferences("scanner_filters",0).getString("scan_exclusions",null)!!))
+        assertEquals(setOf(BearishTurn.ID),saved.getValue(RadarType.A_EARLY_BREAKOUT))
+        assertTrue(saved.getValue(RadarType.B_DEEP_REVERSAL).isEmpty())
+        val form=ExitRulesEditor.Form(host,List(5){ExitRule()})
+        (find(form,"exit-bearish-turn") as CheckBox).isChecked=true
+        assertEquals(List(5){ExitRule()}+ExitRule(bearishExit=true),form.read())
+        form.bind(List(5){ExitRule()});assertFalse((find(form,"exit-bearish-turn") as CheckBox).isChecked)
+        ctl.pause().stop().destroy()
+    }
+
 }

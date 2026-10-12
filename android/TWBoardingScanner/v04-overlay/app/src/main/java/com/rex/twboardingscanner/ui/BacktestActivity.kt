@@ -41,6 +41,7 @@ class BacktestActivity:AppCompatActivity(){
     private var btSectors:Set<StockSector> = emptySet()
     private var btEnabled:Set<RadarType> = defaultActiveRadars()
     private var btDConfig:DPatternConfig = DPatternConfig.DEFAULT
+    private var btExclusions=ExclusionConditions.empty()
     private var btEConfig:EPatternConfig = EPatternConfig.DEFAULT
     private val radarModeButtons=mutableMapOf<RadarType,com.google.android.material.button.MaterialButton>()
     private fun updateRadarModes(){
@@ -69,7 +70,7 @@ class BacktestActivity:AppCompatActivity(){
         val config=store.configuration()
         val saved=runCatching{BtSettingsCodec.decode(config!!)}.getOrElse{BtSettingsCodec.capture(this,start,end,3000000.0,"")}
         btRules=saved.rules;btSectors=saved.sectors;exitRules=saved.exitRules
-        btEnabled=saved.enabledRadars;btDConfig=saved.dConfig;btEConfig=saved.eConfig
+        btEnabled=saved.enabledRadars;btDConfig=saved.dConfig;btEConfig=saved.eConfig;btExclusions=saved.exclusions
         lastLimit=saved.maxHoldingStocks?:25;lastTarget=saved.targetNetPct
         start=runCatching{LocalDate.parse(config?.getString("start"))}.getOrDefault(start);end=runCatching{LocalDate.parse(config?.getString("end"))}.getOrDefault(end)
         val root=NeonUi.vertical(this).apply{setPadding(dp(16),dp(16),dp(16),dp(28))}
@@ -99,11 +100,11 @@ class BacktestActivity:AppCompatActivity(){
 
         val trading=NeonUi.vertical(this)
         trading.addView(tradingControls())
-        exitButton=NeonUi.button(this,"下車賣出條件 · ${exitRules.count{it.active}} / 5 組",NeonUi.amber){
+        exitButton=NeonUi.button(this,"下車賣出條件 · ${exitRules.count{it.active}} / 6 項",NeonUi.amber){
             ExitRulesEditor.show(this,"歷史回測",exitRules){rules->
                 exitRules=rules;check(store.saveDraft(draft())){"無法儲存回測條件"}
                 com.rex.twboardingscanner.data.ExitRuleStore(this).save(StockScope.BACKTEST,rules)
-                exitButton.text="下車賣出條件 · ${rules.count{it.active}} / 5 組"
+                exitButton.text="下車賣出條件 · ${rules.count{it.active}} / 6 項"
             }
         }.apply{tag="backtest-exit-rules"}
         trading.addView(exitButton)
@@ -188,7 +189,7 @@ class BacktestActivity:AppCompatActivity(){
         val trading=readTrading(true)?:return
         if(raw.split(Regex("[,，\\s]+" )).filter{it.isNotBlank()}.any{!it.matches(Regex("[1-9][0-9]{3}"))}){codes.error="請輸入四碼股票代號，以逗號分隔";NeonUi.reveal(codes);return}
         val id=UUID.randomUUID().toString();val s=BtSettingsCodec.capture(this,start,end,cash,raw).copy(rules=btRules.mapValues{it.value.toSet()},sectors=btSectors.toSet(),
-            enabledRadars=btEnabled,dConfig=btDConfig,eConfig=btEConfig,maxHoldingStocks=trading.first,targetNetPct=trading.second,exitRules=exitRules,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
+            enabledRadars=btEnabled,dConfig=btDConfig,eConfig=btEConfig,exclusions=btExclusions,maxHoldingStocks=trading.first,targetNetPct=trading.second,exitRules=exitRules,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
         if(s.sectors.isEmpty()){Toast.makeText(this,"請至少選擇一個產業類型",Toast.LENGTH_LONG).show();return}
         if(s.enabledRadars.none{ s.rules[it].orEmpty().isNotEmpty() }){
             Toast.makeText(this,"請至少亮起一區且該區有勾選條件",Toast.LENGTH_LONG).show();return
@@ -210,7 +211,7 @@ class BacktestActivity:AppCompatActivity(){
     private fun draft():BtSettings {
         readTrading(false)
         return BtSettingsCodec.capture(this,start,end,capital.text.toString().toDoubleOrNull()?.takeIf{it.isFinite()&&it>0}?:3000000.0,codes.text.toString().trim()).copy(rules=btRules.mapValues{it.value.toSet()},sectors=btSectors.toSet(),
-            enabledRadars=btEnabled,dConfig=btDConfig,eConfig=btEConfig,maxHoldingStocks=lastLimit,targetNetPct=lastTarget,exitRules=exitRules,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
+            enabledRadars=btEnabled,dConfig=btDConfig,eConfig=btEConfig,exclusions=btExclusions,maxHoldingStocks=lastLimit,targetNetPct=lastTarget,exitRules=exitRules,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
     }
     private fun refreshRuleButtons(){ruleButtons.forEach{(type,button)->button.text="${type.name.take(1)} 條件 (${btRules[type].orEmpty().size})"}}
     internal fun applyRules(type:RadarType,selected:Set<String>){
@@ -244,8 +245,9 @@ class BacktestActivity:AppCompatActivity(){
             val aSelected=btRules[RadarType.A_EARLY_BREAKOUT].orEmpty()
             options.forEachIndexed{i,rule->if(rule.id in ScanConditions.A_RULE_IDS)boxes[i].isChecked=rule.id in aSelected}
         }.apply{tag="backtest-d-copy-a"})
+        val readExclusions=ExclusionEditor.fields(this,content,type,btExclusions.getValue(type))
         content.addView(NeonUi.row(this,listOf(NeonUi.button(this,"全不選"){boxes.forEach{it.isChecked=false}},NeonUi.button(this,"恢復基本條件"){boxes.forEachIndexed{i,box->box.isChecked=options[i].defaultEnabled}})))
-        showSelectionDialog("${type.name.take(1)} 區回測條件",content){applyRules(type,options.filterIndexed{i,_->boxes[i].isChecked}.map{it.id}.toSet())}
+        showSelectionDialog("${type.name.take(1)} 區回測條件",content){btExclusions=btExclusions+mapOf(type to readExclusions());applyRules(type,options.filterIndexed{i,_->boxes[i].isChecked}.map{it.id}.toSet())}
     }
     private fun refreshSectorButton(){
         val names=btSectors.sortedBy{it.ordinal}.map{it.label}
@@ -296,12 +298,12 @@ class BacktestActivity:AppCompatActivity(){
         if(revision==appliedRevision||!::codes.isInitialized)return
         val saved=runCatching{BtSettingsCodec.decode(store.configuration()!!)}.getOrNull()?:return
         appliedRevision=revision;start=saved.start;end=saved.end;btRules=saved.rules;btSectors=saved.sectors;exitRules=saved.exitRules
-        btEnabled=saved.enabledRadars;btDConfig=saved.dConfig;btEConfig=saved.eConfig;updateRadarModes()
+        btEnabled=saved.enabledRadars;btDConfig=saved.dConfig;btEConfig=saved.eConfig;btExclusions=saved.exclusions;updateRadarModes()
         startButton.text="起始 $start";endButton.text="結束 $end";capital.setText(saved.capital.toLong().toString());codes.setText(saved.codes)
         lastLimit=saved.maxHoldingStocks?:25;lastTarget=saved.targetNetPct
         maxHoldings.setText(lastLimit.toString());profitTarget.setText(btPercent(saved.targetNetPct))
         trendHoldCheck.isChecked=saved.holdProfitUntilMa5Break
-        exitButton.text="下車賣出條件 · ${exitRules.count{it.active}} / 5 組"
+        exitButton.text="下車賣出條件 · ${exitRules.count{it.active}} / 6 項"
         refreshRuleButtons();refreshSectorButton();store.saveDraft(saved)
     }
     private fun openRobotReport(id:String,key:String){

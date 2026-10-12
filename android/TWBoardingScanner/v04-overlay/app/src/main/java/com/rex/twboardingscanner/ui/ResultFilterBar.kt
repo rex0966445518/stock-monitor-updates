@@ -16,8 +16,8 @@ internal object ResultFilters {
             1 -> r.radarType == RadarType.B_DEEP_REVERSAL && r.light != SignalLight.NONE
             2 -> r.radarType == RadarType.C_LONG_RED_VOLUME && r.light != SignalLight.NONE
             3 -> r.radarType==RadarType.D_MAIN_FORCE && r.light!=SignalLight.NONE
-            4 -> r.checks.any { it.selected && it.state == CheckState.PENDING }
-            5 -> r.checks.any { it.selected && it.state == CheckState.FAIL }
+            4 -> (r.checks+r.exclusionChecks).any { it.selected && it.state == CheckState.PENDING }
+            5 -> (r.checks+r.exclusionChecks).any { it.selected && it.state == CheckState.FAIL }
              6 -> r.light != SignalLight.NONE
             7 -> r.radarType==RadarType.E_DIF_TOUCH && r.light!=SignalLight.NONE
             else -> false

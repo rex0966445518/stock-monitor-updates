@@ -137,6 +137,7 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
             )[check.id] ?: check.label.substringBefore("：")
             addCheck(h, short, check.state, check.selected)
         }
+        r.exclusionChecks.filter{it.selected}.forEach{check->addCheck(h,"排除規則1（未命中才通過）",check.state,true)}
         val date = s.bars.lastOrNull()?.let { RuleMetrics.tradingDate(it.time).toString() } ?: "無資料"
         val upgraded = if (r.technicalUpgrade) "｜技術升級" else ""
         val mode = if (r.radarType == RadarType.C_LONG_RED_VOLUME||r.radarType==RadarType.D_MAIN_FORCE)

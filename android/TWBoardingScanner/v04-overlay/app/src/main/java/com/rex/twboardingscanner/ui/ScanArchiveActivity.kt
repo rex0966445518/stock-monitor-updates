@@ -161,6 +161,7 @@ class ScanArchiveActivity:AppCompatActivity(){
         val policy=StockPolicy.read(json.getJSONObject("policy"))
         val details=text("日期 ${json.getString("date")} · 版本 ${json.getString("rulesVersion")}\n"+
             "參與分析區域：${json.optJSONArray("enabledRadars")?.let{a->(0 until a.length()).joinToString("、"){a.getString(it).take(1)}}?:"ABC"}\n"+
+            "排除區：${com.rex.twboardingscanner.domain.ExclusionConditions.read(json.optJSONObject("exclusions")).entries.joinToString("；"){(t,ids)->"${t.name.take(1)} ${ids.size} 項"}}\n"+
             "E 門檻：${com.rex.twboardingscanner.domain.EPatternConfig.read(json.optJSONObject("eConfig"))}\n"+
             "D 門檻：${com.rex.twboardingscanner.domain.DPatternConfig.read(json.optJSONObject("dConfig"))}\n"+
             "檢查 ${json.optInt("analyzed")}／${json.optInt("requested")} 檔 · 失敗 ${json.optInt("failed")} 檔\n"+

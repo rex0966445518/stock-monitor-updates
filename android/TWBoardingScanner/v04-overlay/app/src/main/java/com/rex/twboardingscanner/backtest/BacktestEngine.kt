@@ -15,7 +15,8 @@ data class BtSettings(val start:LocalDate,val end:LocalDate,val capital:Double=3
     val stockPolicy:StockPolicy=StockPolicy(),val stockScope:StockScope=StockScope.BACKTEST,val exitRules:List<ExitRule> = emptyList(),val marketGuardVersion:Int=0,val holdProfitUntilMa5Break:Boolean=false,
     val enabledRadars:Set<RadarType> = defaultActiveRadars(),
     val dConfig:DPatternConfig=DPatternConfig.DEFAULT,
-    val eConfig:EPatternConfig=EPatternConfig.DEFAULT){
+    val eConfig:EPatternConfig=EPatternConfig.DEFAULT,
+    val exclusions:Map<RadarType,Set<String>> = ExclusionConditions.empty()){
     fun validateTrading(){
         require(marketGuardVersion in 0..MarketCrashGuard.VERSION){"大盤保護版本不相容"}
         stockPolicy.validate()
@@ -26,7 +27,7 @@ data class BtSettings(val start:LocalDate,val end:LocalDate,val capital:Double=3
         else require(maxHoldingStocks==null&&targetNetPct==3.0){"舊策略必須保留原持倉及獲利規則"}
         require(targetNetPct.isFinite()&&targetNetPct in 0.01..1000.0){"獲利賣出請填 0.01～1000%"}
         require(enabledRadars.all{it in RadarType.entries}){"啟用區域不存在"}
-        dConfig.validated();eConfig.validated()
+        dConfig.validated();eConfig.validated();ExclusionConditions.validate(exclusions)
     }
 }
 data class BtSeries(val code:String,val name:String,val market:Market,val bars:List<DailyBar>,val dividends:Map<LocalDate,Double> = emptyMap())
@@ -87,8 +88,9 @@ object BacktestEngine {
                         dConfig=settings.dConfig,eConfig=settings.eConfig,marketIndexCloses=benchmark)
                     val metrics=RuleMetrics(snap)
                     val checks=ScanConditions.forRadar(type).filter{it.id in ids}.map{it.test(metrics)}
-                    pending+=checks.count{it==null}
-                    if(checks.size==ids.size&&checks.all{it==true}){
+                    val vetoes=ExclusionConditions.forRadar(type).filter{it.id in settings.exclusions.getValue(type)}.map{it.test(metrics)}
+                    pending+=checks.count{it==null}+vetoes.count{it==null}
+                    if(checks.size==ids.size&&checks.all{it==true}&&vetoes.all{it==false}){
                         matches.add(type to date(bar))
                         if(type==RadarType.D_MAIN_FORCE)dDetails+=metrics.dPattern.format()+"\n"
                         if(type==RadarType.E_DIF_TOUCH)dDetails+=metrics.ePattern?.format().orEmpty()+"\n"

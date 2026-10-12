@@ -93,7 +93,7 @@ class PaperStrategyActivity:AppCompatActivity() {
         exitButton=NeonUi.button(this,"",NeonUi.amber){
             ExitRulesEditor.show(this,"自買自投",exitRules){selected->
                 exitRules=selected
-                exitButton.text="下車賣出條件 · ${selected.count{it.active}} / 5 組"
+                exitButton.text="下車賣出條件 · ${selected.count{it.active}} / 6 項"
             }
         }.apply{tag="paper-exit-rules"}
         trade.addView(exitButton)
@@ -145,7 +145,7 @@ class PaperStrategyActivity:AppCompatActivity() {
     }
     private fun refreshControls(){
         startDateButton.text="起始日\n$start";endDateButton.text="結束日\n$end"
-        exitButton.text="下車賣出條件 · ${exitRules.count{it.active}} / 5 組"
+        exitButton.text="下車賣出條件 · ${exitRules.count{it.active}} / 6 項"
         sectorButton.text="產業篩選 · ${sectors.size} 類"
         radarButtons.forEach{(type,button)->button.text="${type.name.take(1)} ${if(type in preset.enabledRadars)"●" else "○"} · ${rules[type].orEmpty().size} 項"}
         refreshPolicy()
@@ -188,6 +188,7 @@ class PaperStrategyActivity:AppCompatActivity() {
                 isChecked=cond.id in rules[type].orEmpty();minHeight=dp(48)
             }.also{body.addView(it)}
         }
+        val readExclusions=ExclusionEditor.fields(this,body,type,preset.exclusions.getValue(type))
         val controls=NeonUi.row(this,listOf(
             NeonUi.button(this,"全不選"){boxes.forEach{it.isChecked=false}},
             NeonUi.button(this,"恢復預設"){boxes.forEachIndexed{i,cb->cb.isChecked=entries[i].defaultEnabled}}
@@ -197,7 +198,7 @@ class PaperStrategyActivity:AppCompatActivity() {
         MaterialAlertDialogBuilder(this).setTitle("${type.name.take(1)} 區模擬入場條件")
             .setView(scroller).setNegativeButton("取消",null)
             .setPositiveButton("套用"){_,_->
-                preset=preset.copy(enabledRadars=if(enabled.isChecked)preset.enabledRadars+type else preset.enabledRadars-type)
+                preset=preset.copy(exclusions=preset.exclusions+mapOf(type to readExclusions()),enabledRadars=if(enabled.isChecked)preset.enabledRadars+type else preset.enabledRadars-type)
                 rules=rules+mapOf(type to entries.filterIndexed{i,_->boxes[i].isChecked}.map{it.id}.toSet())
                 refreshControls()
             }.show()

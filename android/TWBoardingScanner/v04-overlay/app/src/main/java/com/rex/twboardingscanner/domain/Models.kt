@@ -170,7 +170,8 @@ data class SignalResult(
     val snapshot: StockSnapshot,
     val checks: List<ConditionCheck> = emptyList(),
     val technicalUpgrade: Boolean = false,
-    val dEvidence:String?=null
+    val dEvidence:String?=null,
+    val exclusionChecks:List<ConditionCheck> = emptyList()
 )
 
 // Optional evidence is never synthesized from a single reported EPS or partial flow series.

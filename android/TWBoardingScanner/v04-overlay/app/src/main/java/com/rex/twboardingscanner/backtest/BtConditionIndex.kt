@@ -8,7 +8,7 @@ import java.util.zip.GZIPOutputStream
 import kotlin.math.max
 
 /**
- * Frozen facts for ABCDE. BTINDEX3 stores five distinct indicator vectors and
+ * Frozen facts for ABCDE. BTINDEX4 stores five distinct indicator vectors and
  * the D/E audit trails; older BTINDEX1/2 files are rejected and rebuilt from the
  * same original price/index snapshots. Never interpret an ABC cache as D signals.
  */
@@ -19,7 +19,7 @@ class BtConditionIndex private constructor(
 ){
     private data class Record(
         val code:String,val day:LocalDate,val dataDates:Array<LocalDate?>,
-        val passed:LongArray,val pending:LongArray,val dEvidence:String,val eEvidence:String
+        val passed:LongArray,val pending:LongArray,val dEvidence:String,val eEvidence:String,val vetoHit:LongArray,val vetoPending:LongArray
     )
     fun prepare(s:BtSettings,cancel:()->Boolean={false}):BtPrepared {
         val selected=RadarType.entries.map{type->
@@ -28,6 +28,7 @@ class BtConditionIndex private constructor(
             require(ids.all{id->options.any{it.id==id}})
             options.foldIndexed(0L){i,mask,rule->if(rule.id in ids)mask or (1L shl i)else mask}
         }
+        val exclusionMasks=RadarType.entries.map{type->ExclusionConditions.forRadar(type).foldIndexed(0L){i,m,r->if(r.id in s.exclusions.getValue(type))m or (1L shl i)else m}}
         val signals=mutableMapOf<LocalDate,MutableList<BtSignal>>();var missing=0
         records.forEachIndexed{index,r->
             if(index%512==0)check(!cancel()){"已暫停測試"}
@@ -35,7 +36,9 @@ class BtConditionIndex private constructor(
             selected.forEachIndexed{i,mask->
                 if(mask!=0L&&r.dataDates[i]!=null){
                     missing+=java.lang.Long.bitCount(mask and r.pending[i])
-                    if((mask and r.passed[i])==mask)matches+=i
+                    val veto=exclusionMasks[i]
+                    missing+=java.lang.Long.bitCount(veto and r.vetoPending[i])
+                    if((mask and r.passed[i])==mask&&(veto and (r.vetoHit[i] or r.vetoPending[i]))==0L)matches+=i
                 }
             }
             if(matches.isNotEmpty())signals.getOrPut(r.day){mutableListOf()}.add(
@@ -49,12 +52,12 @@ class BtConditionIndex private constructor(
     fun save(file:File,fingerprint:String){
         file.parentFile?.mkdirs();val tmp=File(file.path+".tmp")
         DataOutputStream(BufferedOutputStream(GZIPOutputStream(tmp.outputStream()))).use{out->
-            out.writeUTF("BTINDEX3");out.writeUTF(fingerprint);out.writeInt(records.size)
+            out.writeUTF("BTINDEX4");out.writeUTF(fingerprint);out.writeInt(records.size)
             records.forEach{r->
                 out.writeUTF(r.code);out.writeLong(r.day.toEpochDay())
                 repeat(RadarType.entries.size){i->
                     out.writeLong(r.dataDates[i]?.toEpochDay()?:Long.MIN_VALUE)
-                    out.writeLong(r.passed[i]);out.writeLong(r.pending[i])
+                    out.writeLong(r.passed[i]);out.writeLong(r.pending[i]);out.writeLong(r.vetoHit[i]);out.writeLong(r.vetoPending[i])
                 }
                 out.writeUTF(r.dEvidence.take(8000));out.writeUTF(r.eEvidence.take(8000))
             }
@@ -70,23 +73,25 @@ class BtConditionIndex private constructor(
             settings.dConfig.json().toString()+":"+settings.eConfig.json().toString()+":"+BtRobotSpace.allSlots.joinToString(","){"${it.first.name}/${it.second}"}
         fun read(file:File,series:List<BtSeries>,fingerprint:String):BtConditionIndex=
             DataInputStream(BufferedInputStream(GZIPInputStream(file.inputStream()))).use{input->
-                require(input.readUTF()=="BTINDEX3"&&input.readUTF()==fingerprint){"歷史 ABCDE 條件快取或版本不一致"}
+                require(input.readUTF()=="BTINDEX4"&&input.readUTF()==fingerprint){"歷史 ABCDE 條件快取或版本不一致"}
                 val count=input.readInt();require(count in 0..1000000)
                 val codes=series.map{it.code}.toSet()
                 val options=RadarType.entries.map{ScanConditions.forRadar(it)}
                 val records=List(count){
                     val code=input.readUTF();require(code in codes)
                     val day=LocalDate.ofEpochDay(input.readLong())
-                    val dates=arrayOfNulls<LocalDate>(RadarType.entries.size);val passed=LongArray(RadarType.entries.size);val pending=LongArray(RadarType.entries.size)
+                    val dates=arrayOfNulls<LocalDate>(RadarType.entries.size);val passed=LongArray(RadarType.entries.size);val pending=LongArray(RadarType.entries.size);val vetoHit=LongArray(RadarType.entries.size);val vetoPending=LongArray(RadarType.entries.size)
                     repeat(RadarType.entries.size){i->
                         val date=input.readLong()
                         dates[i]=if(date==Long.MIN_VALUE)null else LocalDate.ofEpochDay(date)
-                        passed[i]=input.readLong();pending[i]=input.readLong()
+                        passed[i]=input.readLong();pending[i]=input.readLong();vetoHit[i]=input.readLong();vetoPending[i]=input.readLong()
+                        val vetoAllowed=(1L shl ExclusionConditions.forRadar(RadarType.entries[i]).size)-1L
+                        require((vetoHit[i] and vetoAllowed)==vetoHit[i]&&(vetoPending[i] and vetoAllowed)==vetoPending[i]&&(vetoHit[i] and vetoPending[i])==0L)
                         val allowed=(1L shl options[i].size)-1L
                         require((passed[i] and allowed)==passed[i]&&(pending[i] and allowed)==pending[i]&&
                             (passed[i] and pending[i])==0L)
                     }
-                    Record(code,day,dates,passed,pending,input.readUTF(),input.readUTF())
+                    Record(code,day,dates,passed,pending,input.readUTF(),input.readUTF(),vetoHit,vetoPending)
                 }
                 val n=input.readInt();require(n in 0..5000)
                 val days=List(n){LocalDate.ofEpochDay(input.readLong())}
@@ -107,7 +112,7 @@ class BtConditionIndex private constructor(
                     val day=RuleMetrics.tradingDate(bars[j].time)
                     if(day<settings.start||day>settings.end)return@dayLoop
                     check(!cancel()){"已暫停測試"}
-                    val pass=LongArray(RadarType.entries.size);val pending=LongArray(RadarType.entries.size);val dates=arrayOfNulls<LocalDate>(RadarType.entries.size)
+                    val pass=LongArray(RadarType.entries.size);val pending=LongArray(RadarType.entries.size);val vetoHit=LongArray(RadarType.entries.size);val vetoPending=LongArray(RadarType.entries.size);val dates=arrayOfNulls<LocalDate>(RadarType.entries.size)
                     val metrics=mutableMapOf<Int,RuleMetrics>();var details="";var eDetails=""
                     RadarType.entries.forEachIndexed radar@{i,type->
                         if(type !in settings.enabledRadars)return@radar
@@ -131,10 +136,11 @@ class BtConditionIndex private constructor(
                                 false->Unit
                             }
                         }
+                        ExclusionConditions.forRadar(type).forEachIndexed{bit,condition->when(condition.test(m)){true->vetoHit[i]=vetoHit[i] or (1L shl bit);null->vetoPending[i]=vetoPending[i] or (1L shl bit);false->Unit}}
                         if(type==RadarType.D_MAIN_FORCE)details=m.dPattern.format()
                         if(type==RadarType.E_DIF_TOUCH)eDetails=m.ePattern?.format().orEmpty()
                     }
-                    records+=Record(s.code,day,dates,pass,pending,details,eDetails)
+                    records+=Record(s.code,day,dates,pass,pending,details,eDetails,vetoHit,vetoPending)
                 }
                 if(index%10==0||index==series.lastIndex)progress("預算歷史 ABCDE 條件 ${index+1}/${series.size} 檔；完成後重複使用")
             }
