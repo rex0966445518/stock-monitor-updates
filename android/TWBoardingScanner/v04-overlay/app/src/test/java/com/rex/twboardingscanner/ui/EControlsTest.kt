@@ -32,9 +32,11 @@ class EControlsTest{
         val menu=ShadowDialog.getLatestDialog() as AlertDialog
         assertTrue(find(menu.window!!.decorView,"scanner-e-parameters")!!.performClick())
         val editor=ShadowDialog.getLatestDialog() as AlertDialog
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
         (find(editor.window!!.decorView,"e-tolerance") as EditText).setText("0.15")
         (find(editor.window!!.decorView,"e-include-cross") as CheckBox).isChecked=false
         editor.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick()
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
         assertFalse(editor.isShowing)
         assertEquals(EPatternConfig(.15,false),EPatternConfig.read(JSONObject(host.getSharedPreferences("scanner_filters",0).getString("e_pattern_config",null)!!)))
         menu.dismiss();ctl.pause().stop().destroy()
@@ -47,7 +49,8 @@ class EControlsTest{
         val enabled=find(menu.window!!.decorView,"paper-enabled-E_DIF_TOUCH") as CheckBox
         enabled.isChecked=true
         menu.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick()
-        val settings=PaperStrategyActivity::class.java.getDeclaredMethod("capture").apply{isAccessible=true}.invoke(host) as BtSettings
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        val settings=host.capture()
         assertTrue(RadarType.E_DIF_TOUCH in settings.enabledRadars)
         assertTrue(EPattern.EVENT in settings.rules.getValue(RadarType.E_DIF_TOUCH))
         ctl.pause().stop().destroy()
