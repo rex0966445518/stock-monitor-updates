@@ -574,6 +574,7 @@ class MainActivity: AppCompatActivity() {
             val rules = ScanConditions.forRadar(type)
             val savedRules = prefs.getStringSet("rules_${ScanConditions.VERSION}_${type.name}", null)
                 ?:prefs.getStringSet("rules_${ScanConditions.PREVIOUS_VERSION}_${type.name}",null)
+                ?:prefs.getStringSet("rules_${ScanConditions.PREVIOUS_D_VERSION}_${type.name}",null)
                 ?:prefs.getStringSet("rules_${ScanConditions.PRE_D_VERSION}_${type.name}",null)
                 ?:prefs.getStringSet("rules_${ScanConditions.LEGACY_VERSION}_${type.name}",null)
             var chosen=savedRules?.intersect(rules.map{it.id}.toSet())

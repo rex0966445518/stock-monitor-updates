@@ -20,6 +20,7 @@ object BtSettingsCodec {
             val all=com.rex.twboardingscanner.domain.ScanConditions.forRadar(type)
             (prefs.getStringSet("rules_${com.rex.twboardingscanner.domain.ScanConditions.VERSION}_${type.name}",null)
                 ?:prefs.getStringSet("rules_${com.rex.twboardingscanner.domain.ScanConditions.PREVIOUS_VERSION}_${type.name}",null)
+                ?:prefs.getStringSet("rules_${com.rex.twboardingscanner.domain.ScanConditions.PREVIOUS_D_VERSION}_${type.name}",null)
                 ?:prefs.getStringSet("rules_${com.rex.twboardingscanner.domain.ScanConditions.PRE_D_VERSION}_${type.name}",null)
                 ?:prefs.getStringSet("rules_${com.rex.twboardingscanner.domain.ScanConditions.LEGACY_VERSION}_${type.name}",null))?.intersect(all.map{it.id}.toSet())
                 ?:all.filter{it.defaultEnabled}.map{it.id}.toSet()
@@ -58,7 +59,7 @@ object BtSettingsCodec {
         .put("costModel",JSONObject().put("buyFeeRate",0.001425).put("sellFeeRate",0.001425).put("minimumFee",20).put("sellTaxRate",0.003).put("slippageRate",0.001))
     }
     fun decode(o:JSONObject):BtSettings {
-        require(o.getInt("strategyVersion") in 2..4&&o.getString("rulesVersion") in setOf(com.rex.twboardingscanner.domain.ScanConditions.VERSION,com.rex.twboardingscanner.domain.ScanConditions.PREVIOUS_VERSION,com.rex.twboardingscanner.domain.ScanConditions.PRE_D_VERSION,com.rex.twboardingscanner.domain.ScanConditions.LEGACY_VERSION)){"回測條件版本已變更，請重新開始"}
+        require(o.getInt("strategyVersion") in 2..4&&o.getString("rulesVersion") in setOf(com.rex.twboardingscanner.domain.ScanConditions.VERSION,com.rex.twboardingscanner.domain.ScanConditions.PREVIOUS_VERSION,com.rex.twboardingscanner.domain.ScanConditions.PREVIOUS_D_VERSION,com.rex.twboardingscanner.domain.ScanConditions.PRE_D_VERSION,com.rex.twboardingscanner.domain.ScanConditions.LEGACY_VERSION)){"回測條件版本已變更，請重新開始"}
         val rules=com.rex.twboardingscanner.domain.RadarType.entries.associateWith{type->
             val a=o.getJSONObject("rules").optJSONArray(type.name)
             if(a==null)emptySet() else (0 until a.length()).map{a.getString(it)}.toSet()

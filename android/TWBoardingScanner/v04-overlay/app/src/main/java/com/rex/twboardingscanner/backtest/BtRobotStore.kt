@@ -43,7 +43,7 @@ class BtRobotStore(private val c:Context){
             .put("sweep",sweep?.json()?:JSONObject.NULL)
             .put("flowRevision",com.rex.twboardingscanner.data.TradeSideVolumeStore(c).revision()).put("tested",0).put("bestKey","").put("bestSeq",0).put("ack",0)
             .put("seed",BigInteger(80,java.security.SecureRandom()).toString()).put("cursor","0").put("message","按開始測試啟動")
-            .put("appVersion",c.packageManager.getPackageInfo(c.packageName,0).versionName).put("searchVersion",4).put("required",required).put("forbidden",forbidden).put("engineVersion",BtRobotCheckpoint.ENGINE).put("cleared",0)
+            .put("appVersion",c.packageManager.getPackageInfo(c.packageName,0).versionName).put("searchVersion",5).put("required",required).put("forbidden",forbidden).put("engineVersion",BtRobotCheckpoint.ENGINE).put("cleared",0)
         check(db.insertOrThrow("sessions",null,ContentValues().apply{put("id",id);put("created",o.getLong("created"));put("json",o.toString())})>0)
         check(prefs.edit().putString("active",id).commit());id
     }
@@ -53,7 +53,7 @@ class BtRobotStore(private val c:Context){
         require(o.getString("state")!="DONE"){"此測試已完成"}
         BtRobotSpace.validate(BtSettingsCodec.decode(o.getJSONObject("settings")))
         BtRobotSpace.validateConstraints(o.optString("required","0"),o.optString("forbidden","0"))
-        require(o.optInt("searchVersion",1) in 1..4){"搜尋版本不相容"}
+        require(o.optInt("searchVersion",1) in 1..5){"搜尋版本不相容"}
         if(o.has("flowRevision"))require(o.getString("flowRevision")==com.rex.twboardingscanner.data.TradeSideVolumeStore(c).revision()){
             "盤中內外盤資料已更新；請以新條件建立新批次，原測試紀錄保留"
         }
@@ -86,7 +86,7 @@ class BtRobotStore(private val c:Context){
                 s.optString("required","0"),s.optString("forbidden","0"),
                 legacy=version<3,
                 enabled=if(version<4)defaultActiveRadars() else current.enabledRadars,
-                includeD=version>=4){seen(id,it)}
+                includeD=version>=4,includeCost=version>=5){seen(id,it)}
         }
     }
     fun remaining(id:String):BigInteger {val s=session(id);return (BtRobotSweep.read(s?.optJSONObject("sweep"))?.total?.let{BigInteger.valueOf(it.toLong())}
@@ -94,7 +94,8 @@ class BtRobotStore(private val c:Context){
             legacy=(s?.optInt("searchVersion",1)?:1)<3,
             enabled=if((s?.optInt("searchVersion",1)?:1)<4)defaultActiveRadars() else
                 s?.let{BtSettingsCodec.decode(it.getJSONObject("settings")).enabledRadars}?:defaultActiveRadars(),
-            includeD=(s?.optInt("searchVersion",1)?:1)>=4))-BigInteger.valueOf(s?.optLong("tested")?:0L)}
+            includeD=(s?.optInt("searchVersion",1)?:1)>=4,
+             includeCost=(s?.optInt("searchVersion",1)?:1)>=5))-BigInteger.valueOf(s?.optLong("tested")?:0L)}
     fun retained(id:String)=synchronized(lock){db.rawQuery("SELECT COUNT(*) FROM trials WHERE session=? AND cleared=0",arrayOf(id)).use{it.moveToFirst();it.getLong(0)}}
     fun clearZero(id:String):Int=synchronized(lock){
         val s=session(id)?:return@synchronized 0;var removed=0
