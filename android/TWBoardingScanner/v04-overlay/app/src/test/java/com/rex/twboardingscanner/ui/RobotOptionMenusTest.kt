@@ -34,7 +34,7 @@ class RobotOptionMenusTest {
         val end=System.nanoTime()+5_000_000_000L
         while(store.active()==old&&System.nanoTime()<end){Thread.sleep(10);Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()}
         Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
-        assertNotEquals(old,store.active())
+        assertNotEquals("Latest save message: ${org.robolectric.shadows.ShadowToast.getTextOfLatestToast()}",old,store.active())
     }
     @Test fun disabledRadarConstraintsDoNotRejectActiveRadarTrials(){
         val type=RadarType.D_MAIN_FORCE
@@ -87,3 +87,4 @@ class RobotOptionMenusTest {
         ctl.pause().stop().destroy()
     }
 }
+
