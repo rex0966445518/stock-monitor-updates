@@ -68,7 +68,7 @@ class MainActivity: AppCompatActivity() {
     private val workers = Executors.newFixedThreadPool(6)
 
     private var latest = listOf<SignalResult>()
-    private var selectedTab = 0
+    private var selectedTab = 6 // Show all real hits first; A may legitimately be empty.
     private var isScanning = false
     private var latestScanDate = ""
     private var latestScanAt = 0L
@@ -121,7 +121,11 @@ class MainActivity: AppCompatActivity() {
         b.marketGuardButton.setOnClickListener { showMarketGuard() }
         b.settingsButton.setOnClickListener { showSettings() }
         b.robotButton.setOnClickListener { startActivity(android.content.Intent(this,BtRobotActivity::class.java)) }
-        b.resultFilters.onSelected = { index -> selectedTab = index; render() }
+        b.resultFilters.onSelected = { index ->
+            selectedTab=index
+            render()
+            b.recycler.scrollToPosition(0)
+        }
 
         b.conditionAButton.setOnClickListener { showRadarConditions(RadarType.A_EARLY_BREAKOUT) }
         b.conditionBButton.setOnClickListener { showRadarConditions(RadarType.B_DEEP_REVERSAL) }
@@ -519,12 +523,27 @@ class MainActivity: AppCompatActivity() {
         com.rex.twboardingscanner.paper.PaperRepository(this).publish(latest,latestScanAt)
     }
     private fun render() {
-        val groups = (0..5).map { ResultFilters.select(admitted(), it) }
-        b.resultFilters.update(groups.map { it.size }, selectedTab)
-        adapter.submit(groups[selectedTab])
-        b.emptyState.visibility=if(groups[selectedTab].isEmpty())android.view.View.VISIBLE else android.view.View.GONE
-        (b.emptyState.getChildAt(0) as TextView).text=if(isScanning)"正在整理市場訊號" else if(latestScanAt>0)"此分類暫無結果" else "等待市場訊號"
-        (b.emptyState.getChildAt(1) as TextView).text=if(isScanning)"掃描結果會陸續顯示，請稍候。" else if(latestScanAt>0)"可切換上方分類，或調整條件重新掃描。" else "設定掃描條件，再開始全市場掃描。\n結果會依 A／B／C 分類呈現。"
+        val source=admitted()
+        val groups=(0..6).map{ResultFilters.select(source,it)}
+        b.resultFilters.update(groups.map{it.size},selectedTab)
+        val selected=groups[selectedTab]
+        adapter.submit(selected)
+        b.emptyState.visibility=if(selected.isEmpty())android.view.View.VISIBLE else android.view.View.GONE
+        (b.emptyState.getChildAt(0) as TextView).text=when{
+            isScanning->"正在整理市場訊號"
+            selectedTab==6&&latestScanAt>0->"本次沒有符合條件的股票"
+            latestScanAt>0->"此分類尚無入選股票"
+            else->"等待市場訊號"
+        }
+        val available=RadarType.entries.mapIndexedNotNull{i,type->
+            groups[i].size.takeIf{it>0}?.let{"${type.name.take(1)} 區 $it 筆"}
+        }.joinToString("、")
+        (b.emptyState.getChildAt(1) as TextView).text=when{
+            isScanning->"已完成的股票會陸續出現在「全部入選」；可切換 A/B/C/D。"
+            available.isNotBlank()->"目前已掃出 $available。請點「全部入選」直接查看，或切換有訊號的分類。"
+            latestScanAt>0->"目前沒有符合已勾選條件的股票；可在條件與工具中調整。"
+            else->"請開始掃描；預設「全部入選」顯示 ABCD 所有通過的股票。"
+        }
     }
 
     private fun loadScanSettings() {

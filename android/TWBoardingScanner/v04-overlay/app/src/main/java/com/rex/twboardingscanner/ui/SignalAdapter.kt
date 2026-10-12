@@ -6,6 +6,7 @@ import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.DiffUtil
 import com.google.android.material.chip.Chip
 import com.rex.twboardingscanner.databinding.ItemStockSignalBinding
 import com.rex.twboardingscanner.domain.CheckState
@@ -16,11 +17,26 @@ import com.rex.twboardingscanner.domain.SignalResult
 
 class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private val onFinancial: (SignalResult) -> Unit = {}):RecyclerView.Adapter<SignalAdapter.VH>() {
     private val items = mutableListOf<SignalResult>()
+    init { setHasStableIds(true) }
+    override fun getItemId(position:Int)=
+        (items[position].code+"-"+items[position].radarType.name).hashCode().toLong() and 0xffffffffL
 
     fun submit(list:List<SignalResult>) {
-        items.clear()
-        items.addAll(list)
-        notifyDataSetChanged()
+        val target=list.toList()
+        if(items==target)return
+        val previous=items.toList()
+        val diff=DiffUtil.calculateDiff(object:DiffUtil.Callback(){
+            override fun getOldListSize()=previous.size
+            override fun getNewListSize()=target.size
+            override fun areItemsTheSame(oldItemPosition:Int,newItemPosition:Int):Boolean {
+                val a=previous[oldItemPosition];val b=target[newItemPosition]
+                return a.code==b.code&&a.radarType==b.radarType
+            }
+            override fun areContentsTheSame(oldItemPosition:Int,newItemPosition:Int)=
+                previous[oldItemPosition]==target[newItemPosition]
+        },false)
+        items.clear();items.addAll(target)
+        diff.dispatchUpdatesTo(this)
     }
 
     class VH(val b:ItemStockSignalBinding):RecyclerView.ViewHolder(b.root)
