@@ -20,7 +20,8 @@ class WantGooInlineChartTest {
         }
     }
     @Test fun offscreenCardsDoNotCreateBrowserOrMakeRequests() {
-        val view=WantGooInlineChartView(RuntimeEnvironment.getApplication(),"3264")
+        val context=androidx.appcompat.view.ContextThemeWrapper(RuntimeEnvironment.getApplication(),com.rex.twboardingscanner.R.style.Theme_TWBoardingScanner)
+        val view=WantGooInlineChartView(context,"3264")
         view.setActive(false)
         assertEquals(0,(view.getChildAt(1) as android.widget.FrameLayout).childCount)
         view.dispose()
