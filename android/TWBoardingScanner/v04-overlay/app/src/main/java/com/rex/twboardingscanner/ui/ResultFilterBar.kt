@@ -45,7 +45,7 @@ class ResultFilterBar @JvmOverloads constructor(context: Context, attrs: Attribu
         orientation = VERTICAL
         addView(NeonUi.row(context, buttons.take(4)))
         addView(NeonUi.gap(context, 3))
-        addView(NeonUi.row(context, listOf(buttons[7],buttons[6],buttons[4],buttons[5])))
+        addView(NeonUi.row(context, listOf(buttons[6],buttons[7],buttons[4],buttons[5])))
         update(List(8) { 0 }, 6)
     }
     fun update(counts: List<Int>, selected: Int) {
