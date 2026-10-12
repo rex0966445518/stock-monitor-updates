@@ -41,6 +41,7 @@ import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 
 class MainActivity: AppCompatActivity() {
     private lateinit var b: ActivityMainBinding
@@ -297,6 +298,12 @@ class MainActivity: AppCompatActivity() {
             val insufficient = AtomicInteger(0)
             val failed = AtomicInteger(0)
             val newCount = AtomicInteger(0)
+            val financeQueries=AtomicInteger(0)
+            val historyWaitMs=AtomicLong(0L)
+            val financeWaitMs=AtomicLong(0L)
+            val lastProgressMs=AtomicLong(0L)
+            val lastRenderMs=AtomicLong(0L)
+            provider.resetHistoryStats()
             val latch = CountDownLatch(total)
             val results = Collections.synchronizedList(mutableListOf<SignalResult>())
             val started = System.currentTimeMillis()
@@ -317,7 +324,9 @@ class MainActivity: AppCompatActivity() {
                         if (userExcluded) {
                             excluded.incrementAndGet()
                         } else {
-                            val bars = loadHistoryWithRetry(stock)
+                            val historyBegin=android.os.SystemClock.elapsedRealtime()
+                            val bars = runCatching{provider.loadHistory(stock)}.getOrDefault(emptyList())
+                            historyWaitMs.addAndGet(android.os.SystemClock.elapsedRealtime()-historyBegin)
                             if (bars.isEmpty()) {
                                 failed.incrementAndGet()
                             } else if (bars.size < 20) {
@@ -341,20 +350,39 @@ class MainActivity: AppCompatActivity() {
                                     }
                                     val withFlow=stock.copy(tradeSideVolume=flowStore.read(stock.code,scanDate))
                                     val initial = evaluate(withFlow)
-                                    // Fetch financial tables only for candidates that pass selected technical rules.
-                                    val candidate = initial.any { result -> result.checks.filter { it.selected && !it.extra }.all { it.state == com.rex.twboardingscanner.domain.CheckState.PASS } } ||
-                                        (paperSettings?.let{config->initial.any{r->
-                                            r.sector in config.sectors&&
-                                                config.rules[r.radarType].orEmpty().isNotEmpty()&&
-                                                config.rules[r.radarType].orEmpty()
-                                                    .filter{id->com.rex.twboardingscanner.domain.ScanConditions.forRadar(r.radarType).any{x->x.id==id&&!x.extra}}
-                                                    .all{id->r.checks.any{x->x.id==id&&x.state==com.rex.twboardingscanner.domain.CheckState.PASS}}
-                                        }}?:false)
-                                    val r = if (candidate) {
-                                        val report = financialProvider.load(stock.code)
-                                        evaluate(withFlow.copy(financials = report, quarterlyEps = report.eps,
-                                            epsTtm = report.ttm(scanDate), closingAuction = auctionProvider.load(stock.code, stock.market)))
-                                    } else initial
+                                    // Never request three HiStock pages for technical-only conditions.
+                                    // Paper robot/strategy checklists are independent of the main selected IDs.
+                                    val neededTopics=buildSet<String>{
+                                        initial.forEach{result->
+                                            val mainIds=if(result.radarType in scanEnabled&&result.sector in mainSectors)
+                                                scanRules[result.radarType].orEmpty() else emptySet()
+                                            val mainReady=mainIds.isNotEmpty()&&result.checks
+                                                .filter{it.id in mainIds&&!it.extra}
+                                                .all{it.state==com.rex.twboardingscanner.domain.CheckState.PASS}
+                                            if(mainReady)addAll(com.rex.twboardingscanner.data.FinancialDataProvider.topicsForRuleIds(mainIds))
+                                            val paperIds=if(result.radarType in (paperSettings?.enabledRadars?:emptySet())&&result.sector in paperSettings!!.sectors)
+                                                paperSettings.rules[result.radarType].orEmpty() else emptySet()
+                                            val paperReady=paperIds.isNotEmpty()&&paperIds
+                                                .filter{id->com.rex.twboardingscanner.domain.ScanConditions.forRadar(result.radarType).any{x->x.id==id&&!x.extra}}
+                                                .all{id->result.checks.any{it.id==id&&it.state==com.rex.twboardingscanner.domain.CheckState.PASS}}
+                                            if(paperReady)addAll(com.rex.twboardingscanner.data.FinancialDataProvider.topicsForRuleIds(paperIds))
+                                        }
+                                    }
+                                    val report=if(neededTopics.isNotEmpty()){
+                                        financeQueries.incrementAndGet()
+                                        val begin=android.os.SystemClock.elapsedRealtime()
+                                        try{financialProvider.load(stock.code,neededTopics)}
+                                        finally{financeWaitMs.addAndGet(android.os.SystemClock.elapsedRealtime()-begin)}
+                                    }else null
+                                    val enriched=if(report==null)withFlow else withFlow.copy(
+                                        financials=report,quarterlyEps=report.eps,epsTtm=report.ttm(scanDate))
+                                    val evaluated=if(report==null)initial else evaluate(enriched)
+                                    // A 13:30 auction cannot exist at 10:00. Avoid a pointless
+                                    // remote MIS/time-sales request during regular trading.
+                                    val positive=evaluated.any{it.light!=SignalLight.NONE&&it.sector in mainSectors}
+                                    val r=if(positive&&java.time.LocalTime.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI)>=java.time.LocalTime.of(13,33)){
+                                        evaluate(enriched.copy(closingAuction=auctionProvider.load(stock.code,stock.market)))
+                                    }else evaluated
                                     results.addAll(r)
 
                                     r.filter { it.sector in mainSectors && it.light != SignalLight.NONE && scanPolicy.decision(it.code,it.snapshot.sourceStock?.close?:it.snapshot.price,com.rex.twboardingscanner.domain.StockScope.SCANNER)==com.rex.twboardingscanner.domain.StockDecision.ALLOW }.forEach { sig ->
@@ -372,15 +400,20 @@ class MainActivity: AppCompatActivity() {
                         failed.incrementAndGet()
                     } finally {
                         val d = done.incrementAndGet()
-                        updateProgress(
-                            d, total, started,
-                            analyzed.get(), excluded.get(), insufficient.get(), failed.get()
-                        )
+                        val now=android.os.SystemClock.elapsedRealtime()
+                        val last=lastProgressMs.get()
+                        if(d==total||(now-last>=350L&&lastProgressMs.compareAndSet(last,now))){
+                            updateProgress(
+                                d,total,started,analyzed.get(),excluded.get(),insufficient.get(),failed.get(),
+                                provider.historyStats(),financeQueries.get()
+                            )
+                        }
 
-                        if (d % 20 == 0 || d == total) {
-                            val copy = synchronized(results) { results.toList() }
-                            runOnUiThread {
-                                latest = copy
+                        val rendered=lastRenderMs.get()
+                        if(d==total||(d%20==0&&now-rendered>=800L&&lastRenderMs.compareAndSet(rendered,now))){
+                            val copy=synchronized(results){results.toList()}
+                            runOnUiThread{
+                                latest=copy
                                 render()
                             }
                         }
@@ -416,10 +449,11 @@ class MainActivity: AppCompatActivity() {
                 isScanning = false
                 b.startScanButton.isEnabled=true;b.startScanButton.text="開始掃描"
                 b.scanProgress.progress = total
-                b.progressTitle.text = "全市場掃描完成"
+                val metrics=provider.historyStats()
+                b.progressTitle.text = if(metrics.rateLimited>0||failed.get()>0)"掃描結束 · 部分行情待重試" else "全市場掃描完成"
                 b.progressCount.text = "已處理 ${total} / ${total} 檔（100%）"
-                b.etaText.text = "掃描完成"
-                b.progressStats.text = "已分析 ${analyzed.get()}｜排除 ${excluded.get()}｜資料不足 ${insufficient.get()}｜失敗 ${failed.get()}"
+                b.etaText.text = if(metrics.rateLimited>0)"行情來源限流，請稍後重試" else "掃描完成"
+                b.progressStats.text = "已分析 ${analyzed.get()}｜排除 ${excluded.get()}｜資料不足 ${insufficient.get()}｜失敗 ${failed.get()}\n日K快取 ${metrics.cached}｜下載 ${metrics.downloaded}｜來源限流 ${metrics.rateLimited}｜財報查核 ${financeQueries.get()}"
                 render()
                 handler.removeCallbacksAndMessages(null)
 
@@ -427,19 +461,10 @@ class MainActivity: AppCompatActivity() {
         }
     }
 
-    private fun loadHistoryWithRetry(stock: com.rex.twboardingscanner.domain.MarketStock): List<DailyBar> {
-        var bars: List<DailyBar> = emptyList()
-        for (attempt in 0 until 3) {
-            bars = runCatching { provider.loadHistory(stock) }.getOrDefault(emptyList())
-            if (bars.isNotEmpty()) break
-            Thread.sleep(300L * (attempt + 1))
-        }
-        return bars
-    }
-
     private fun updateProgress(
         done:Int, total:Int, started:Long,
-        analyzed:Int, excluded:Int, insufficient:Int, failed:Int
+        analyzed:Int,excluded:Int,insufficient:Int,failed:Int,
+        stats:MarketDataProvider.HistoryStats,financial:Int
     ) {
         val elapsed = System.currentTimeMillis() - started
         val remain = if (done > 0) elapsed.toDouble() / done * (total - done) else 0.0
@@ -450,7 +475,7 @@ class MainActivity: AppCompatActivity() {
             b.scanProgress.progress = done
             b.progressCount.text = "已處理 ${done} / ${total} 檔（${done * 100 / total}%）"
             b.etaText.text = if (done < 10) "正在估算…" else "剩餘約 ${min}分${sec}秒"
-            b.progressStats.text = "已分析 ${analyzed}｜排除 ${excluded}｜資料不足 ${insufficient}｜失敗 ${failed}"
+            b.progressStats.text = "已分析 ${analyzed}｜排除 ${excluded}｜資料不足 ${insufficient}｜失敗 ${failed}\n日K快取 ${stats.cached}｜下載 ${stats.downloaded}｜限流 ${stats.rateLimited}｜財報 ${financial}"
         }
     }
 
