@@ -74,7 +74,7 @@ internal object ExitRulesEditor {
             addView(bearish);addView(NeonUi.label(c,"技術風險退出為獨立 OR 條件；回測／機器人用完整日K確認後，次一可交易日開盤賣出，不以觸發日收盤偷跑。MACD指EMA9訊號線，RSI14採Wilder平滑。",12f));bind(rules)
         }
         private fun bindRow(i:Int,r:ExitRule){val f=fields[i];f.days.setText(r.days?.toString().orEmpty());f.compare.setSelection(r.compare?.ordinal?.plus(1)?:0);f.loss.setText(r.lossPct?.let{java.math.BigDecimal.valueOf(it).stripTrailingZeros().toPlainString()}.orEmpty());f.macd.setSelection(r.macd?.ordinal?.plus(1)?:0);f.ma.setText(r.maDays?.toString().orEmpty())}
-        fun bind(rules:List<ExitRule>){bearish.isChecked=rules.any{it.bearishExit};fields.indices.forEach{bindRow(it,rules.getOrNull(it)?:ExitRule())}}
+        fun bind(rules:List<ExitRule>){bearish.isChecked=rules.any{it.bearishExit};val ordinary=rules.filterNot{it.bearishExit};fields.indices.forEach{bindRow(it,ordinary.getOrNull(it)?:ExitRule())}}
         fun read():List<ExitRule> = fields.mapIndexed{i,f->
             fun integer(e:EditText):Int? {val raw=e.text.toString().trim();if(raw.isBlank())return null;return raw.toIntOrNull()?:error("第 ${i+1} 組請填有效整數")}
             val raw=f.loss.text.toString().trim();val loss=if(raw.isBlank())null else raw.toDoubleOrNull()?:error("第 ${i+1} 組虧損幅度無效")
