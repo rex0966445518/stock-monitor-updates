@@ -102,6 +102,15 @@ class MarketDataProvider(private val context: Context) {
         return emptyList()
     }
 
+    /** Offline chart preview: return saved candles with their original trading dates. */
+    fun loadCachedChartHistory(code:String):List<DailyBar> {
+        require(code.matches(Regex("[0-9]{4}")))
+        return Market.entries.mapNotNull{market->
+            val file=File(context.cacheDir,"price_history_v044/${code}_${market.name}.json")
+            if(!file.exists())null else runCatching{parseYahoo(file.readText())}.getOrNull()?.takeIf{it.isNotEmpty()}
+        }.maxByOrNull{bars->bars.maxOf{it.time}}?.sortedBy{it.time}?.takeLast(320).orEmpty()
+    }
+
     private fun loadSymbolHistory(code: String, market: Market, forceRefresh: Boolean): List<DailyBar> {
         val cacheDir = File(context.cacheDir, "price_history_v044").apply { mkdirs() }
         val file = File(cacheDir, "${code}_${market.name}.json")

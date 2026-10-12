@@ -54,7 +54,6 @@ class PaperTradingActivity:AppCompatActivity() {
     private fun panel(accent:Int=NeonUi.blue)=NeonUi.vertical(this).apply{background=NeonUi.panel(this@PaperTradingActivity,accent);setPadding(dp(14),dp(14),dp(14),dp(14))}
     private fun render(){
         val y=scroll.scrollY;content.removeAllViews()
-        scroll.post{updateChartVisibility()}
         content.addView(NeonUi.header(this,"自買自投","PAPER PORTFOLIO"){finish()})
         content.addView(label("模擬資金・不連接券商",12f,NeonUi.mint));space()
         content.addView(NeonUi.primary(this,"自訂所有交易參數 · 與歷史回測相同欄位"){
@@ -144,7 +143,7 @@ class PaperTradingActivity:AppCompatActivity() {
         content.addView(NeonUi.button(this,"前往歷史回測",NeonUi.blue){startActivity(Intent(this,BacktestActivity::class.java))})
         content.addView(NeonUi.button(this,"查看自動策略與成交規則",NeonUi.amber){rules()})
         content.addView(label("前景每 30 秒；背景約每 15 分鐘（省電可能延後）。強制停止／離線期間不交易、不補單。持股估值會顯示原始報價時間。",11f))
-        scroll.post{scroll.scrollTo(0,y)}
+        scroll.post{scroll.scrollTo(0,y);updateChartVisibility()}
     }
     private fun toggle(b:PaperBook){
         if(b.enabled){
