@@ -209,7 +209,9 @@ class BtRobotCheckpointTest {
         find(v){it.tag=="save-required-rules"}!!.performClick()
         val on=BtRobotSpace.rules(savedOn);val off=BtRobotSpace.rules(savedOff)
         assertTrue(on[RadarType.A_EARLY_BREAKOUT]!!.isEmpty());assertEquals(setOf("price"),on[RadarType.B_DEEP_REVERSAL]);assertEquals(setOf("price","volume"),off[RadarType.A_EARLY_BREAKOUT]);assertTrue(off[RadarType.B_DEEP_REVERSAL]!!.isEmpty())
-        assertEquals(BigInteger.ONE.shiftLeft(74),BtRobotSpace.total(savedOn,savedOff))
+        // Each newly appended D/A checkbox is a new free robot bit; the
+        // three saved required/excluded bits remain exactly the same.
+        assertEquals(BigInteger.ONE.shiftLeft(BtRobotSpace.allSlots.size-3),BtRobotSpace.total(savedOn,savedOff))
         ctl.pause().stop().destroy()
     }
     @Test fun requiredMenuSeparatesAbcAndRendersWithClearAndExportActions(){

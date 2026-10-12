@@ -44,7 +44,9 @@ class AllSignalsAndDOptionsTest {
     }
 
     @Test fun combinedFilterIsAvailableWithoutAddingTallExtraRow(){
-        val view=ResultFilterBar(RuntimeEnvironment.getApplication())
+        // MaterialButton requires the actual AppCompat activity theme.
+        val ctl=org.robolectric.Robolectric.buildActivity(MainActivity::class.java).setup()
+        val view=ResultFilterBar(ctl.get())
         assertEquals(3,view.childCount) // two rows and existing gap
         view.update(listOf(0,3,13,2,50,200,18),6)
         var selected=-1;view.onSelected={selected=it}
@@ -54,6 +56,7 @@ class AllSignalsAndDOptionsTest {
         assertTrue(all.text.contains("18"))
         all.performClick()
         assertEquals(6,selected)
+        ctl.pause().stop().destroy()
     }
 
     @Test fun v047DConditionKeysRetainTheirOriginalPrefix(){
