@@ -360,7 +360,7 @@ class BtRobotActivity:AppCompatActivity(){
                             val mustHave=if(sweep!=null)"0" else required()
                             val excludes=if(sweep!=null)"0" else forbidden()
                             if(original.isNotBlank())BtRobotWorker.pause(this,original)
-                            store.create(settings,mustHave,excludes,
+                            store.create(RobotRuleSelection.prepare(settings,fixedRules=sweep!=null),mustHave,excludes,
                                 previous?.takeIf{!it.isNull("sourceJournalId")}?.optString("sourceJournalId"),sweep)
                             "已建立新批次，請按開始測試；舊結果保留"
                         }
@@ -406,19 +406,16 @@ class BtRobotActivity:AppCompatActivity(){
             holdProfitUntilMa5Break=com.rex.twboardingscanner.data.ExitRuleStore(this).readProfitTrendHold(StockScope.ROBOT))
     }
     /** Changed money/holding/exit targets must always become a NEW independent batch. */
-    private fun policySession(params:RobotTradingParams,sweep:BtRobotSweep?,dateRange:RobotBacktestDates):String {
+    internal fun policySession(params:RobotTradingParams,sweep:BtRobotSweep?,dateRange:RobotBacktestDates):String {
         val old=store.session()
         val saved=old?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}
         val previousSweep=BtRobotSweep.read(old?.optJSONObject("sweep"))
         val original=saved?:base()
         val policy=com.rex.twboardingscanner.data.StockPolicyStore(this).read()
-        val next=dateRange.applyTo(params.applyTo(original))
+        val next=RobotRuleSelection.prepare(dateRange.applyTo(params.applyTo(original))
             .copy(enabledRadars=enabledRadars,dConfig=robotDConfig,stockPolicy=policy,stockScope=StockScope.ROBOT,marketGuardVersion=MarketCrashGuard.VERSION,
-                holdProfitUntilMa5Break=trendHoldCheck.isChecked)
+                holdProfitUntilMa5Break=trendHoldCheck.isChecked),fixedRules=sweep!=null)
         BtRobotSpace.validate(next)
-        require(next.enabledRadars.any{next.rules[it].orEmpty().isNotEmpty()}){
-            "至少啟用一區且該區有掃描條件"
-        }
         if(old!=null&&next==saved&&sweep==previousSweep)return old.getString("id")
         val oldId=old?.optString("id").orEmpty()
         val required=if(sweep!=null)"0" else old?.optString("required","0")?:required()
@@ -477,7 +474,7 @@ class BtRobotActivity:AppCompatActivity(){
                 includeD=searchVersion>=4)
         val remaining=total-BigInteger.valueOf(tested)
         val fixed=BtRobotSpace.required(required()).bitCount();val blocked=BtRobotSpace.required(forbidden()).bitCount()
-        ruleSummary.text=if(sweepCheck.isChecked)"目前為持倉×淨利網格，ABCD 條件固定；儲存區域條件會切換為條件組合測試。"
+        ruleSummary.text=if(sweepCheck.isChecked)"目前為持倉×淨利網格；啟用區域若無固定條件，開始時會補上該區預設條件。儲存區域條件可切換自由組合測試。"
             else "目前條件：必選 $fixed／排除 $blocked；其餘由機器人自由測試"
         val selectedRules=BtRobotSpace.rules(required());val excludedRules=BtRobotSpace.rules(forbidden())
         radarRuleButtons.forEach{(type,button)->
