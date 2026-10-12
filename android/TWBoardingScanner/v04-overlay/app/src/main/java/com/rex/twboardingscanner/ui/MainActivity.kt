@@ -425,6 +425,19 @@ class MainActivity: AppCompatActivity() {
             latch.await()
             val copy = synchronized(results) { results.toList() }
             latest = copy
+            val elapsedSec=(System.currentTimeMillis()-started).coerceAtLeast(0L)/1000L
+            val workerHistorySec=historyWaitMs.get()/1000L
+            val workerFinanceSec=financeWaitMs.get()/1000L
+            android.util.Log.i("FullMarketScan",
+                "processed=$total analyzed=${analyzed.get()} failures=${failed.get()} elapsed=${elapsedSec}s historyWorker=${workerHistorySec}s financialWorker=${workerFinanceSec}s cache=${provider.historyStats().cached} downloaded=${provider.historyStats().downloaded} rateLimited=${provider.historyStats().rateLimited}")
+            getSharedPreferences("scanner-performance",MODE_PRIVATE).edit()
+                .putLong("elapsedSec",elapsedSec)
+                .putLong("historyWorkerSec",workerHistorySec)
+                .putLong("financeWorkerSec",workerFinanceSec)
+                .putInt("cacheHits",provider.historyStats().cached)
+                .putInt("downloads",provider.historyStats().downloaded)
+                .putInt("rateLimited",provider.historyStats().rateLimited)
+                .putInt("financialChecked",financeQueries.get()).apply()
             // Save an IMMUTABLE folder for this exact scan, including every chosen
             // ABC predicate, selected sector, banned policy and ranked candidates.
             // Do not mix a newly imported flow CSV into an already-running scan.
@@ -452,7 +465,7 @@ class MainActivity: AppCompatActivity() {
                 val metrics=provider.historyStats()
                 b.progressTitle.text = if(metrics.rateLimited>0||failed.get()>0)"掃描結束 · 部分行情待重試" else "全市場掃描完成"
                 b.progressCount.text = "已處理 ${total} / ${total} 檔（100%）"
-                b.etaText.text = if(metrics.rateLimited>0)"行情來源限流，請稍後重試" else "掃描完成"
+                b.etaText.text = if(metrics.rateLimited>0)"行情來源限流 · 耗時 ${elapsedSec/60}分${elapsedSec%60}秒" else "完成 · 耗時 ${elapsedSec/60}分${elapsedSec%60}秒"
                 b.progressStats.text = "已分析 ${analyzed.get()}｜排除 ${excluded.get()}｜資料不足 ${insufficient.get()}｜失敗 ${failed.get()}\n日K快取 ${metrics.cached}｜下載 ${metrics.downloaded}｜來源限流 ${metrics.rateLimited}｜財報查核 ${financeQueries.get()}"
                 render()
                 handler.removeCallbacksAndMessages(null)
