@@ -21,6 +21,7 @@ import org.robolectric.shadows.ShadowDialog
 class RobotOptionMenusTest {
     private val app get()=RuntimeEnvironment.getApplication()
     @Before fun clean(){
+        runCatching{androidx.work.WorkManager.initialize(app,androidx.work.Configuration.Builder().build())}
         app.getSharedPreferences("backtest_robot",0).edit().clear().commit()
         app.getSharedPreferences("robot-params-draft",0).edit().clear().commit()
     }
