@@ -127,8 +127,9 @@ object BtRobotCheckpoint {
                 require(settings.marketGuardVersion==0||loaded.market.isNotEmpty()){"此備份缺少加權指數快照"}
                 if(conditions.exists()&&settings.let{s.getJSONObject("settings").optString("rulesVersion")==com.rex.twboardingscanner.domain.ScanConditions.VERSION}
                     &&s.has("flowRevision"))
-                    BtConditionIndex.read(conditions,loaded.series,BtConditionIndex.fingerprint(
-                        s.getString("datasetSha256"),settings,s.getString("flowRevision")))
+                    runCatching{BtConditionIndex.read(conditions,loaded.series,BtConditionIndex.fingerprint(
+                        s.getString("datasetSha256"),settings,s.getString("flowRevision")))}
+                        .onFailure{conditions.delete()} // Rebuild old indicator caches from the verified price snapshot.
             }else require(tested==0L&&!conditions.exists()){"缺少固定行情，不能續跑"}
             store.dataset(id).parentFile?.mkdirs()
             if(history.exists())history.copyTo(store.dataset(id))

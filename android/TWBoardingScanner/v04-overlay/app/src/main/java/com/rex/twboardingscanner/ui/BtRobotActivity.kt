@@ -145,10 +145,10 @@ class BtRobotActivity:AppCompatActivity(){
         sweepCheck=CheckBox(this).apply{
             tag="robot-grid-mode";text="自動範圍測試 · 持倉 × 淨利"
             textSize=15f;setTextColor(NeonUi.cyan)
-            contentDescription="啟用固定 ABC 條件的持倉、淨利下車全組合回測"
+            contentDescription="啟用固定 ABCD 條件的持倉、淨利下車全組合回測"
         }
         c.addView(sweepCheck)
-        c.addView(label("固定目前 ABC 勾選、產業、日期與本金。依下方範圍逐組測試，保留結果並自動結束。",11f))
+        c.addView(label("固定目前 ABCD 勾選、產業、日期與本金。依下方範圍逐組測試，保留結果並自動結束。",11f))
         sweepFields=NeonUi.vertical(this).apply{tag="robot-grid-fields"}
         hFrom=rangeInput("robot-holding-from");hTo=rangeInput("robot-holding-to")
         pFrom=rangeInput("robot-profit-from");pTo=rangeInput("robot-profit-to")
@@ -292,7 +292,7 @@ class BtRobotActivity:AppCompatActivity(){
         fixed.addView(trendHoldCheck)
         paramNotice=label("",11f).apply{tag="robot-parameter-notice"}
         fixed.addView(NeonUi.gap(this,8));fixed.addView(paramNotice)
-        fixed.addView(NeonUi.gap(this,6));fixed.addView(label("每次各買 1,000 股；超過 5 天可保本賣出，保留折讓金。測試日期、股票範圍、ABC 與產業採用目前批次快照；可從回測日誌完整同步。",11f))
+        fixed.addView(NeonUi.gap(this,6));fixed.addView(label("每次各買 1,000 股；超過 5 天可保本賣出，保留折讓金。測試日期、股票範圍、ABCD 與產業採用目前批次快照；可從回測日誌完整同步。",11f))
         fixed.addView(NeonUi.gap(this,10))
         fixed.addView(buildSweepPanel())
         val snapshot=store.session()?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()
@@ -347,7 +347,7 @@ class BtRobotActivity:AppCompatActivity(){
                     return@button
                 }
                 MaterialAlertDialogBuilder(this).setTitle("建立新的測試批次")
-                    .setMessage("會保留目前批次的全部結果，使用你選定的 ${chosenDates.start} → ${chosenDates.end} 歷史日期，以及目前 ABC、產業、股號範圍、下車規則和輸入的資金／持倉／獲利設定。日期改變時重新取得該期間的歷史行情，不沿用舊區間資料。建立後按開始才測試。")
+                    .setMessage("會保留目前批次的全部結果，使用你選定的 ${chosenDates.start} → ${chosenDates.end} 歷史日期，以及目前 ABCD、產業、股號範圍、下車規則和輸入的資金／持倉／獲利設定。日期改變時重新取得該期間的歷史行情，不沿用舊區間資料。建立後按開始才測試。")
                     .setNegativeButton("取消",null).setPositiveButton("建立"){_,_->
                         runTask("正在建立新的測試批次…"){
                             val previous=store.session()
@@ -416,7 +416,7 @@ class BtRobotActivity:AppCompatActivity(){
             .copy(enabledRadars=enabledRadars,dConfig=robotDConfig,stockPolicy=policy,stockScope=StockScope.ROBOT,marketGuardVersion=MarketCrashGuard.VERSION,
                 holdProfitUntilMa5Break=trendHoldCheck.isChecked),fixedRules=sweep!=null)
         BtRobotSpace.validate(next)
-        if(old!=null&&next==saved&&sweep==previousSweep)return old.getString("id")
+        if(old!=null&&old.optInt("analysisVersion")>=2&&next==saved&&sweep==previousSweep)return old.getString("id")
         val oldId=old?.optString("id").orEmpty()
         val required=if(sweep!=null)"0" else old?.optString("required","0")?:required()
         val forbidden=if(sweep!=null)"0" else old?.optString("forbidden","0")?:forbidden()
@@ -467,11 +467,11 @@ class BtRobotActivity:AppCompatActivity(){
         val desiredSweep=runCatching{selectedSweep()}.getOrNull()
         val invalidSweep=sweepCheck.isChecked&&desiredSweep==null
         val activeRuleSet=if(s==null)enabledRadars else BtSettingsCodec.decode(s.getJSONObject("settings")).enabledRadars
-        val searchVersion=s?.optInt("searchVersion",4)?:4
+        val searchVersion=s?.optInt("searchVersion",5)?:5
         val total=(sessionSweep?:if(s==null)desiredSweep else null)?.total?.let{BigInteger.valueOf(it.toLong())}
             ?:BtRobotSpace.total(required(),forbidden(),legacy=legacySpace,
                 enabled=if(searchVersion<4)defaultActiveRadars() else activeRuleSet,
-                includeD=searchVersion>=4)
+                includeD=searchVersion>=4,includeCost=searchVersion>=5)
         val remaining=total-BigInteger.valueOf(tested)
         val fixed=BtRobotSpace.required(required()).bitCount();val blocked=BtRobotSpace.required(forbidden()).bitCount()
         ruleSummary.text=if(sweepCheck.isChecked)"目前為持倉×淨利網格；啟用區域若無固定條件，開始時會補上該區預設條件。儲存區域條件可切換自由組合測試。"
@@ -495,7 +495,7 @@ class BtRobotActivity:AppCompatActivity(){
         val entered=runCatching{parameters()}.getOrNull()
         val dateError=runCatching{dates().validated()}.exceptionOrNull()?.message
         val matching=s?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}
-        val changed=s!=null&&(sessionSweep!=desiredSweep||
+        val changed=s!=null&&(s.optInt("analysisVersion")<2||sessionSweep!=desiredSweep||
             matching?.enabledRadars!=enabledRadars||matching.dConfig!=robotDConfig||
             dates()!=RobotBacktestDates.of(BtSettingsCodec.decode(s.getJSONObject("settings")))||
             entered!=null&&RobotTradingParams.of(BtSettingsCodec.decode(s.getJSONObject("settings")))!=entered)
@@ -503,7 +503,7 @@ class BtRobotActivity:AppCompatActivity(){
         status.text=when{
             dateError!=null->"測試日期錯誤：$dateError"
             invalid->"資金／持倉／淨利範圍有無效數字，請修改後再開始"
-            changed->"測試日期、參數或模式已修改；按開始將建立新批次並保留舊績效"
+            changed->"條件引擎、日期、參數或模式已更新；按開始將建立新批次並保留舊績效"
             guardChanged->"此舊批次未啟用大盤保護；按開始建立受保護新批次，舊績效保留"
             policyChanged->"禁股／限價已更新；按開始將建立新批次並沿用快取"
             else->s?.optString("message")?:"按開始測試，自動尋找更高收益組合"
@@ -521,6 +521,7 @@ class BtRobotActivity:AppCompatActivity(){
             "\n日期：${settings.start} → ${settings.end}"+
             "\n本金 ${num(settings.capital)} 元"+(if(sessionSweep==null)" · 持倉 ${settings.maxHoldingStocks} 檔 · 淨利 ${btPercent(settings.targetNetPct)}%"
                 else "\n持倉與淨利：按 ${sessionSweep.total} 組可調範圍逐組測試")+
+            "\n啟用：${radarLabel(s)} · D 固定 ${BtRobotSpace.rules(s.optString("required","0"))[RadarType.D_MAIN_FORCE].orEmpty().size}／排除 ${BtRobotSpace.rules(s.optString("forbidden","0"))[RadarType.D_MAIN_FORCE].orEmpty().size}"+
             "\n產業："+settings.sectors.sortedBy{it.ordinal}.joinToString("、"){it.label}+
             (if(!s.isNull("sourceJournalId"))"\n來源回測日誌：${s.optString("sourceJournalId").take(8)}" else "")
         }
@@ -563,7 +564,7 @@ class BtRobotActivity:AppCompatActivity(){
         val body=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(this@BtRobotActivity,12),
             NeonUi.dp(this@BtRobotActivity,12),NeonUi.dp(this@BtRobotActivity,12),NeonUi.dp(this@BtRobotActivity,12))}
         body.addView(label(if(total!=null)"已完成 ${session.getLong("tested")} / $total 組 · ${if(session.optString("state")=="DONE")"全部完成" else "持續測試中"}"
-            else "ABC 組合已測 ${session.getLong("tested")} 組",13f,NeonUi.cyan,true))
+            else "${radarLabel(session)} 組合已測 ${session.getLong("tested")} 組",13f,NeonUi.cyan,true))
         body.addView(NeonUi.gap(this,10))
         if(top.isEmpty())body.addView(label("尚無有效結果，第一組完成後就會顯示收益排名。",13f))
         top.forEachIndexed{i,r->
@@ -594,6 +595,9 @@ class BtRobotActivity:AppCompatActivity(){
             box.addView(label(if(sweep!=null)sweep.parseKey(key).label else
                 BtRobotSpace.rules(key).entries.joinToString(" · "){"${it.key.name.take(1)} ${it.value.size} 項"},13f,NeonUi.cyan))
             box.addView(label("買 ${r.getInt("buys")} 張／賣 ${r.getInt("closed")} 張 · 最大回撤 ${String.format(Locale.TAIWAN,"%.2f",r.getDouble("drawdown"))}%",11f))
+            r.optJSONObject("signalCounts")?.let{feedback->
+                box.addView(label(feedback.keys().asSequence().sorted().joinToString(" · "){"$it 符合 ${feedback.optInt(it)} 筆"}+" · 待查核 ${r.optInt("pendingChecks")} 項",11f,NeonUi.amber))
+            }
             box.addView(NeonUi.gap(this,6))
             box.addView(NeonUi.row(this,listOf(NeonUi.button(this,"條件快照"){store.session(id)?.let{BtSnapshotDialog.show(this,BtSettingsCodec.encode(settings(it,key)),"第 ${r.getLong("seq")} 組")}},NeonUi.button(this,"完整日誌"){openReport(id,key)})))
             records.addView(NeonUi.gap(this,8));records.addView(box)
@@ -757,12 +761,14 @@ class BtRobotActivity:AppCompatActivity(){
         recovering=true
         Thread{runCatching{BtRobotWorker.recover(this,s.getString("id"),s.optString("token"))};runOnUiThread{recovering=false}}.start()
     }
+    private fun radarLabel(session:JSONObject):String = BtSettingsCodec.decode(session.getJSONObject("settings")).enabledRadars
+        .sortedBy{it.ordinal}.joinToString(""){it.name.take(1)}
     private fun sessions(){
         if(busy)return
         val sessions=store.sessions();if(sessions.isEmpty()){Toast.makeText(this,"尚無測試紀錄",Toast.LENGTH_SHORT).show();return}
         val names=sessions.map{ item->
             val grid=BtRobotSweep.read(item.optJSONObject("sweep"))
-            "${BacktestJournalUi.time(item.getLong("created"))} · ${item.getLong("tested")} /${grid?.total?.toString()?:"ABC 探索"} 組\n"+
+            "${BacktestJournalUi.time(item.getLong("created"))} · ${radarLabel(item)} ${if(grid==null)"探索" else "參數"}組\n已測 ${item.getLong("tested")} / ${grid?.total?.toString()?: (store.remaining(item.getString("id"))+BigInteger.valueOf(item.getLong("tested"))).toString()} 組\n"+
                 (if(item.has("bestProfit"))"已測最佳 ${signed(item.getDouble("bestProfit"))} 元"else"尚無結果")+
                 (if(item.optString("state")=="DONE")" · 已完成"else"")
         }

@@ -108,6 +108,42 @@ class BtRobotTest {
         val truncated=data.map{s->s.copy(bars=s.bars.filter{RuleMetrics.tradingDate(it.time)<=base.end})}
         assertEquals(index.prepare(base).signals,BtConditionIndex.build(truncated,base).prepare(base).signals)
     }
+    @Test fun abcCacheCannotBeReusedAfterEnablingDAndDSignalsMatchReference(){
+        val data=series()
+        val abc=BtRobotSpace.settings().copy(end=LocalDate.of(2026,8,8),enabledRadars=defaultActiveRadars())
+        val d=abc.copy(enabledRadars=setOf(RadarType.D_MAIN_FORCE),
+            rules=empty()+mapOf(RadarType.D_MAIN_FORCE to setOf("price")))
+        assertNotEquals(BtConditionIndex.fingerprint("sample",abc),BtConditionIndex.fingerprint("sample",d))
+        val file=File(app.cacheDir,"abc-to-d.conditions.gz")
+        BtConditionIndex.build(data,abc).save(file,BtConditionIndex.fingerprint("sample",abc))
+        assertThrows(IllegalArgumentException::class.java){
+            BtConditionIndex.read(file,data,BtConditionIndex.fingerprint("sample",d))
+        }
+        val actual=BtConditionIndex.build(data,d).prepare(d)
+        assertTrue(actual.signals.isNotEmpty())
+        assertTrue(actual.signals.values.flatten().all{it.radar=="D"})
+        assertEquals(BacktestEngine.prepare(data,d).signals,actual.signals)
+        // Trading parameter changes still reuse the correct indicator cache.
+        assertEquals(BtConditionIndex.fingerprint("sample",d),
+            BtConditionIndex.fingerprint("sample",d.copy(capital=6000000.0,targetNetPct=3.0)))
+    }
+    @Test fun dOnlyExplorationKeepsThirteenRequiredAndSixExcluded(){
+        val options=ScanConditions.forRadar(RadarType.D_MAIN_FORCE).map{it.id}
+        val must=empty()+mapOf(RadarType.D_MAIN_FORCE to options.take(13).toSet())
+        val excluded=empty()+mapOf(RadarType.D_MAIN_FORCE to options.drop(13).take(6).toSet())
+        val required=BtRobotSpace.key(must);val forbidden=BtRobotSpace.key(excluded)
+        val active=setOf(RadarType.D_MAIN_FORCE)
+        assertEquals(BigInteger.ONE.shiftLeft(options.size-19),BtRobotSpace.total(required,forbidden,enabled=active))
+        val seen=mutableSetOf<String>();var cursor=BigInteger.ZERO
+        repeat(40){
+            val candidate=BtRobotSpace.next(required,null,cursor,BigInteger.valueOf(93),required,forbidden,enabled=active){it in seen}!!
+            cursor=candidate.cursor;seen+=candidate.key
+            val rules=BtRobotSpace.rules(candidate.key)
+            assertTrue(rules.getValue(RadarType.D_MAIN_FORCE).containsAll(options.take(13)))
+            assertTrue(rules.getValue(RadarType.D_MAIN_FORCE).intersect(options.drop(13).take(6).toSet()).isEmpty())
+            assertTrue(rules.filterKeys{it!=RadarType.D_MAIN_FORCE}.values.all{it.isEmpty()})
+        }
+    }
     @Test fun fixedCashUniqueCapAndFourPercentTargetAreEnforcedBySharedEngine(){
         val dates=listOf(LocalDate.of(2026,8,3),LocalDate.of(2026,8,4),LocalDate.of(2026,8,5))
         val data=(0..30).map{i->BtSeries("${2000+i}","公司$i",Market.TWSE,dates.mapIndexed{j,d->bar(d,100.0,if(j==1)110.0 else 101.0)})}
