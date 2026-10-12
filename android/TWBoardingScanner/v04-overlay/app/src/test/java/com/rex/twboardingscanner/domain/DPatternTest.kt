@@ -33,8 +33,8 @@ class DPatternTest{
     @Test fun DDefaultsAndHistoricalBitsNeverChange(){
         val dOptions=ScanConditions.forRadar(RadarType.D_MAIN_FORCE)
         val aOptions=ScanConditions.forRadar(RadarType.A_EARLY_BREAKOUT)
-        assertEquals(32,dOptions.size)
-        assertEquals(26,aOptions.size)
+        assertEquals(33,dOptions.size)
+        assertEquals(27,aOptions.size)
         assertEquals(aOptions.map{it.id},dOptions.drop(6).map{it.id})
         assertEquals((setOf(DPattern.LIMIT,DPattern.GREEN,DPattern.GAP,DPattern.VOLUME)+ScanConditions.D_A_DEFAULT_IDS),
             dOptions.filter{it.defaultEnabled}.map{it.id}.toSet())

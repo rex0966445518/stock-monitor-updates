@@ -15,8 +15,11 @@ class ScoringEngine {
         val reasons = active.filter { it.state == CheckState.PASS }.map { it.label }.toMutableList()
         if (upgraded) reasons += "技術升級：RSI>50 且收盤站上20日線"
         val light = if (blockers.isNotEmpty()) SignalLight.NONE else if (upgraded) SignalLight.RED else SignalLight.ORANGE
-        val evidence=if(type==RadarType.D_MAIN_FORCE)
-            metrics.dPattern.format() else if(type==RadarType.E_DIF_TOUCH) metrics.ePattern?.format()?:"E 日K資料不足，待查核" else null
+        val evidence=listOfNotNull(
+            if(type==RadarType.D_MAIN_FORCE)metrics.dPattern.format() else null,
+            if(type==RadarType.E_DIF_TOUCH)metrics.ePattern?.format()?:"E 日K資料不足，待查核" else null,
+            if(RsiGoldenCross.ID in selected)metrics.rsiGoldenCross?.format()?:"RSI(5/10) 資料不足，待查核" else null
+        ).joinToString("\n").ifBlank{null}
         return SignalResult(s.code, s.name, s.sector, type, score, light, reasons, blockers, s, checks, upgraded,evidence)
     }
     fun evaluateA(s: StockSnapshot, selected: Set<String> = defaults(RadarType.A_EARLY_BREAKOUT)) = evaluate(s, RadarType.A_EARLY_BREAKOUT, selected)

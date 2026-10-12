@@ -112,7 +112,7 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
         h.b.chartView.setBars(s.bars)
         VolumeStrip.bind(h.b.volumeSummary, h.b.recentVolumes, s.bars)
 
-        h.b.dEvidence?.visibility=if(r.radarType in setOf(RadarType.D_MAIN_FORCE,RadarType.E_DIF_TOUCH))android.view.View.VISIBLE else android.view.View.GONE
+        h.b.dEvidence?.visibility=if(r.dEvidence!=null)android.view.View.VISIBLE else android.view.View.GONE
         h.b.dEvidence?.text=r.dEvidence.orEmpty()
         h.b.closingAuction.bind(s.sourceStock?.closingAuction)
         h.b.financialPanel.bind(s.sourceStock?.financials,RuleMetrics(s).today)
@@ -131,7 +131,8 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
                 "d_limit" to "曾觸漲停", "d_green" to "連陽", "d_gap" to "向上缺口",
                 "d_unfilled" to "缺口未回補", "d_volume" to "連續放量",
                 "d_relative" to "勝過大盤",
-                "below_main_force_cost_20" to "低於估算主力成本"
+                "below_main_force_cost_20" to "低於估算主力成本",
+                RsiGoldenCross.ID to "RSI<35黃金交叉"
             )[check.id] ?: check.label.substringBefore("：")
             addCheck(h, short, check.state, check.selected)
         }

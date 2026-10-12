@@ -10,7 +10,7 @@ object BtRobotSpace {
     // used 65 bits. Append new features after ALL historical positions.
     val legacySlots=RadarType.entries.take(3).flatMap{type->
         ScanConditions.forRadar(type).filterNot{
-            it.id in ScanConditions.NEW_IDS||it.id==ScanConditions.MAIN_FORCE_COST_20
+            it.id in ScanConditions.NEW_IDS||it.id==ScanConditions.MAIN_FORCE_COST_20||it.id==RsiGoldenCross.ID
         }.map{type to it.id}
     }
     val slots=legacySlots+RadarType.entries.take(3).flatMap{type->
@@ -19,14 +19,15 @@ object BtRobotSpace {
     // v0.4.48 search keys have 102 fixed positions. Leave every existing
     // bit (including D's 31 inherited A predicates) exactly where it was.
     val dSlots=ScanConditions.forRadar(RadarType.D_MAIN_FORCE)
-        .filterNot{it.id==ScanConditions.MAIN_FORCE_COST_20}
+        .filterNot{it.id==ScanConditions.MAIN_FORCE_COST_20||it.id==RsiGoldenCross.ID}
         .map{RadarType.D_MAIN_FORCE to it.id}
     val v4Slots=slots+dSlots
     // All FOUR new switches are appended AFTER the historical bit 101.
     val mainCostSlots=RadarType.entries.take(4).map{it to ScanConditions.MAIN_FORCE_COST_20}
     val v5Slots=v4Slots+mainCostSlots
-    val eSlots=ScanConditions.forRadar(RadarType.E_DIF_TOUCH).map{RadarType.E_DIF_TOUCH to it.id}
-    val allSlots=v5Slots+eSlots
+    val eSlots=ScanConditions.forRadar(RadarType.E_DIF_TOUCH).filterNot{it.id==RsiGoldenCross.ID}.map{RadarType.E_DIF_TOUCH to it.id}
+    val rsiSlots=RadarType.entries.map{it to RsiGoldenCross.ID}
+    val allSlots=v5Slots+eSlots+rsiSlots
     val total:BigInteger=BigInteger.ONE.shiftLeft(allSlots.size)
     val legacyTotal:BigInteger=BigInteger.ONE.shiftLeft(legacySlots.size)
     fun key(rules:Map<RadarType,Set<String>>):String=allSlots.foldIndexed(BigInteger.ZERO){i,n,(type,id)->if(id in rules[type].orEmpty())n.setBit(i)else n}.toString(16)

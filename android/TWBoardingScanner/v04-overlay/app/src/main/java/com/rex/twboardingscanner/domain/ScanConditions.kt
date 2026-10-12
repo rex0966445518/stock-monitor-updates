@@ -108,6 +108,9 @@ object ScanConditions {
             ScanCondition(MAIN_FORCE_COST_20,
                 "現價低於估算主力成本（近20日成交量加權價格；非真實主力持股成本）",true){
                 it.belowMainForceCost20
+            },
+            ScanCondition(RsiGoldenCross.ID,"RSI(5)<35 且向上黃金交叉突破 RSI(10)（RSI5上升；Wilder）",true){
+                it.rsiGoldenCross?.passes
             }
         )
     }
@@ -120,6 +123,7 @@ class RuleMetrics(val s: StockSnapshot) {
     val last = bars.lastOrNull()
     val estimatedMainCost20 by lazy(LazyThreadSafetyMode.NONE){MainForceCost.estimate(bars)}
     val belowMainForceCost20:Boolean? get() = MainForceCost.below(last?.close?:Double.NaN,estimatedMainCost20)
+    val rsiGoldenCross by lazy(LazyThreadSafetyMode.NONE){RsiGoldenCross.inspect(bars.map{it.close})}
     val ePattern by lazy(LazyThreadSafetyMode.NONE){EPattern.inspect(bars.map{it.close},s.eConfig)}
     val dPattern by lazy(LazyThreadSafetyMode.NONE){DPattern.inspect(bars,s.dConfig,s.marketIndexCloses)}
     private val previous = bars.dropLast(1)
