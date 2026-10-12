@@ -142,7 +142,7 @@ class MainActivity: AppCompatActivity() {
         refreshRadarSwitches()
         b.scanConditionButton.setOnClickListener { showScanConditionsDialog() }
         posterExport=PosterExport(this)
-        b.refreshButton.text="導出海報"
+        b.refreshButton.text="導出 ABCD 海報"
         b.refreshButton.setOnClickListener {
             val snapshot=admitted()
             posterExport.generate(isScanning,ScanPoster.collect(snapshot),b.scanProgress.progress,b.scanProgress.max)
