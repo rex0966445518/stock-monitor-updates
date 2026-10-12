@@ -214,11 +214,20 @@ class MarketDataProvider(private val context: Context) {
         sectorMap: Map<String, Pair<String, StockSector>>,
         epsMap: Map<String, Double>, revMap: Map<String, Double>, out: MutableList<MarketStock>
     ) {
-        val arr = fetchArray("https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL") ?: return
+        val arr = fetchArray("https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL")
+        if(arr==null){
+            out+=TwseCsvBackup.load(context,sectorMap,epsMap,revMap)
+            return
+        }
         for (i in 0 until arr.length()) {
             val o = arr.optJSONObject(i) ?: continue
             val code = o.optString("Code").trim()
-            val meta = sectorMap[code] ?: continue
+            if(!code.matches(Regex("[1-9][0-9]{3}")))continue
+            // TWSE quotes have their own Name field; missing sector metadata
+            // must never erase the full listed market from the scan.
+            val meta=sectorMap[code]
+            val name=meta?.first?:o.optString("Name").takeIf{it.isNotBlank()}?:code
+            val sector=meta?.second?:StockSector.UNKNOWN
             val close = num(o.optString("ClosingPrice")) ?: continue
             val open = num(o.optString("OpeningPrice")) ?: close
             val high = num(o.optString("HighestPrice")) ?: close
@@ -227,7 +236,13 @@ class MarketDataProvider(private val context: Context) {
             val change = num(o.optString("Change")) ?: 0.0
             val prev = if (close - change != 0.0) close - change else close
             val pct = if (prev != 0.0) change / prev * 100.0 else 0.0
-            out += MarketStock(code, meta.first, Market.TWSE, meta.second, open, high, low, close, pct, (volShares / 1000L).toInt(), epsMap[code], revMap[code])
+            out += MarketStock(code, name, Market.TWSE, sector, open, high, low, close, pct, (volShares / 1000L).toInt(), epsMap[code], revMap[code])
+        }
+        // A small/invalid OpenAPI payload must not silently masquerade as
+        // complete TWSE coverage. Ask the second official endpoint once.
+        if(out.count{it.market==Market.TWSE}<100){
+            out.removeAll{it.market==Market.TWSE}
+            out+=TwseCsvBackup.load(context,sectorMap,epsMap,revMap)
         }
     }
 
