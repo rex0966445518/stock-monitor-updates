@@ -50,7 +50,7 @@ class MainActivity: AppCompatActivity() {
     private lateinit var posterExport: PosterExport
     private var chartDialog: StockChartDialog? = null
     private val adapter = SignalAdapter(onClick = { result ->
-        openStockChart(result.code, result.name, result.snapshot.sourceStock?.market, result.snapshot.bars)
+        ChipKLauncher.open(this@MainActivity,result.code,result.name)
     }, onFinancial = { result -> showFinancialReport(result) })
     private lateinit var financialProvider: com.rex.twboardingscanner.data.FinancialDataProvider
     private val auctionProvider = com.rex.twboardingscanner.data.ClosingAuctionProvider()
@@ -775,7 +775,7 @@ class MainActivity: AppCompatActivity() {
 
         val rv = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
-            adapter = HistoryAdapter { row -> openStockChart(row.code, row.name, bars = row.chartBars) }.apply { submit(rows) }
+            adapter = HistoryAdapter { row -> ChipKLauncher.open(this@MainActivity,row.code,row.name) }.apply { submit(rows) }
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 dp(520)

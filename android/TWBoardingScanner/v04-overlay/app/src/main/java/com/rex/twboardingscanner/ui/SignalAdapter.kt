@@ -56,7 +56,7 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
         h.b.root.isFocusable = true
         h.b.root.setOnClickListener { onClick(r) }
         h.b.chartView.setOnClickListener { onClick(r) }
-        h.b.root.contentDescription = "${r.code} ${r.name}，點擊查看日K、成交量與MACD"
+        h.b.root.contentDescription = "${r.code} ${r.name}，點擊開啟籌碼K線 App 查看日K"
         val accent = when(r.radarType) {
             RadarType.A_EARLY_BREAKOUT -> NeonUi.pink
             RadarType.B_DEEP_REVERSAL -> NeonUi.amber
