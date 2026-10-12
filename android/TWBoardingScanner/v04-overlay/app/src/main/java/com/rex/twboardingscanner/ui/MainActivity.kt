@@ -312,7 +312,8 @@ class MainActivity: AppCompatActivity() {
                 b.scanProgress.isIndeterminate = false
                 b.scanProgress.max = total
                 b.scanProgress.progress = 0
-                b.progressTitle.text = "全市場逐檔掃描中"
+                val coverage=provider.universeCoverage
+                b.progressTitle.text = if(coverage.complete)"全市場逐檔掃描中" else "部分市場資料缺漏（${coverage.description}）"
             }
 
             universe.forEach { stock ->
@@ -463,9 +464,15 @@ class MainActivity: AppCompatActivity() {
                 b.startScanButton.isEnabled=true;b.startScanButton.text="開始掃描"
                 b.scanProgress.progress = total
                 val metrics=provider.historyStats()
-                b.progressTitle.text = if(metrics.rateLimited>0||failed.get()>0)"掃描結束 · 部分行情待重試" else "全市場掃描完成"
+                val coverage=provider.universeCoverage
+                b.progressTitle.text = when{
+                    !coverage.complete->"部分市場掃描完畢（${coverage.description}）"
+                    metrics.rateLimited>0||failed.get()>0->"掃描結束 · 部分行情待重試"
+                    else->"全市場掃描完成"
+                }
                 b.progressCount.text = "已處理 ${total} / ${total} 檔（100%）"
-                b.etaText.text = if(metrics.rateLimited>0)"行情來源限流 · 耗時 ${elapsedSec/60}分${elapsedSec%60}秒" else "完成 · 耗時 ${elapsedSec/60}分${elapsedSec%60}秒"
+                b.etaText.text = if(metrics.rateLimited>0)"行情限流 · 耗時 ${elapsedSec/60}分${elapsedSec%60}秒" else "完成 · 耗時 ${elapsedSec/60}分${elapsedSec%60}秒"
+                if(!coverage.complete)Toast.makeText(this,"上市／上櫃資料來源不完整，本輪僅分析已取得的股票；請稍後重掃。",Toast.LENGTH_LONG).show()
                 b.progressStats.text = "已分析 ${analyzed.get()}｜排除 ${excluded.get()}｜資料不足 ${insufficient.get()}｜失敗 ${failed.get()}\n日K快取 ${metrics.cached}｜下載 ${metrics.downloaded}｜來源限流 ${metrics.rateLimited}｜財報查核 ${financeQueries.get()}"
                 render()
                 handler.removeCallbacksAndMessages(null)

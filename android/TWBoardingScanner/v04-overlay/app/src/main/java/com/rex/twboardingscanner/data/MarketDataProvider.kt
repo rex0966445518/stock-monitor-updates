@@ -30,6 +30,12 @@ class MarketDataProvider(private val context: Context) {
     private val historyRequests=AtomicInteger()
 
     data class HistoryStats(val cached:Int,val downloaded:Int,val failed:Int,val rateLimited:Int,val requests:Int)
+    data class UniverseCoverage(val listed:Int,val otc:Int){
+        val complete:Boolean get()=listed>0&&otc>0
+        val description:String get()="上市 $listed 檔・上櫃 $otc 檔"
+    }
+    @Volatile var universeCoverage=UniverseCoverage(0,0)
+        private set
     fun historyStats()=HistoryStats(cacheHits.get(),historyDownloads.get(),historyFailures.get(),historyBlocked.get(),historyRequests.get())
     fun resetHistoryStats(){
         cacheHits.set(0);historyDownloads.set(0);historyFailures.set(0)
@@ -62,6 +68,7 @@ class MarketDataProvider(private val context: Context) {
         val result = mutableListOf<MarketStock>()
         loadTwseQuotes(sectorMap, epsMap, revMap, result)
         loadTpexQuotes(sectorMap, epsMap, revMap, result)
+        universeCoverage=UniverseCoverage(result.count{it.market==Market.TWSE},result.count{it.market==Market.TPEX})
         return result.distinctBy { it.code }.sortedBy { it.code }
     }
 
