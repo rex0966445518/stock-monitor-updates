@@ -12,17 +12,24 @@ data class ScanCondition(val id: String, val label: String, val extra: Boolean =
 }
 
 object ScanConditions {
-    const val VERSION = "20261012-D1"
-    const val PREVIOUS_VERSION="20261012"
+    const val VERSION = "20261012-D2"
+    const val PREVIOUS_VERSION="20261012-D1"
+    const val PRE_D_VERSION="20261012"
     const val LEGACY_VERSION = "20261009"
+    /** New D defaults are moderate: no forced breakout/convergence on top of D momentum. */
+    val D_A_DEFAULT_IDS=setOf("price","volume","macd","rsi","ma5up")
+    /** Every A checkbox can be applied independently inside D, including financial rules. */
+    val A_RULE_IDS by lazy { forRadar(RadarType.A_EARLY_BREAKOUT).map{it.id}.toSet() }
     const val MA5_TOUCH_MA10 = "ma5_touch_ma10"
     const val ACTIVE_BUY_SELL_15 = "active_buy_sell_15"
     val NEW_IDS=setOf(MA5_TOUCH_MA10,ACTIVE_BUY_SELL_15)
     fun forRadar(type: RadarType): List<ScanCondition> {
         if(type==RadarType.D_MAIN_FORCE){
-            // Keep exactly six independent D predicates. Numeric thresholds are frozen
-            // inside StockSnapshot.dConfig and used by both scans and historical replay.
-            return listOf(
+            // Keep the original SIX D bit positions identical to v0.4.47.
+            // Append an independent copy of EVERY A rule (same rule ID/formula,
+            // scoped to D). Newly copied high-selectivity basics are defaults;
+            // optional A filters remain opt-in to avoid silently returning zero stocks.
+            val originalD=listOf(
                 ScanCondition(DPattern.LIMIT,"近 N 交易日至少 K 次收盤達估算漲停價"){DPattern.checks(it.dPattern)[DPattern.LIMIT]},
                 ScanCondition(DPattern.GREEN,"近 N 交易日曾連續 K 根陽線"){DPattern.checks(it.dPattern)[DPattern.GREEN]},
                 ScanCondition(DPattern.GAP,"近 N 交易日曾有向上不重疊缺口"){DPattern.checks(it.dPattern)[DPattern.GAP]},
@@ -30,6 +37,11 @@ object ScanConditions {
                 ScanCondition(DPattern.VOLUME,"最近 K 日成交量各達先前 N 日均量 M 倍"){DPattern.checks(it.dPattern)[DPattern.VOLUME]},
                 ScanCondition(DPattern.RELATIVE,"連陽期間個股漲幅高於加權指數（需官方同期資料）",true){DPattern.checks(it.dPattern)[DPattern.RELATIVE]}
             )
+            val aOptions=forRadar(RadarType.A_EARLY_BREAKOUT).map{rule->
+                rule.copy(extra=rule.id !in D_A_DEFAULT_IDS)
+            }
+            check(aOptions.size==25&&aOptions.map{it.id}.distinct().size==aOptions.size)
+            return originalD+aOptions
         }
         val basic = listOf(
             ScanCondition("price", "股價 ≥ 50 元") { it.last?.close?.let { p -> p >= 50 } },
