@@ -48,9 +48,11 @@ class RobotOptionMenusTest {
     @Test fun everyRadarOpensItsOwnRuleMenuEvenInGridMode(){
         val store=BtRobotStore(app);store.create(settings(),sweep=BtRobotSweep(10,12,3,4))
         val ctl=Robolectric.buildActivity(BtRobotActivity::class.java).setup();val a=ctl.get()
-        assertTrue(find(a.window.decorView,"robot-required")!!.isEnabled)
+        assertNull(find(a.window.decorView,"robot-required"))
+        val options=find(a.window.decorView,"robot-condition-settings")!!
+        assertNotNull(find(options,"robot-sectors"))
         for(type in RadarType.entries){
-            find(a.window.decorView,"robot-rules-${type.name}")!!.performClick()
+            find(options,"robot-rules-${type.name}")!!.performClick()
             val dialog=ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
             val id=ScanConditions.forRadar(type).first().id
             val row=find(dialog.window!!.decorView,"required-${type.name}-$id") as BtRuleChoice
@@ -88,4 +90,3 @@ class RobotOptionMenusTest {
         ctl.pause().stop().destroy()
     }
 }
-

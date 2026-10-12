@@ -27,7 +27,8 @@ class BtRobotActivity:AppCompatActivity(){
     private lateinit var bestButton:com.google.android.material.button.MaterialButton
     private lateinit var records:LinearLayout
     private lateinit var sectorButton:com.google.android.material.button.MaterialButton
-    private lateinit var requiredButton:com.google.android.material.button.MaterialButton
+    private lateinit var ruleSummary:TextView
+    private val radarRuleButtons=mutableMapOf<RadarType,com.google.android.material.button.MaterialButton>()
     private lateinit var spaceLabel:TextView
     private lateinit var robotRange:TextView
     private lateinit var robotStartDate:com.google.android.material.button.MaterialButton
@@ -242,22 +243,29 @@ class BtRobotActivity:AppCompatActivity(){
             if(!busy)startActivity(Intent(this,TradeSideVolumeImportActivity::class.java))
         }.apply{tag="robot-flow-import"})
         root.addView(NeonUi.gap(this,8))
-        root.addView(label("ABCD 參與分析 · 按鈕亮起才進行此類型計算",12f,NeonUi.cyan))
-        root.addView(NeonUi.row(this,RadarType.entries.map{type->
+        val options=panel(NeonUi.cyan).apply{tag="robot-condition-settings"}
+        options.addView(label("ABCD 參與分析 · 按鈕亮起才進行此類型計算",12f,NeonUi.cyan))
+        options.addView(NeonUi.row(this,RadarType.entries.map{type->
             NeonUi.button(this,"",NeonUi.cyan){
                 enabledRadars=if(type in enabledRadars)enabledRadars-type else enabledRadars+type
                 refreshRadarModes()
             }.apply{tag="robot-enabled-${type.name}";textSize=12f}.also{radarModeButtons[type]=it}
         }))
-        root.addView(NeonUi.row(this,RadarType.entries.map{type->
+        options.addView(NeonUi.row(this,RadarType.entries.map{type->
             NeonUi.button(this,"${type.name.take(1)} 條件 ▾",NeonUi.mint){openRuleOptions(type)}
-                .apply{tag="robot-rules-${type.name}";textSize=12f}
+                .apply{tag="robot-rules-${type.name}";textSize=11f}.also{radarRuleButtons[type]=it}
         }))
-        root.addView(label("各區條件：單點必選、空白自由測試、雙擊排除；設定不會改變上方啟停開關。",11f))
-        root.addView(NeonUi.button(this,"D 主力進場 · 數值門檻",NeonUi.mint){
+        options.addView(label("各區條件：單點必選、空白自由測試、雙擊排除；設定不會改變上方啟停開關。",11f))
+        options.addView(NeonUi.button(this,"D 主力進場 · 數值門檻",NeonUi.mint){
             DPatternEditor.show(this,robotDConfig){cfg->robotDConfig=cfg;refreshRadarModes()}
         }.apply{tag="robot-d-parameters"})
-        root.addView(NeonUi.gap(this,12))
+        options.addView(NeonUi.gap(this,12))
+        sectorButton=NeonUi.button(this,"產業保留／排除",NeonUi.mint){
+            if(!busy){hideInput();val settings=store.session()?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()
+                RobotSectorDialog.show(this,settings.sectors){applySectors(it)}}
+        }.apply{tag="robot-sectors"};options.addView(sectorButton)
+        ruleSummary=label("",11f,NeonUi.cyan).apply{tag="robot-rule-summary"};options.addView(ruleSummary)
+        root.addView(options)
         val fixed=panel(NeonUi.cyan)
         fixed.addView(label("測試範圍與可調整參數",15f,NeonUi.ink,true));fixed.addView(NeonUi.gap(this,6))
         robotRange=label("",14f,NeonUi.cyan,true).apply{tag="robot-date-range"}
@@ -319,11 +327,7 @@ class BtRobotActivity:AppCompatActivity(){
         root.addView(NeonUi.gap(this,6))
         val manageFirst=NeonUi.row(this,listOf(NeonUi.button(this,"未測組合"){untested()},NeonUi.button(this,"測試紀錄"){sessions()}));root.addView(manageFirst)
         root.addView(NeonUi.gap(this,6))
-        requiredButton=NeonUi.button(this,"條件選單",NeonUi.cyan){openRuleOptions(RadarType.A_EARLY_BREAKOUT)};requiredButton.tag="robot-required";root.addView(requiredButton)
-        sectorButton=NeonUi.button(this,"產業保留／排除",NeonUi.mint){
-            if(!busy){hideInput();val settings=store.session()?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()
-                RobotSectorDialog.show(this,settings.sectors){applySectors(it)}}
-        }.apply{tag="robot-sectors"};root.addView(sectorButton)
+
         root.addView(NeonUi.gap(this,6))
         root.addView(NeonUi.button(this,"一鍵清除零收益",NeonUi.amber){clearZeros()}.apply{tag="robot-clear-zero"})
         root.addView(NeonUi.gap(this,6))
@@ -377,7 +381,7 @@ class BtRobotActivity:AppCompatActivity(){
         root.addView(controls,1)
         root.removeView(toolsRow);fixed.addView(NeonUi.gap(this,8));fixed.addView(toolsRow)
         NeonUi.group(root,fixed,configLast,"測試參數與下車條件","本金、持倉、淨利可編輯；沿用快照日期及 5 組認賠條件","robot-settings")
-        NeonUi.group(root,manageFirst,manageLast,"條件選單與批次管理","必選／排除、匯入匯出與續跑","robot-management")
+        NeonUi.group(root,manageFirst,manageLast,"批次管理","測試紀錄、匯入匯出與續跑","robot-management")
         render()
     }
     override fun onResume(){super.onResume();visible=true;handler.post(poll)}
@@ -473,8 +477,13 @@ class BtRobotActivity:AppCompatActivity(){
                 includeD=searchVersion>=4)
         val remaining=total-BigInteger.valueOf(tested)
         val fixed=BtRobotSpace.required(required()).bitCount();val blocked=BtRobotSpace.required(forbidden()).bitCount()
-        requiredButton.text="條件選單 · 必選 $fixed／排除 $blocked"
-        requiredButton.isEnabled=!busy
+        ruleSummary.text=if(sweepCheck.isChecked)"目前為持倉×淨利網格，ABCD 條件固定；儲存區域條件會切換為條件組合測試。"
+            else "目前條件：必選 $fixed／排除 $blocked；其餘由機器人自由測試"
+        val selectedRules=BtRobotSpace.rules(required());val excludedRules=BtRobotSpace.rules(forbidden())
+        radarRuleButtons.forEach{(type,button)->
+            button.text="${type.name.take(1)} 條件 ▾\n必選 ${selectedRules[type].orEmpty().size}／排除 ${excludedRules[type].orEmpty().size}"
+            button.isEnabled=!busy
+        }
         val sectors=s?.let{BtSettingsCodec.decode(it.getJSONObject("settings")).sectors}?:base().sectors
         sectorButton.text="產業選單 · 保留 ${sectors.size}／排除 ${StockSector.entries.size-sectors.size}"
         sectorButton.isEnabled=!busy
