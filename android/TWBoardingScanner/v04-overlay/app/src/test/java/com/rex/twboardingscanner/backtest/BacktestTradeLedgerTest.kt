@@ -92,7 +92,7 @@ class BacktestTradeLedgerTest {
         ctl.pause().stop().destroy()
     }
     private fun capture(v:View,name:String){
-        v.measure(View.MeasureSpec.makeMeasureSpec(720,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(1800,View.MeasureSpec.EXACTLY));v.layout(0,0,720,1800)
+        v.measure(View.MeasureSpec.makeMeasureSpec(720,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));v.layout(0,0,720,v.measuredHeight)
         fun check(w:View){if(w is TextView&&w.layout!=null&&w.text.isNotEmpty())assertTrue("clipped ${w.text}",w.layout.height<=w.height-w.compoundPaddingTop-w.compoundPaddingBottom+2);if(w is ViewGroup)for(i in 0 until w.childCount)check(w.getChildAt(i))}
         check(v);val bitmap=Bitmap.createBitmap(720,1800,Bitmap.Config.ARGB_8888);v.draw(Canvas(bitmap));val f=File("build/ui-previews/$name.png");f.parentFile.mkdirs();f.outputStream().use{bitmap.compress(Bitmap.CompressFormat.PNG,100,it)};bitmap.recycle()
     }
