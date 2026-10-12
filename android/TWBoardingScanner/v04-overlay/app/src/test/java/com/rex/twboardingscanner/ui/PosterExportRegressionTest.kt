@@ -30,7 +30,7 @@ import java.time.LocalDate
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class PosterExportRegressionTest {
     class Host:AppCompatActivity(){
-        lateinit var exporter:PosterExport
+        internal lateinit var exporter:PosterExport
         override fun onCreate(state:Bundle?){
             setTheme(R.style.Theme_TWBoardingScanner)
             super.onCreate(state)
