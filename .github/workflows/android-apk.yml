@@ -101,7 +101,16 @@ jobs:
           zip -q "TWBoardingScanner-v$VERSION.zip" "TWBoardingScanner-v$VERSION.apk"
           python3 android/TWBoardingScanner/write_update_manifest.py
 
+      - name: Upload review APK
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: TWBoardingScanner-review-APK
+          path: _android_build/TWBoardingScanner_Android_v02/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
       - name: Upload artifact
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: TWBoardingScanner-APK
