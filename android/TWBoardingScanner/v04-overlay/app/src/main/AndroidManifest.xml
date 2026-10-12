@@ -8,6 +8,10 @@
  <application android:allowBackup="true" android:label="AI-離職神器" android:theme="@style/Theme.TWBoardingScanner">
  <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.posters" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/poster_paths"/></provider>
  <service android:name="androidx.work.impl.foreground.SystemForegroundService" android:foregroundServiceType="dataSync" tools:node="merge"/>
+ <service android:name=".ui.ChipKSearchService" android:exported="true" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:label="籌碼K線搜尋輔助">
+  <intent-filter><action android:name="android.accessibilityservice.AccessibilityService"/></intent-filter>
+  <meta-data android:name="android.accessibilityservice" android:resource="@xml/chipk_search_service"/>
+ </service>
  <activity android:name=".ui.StockToolsActivity" android:exported="false"/>
  <activity android:name=".ui.AppUpdateActivity" android:exported="false"/>
  <activity android:name=".ui.BtRobotActivity" android:exported="false"/>
