@@ -583,6 +583,9 @@ class MainActivity: AppCompatActivity() {
             // gently add five useful A guards. Never resurrect an intentionally
             // blank D selection or overwrite a saved D2 selection.
             if(type==RadarType.D_MAIN_FORCE&&savedRules!=null&&savedRules.isNotEmpty()&&
+                // Only migrate v0.4.47 or older D settings. D2 users may have
+                // intentionally deselected one of the original five guards.
+                prefs.getStringSet("rules_${ScanConditions.PREVIOUS_VERSION}_${type.name}",null)==null&&
                 prefs.getStringSet("rules_${ScanConditions.VERSION}_${type.name}",null)==null&&
                 !prefs.getBoolean("d_a_filters_migrated_v048",false)){
                 chosen=chosen+ScanConditions.D_A_DEFAULT_IDS
