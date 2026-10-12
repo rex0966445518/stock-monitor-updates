@@ -94,6 +94,7 @@ internal class PosterExport(private val activity:AppCompatActivity) {
             setBackgroundColor(android.graphics.Color.rgb(4,17,30))
         }
         val image=ImageView(activity).apply{
+            tag="poster-preview-image"
             adjustViewBounds=true
             setBackgroundColor(android.graphics.Color.rgb(4,17,30))
             contentDescription="掃描海報預覽"

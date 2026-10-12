@@ -13,6 +13,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.rex.twboardingscanner.R
 import com.rex.twboardingscanner.domain.RadarType
 import org.junit.Assert.*
+import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -43,10 +44,15 @@ class PosterExportRegressionTest {
         if(root is ViewGroup)for(i in 0 until root.childCount)find(root.getChildAt(i),tag)?.let{return it}
         return null
     }
-    private fun findImage(root:View):ImageView?{
-        if(root is ImageView)return root
-        if(root is ViewGroup)for(i in 0 until root.childCount)findImage(root.getChildAt(i))?.let{return it}
-        return null
+    // FileProvider caches roots per authority across Robolectric application sandboxes.
+    // Clear only the test JVM's static cache after using its share chooser; otherwise
+    // the unrelated updater URI test could inherit this test's temporary filesDir.
+    @After fun clearRobolectricFileProviderRoots(){
+        val field=androidx.core.content.FileProvider::class.java.getDeclaredField("sCache")
+        field.isAccessible=true
+        @Suppress("UNCHECKED_CAST")
+        val cache=field.get(null) as MutableMap<Any,Any>
+        synchronized(cache){cache.clear()}
     }
     private fun prepared(host:Host):List<File>{
         val folder=File(host.cacheDir,"posters/regression-4");folder.mkdirs()
@@ -98,7 +104,8 @@ class PosterExportRegressionTest {
             val control=find(decor,"poster-tab-${section.letter}")
             assertNotNull("Missing ${section.label} preview tab",control)
             assertTrue(control!!.performClick())
-            assertEquals("${section.label} 海報預覽",findImage(decor)?.contentDescription?.toString())
+            assertEquals("${section.label} 海報預覽",
+                (find(decor,"poster-preview-image") as ImageView).contentDescription?.toString())
         }
         assertTrue(dialog.getButton(DialogInterface.BUTTON_POSITIVE).text.toString().contains("4 張"))
         assertTrue(dialog.getButton(DialogInterface.BUTTON_NEUTRAL).text.toString().contains("4 張"))
