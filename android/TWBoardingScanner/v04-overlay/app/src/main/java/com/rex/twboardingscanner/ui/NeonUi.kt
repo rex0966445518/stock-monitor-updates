@@ -87,6 +87,17 @@ internal object NeonUi {
         button.backgroundTintList=ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled),intArrayOf()),intArrayOf(border,ruby))
         button.strokeWidth=dp(button.context,1).coerceAtLeast(1);button.strokeColor=ColorStateList.valueOf(neonRed);button.typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
     }
+    fun radarSwitch(button:MaterialButton,type:com.rex.twboardingscanner.domain.RadarType,on:Boolean){
+        button.text="${type.label}\n${if(on)"✓ 已啟用" else "— 已停用"}"
+        button.textSize=12f;button.minHeight=dp(button.context,64)
+        button.isSelected=on;button.isCheckable=true;button.isChecked=on
+        val accent=radarColor(type)
+        button.setTextColor(if(on)canvas else muted)
+        button.backgroundTintList=ColorStateList.valueOf(if(on)accent else surface)
+        button.strokeColor=ColorStateList.valueOf(if(on)accent else border)
+        button.strokeWidth=dp(button.context,if(on)2 else 1)
+        button.contentDescription="${type.label}，${if(on)"已啟用，點擊停用" else "已停用，點擊啟用"}"
+    }
     fun selected(button:MaterialButton,active:Boolean,accent:Int=labelAccent(button.text)?:cyan){
         button.isSelected=active
         button.backgroundTintList=ColorStateList.valueOf(if(active)tint(accent,.15f) else surface)

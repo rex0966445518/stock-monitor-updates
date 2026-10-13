@@ -14,7 +14,7 @@ internal object ExitRulesEditor {
         val viewport=NeonUi.vertical(c).apply{
             setPadding(NeonUi.dp(c,16),NeonUi.dp(c,20),NeonUi.dp(c,16),NeonUi.dp(c,16))
             addView(NeonUi.label(c,"下車賣出條件",23f,NeonUi.ink,true))
-            addView(NeonUi.gap(c,6));addView(NeonUi.label(c,"$title · 原5組＋技術風險退出，空白不限制",12f))
+            addView(NeonUi.gap(c,6));addView(NeonUi.label(c,"$title · 原5組＋2項獨立退出，空白不限制",12f))
             addView(NeonUi.gap(c,12))
             addView(ScrollView(c).apply{addView(form);isFillViewport=false},LinearLayout.LayoutParams(-1,0,1f))
             addView(NeonUi.gap(c,12))
@@ -36,6 +36,7 @@ internal object ExitRulesEditor {
     }
     internal class Form(c:Context,rules:List<ExitRule>):LinearLayout(c) {
         private val fields=mutableListOf<Fields>()
+        private val ma5=CheckBox(c).apply{tag="exit-ma5-only";text="獨立賣出：日K收盤跌破5日線（不參考RSI、不限盈虧）";setTextColor(NeonUi.mint)}
         private val bearish=CheckBox(c).apply{tag="exit-bearish-turn";text="獨立風險退出："+BearishTurn.LABEL+"（不限盈虧）";setTextColor(NeonUi.pink)}
         init {
             orientation=VERTICAL;setPadding(NeonUi.dp(c,16),NeonUi.dp(c,8),NeonUi.dp(c,16),NeonUi.dp(c,16));setBackgroundColor(NeonUi.canvas)
@@ -71,14 +72,14 @@ internal object ExitRulesEditor {
                 card.removeViewAt(0)
                 NeonUi.group(this,card,card,"第 ${i+1} 組 · 認賠賣出",key="",expanded=i==0||rules.getOrNull(i)?.active==true)
             }
-            addView(bearish);addView(NeonUi.label(c,"技術風險退出為獨立 OR 條件；回測／機器人用完整日K確認後，次一可交易日開盤賣出，不以觸發日收盤偷跑。MACD指EMA9訊號線，RSI14採Wilder平滑。",12f));bind(rules)
+            addView(ma5);addView(NeonUi.label(c,"勾選後不需達到淨利目標，也不受 RSI 續抱限制；收盤低於5MA即觸發，回測於次一可交易日開盤賣出。",12f));addView(bearish);addView(NeonUi.label(c,"技術風險退出為獨立 OR 條件；回測／機器人用完整日K確認後，次一可交易日開盤賣出，不以觸發日收盤偷跑。MACD指EMA9訊號線，RSI14採Wilder平滑。",12f));bind(rules)
         }
         private fun bindRow(i:Int,r:ExitRule){val f=fields[i];f.days.setText(r.days?.toString().orEmpty());f.compare.setSelection(r.compare?.ordinal?.plus(1)?:0);f.loss.setText(r.lossPct?.let{java.math.BigDecimal.valueOf(it).stripTrailingZeros().toPlainString()}.orEmpty());f.macd.setSelection(r.macd?.ordinal?.plus(1)?:0);f.ma.setText(r.maDays?.toString().orEmpty())}
-        fun bind(rules:List<ExitRule>){bearish.isChecked=rules.any{it.bearishExit};val ordinary=rules.filterNot{it.bearishExit};fields.indices.forEach{bindRow(it,ordinary.getOrNull(it)?:ExitRule())}}
+        fun bind(rules:List<ExitRule>){ma5.isChecked=rules.any{it.ma5Exit};bearish.isChecked=rules.any{it.bearishExit};val ordinary=rules.filterNot{it.bearishExit||it.ma5Exit};fields.indices.forEach{bindRow(it,ordinary.getOrNull(it)?:ExitRule())}}
         fun read():List<ExitRule> = fields.mapIndexed{i,f->
             fun integer(e:EditText):Int? {val raw=e.text.toString().trim();if(raw.isBlank())return null;return raw.toIntOrNull()?:error("第 ${i+1} 組請填有效整數")}
             val raw=f.loss.text.toString().trim();val loss=if(raw.isBlank())null else raw.toDoubleOrNull()?:error("第 ${i+1} 組虧損幅度無效")
             ExitRule(integer(f.days),LossCompare.entries.getOrNull(f.compare.selectedItemPosition-1),loss,ExitMacd.entries.getOrNull(f.macd.selectedItemPosition-1),integer(f.ma)).also{it.validate()}
-        }.let{it+if(bearish.isChecked)listOf(ExitRule(bearishExit=true))else emptyList()}.also(ExitRules::validate)
+        }.let{it+if(bearish.isChecked)listOf(ExitRule(bearishExit=true))else emptyList()}.let{it+if(ma5.isChecked)listOf(ExitRule(ma5Exit=true))else emptyList()}.also(ExitRules::validate)
     }
 }

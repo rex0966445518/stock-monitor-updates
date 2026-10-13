@@ -93,7 +93,7 @@ class PaperStrategyActivity:AppCompatActivity() {
         exitButton=NeonUi.button(this,"",NeonUi.amber){
             ExitRulesEditor.show(this,"自買自投",exitRules){selected->
                 exitRules=selected
-                exitButton.text="下車賣出條件 · ${selected.count{it.active}} / 6 項"
+                exitButton.text="下車賣出條件 · ${selected.count{it.active}} / 7 項"
             }
         }.apply{tag="paper-exit-rules"}
         trade.addView(exitButton)
@@ -141,7 +141,7 @@ class PaperStrategyActivity:AppCompatActivity() {
     }
     private fun refreshControls(){
         startDateButton.text="起始日\n$start";endDateButton.text="結束日\n$end"
-        exitButton.text="下車賣出條件 · ${exitRules.count{it.active}} / 6 項"
+        exitButton.text="下車賣出條件 · ${exitRules.count{it.active}} / 7 項"
         sectorButton.text="產業篩選 · ${sectors.size} 類"
         radarButtons.forEach{(type,button)->button.text="${type.label}\n${if(type in preset.enabledRadars)"●" else "○"} · ${rules[type].orEmpty().size} 項"}
         refreshPolicy()

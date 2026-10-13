@@ -45,7 +45,7 @@ class FPatternTest {
         val restored=BtSettingsCodec.decode(old)
         assertFalse(f in restored.enabledRadars)
         assertEquals(FPatternConfig.DEFAULT,restored.fConfig)
-        assertEquals(BtRobotSpace.v5Slots+BtRobotSpace.eSlots+BtRobotSpace.rsiSlots,BtRobotSpace.allSlots.dropLast(ScanConditions.forRadar(f).size))
+        assertEquals(BtRobotSpace.v5Slots+BtRobotSpace.eSlots+BtRobotSpace.rsiSlots,BtRobotSpace.v6Slots.dropLast(ScanConditions.forRadar(f).count{it.id !in ScanConditions.MOMENTUM_IDS}))
         assertTrue(runCatching{FPatternConfig(volumePct=100.0).validated()}.isFailure)
     }
     @Test fun allSixtyFourSwitchCombinationsMatchDirectAndCachedDetection(){

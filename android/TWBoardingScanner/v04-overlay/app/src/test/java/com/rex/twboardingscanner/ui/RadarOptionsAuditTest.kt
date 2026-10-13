@@ -31,7 +31,7 @@ class RadarOptionsAuditTest {
         RadarType.D_MAIN_FORCE to setOf(DPattern.LIMIT,DPattern.GREEN,DPattern.GAP,DPattern.VOLUME),
         RadarType.E_DIF_TOUCH to setOf(EPattern.EVENT,EPattern.CROSS),
         RadarType.F_VOLUME_CONTRACTION to setOf(FPattern.EVENT,"f_average","f_dif")
-    )
+    ).mapValues{it.value+ScanConditions.MOMENTUM_IDS}
     @Test fun allSixFamiliesExposeEveryRuleAndSaveCoreSelectionsInScannerAndBacktest(){
         assertEquals(listOf("準備起漲","深跌反轉","突發爆量","主力進場","DIF金叉","縮量上漲"),RadarType.entries.map{it.displayName})
         val main=Robolectric.buildActivity(MainActivity::class.java).setup()

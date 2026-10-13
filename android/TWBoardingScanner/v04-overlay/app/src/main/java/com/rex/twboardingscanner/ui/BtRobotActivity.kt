@@ -50,9 +50,7 @@ class BtRobotActivity:AppCompatActivity(){
     private fun refreshRadarModes(){
         radarModeButtons.forEach{(type,button)->
             val lit=type in enabledRadars
-            button.text="${type.label}\n${if(lit)"●" else "○"}"
-            NeonUi.selected(button,lit)
-            button.contentDescription="${type.name.take(1)} ${if(lit)"已啟動" else "不參與計算"}"
+            NeonUi.radarSwitch(button,type,lit)
         }
         exclusionButtons.forEach{(type,button)->button.text="${type.name.take(1)} 排除 ${robotExclusions.getValue(type).size}"}
         if(::paramNotice.isInitialized)refreshParameterHint()
@@ -253,15 +251,17 @@ class BtRobotActivity:AppCompatActivity(){
         }.apply{tag="robot-flow-import"})
         root.addView(NeonUi.gap(this,8))
         val options=panel(NeonUi.cyan).apply{tag="robot-condition-settings"}
-        options.addView(label("ABCDEF 參與分析 · 按鈕亮起才進行此類型計算",12f,NeonUi.cyan))
+        options.addView(label("① 啟用類別 · 彩色已啟用／灰色已停用",12f,NeonUi.cyan))
         options.addView(NeonUi.radarRows(this,RadarType.entries.map{type->
             NeonUi.button(this,"",NeonUi.cyan){
                 enabledRadars=if(type in enabledRadars)enabledRadars-type else enabledRadars+type
                 refreshRadarModes()
             }.apply{tag="robot-enabled-${type.name}";textSize=12f}.also{radarModeButtons[type]=it}
         }))
+        options.addView(NeonUi.gap(this,18))
+        options.addView(label("② 設定條件 · 點擊編輯必選／排除",15f,NeonUi.ink,true))
         options.addView(NeonUi.radarRows(this,RadarType.entries.map{type->
-            NeonUi.button(this,"${type.label} ▾",NeonUi.mint){openRuleOptions(type)}
+            NeonUi.button(this,"${type.label}\n設定條件 ▾",NeonUi.mint){openRuleOptions(type)}
                 .apply{tag="robot-rules-${type.name}";textSize=11f}.also{radarRuleButtons[type]=it}
         }))
         options.addView(NeonUi.radarRows(this,RadarType.entries.map{type->NeonUi.button(this,"${type.name.take(1)} 排除",NeonUi.pink){
@@ -496,7 +496,7 @@ class BtRobotActivity:AppCompatActivity(){
             else "目前條件：必選 $fixed／排除 $blocked；其餘由機器人自由測試"
         val selectedRules=BtRobotSpace.rules(required());val excludedRules=BtRobotSpace.rules(forbidden())
         radarRuleButtons.forEach{(type,button)->
-            button.text="${type.label} ▾\n必選 ${selectedRules[type].orEmpty().size}／排除 ${excludedRules[type].orEmpty().size}"
+            button.text="${type.label} · 設定\n必選 ${selectedRules[type].orEmpty().size}／排除 ${excludedRules[type].orEmpty().size}"
             button.isEnabled=!busy
         }
         val sectors=s?.let{BtSettingsCodec.decode(it.getJSONObject("settings")).sectors}?:base().sectors

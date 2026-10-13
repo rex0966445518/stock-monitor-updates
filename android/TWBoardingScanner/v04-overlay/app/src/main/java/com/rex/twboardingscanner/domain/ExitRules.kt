@@ -9,15 +9,17 @@ enum class LossCompare(val label:String) { LT("小於"), LTE("小於等於"), GT
 enum class ExitMacd(val label:String) { DOWN("向下"), UP("向上") }
 
 /** Null means omitted. A half-filled comparison is retained for editing but not evaluated. */
-data class ExitRule(val days:Int?=null,val compare:LossCompare?=null,val lossPct:Double?=null,val macd:ExitMacd?=null,val maDays:Int?=null,val bearishExit:Boolean=false) {
-    val active:Boolean get()=bearishExit||days!=null||(compare!=null&&lossPct!=null)||macd!=null||maDays!=null
+data class ExitRule(val days:Int?=null,val compare:LossCompare?=null,val lossPct:Double?=null,val macd:ExitMacd?=null,val maDays:Int?=null,val bearishExit:Boolean=false,val ma5Exit:Boolean=false) {
+    val active:Boolean get()=ma5Exit||bearishExit||days!=null||(compare!=null&&lossPct!=null)||macd!=null||maDays!=null
     fun validate(){
-        if(bearishExit)require(days==null&&compare==null&&lossPct==null&&macd==null&&maDays==null){"技術風險退出為獨立條件"}
+        require(!(bearishExit&&ma5Exit)){"獨立退出條件不得混用"}
+        if(bearishExit||ma5Exit)require(days==null&&compare==null&&lossPct==null&&macd==null&&maDays==null){"技術風險退出為獨立條件"}
         require(days==null||days in 0..36500){"留倉天數請填 0～36500 的整數"}
         require(lossPct==null||(lossPct.isFinite()&&lossPct in 0.0..1000.0)){"虧損幅度請填 0～1000 的數字"}
         require(maDays==null||maDays in 1..320){"日線天數請填 1～320 的整數"}
     }
     fun description():String {
+        if(ma5Exit)return "日K收盤低於5日均線即賣出（不參考RSI、不限盈虧）"
         if(bearishExit)return BearishTurn.LABEL+" → 風險退出（不限盈虧）"
         val parts=mutableListOf<String>()
         days?.let{parts+="留倉超過 $it 個日曆日"}
@@ -30,17 +32,17 @@ data class ExitRule(val days:Int?=null,val compare:LossCompare?=null,val lossPct
 
 object ExitRules {
     fun example()=listOf(ExitRule(15,LossCompare.LT,3.0,ExitMacd.DOWN,20))+List(4){ExitRule()}
-    fun validate(rules:List<ExitRule>){require(rules.size<=6){"最多原5組＋1項技術風險退出"};require(rules.count{!it.bearishExit}<=5&&rules.count{it.bearishExit}<=1){"原五組與技術退出不得重複"};rules.forEach{it.validate()}}
+    fun validate(rules:List<ExitRule>){require(rules.size<=7){"最多原5組＋2項獨立退出"};require(rules.count{!it.bearishExit&&!it.ma5Exit}<=5&&rules.count{it.bearishExit}<=1&&rules.count{it.ma5Exit}<=1){"原五組與技術退出不得重複"};rules.forEach{it.validate()}}
     fun json(rules:List<ExitRule>):JSONArray {validate(rules);return JSONArray(rules.map{r->JSONObject()
         .put("days",r.days?:JSONObject.NULL).put("compare",r.compare?.name?:JSONObject.NULL)
-        .put("lossPct",r.lossPct?:JSONObject.NULL).put("macd",r.macd?.name?:JSONObject.NULL).put("maDays",r.maDays?:JSONObject.NULL).put("bearishExit",r.bearishExit)})}
+        .put("lossPct",r.lossPct?:JSONObject.NULL).put("macd",r.macd?.name?:JSONObject.NULL).put("maDays",r.maDays?:JSONObject.NULL).put("bearishExit",r.bearishExit).put("ma5Exit",r.ma5Exit)})}
     fun read(a:JSONArray?):List<ExitRule> {
         if(a==null)return emptyList()
-        require(a.length()<=6)
+        require(a.length()<=7)
         return List(a.length()){i->val o=a.getJSONObject(i)
             fun integer(key:String):Int? {if(o.isNull(key))return null;val n=o.getDouble(key);require(n.isFinite()&&n==kotlin.math.floor(n)&&n in 0.0..36500.0);return n.toInt()}
             ExitRule(integer("days"),if(o.isNull("compare"))null else LossCompare.valueOf(o.getString("compare")),
-                if(o.isNull("lossPct"))null else o.getDouble("lossPct"),if(o.isNull("macd"))null else ExitMacd.valueOf(o.getString("macd")),integer("maDays"),o.optBoolean("bearishExit",false))
+                if(o.isNull("lossPct"))null else o.getDouble("lossPct"),if(o.isNull("macd"))null else ExitMacd.valueOf(o.getString("macd")),integer("maDays"),o.optBoolean("bearishExit",false),o.optBoolean("ma5Exit",false))
         }.also(::validate)
     }
     fun summary(rules:List<ExitRule>)=rules.mapIndexedNotNull{i,r->if(r.active)"第 ${i+1} 組：${r.description()}" else null}.joinToString("\n").ifBlank{"下車認賠條件：未啟用"}
@@ -59,7 +61,7 @@ object ExitRules {
             val now=calculator.macd(closes);val prior=calculator.macd(closes.dropLast(1))
             if(now==null||prior==null)null else now.dif-prior.dif
         }
-        return rules.indexOfFirst{r->if(r.bearishExit)current!=null&&BearishTurn.inspect(known.map{it.close})?.passes==true else r.active && netPnlPct<0 &&
+        return rules.indexOfFirst{r->if(r.ma5Exit)current!=null&&known.size>=5&&known.takeLast(5).all{it.close.isFinite()&&it.close>0}&&current.close<known.takeLast(5).map{it.close}.average() else if(r.bearishExit)current!=null&&BearishTurn.inspect(known.map{it.close})?.passes==true else r.active && netPnlPct<0 &&
             (r.days==null||days>r.days) &&
             (r.compare==null||r.lossPct==null||when(r.compare){LossCompare.LT->loss<r.lossPct-1e-9;LossCompare.LTE->loss<=r.lossPct+1e-9;LossCompare.GT->loss>r.lossPct+1e-9;LossCompare.GTE->loss>=r.lossPct-1e-9}) &&
             (r.macd==null||(current!=null&&difDelta?.let{d->d.isFinite()&&if(r.macd==ExitMacd.DOWN)d<0 else d>0}==true)) &&

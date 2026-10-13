@@ -12,6 +12,9 @@ data class ScanCondition(val id: String, val label: String, val extra: Boolean =
 }
 
 object ScanConditions {
+    const val MACD_ABOVE_ZERO="macd_signal_above_zero"
+    const val RSI_30_TO_50="rsi14_30_to_50_one_day"
+    val MOMENTUM_IDS=setOf(MACD_ABOVE_ZERO,RSI_30_TO_50)
     const val VERSION = "20261012-E1"
     const val PRE_E_VERSION="20261012-D3"
     const val PREVIOUS_VERSION="20261012-D2"
@@ -113,7 +116,9 @@ object ScanConditions {
             },
             ScanCondition(RsiGoldenCross.ID,"RSI(5)<35 且向上黃金交叉突破 RSI(10)（RSI5上升；Wilder）",true){
                 it.rsiGoldenCross?.passes
-            }
+            },
+            ScanCondition(MACD_ABOVE_ZERO,"MACD 訊號線（DIF 的 EMA9）在 0 軸上方",true){it.macdAboveZero},
+            ScanCondition(RSI_30_TO_50,"近一日 RSI(14) 由 ≤30 上升突破 50（前日≤30、當日>50；Wilder）",true){it.rsi30To50}
         )
     }
 }
@@ -136,6 +141,12 @@ class RuleMetrics(val s: StockSnapshot) {
     private val ma5 = avg(5)
     private val ma10 = avg(10)
     private val ma20 = avg(20)
+    val macdAboveZero:Boolean? get() = if(closes.any{!it.isFinite()||it<=0})null else TechnicalCalculator().macd(closes)?.let{it.signal>0.0}
+    val rsi30To50:Boolean? get() {
+        if(closes.size<16||closes.any{!it.isFinite()||it<=0})return null
+        val values=RsiGoldenCross.values(closes,14)
+        return values[values.lastIndex-1]<=30.0&&values.last()>50.0
+    }
     val macdUp: Boolean? get() = TechnicalCalculator().macd(closes)?.let { it.difRising && it.histRising }
     val notHot: Boolean? get() {
         if (closes.size < 20 || ma20 == null || ma20 <= 0 || closes[closes.lastIndex - 5] <= 0) return null

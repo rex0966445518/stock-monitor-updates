@@ -33,8 +33,8 @@ class DPatternTest{
     @Test fun DDefaultsAndHistoricalBitsNeverChange(){
         val dOptions=ScanConditions.forRadar(RadarType.D_MAIN_FORCE)
         val aOptions=ScanConditions.forRadar(RadarType.A_EARLY_BREAKOUT)
-        assertEquals(33,dOptions.size)
-        assertEquals(27,aOptions.size)
+        assertEquals(35,dOptions.size)
+        assertEquals(29,aOptions.size)
         assertEquals(aOptions.map{it.id},dOptions.drop(6).map{it.id})
         assertEquals((setOf(DPattern.LIMIT,DPattern.GREEN,DPattern.GAP,DPattern.VOLUME)+ScanConditions.D_A_DEFAULT_IDS),
             dOptions.filter{it.defaultEnabled}.map{it.id}.toSet())
@@ -53,7 +53,7 @@ class DPatternTest{
         val fromOld=BtRobotSpace.key(defaultBtRules())
         val key=BtRobotSpace.key(BtRobotSpace.rules(fromOld))
         assertEquals(fromOld,key)
-        assertEquals(BigInteger.ONE.shiftLeft(77),BtRobotSpace.total("0","0",
+        assertEquals(BigInteger.ONE.shiftLeft(83),BtRobotSpace.total("0","0",
             enabled=defaultActiveRadars(),includeD=false))
     }
     @Test fun limitGreenGapAndVolumeProvideTraceableDatesAndPreciseRatios(){

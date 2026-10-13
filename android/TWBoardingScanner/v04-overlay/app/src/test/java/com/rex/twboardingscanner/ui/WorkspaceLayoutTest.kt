@@ -64,6 +64,13 @@ class WorkspaceLayoutTest {
                 if(a is BacktestActivity){
                     val button=content.findViewWithTag<View>("disclosure-backtest-trading");button.performClick()
                     layout(content);check(content);screenshot(content,"workspace-backtest-settings-${scale}")
+                    val universeToggle=content.findViewWithTag<View>("disclosure-backtest-universe")
+                    universeToggle.performClick();layout(content)
+                    val universe=universeToggle.parent as View
+                    universe.measure(View.MeasureSpec.makeMeasureSpec(656,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED))
+                    universe.layout(0,0,656,universe.measuredHeight);check(universe)
+                    screenshot(universe,"backtest-category-controls-${scale}")
+                    universeToggle.performClick();layout(content)
                     val input=content.findViewWithTag<EditText>("max-holding-stocks");input.setText("12")
                     button.performClick();button.performClick();assertEquals("12",input.text.toString())
                     if(scale==1f){

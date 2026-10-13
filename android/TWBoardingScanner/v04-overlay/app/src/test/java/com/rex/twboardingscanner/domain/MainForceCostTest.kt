@@ -87,7 +87,7 @@ class MainForceCostTest {
         assertEquals(newOnly,BtRobotSpace.rules(encoded))
         assertEquals(BigInteger.ONE.shiftLeft(102),BtRobotSpace.total("0","0",includeCost=false))
         assertEquals(BigInteger.ONE.shiftLeft(106),BtRobotSpace.total("0","0",includeCost=true,includeE=false))
-        assertEquals(BigInteger.ONE.shiftLeft(77),
+        assertEquals(BigInteger.ONE.shiftLeft(83),
             BtRobotSpace.total("0","0",enabled=defaultActiveRadars(),includeD=false))
     }
 

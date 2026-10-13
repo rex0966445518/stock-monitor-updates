@@ -10,7 +10,7 @@ object BtRobotSpace {
     // used 65 bits. Append new features after ALL historical positions.
     val legacySlots=RadarType.entries.take(3).flatMap{type->
         ScanConditions.forRadar(type).filterNot{
-            it.id in ScanConditions.NEW_IDS||it.id==ScanConditions.MAIN_FORCE_COST_20||it.id==RsiGoldenCross.ID
+            it.id in ScanConditions.MOMENTUM_IDS||it.id in ScanConditions.NEW_IDS||it.id==ScanConditions.MAIN_FORCE_COST_20||it.id==RsiGoldenCross.ID
         }.map{type to it.id}
     }
     val slots=legacySlots+RadarType.entries.take(3).flatMap{type->
@@ -19,15 +19,16 @@ object BtRobotSpace {
     // v0.4.48 search keys have 102 fixed positions. Leave every existing
     // bit (including D's 31 inherited A predicates) exactly where it was.
     val dSlots=ScanConditions.forRadar(RadarType.D_MAIN_FORCE)
-        .filterNot{it.id==ScanConditions.MAIN_FORCE_COST_20||it.id==RsiGoldenCross.ID}
+        .filterNot{it.id in ScanConditions.MOMENTUM_IDS||it.id==ScanConditions.MAIN_FORCE_COST_20||it.id==RsiGoldenCross.ID}
         .map{RadarType.D_MAIN_FORCE to it.id}
     val v4Slots=slots+dSlots
     // All FOUR new switches are appended AFTER the historical bit 101.
     val mainCostSlots=RadarType.entries.take(4).map{it to ScanConditions.MAIN_FORCE_COST_20}
     val v5Slots=v4Slots+mainCostSlots
-    val eSlots=ScanConditions.forRadar(RadarType.E_DIF_TOUCH).filterNot{it.id==RsiGoldenCross.ID}.map{RadarType.E_DIF_TOUCH to it.id}
+    val eSlots=ScanConditions.forRadar(RadarType.E_DIF_TOUCH).filterNot{it.id in ScanConditions.MOMENTUM_IDS||it.id==RsiGoldenCross.ID}.map{RadarType.E_DIF_TOUCH to it.id}
     val rsiSlots=RadarType.entries.take(5).map{it to RsiGoldenCross.ID}
-    val allSlots=v5Slots+eSlots+rsiSlots+ScanConditions.forRadar(RadarType.F_VOLUME_CONTRACTION).map{RadarType.F_VOLUME_CONTRACTION to it.id}
+    val v6Slots=v5Slots+eSlots+rsiSlots+ScanConditions.forRadar(RadarType.F_VOLUME_CONTRACTION).filterNot{it.id in ScanConditions.MOMENTUM_IDS}.map{RadarType.F_VOLUME_CONTRACTION to it.id}
+    val allSlots=v6Slots+RadarType.entries.flatMap{type->ScanConditions.MOMENTUM_IDS.map{type to it}}
     val total:BigInteger=BigInteger.ONE.shiftLeft(allSlots.size)
     val legacyTotal:BigInteger=BigInteger.ONE.shiftLeft(legacySlots.size)
     fun key(rules:Map<RadarType,Set<String>>):String=allSlots.foldIndexed(BigInteger.ZERO){i,n,(type,id)->if(id in rules[type].orEmpty())n.setBit(i)else n}.toString(16)
@@ -58,9 +59,9 @@ object BtRobotSpace {
     }
     fun total(required:String,forbidden:String="0",legacy:Boolean=false,
               enabled:Set<RadarType> = RadarType.entries.toSet(),
-              includeD:Boolean=true,includeCost:Boolean=true,includeE:Boolean=true):BigInteger {
+              includeD:Boolean=true,includeCost:Boolean=true,includeE:Boolean=true,includeMomentum:Boolean=true):BigInteger {
         validateConstraints(required,forbidden)
-        val options=if(legacy)legacySlots else if(includeCost&&includeE)allSlots else if(includeCost)v5Slots else v4Slots
+        val options=if(legacy)legacySlots else if(includeCost&&includeE)(if(includeMomentum)allSlots else v6Slots) else if(includeCost)v5Slots else v4Slots
         val active=options.withIndex().filter{it.value.first in enabled&&
             (includeD||it.value.first!=RadarType.D_MAIN_FORCE)}
         val forced=BtRobotSpace.required(required).or(BtRobotSpace.required(forbidden))
@@ -76,12 +77,12 @@ object BtRobotSpace {
     }
     fun next(base:String,best:String?,cursor:BigInteger,seed:BigInteger,required:String="0",forbidden:String="0",
         legacy:Boolean=false,enabled:Set<RadarType> = RadarType.entries.toSet(),
-        includeD:Boolean=true,includeCost:Boolean=true,includeE:Boolean=true,seen:(String)->Boolean):Candidate? {
-        val options=if(legacy)legacySlots else if(includeCost&&includeE)allSlots else if(includeCost)v5Slots else v4Slots
+        includeD:Boolean=true,includeCost:Boolean=true,includeE:Boolean=true,includeMomentum:Boolean=true,seen:(String)->Boolean):Candidate? {
+        val options=if(legacy)legacySlots else if(includeCost&&includeE)(if(includeMomentum)allSlots else v6Slots) else if(includeCost)v5Slots else v4Slots
         val allowed=options.foldIndexed(BigInteger.ZERO){i,v,pair->
             if(pair.first in enabled&&(includeD||pair.first!=RadarType.D_MAIN_FORCE))v.setBit(i) else v
         }
-        val total=total(required,forbidden,legacy,enabled,includeD,includeCost,includeE)
+        val total=total(required,forbidden,legacy,enabled,includeD,includeCost,includeE,includeMomentum)
         val fixed=BtRobotSpace.required(required).and(allowed)
         val blocked=BtRobotSpace.required(forbidden).and(allowed)
         val free=options.indices.filter{allowed.testBit(it)&&!fixed.testBit(it)&&!blocked.testBit(it)}

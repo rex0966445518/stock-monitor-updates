@@ -93,7 +93,7 @@ class RobotJournalSyncTest {
             val button=find(a.window.decorView,"robot-rules-${type.name}") as TextView
             assertTrue(button.text.toString().contains("必選 ${counts[type.ordinal]}／排除 0"))
             val toggle=find(a.window.decorView,"robot-enabled-${type.name}") as TextView
-            assertTrue(toggle.text.toString().contains("●"))
+            assertTrue(toggle.text.toString().contains("已啟用"))
         }
         val retained=a.policySession(RobotTradingParams.of(desired),null,RobotBacktestDates.of(desired))
         assertEquals(id,retained)
@@ -124,7 +124,7 @@ class RobotJournalSyncTest {
         val ctl=Robolectric.buildActivity(BtRobotActivity::class.java).setup()
         RadarType.entries.forEach{type->
             val button=find(ctl.get().window.decorView,"robot-enabled-${type.name}") as TextView
-            assertEquals(type==RadarType.D_MAIN_FORCE,button.text.toString().contains("●"))
+            assertEquals(type==RadarType.D_MAIN_FORCE,button.text.toString().contains("已啟用"))
         }
         assertEquals(desired,BtSettingsCodec.decode(store.session(id)!!.getJSONObject("settings")))
         assertEquals(desired.dConfig,BtSettingsCodec.decode(store.session(id)!!.getJSONObject("settings")).dConfig)

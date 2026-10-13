@@ -98,9 +98,7 @@ class MainActivity: AppCompatActivity() {
     private fun refreshRadarSwitches(){
         radarSwitches.forEach{(type,button)->
             val on=type in radarEnabled
-            button.text="${type.label}\n${if(on)"● 分析" else "○ 停用"}"
-            NeonUi.selected(button,on)
-            button.contentDescription="${type.label} ${if(on)"已啟用，參與篩選" else "已停用，不參與篩選"}"
+            NeonUi.radarSwitch(button,type,on)
         }
     }
 
@@ -147,7 +145,7 @@ class MainActivity: AppCompatActivity() {
             NeonUi.button(this,"F 縮量上漲"){showRadarConditions(RadarType.F_VOLUME_CONTRACTION)}.apply{tag="scanner-f-conditions"})
         editors.forEachIndexed{i,button->
             (button.parent as? ViewGroup)?.removeView(button)
-            button.text=RadarType.entries[i].label
+            button.text="${RadarType.entries[i].label}\n設定條件"
             NeonUi.categoryStyle(button,RadarType.entries[i])
             button.minHeight=dp(56);button.textSize=13f
             button.icon=RadarGlyph(RadarType.entries[i]);button.iconSize=dp(20)
@@ -155,13 +153,14 @@ class MainActivity: AppCompatActivity() {
         }
         b.settingsPanel.removeView(originalRow)
         val extraConditionRow=NeonUi.vertical(this).apply{
+            addView(NeonUi.label(this@MainActivity,"② 設定條件 · 點擊編輯",15f,NeonUi.ink,true))
             editors.chunked(2).forEach{addView(NeonUi.row(this@MainActivity,it))}
         }
         b.settingsPanel.addView(extraConditionRow,editorIndex)
         // The six on/off buttons control computation, without deleting checked rules.
         val switchRow=NeonUi.vertical(this).apply{
             tag="scanner-radar-toggles"
-            addView(NeonUi.label(this@MainActivity,"ABCDEF 參與分析：亮起才會跑該區條件",12f,NeonUi.cyan,true))
+            addView(NeonUi.label(this@MainActivity,"① 啟用類別 · 彩色已啟用／灰色已停用",12f,NeonUi.cyan,true))
             addView(NeonUi.radarRows(this@MainActivity,RadarType.entries.map{type->
                 NeonUi.button(this@MainActivity,"",NeonUi.cyan){
                     radarEnabled=if(type in radarEnabled)radarEnabled-type else radarEnabled+type
@@ -169,7 +168,7 @@ class MainActivity: AppCompatActivity() {
                 }.apply{tag="scanner-enabled-${type.name}";textSize=11f}.also{radarSwitches[type]=it}
             }))
         }
-        b.settingsPanel.addView(switchRow,b.settingsPanel.indexOfChild(extraConditionRow)+1)
+        b.settingsPanel.addView(switchRow,b.settingsPanel.indexOfChild(extraConditionRow))
         refreshRadarSwitches()
         b.scanConditionButton.setOnClickListener { showScanConditionsDialog() }
         posterExport=PosterExport(this)
@@ -185,10 +184,10 @@ class MainActivity: AppCompatActivity() {
             val store=com.rex.twboardingscanner.data.ExitRuleStore(this)
             ExitRulesEditor.show(this,"主篩查器",store.read(com.rex.twboardingscanner.domain.StockScope.SCANNER)){rules->
                 store.save(com.rex.twboardingscanner.domain.StockScope.SCANNER,rules)
-                b.exitRulesButton.text="下車賣出條件 · ${rules.count{it.active}} / 6 項"
+                b.exitRulesButton.text="下車賣出條件 · ${rules.count{it.active}} / 7 項"
             }
         }
-        b.exitRulesButton.text="下車賣出條件 · ${com.rex.twboardingscanner.data.ExitRuleStore(this).read(com.rex.twboardingscanner.domain.StockScope.SCANNER).count{it.active}} / 6 項"
+        b.exitRulesButton.text="下車賣出條件 · ${com.rex.twboardingscanner.data.ExitRuleStore(this).read(com.rex.twboardingscanner.domain.StockScope.SCANNER).count{it.active}} / 7 項"
         trendHoldCheck=CheckBox(this).apply{
             tag="scanner-profit-trend-hold";textSize=13f;setTextColor(NeonUi.cyan)
             text="淨利達標 RSI(14)>50 且日K未跌破5MA 續抱；日K收盤跌破5MA才賣出"
@@ -258,7 +257,7 @@ class MainActivity: AppCompatActivity() {
         dialog.behavior.state=com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
     }
 
-    override fun onResume() { super.onResume();guardHandler.post(guardPoll);loadScanSettings();if(::trendHoldCheck.isInitialized)trendHoldCheck.isChecked=com.rex.twboardingscanner.data.ExitRuleStore(this).readProfitTrendHold(StockScope.SCANNER);b.exitRulesButton.text="下車賣出條件 · ${com.rex.twboardingscanner.data.ExitRuleStore(this).read(com.rex.twboardingscanner.domain.StockScope.SCANNER).count{it.active}} / 6 項";if(::paperLoop.isInitialized){paperLoop.start();render();if(latest.isNotEmpty())coordinator.submit{runCatching{publishLists()}}} }
+    override fun onResume() { super.onResume();guardHandler.post(guardPoll);loadScanSettings();if(::trendHoldCheck.isInitialized)trendHoldCheck.isChecked=com.rex.twboardingscanner.data.ExitRuleStore(this).readProfitTrendHold(StockScope.SCANNER);b.exitRulesButton.text="下車賣出條件 · ${com.rex.twboardingscanner.data.ExitRuleStore(this).read(com.rex.twboardingscanner.domain.StockScope.SCANNER).count{it.active}} / 7 項";if(::paperLoop.isInitialized){paperLoop.start();render();if(latest.isNotEmpty())coordinator.submit{runCatching{publishLists()}}} }
     override fun onPause() { guardHandler.removeCallbacks(guardPoll);if(::paperLoop.isInitialized)paperLoop.stop();super.onPause() }
 
     private fun startFullScan() {
