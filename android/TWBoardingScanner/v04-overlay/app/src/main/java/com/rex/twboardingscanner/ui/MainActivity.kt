@@ -136,10 +136,11 @@ class MainActivity: AppCompatActivity() {
         b.conditionDButton.setOnClickListener { showRadarConditions(RadarType.D_MAIN_FORCE) }
 
 
-        b.settingsPanel.addView(NeonUi.row(this,listOf(
+        val extraConditionRow=NeonUi.row(this,listOf(
             NeonUi.button(this,"E 條件",NeonUi.pink){showRadarConditions(RadarType.E_DIF_TOUCH)}.apply{tag="scanner-e-conditions"},
             NeonUi.button(this,"F 縮量上漲",NeonUi.mint){showRadarConditions(RadarType.F_VOLUME_CONTRACTION)}.apply{tag="scanner-f-conditions"}
-        )))
+        ))
+        b.settingsPanel.addView(extraConditionRow,b.settingsPanel.indexOfChild(b.conditionAButton.parent as android.view.View)+1)
         // The six on/off buttons control computation, without deleting checked rules.
         val switchRow=NeonUi.vertical(this).apply{
             tag="scanner-radar-toggles"
@@ -151,8 +152,7 @@ class MainActivity: AppCompatActivity() {
                 }.apply{tag="scanner-enabled-${type.name}";textSize=11f}.also{radarSwitches[type]=it}
             }))
         }
-        val conditionRow=b.conditionAButton.parent as android.view.View
-        b.settingsPanel.addView(switchRow,b.settingsPanel.indexOfChild(conditionRow)+1)
+        b.settingsPanel.addView(switchRow,b.settingsPanel.indexOfChild(extraConditionRow)+1)
         refreshRadarSwitches()
         b.scanConditionButton.setOnClickListener { showScanConditionsDialog() }
         posterExport=PosterExport(this)
