@@ -68,6 +68,9 @@ class MainActivity: AppCompatActivity() {
     private val workers = Executors.newFixedThreadPool(6)
 
     private var latest = listOf<SignalResult>()
+    private var latestPaper = listOf<SignalResult>()
+    private val scanRevision = AtomicLong(0)
+    private var restartScan = false
     private var selectedTab = 6 // Show all real hits first; A may legitimately be empty.
     private var isScanning = false
     private var latestScanDate = ""
@@ -250,6 +253,22 @@ class MainActivity: AppCompatActivity() {
             return
         }
 
+        if(radarEnabled.isEmpty()) {
+            latest=emptyList();latestPaper=emptyList();render()
+            b.scanProgress.isIndeterminate=false;b.scanProgress.progress=0
+            b.progressCount.text="未執行掃描";b.etaText.text="請選擇條件"
+            b.progressTitle.text="未啟用任何入場條件"
+            Toast.makeText(this,"請至少啟用 A～F 中的一個條件",Toast.LENGTH_LONG).show()
+            return
+        }
+        val revision=scanRevision.get()
+        fun current()=revision==scanRevision.get()
+        fun finishCancelled() { runOnUiThread {
+            if(isFinishing||isDestroyed)return@runOnUiThread
+            isScanning=false
+            b.startScanButton.isEnabled=true;b.startScanButton.text="開始掃描"
+            if(restartScan){restartScan=false;startFullScan()}
+        } }
         // Each new scan starts on the consolidated results view, not an empty A tab.
         selectedTab=6
         val scanDate = java.time.LocalDate.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI)
@@ -267,11 +286,15 @@ class MainActivity: AppCompatActivity() {
         val mainSectors = enabledSectors.toSet()
         // Paper mode owns independent ABC/sectors. Fetch the union so paper-only
         // candidates are not accidentally excluded by the main scanner view.
-        val paperSettings=runCatching{com.rex.twboardingscanner.paper.PaperRepository(this).read().strategy}.getOrNull()
+        val paperBook=runCatching{com.rex.twboardingscanner.paper.PaperRepository(this).read()}.getOrNull()
+        val participation=com.rex.twboardingscanner.domain.ScanParticipation(scanEnabled,mainSectors,
+            paperBook?.enabled==true,paperBook?.strategy)
+        val paperSettings=participation.paperSettings
         val scanSectors = mainSectors+(paperSettings?.sectors?:emptySet())
         isScanning = true
         b.startScanButton.isEnabled=false;b.startScanButton.text="掃描中…"
         latest = emptyList()
+        latestPaper=emptyList()
         b.scanProgress.progress = 0
         b.scanProgress.max = 0
         render()
@@ -282,8 +305,9 @@ class MainActivity: AppCompatActivity() {
         b.progressStats.text = "已分析 0｜排除 0｜資料不足 0｜失敗 0"
 
         coordinator.submit {
+            if(!current()){finishCancelled();return@submit}
             val guard=runCatching{com.rex.twboardingscanner.data.MarketIndexData(this).live()}.getOrElse{com.rex.twboardingscanner.domain.MarketCrashGuard.unknown("大盤檢查失敗，暫停買入")}
-            runOnUiThread{b.marketGuardButton.text=guard.title+"  ›";b.marketGuardButton.setTextColor(if(guard.canBuy)NeonUi.cyan else NeonUi.amber)}
+            runOnUiThread{if(!current())return@runOnUiThread;b.marketGuardButton.text=guard.title+"  ›";b.marketGuardButton.setTextColor(if(guard.canBuy)NeonUi.cyan else NeonUi.amber)}
             val indexHistory=if(
                 (RadarType.D_MAIN_FORCE in scanEnabled&&DPattern.RELATIVE in scanRules[RadarType.D_MAIN_FORCE].orEmpty())||
                 (paperSettings?.enabledRadars?.contains(RadarType.D_MAIN_FORCE)==true&&
@@ -293,11 +317,13 @@ class MainActivity: AppCompatActivity() {
                     .associate{it.date to it.close}
             }.getOrNull() else null
             val universe = provider.loadUniverse { msg ->
-                runOnUiThread { b.progressTitle.text = msg }
+                runOnUiThread { if(current())b.progressTitle.text = msg }
             }
 
+            if(!current()){finishCancelled();return@submit}
             if (universe.isEmpty()) {
                 runOnUiThread {
+                    if(!current()){finishCancelled();return@runOnUiThread}
                     isScanning = false
                     b.startScanButton.isEnabled=true;b.startScanButton.text="開始掃描"
                     b.scanProgress.isIndeterminate = false
@@ -307,7 +333,7 @@ class MainActivity: AppCompatActivity() {
             }
 
             runCatching { com.rex.twboardingscanner.data.StockDirectory(this).remember(universe) }
-            runOnUiThread { sectorCounts = universe.groupingBy { it.sector }.eachCount(); refreshSectorCounts() }
+            runOnUiThread { if(!current())return@runOnUiThread;sectorCounts = universe.groupingBy { it.sector }.eachCount(); refreshSectorCounts() }
 
             val total = universe.size
             val done = AtomicInteger(0)
@@ -327,16 +353,18 @@ class MainActivity: AppCompatActivity() {
             val started = System.currentTimeMillis()
 
             runOnUiThread {
+                if(!current())return@runOnUiThread
                 b.scanProgress.isIndeterminate = false
                 b.scanProgress.max = total
                 b.scanProgress.progress = 0
                 val coverage=provider.universeCoverage
-                b.progressTitle.text = if(coverage.complete)"全市場逐檔掃描中" else "部分市場資料缺漏（${coverage.description}）"
+                b.progressTitle.text = if(coverage.complete)"全市場逐檔掃描中 · ${scanEnabled.joinToString("/"){it.name.take(1)}}${if(paperSettings!=null)"（模擬交易另行分析）" else ""}" else "部分市場資料缺漏（${coverage.description}）"
             }
 
             universe.forEach { stock ->
-                workers.submit {
+                workers.submit stockTask@{
                     try {
+                        if(!current())return@stockTask
                         val userExcluded =
                             stock.sector !in scanSectors || stock.code in scanPolicy.banned
 
@@ -353,8 +381,8 @@ class MainActivity: AppCompatActivity() {
                             } else {
                                 run {
                                     analyzed.incrementAndGet()
-                                    fun evaluate(stockToUse: com.rex.twboardingscanner.domain.MarketStock) = RadarType.entries.mapNotNull { type ->
-                                        if(type !in scanEnabled&&type !in (paperSettings?.enabledRadars?:emptySet()))return@mapNotNull null
+                                    fun evaluate(stockToUse: com.rex.twboardingscanner.domain.MarketStock) = participation.evaluate(stockToUse.sector) { type ->
+                                        if(!current())return@evaluate null
                                         val datedBars = calculator.barsForRadar(bars, type, scanDate)
                                         if (datedBars.isEmpty()) null else {
                                             val snap = calculator.build(stockToUse, datedBars)
@@ -400,20 +428,12 @@ class MainActivity: AppCompatActivity() {
                                     val evaluated=if(report==null)initial else evaluate(enriched)
                                     // A 13:30 auction cannot exist at 10:00. Avoid a pointless
                                     // remote MIS/time-sales request during regular trading.
-                                    val positive=evaluated.any{it.light!=SignalLight.NONE&&it.sector in mainSectors}
+                                    val positive=participation.mainResults(evaluated).any{it.light!=SignalLight.NONE}
                                     val r=if(positive&&java.time.LocalTime.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI)>=java.time.LocalTime.of(13,33)){
                                         evaluate(enriched.copy(closingAuction=auctionProvider.load(stock.code,stock.market)))
                                     }else evaluated
+                                    if(!current())return@stockTask
                                     results.addAll(r)
-
-                                    r.filter { it.sector in mainSectors && it.light != SignalLight.NONE && scanPolicy.decision(it.code,it.snapshot.sourceStock?.close?:it.snapshot.price,com.rex.twboardingscanner.domain.StockScope.SCANNER)==com.rex.twboardingscanner.domain.StockDecision.ALLOW }.forEach { sig ->
-                                        if (history.insertIfNew(sig)) {
-                                            newCount.incrementAndGet()
-                                            if ((sig.light == SignalLight.RED || sig.light == SignalLight.ORANGE)&&com.rex.twboardingscanner.data.MarketIndexData(this).cached().canBuy) {
-                                                notifyNewSignal(sig)
-                                            }
-                                        }
-                                    }
                                 }
                             }
                         }
@@ -423,19 +443,18 @@ class MainActivity: AppCompatActivity() {
                         val d = done.incrementAndGet()
                         val now=android.os.SystemClock.elapsedRealtime()
                         val last=lastProgressMs.get()
-                        if(d==total||(now-last>=350L&&lastProgressMs.compareAndSet(last,now))){
+                        if(current()&&(d==total||(now-last>=350L&&lastProgressMs.compareAndSet(last,now)))){
                             updateProgress(
                                 d,total,started,analyzed.get(),excluded.get(),insufficient.get(),failed.get(),
-                                provider.historyStats(),financeQueries.get()
+                                provider.historyStats(),financeQueries.get(),revision
                             )
                         }
 
                         val rendered=lastRenderMs.get()
-                        if(d==total||(d%20==0&&now-rendered>=800L&&lastRenderMs.compareAndSet(rendered,now))){
+                        if(current()&&(d==total||(d%20==0&&now-rendered>=800L&&lastRenderMs.compareAndSet(rendered,now)))){
                             val copy=synchronized(results){results.toList()}
                             runOnUiThread{
-                                latest=copy
-                                render()
+                                if(current()){latest=participation.mainResults(copy);render()}
                             }
                         }
                         latch.countDown()
@@ -444,8 +463,11 @@ class MainActivity: AppCompatActivity() {
             }
 
             latch.await()
-            val copy = synchronized(results) { results.toList() }
+            if(!current()){finishCancelled();return@submit}
+            val allResults = synchronized(results) { results.toList() }
+            val copy = participation.mainResults(allResults)
             latest = copy
+            latestPaper = if(paperSettings==null)copy else participation.paperResults(allResults)
             val elapsedSec=(System.currentTimeMillis()-started).coerceAtLeast(0L)/1000L
             val workerHistorySec=historyWaitMs.get()/1000L
             val workerFinanceSec=financeWaitMs.get()/1000L
@@ -476,10 +498,18 @@ class MainActivity: AppCompatActivity() {
             }.onFailure{failure->runOnUiThread{
                 Toast.makeText(this,"此次掃描未能存入獨立資料夾：${failure.message}",Toast.LENGTH_LONG).show()
             }}
+            if(!current()){finishCancelled();return@submit}
+            copy.filter { it.light != SignalLight.NONE && scanPolicy.decision(it.code,it.snapshot.sourceStock?.close?:it.snapshot.price,StockScope.SCANNER)==com.rex.twboardingscanner.domain.StockDecision.ALLOW }.forEach { sig ->
+                if(current() && history.insertIfNew(sig)) {
+                    newCount.incrementAndGet()
+                    if((sig.light==SignalLight.RED||sig.light==SignalLight.ORANGE)&&com.rex.twboardingscanner.data.MarketIndexData(this).cached().canBuy)notifyNewSignal(sig)
+                }
+            }
             runCatching { publishLists() }
                 .onFailure { runOnUiThread { Toast.makeText(this,"模擬候選清單儲存失敗，請檢查儲存空間",Toast.LENGTH_LONG).show() } }
 
             runOnUiThread {
+                if(!current()){finishCancelled();return@runOnUiThread}
                 isScanning = false
                 b.startScanButton.isEnabled=true;b.startScanButton.text="開始掃描"
                 b.scanProgress.progress = total
@@ -504,7 +534,7 @@ class MainActivity: AppCompatActivity() {
     private fun updateProgress(
         done:Int, total:Int, started:Long,
         analyzed:Int,excluded:Int,insufficient:Int,failed:Int,
-        stats:MarketDataProvider.HistoryStats,financial:Int
+        stats:MarketDataProvider.HistoryStats,financial:Int,revision:Long
     ) {
         val elapsed = System.currentTimeMillis() - started
         val remain = if (done > 0) elapsed.toDouble() / done * (total - done) else 0.0
@@ -512,6 +542,7 @@ class MainActivity: AppCompatActivity() {
         val sec = ((remain % 60000) / 1000).toInt()
 
         runOnUiThread {
+            if(revision!=scanRevision.get())return@runOnUiThread
             b.scanProgress.progress = done
             b.progressCount.text = "已處理 ${done} / ${total} 檔（${done * 100 / total}%）"
             b.etaText.text = if (done < 10) "正在估算…" else "剩餘約 ${min}分${sec}秒"
@@ -521,12 +552,12 @@ class MainActivity: AppCompatActivity() {
 
     private fun admitted():List<SignalResult>{
         val policy=com.rex.twboardingscanner.data.StockPolicyStore(this).read()
-        return latest.filter{it.sector in enabledSectors &&
+        return latest.filter{it.radarType in radarEnabled && it.sector in enabledSectors &&
             policy.decision(it.code,it.snapshot.sourceStock?.close?:it.snapshot.price,com.rex.twboardingscanner.domain.StockScope.SCANNER)==com.rex.twboardingscanner.domain.StockDecision.ALLOW}
     }
     private fun publishLists(){
         val store=com.rex.twboardingscanner.data.StockPolicyStore(this);val policy=store.read()
-        val candidates=latest.filter{it.sector in enabledSectors&&it.light!=SignalLight.NONE&&it.checks.filter{c->c.selected}.all{c->c.state==com.rex.twboardingscanner.domain.CheckState.PASS}}
+        val candidates=latest.filter{it.radarType in radarEnabled&&it.sector in enabledSectors&&it.light!=SignalLight.NONE&&it.checks.filter{c->c.selected}.all{c->c.state==com.rex.twboardingscanner.domain.CheckState.PASS}}
         val date=latestScanDate.ifBlank{java.time.LocalDate.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI).toString()}
         val rows=org.json.JSONArray(candidates.filter{policy.decision(it.code,it.snapshot.sourceStock?.close?:it.snapshot.price,com.rex.twboardingscanner.domain.StockScope.SCANNER)==com.rex.twboardingscanner.domain.StockDecision.LIMITED}.groupBy{it.code}.map{(code,all)->
             val r=all.first();org.json.JSONObject().put("date",date).put("code",code).put("name",r.name).put("price",r.snapshot.sourceStock?.close?:r.snapshot.price).put("radar",all.map{it.radarType.name.take(1)}.distinct().joinToString("/"))
@@ -536,7 +567,7 @@ class MainActivity: AppCompatActivity() {
         val file=java.io.File(filesDir,"scanner-search.json");val temp=java.io.File(file.path+".tmp");temp.writeText(current.toString());check(temp.renameTo(file))
         store.candidates(com.rex.twboardingscanner.domain.StockScope.SCANNER,rows,"主頁掃描 · $date",policy)
         // Publish all evaluated stocks; PaperRepository applies its OWN saved rule set.
-        com.rex.twboardingscanner.paper.PaperRepository(this).publish(latest,latestScanAt)
+        com.rex.twboardingscanner.paper.PaperRepository(this).publish(latestPaper,latestScanAt)
     }
     private fun render() {
         val source=admitted()
@@ -680,7 +711,13 @@ class MainActivity: AppCompatActivity() {
     }
 
     private fun requestConfiguredScan() {
-        Toast.makeText(this, "條件已儲存；請按「開始掃描」套用新條件", Toast.LENGTH_LONG).show()
+        scanRevision.incrementAndGet()
+        latest=emptyList();latestPaper=emptyList();render()
+        if(isScanning){
+            restartScan=true
+            b.progressTitle.text="條件已變更，正在停止舊掃描…"
+            Toast.makeText(this,"停止舊掃描後，將套用最新條件重新掃描",Toast.LENGTH_SHORT).show()
+        } else Toast.makeText(this,"條件已儲存；請按「開始掃描」套用新條件",Toast.LENGTH_SHORT).show()
     }
 
     private var financialDialog: FinancialDialog? = null
@@ -862,6 +899,7 @@ class MainActivity: AppCompatActivity() {
     private fun dp(v:Int):Int = (v * resources.displayMetrics.density).toInt()
 
     override fun onDestroy() {
+        restartScan=false;scanRevision.incrementAndGet()
         chartDialog?.dismiss()
         chartDialog = null
         handler.removeCallbacksAndMessages(null)
