@@ -254,17 +254,17 @@ class BtRobotActivity:AppCompatActivity(){
         root.addView(NeonUi.gap(this,8))
         val options=panel(NeonUi.cyan).apply{tag="robot-condition-settings"}
         options.addView(label("ABCDEF 參與分析 · 按鈕亮起才進行此類型計算",12f,NeonUi.cyan))
-        options.addView(NeonUi.row(this,RadarType.entries.map{type->
+        options.addView(NeonUi.radarRows(this,RadarType.entries.map{type->
             NeonUi.button(this,"",NeonUi.cyan){
                 enabledRadars=if(type in enabledRadars)enabledRadars-type else enabledRadars+type
                 refreshRadarModes()
             }.apply{tag="robot-enabled-${type.name}";textSize=12f}.also{radarModeButtons[type]=it}
         }))
-        options.addView(NeonUi.row(this,RadarType.entries.map{type->
+        options.addView(NeonUi.radarRows(this,RadarType.entries.map{type->
             NeonUi.button(this,"${type.name.take(1)} 條件 ▾",NeonUi.mint){openRuleOptions(type)}
                 .apply{tag="robot-rules-${type.name}";textSize=11f}.also{radarRuleButtons[type]=it}
         }))
-        options.addView(NeonUi.row(this,RadarType.entries.map{type->NeonUi.button(this,"${type.name.take(1)} 排除",NeonUi.pink){
+        options.addView(NeonUi.radarRows(this,RadarType.entries.map{type->NeonUi.button(this,"${type.name.take(1)} 排除",NeonUi.pink){
             ExclusionEditor.show(this,type,robotExclusions.getValue(type)){ids->robotExclusions=robotExclusions+mapOf(type to ids);refreshRadarModes()}
         }.apply{tag="robot-exclusions-${type.name}";textSize=11f}.also{exclusionButtons[type]=it}}))
         options.addView(label("各區條件：單點必選、空白自由測試、雙擊排除；設定不會改變上方啟停開關。",11f))

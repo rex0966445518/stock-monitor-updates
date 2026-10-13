@@ -51,11 +51,9 @@ internal object NeonUi {
     }
     fun row(c:Context,views:List<View>):LinearLayout=LinearLayout(c).apply {
         gravity=Gravity.CENTER_VERTICAL
-        if(views.size>4){
-            orientation=LinearLayout.VERTICAL
-            views.chunked(3).forEach{group->addView(row(c,group),LinearLayout.LayoutParams(-1,-2))}
-        }else views.forEachIndexed { i,v -> addView(v,LinearLayout.LayoutParams(0,-2,1f).apply { if(i>0)marginStart=dp(c,8) }) }
+        views.forEachIndexed { i,v -> addView(v,LinearLayout.LayoutParams(0,-2,1f).apply { if(i>0)marginStart=dp(c,8) }) }
     }
+    fun radarRows(c:Context,views:List<View>):LinearLayout=vertical(c).apply{views.chunked(3).forEach{addView(row(c,it),LinearLayout.LayoutParams(-1,-2))}}
     fun button(c:Context,value:String,accent:Int=cyan,action:()->Unit)=MaterialButton(c).apply {
         text=value;isAllCaps=false;textSize=13f;minHeight=dp(c,50);minimumWidth=0
         insetTop=dp(c,3);insetBottom=dp(c,3);cornerRadius=dp(c,14);strokeWidth=dp(c,1).coerceAtLeast(1)

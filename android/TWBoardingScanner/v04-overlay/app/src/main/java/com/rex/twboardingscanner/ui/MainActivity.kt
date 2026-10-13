@@ -144,7 +144,7 @@ class MainActivity: AppCompatActivity() {
         val switchRow=NeonUi.vertical(this).apply{
             tag="scanner-radar-toggles"
             addView(NeonUi.label(this@MainActivity,"ABCDEF 參與分析：亮起才會跑該區條件",12f,NeonUi.cyan,true))
-            addView(NeonUi.row(this@MainActivity,RadarType.entries.map{type->
+            addView(NeonUi.radarRows(this@MainActivity,RadarType.entries.map{type->
                 NeonUi.button(this@MainActivity,"",NeonUi.cyan){
                     radarEnabled=if(type in radarEnabled)radarEnabled-type else radarEnabled+type
                     saveScanSettings();refreshRadarSwitches();requestConfiguredScan()

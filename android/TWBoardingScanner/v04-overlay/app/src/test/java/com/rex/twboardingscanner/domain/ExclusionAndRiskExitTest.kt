@@ -58,7 +58,7 @@ class ExclusionAndRiskExitTest{
         val settings=BtRobotSpace.settings(rules).copy(start=day,end=day.plusDays(1),enabledRadars=RadarType.entries.toSet(),stockScope=StockScope.ROBOT,
             exclusions=RadarType.entries.associateWith{setOf(BearishTurn.ID)},exitRules=listOf(ExitRule(bearishExit=true)),marketGuardVersion=MarketCrashGuard.VERSION)
         val ref=BacktestEngine.prepare(series,settings)
-        assertEquals("A/B/E",ref.signals.getValue(day).single().radar)
+        assertEquals("A/B/E/F",ref.signals.getValue(day).single().radar)
         assertEquals("C/D",ref.signals.getValue(day.plusDays(1)).single().radar)
         val file=File(RuntimeEnvironment.getApplication().cacheDir,"veto-facts.gz")
         val fp=BtConditionIndex.fingerprint("fixture",settings)

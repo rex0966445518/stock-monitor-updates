@@ -24,7 +24,7 @@ internal object BtRobotRulesDialog {
         root.addView(NeonUi.label(a,"單點 ✓ 必選；快速雙點 ✕ 排除，再單點解除。空白為機器人自由測試；✕ 不加入任何組合。長按也可排除。",12f))
         val body=NeonUi.vertical(a);val tabs=NeonUi.row(a,RadarType.entries.map{type->NeonUi.button(a,when(type){RadarType.A_EARLY_BREAKOUT->"A 起漲";RadarType.B_DEEP_REVERSAL->"B 反轉";RadarType.C_LONG_RED_VOLUME->"C 爆量";RadarType.D_MAIN_FORCE->"D 主力";RadarType.E_DIF_TOUCH->"E DIF 接觸";else->"F 縮量上漲"}){
             populate(a,body,type,selected.getValue(type),excluded.getValue(type)){summary()}
-        }})
+        }.apply{textSize=11f;setPadding(3,4,3,4);maxLines=2;minHeight=NeonUi.dp(a,44)}})
         root.addView(tabs)
         root.addView(NeonUi.button(a,"一鍵把 A 的必選／排除同步到 D（保留 D 原有六項）",NeonUi.mint){
             val aType=RadarType.A_EARLY_BREAKOUT

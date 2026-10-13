@@ -125,14 +125,14 @@ class BacktestActivity:AppCompatActivity(){
         sectorButton=NeonUi.button(this,""){editSectors()};refreshSectorButton();universe.addView(sectorButton)
         universe.addView(NeonUi.gap(this,12));universe.addView(label("回測專用 ABCDEF 條件",15f,NeonUi.ink,true))
         universe.addView(label("按鈕亮起才參與分析；關閉不會刪除該區勾選",11f))
-        universe.addView(NeonUi.row(this,RadarType.entries.map{type->
+        universe.addView(NeonUi.radarRows(this,RadarType.entries.map{type->
             NeonUi.button(this,"",NeonUi.cyan){
                 btEnabled=if(type in btEnabled)btEnabled-type else btEnabled+type
                 store.saveDraft(draft());updateRadarModes()
             }.apply{tag="backtest-enabled-${type.name}";textSize=12f}.also{radarModeButtons[type]=it}
         }))
         updateRadarModes()
-        universe.addView(NeonUi.row(this,RadarType.entries.map{type->NeonUi.button(this,"",when(type){RadarType.A_EARLY_BREAKOUT->NeonUi.pink;RadarType.B_DEEP_REVERSAL->NeonUi.amber;else->NeonUi.cyan}){editRules(type)}.also{ruleButtons[type]=it}}))
+        universe.addView(NeonUi.radarRows(this,RadarType.entries.map{type->NeonUi.button(this,"",when(type){RadarType.A_EARLY_BREAKOUT->NeonUi.pink;RadarType.B_DEEP_REVERSAL->NeonUi.amber;else->NeonUi.cyan}){editRules(type)}.also{ruleButtons[type]=it}}))
         refreshRuleButtons()
         universe.addView(label("首次沿用主頁，之後獨立保存回測設定。",11f))
         universe.addView(NeonUi.button(this,"查看完整回測條件"){if(readTrading(true)!=null)showRules(BtSettingsCodec.encode(draft()))})

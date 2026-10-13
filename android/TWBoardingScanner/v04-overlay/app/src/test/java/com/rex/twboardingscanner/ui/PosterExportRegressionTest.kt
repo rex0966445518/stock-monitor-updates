@@ -107,8 +107,8 @@ class PosterExportRegressionTest {
             assertEquals("${section.label} 海報預覽",
                 (find(decor,"poster-preview-image") as ImageView).contentDescription?.toString())
         }
-        assertTrue(dialog.getButton(DialogInterface.BUTTON_POSITIVE).text.toString().contains("5 張"))
-        assertTrue(dialog.getButton(DialogInterface.BUTTON_NEUTRAL).text.toString().contains("5 張"))
+        assertTrue(dialog.getButton(DialogInterface.BUTTON_POSITIVE).text.toString().contains("6 張"))
+        assertTrue(dialog.getButton(DialogInterface.BUTTON_NEUTRAL).text.toString().contains("6 張"))
         dialog.dismiss()
         activity.pause().stop().destroy()
         files.forEach{it.delete()}
