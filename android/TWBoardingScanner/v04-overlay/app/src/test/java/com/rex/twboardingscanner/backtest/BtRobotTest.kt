@@ -64,6 +64,27 @@ class BtRobotTest {
         val wrong=BtSettingsCodec.encode(settings).put("rulesVersion","old")
         assertThrows(Exception::class.java){BtRuleApply.apply(app,wrong)}
     }
+    @Test fun targetedJournalSyncChangesOnlyChosenDraftAndRejectsIncompleteSnapshots(){
+        val old=BtSettings(LocalDate.of(2025,8,1),LocalDate.of(2025,8,31))
+        val store=BacktestStore(app);store.saveDraft(old)
+        val settings=old.copy(capital=5000000.0,maxHoldingStocks=19,targetNetPct=4.0,codes="2330",rules=empty()+mapOf(RadarType.B_DEEP_REVERSAL to setOf("price","floor")),sectors=setOf(StockSector.entries.first()))
+        val snapshot=BtSettingsCodec.encode(settings)
+        val revision=BtRuleApply.revision(app)
+        BtRuleApply.applyTo(app,snapshot,StockScope.SCANNER)
+        assertEquals(old,BtSettingsCodec.decode(store.configuration()!!))
+        assertEquals(revision,BtRuleApply.revision(app))
+        assertEquals(settings.rules,BtSettingsCodec.capture(app,old.start,old.end,1000000.0,"").rules)
+        val scannerPrefs=app.getSharedPreferences("scanner_filters",0)
+        val scannerBefore=scannerPrefs.all.toMap()
+        BtRuleApply.applyTo(app,BtSettingsCodec.encode(old),StockScope.BACKTEST)
+        assertEquals(old,BtSettingsCodec.decode(store.configuration()!!))
+        assertNotEquals(revision,BtRuleApply.revision(app))
+        assertEquals(scannerBefore.filterKeys{it!=BtRuleApply.BACKTEST_REVISION},scannerPrefs.all.filterKeys{it!=BtRuleApply.BACKTEST_REVISION})
+        val saved=store.configuration().toString()
+        val invalid=JSONObject(snapshot.toString()).apply{remove("exitRules")}
+        assertThrows(Exception::class.java){BtRuleApply.applyTo(app,invalid,StockScope.BACKTEST)}
+        assertEquals(saved,store.configuration().toString())
+    }
     @Test fun sixtyFiveIndependentSwitchesRoundTripAndSearchNeverRepeats(){
         assertEquals(65,BtRobotSpace.legacySlots.size)
         assertEquals(71,BtRobotSpace.slots.size)

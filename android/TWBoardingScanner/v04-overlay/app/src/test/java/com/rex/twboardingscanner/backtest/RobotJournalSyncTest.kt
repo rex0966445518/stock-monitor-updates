@@ -1,5 +1,9 @@
 package com.rex.twboardingscanner.backtest
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import org.robolectric.annotation.GraphicsMode
+import java.io.File
 import android.widget.EditText
 import android.view.View
 import android.view.ViewGroup
@@ -21,6 +25,7 @@ import java.time.LocalDate
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk=[34],qualifiers="zh-rTW-w360dp-h800dp-xhdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class RobotJournalSyncTest {
     private val app get()=RuntimeEnvironment.getApplication()
     @Before fun clean(){
@@ -162,6 +167,23 @@ class RobotJournalSyncTest {
         val incomplete=find(journal.get().window.decorView,"journal-sync-unfinished") as TextView
         assertNotNull(done);assertTrue(done.isEnabled)
         assertNotNull(incomplete);assertFalse(incomplete.isEnabled)
+        listOf("scanner","backtest").forEach{target->
+            val ready=find(journal.get().window.decorView,"journal-sync-$target-7e67cf98") as TextView
+            val disabled=find(journal.get().window.decorView,"journal-sync-$target-unfinished") as TextView
+            assertTrue(ready.isEnabled);assertFalse(disabled.isEnabled)
+            ready.performClick()
+            val prompt=ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
+            assertTrue(prompt.isShowing);prompt.dismiss()
+        }
+        val strip=done.parent as View
+        strip.measure(View.MeasureSpec.makeMeasureSpec(624,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED))
+        strip.layout(0,0,624,strip.measuredHeight)
+        val bitmap=Bitmap.createBitmap(624,strip.measuredHeight,Bitmap.Config.ARGB_8888)
+        strip.draw(Canvas(bitmap))
+        val preview=File("build/ui-previews/journal-sync-three-buttons.png")
+        preview.parentFile!!.mkdirs()
+        preview.outputStream().use{bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}
+        bitmap.recycle()
         done.performClick()
         val dialog=ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
         assertTrue(dialog.isShowing)

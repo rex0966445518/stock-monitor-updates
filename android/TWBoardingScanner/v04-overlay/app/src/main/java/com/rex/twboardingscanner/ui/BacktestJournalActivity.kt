@@ -8,6 +8,8 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.rex.twboardingscanner.backtest.BtRuleApply
+import com.rex.twboardingscanner.backtest.BtSettingsCodec
 import com.rex.twboardingscanner.backtest.BacktestStore
 import com.rex.twboardingscanner.backtest.BtRobotJournalSync
 import com.rex.twboardingscanner.backtest.BtRobotStore
@@ -120,6 +122,27 @@ class BacktestJournalActivity:AppCompatActivity(){
             runOnUiThread{if(!isFinishing&&!isDestroyed)result.fold({reload();android.widget.Toast.makeText(this,"已匯入獨立日誌，原始績效保留",android.widget.Toast.LENGTH_LONG).show()},{status.text="匯入失敗：請選擇匯出的完整回測報告 JSON。${it.message}"})}
         }.start()
     }
+    private fun syncToPage(id:String,row:JSONObject,scope:com.rex.twboardingscanner.domain.StockScope){
+        val name=if(scope==com.rex.twboardingscanner.domain.StockScope.SCANNER)"主頁偵測器" else "歷史回測"
+        if(row.optString("state")!="DONE")return
+        val snapshot=row.optJSONObject("settings")?:return
+        val policy=runCatching{BtSettingsCodec.decode(snapshot).stockPolicy}.getOrElse{
+            android.widget.Toast.makeText(this,"無法同步：${it.message}",android.widget.Toast.LENGTH_LONG).show();return
+        }
+        val shared=if(StockPolicyStore(this).read()!=policy)"\n\n此日誌的禁股／限價與目前不同，會更新三區共用名單，並暫停執行中的回測與機器人。" else ""
+        val fields=if(scope==com.rex.twboardingscanner.domain.StockScope.SCANNER)
+            "ABCDEF 條件、啟用開關、數值門檻、排除規則、產業及下車條件"
+            else "ABCDEF 條件、啟用開關、數值門檻、排除規則、產業、股號、日期、本金、持倉、獲利及下車條件"
+        MaterialAlertDialogBuilder(this).setTitle("同步至$name · ${id.take(8)}")
+            .setMessage("將此筆回測保存的$fields 同步至$name。同步後前往該頁，由你按開始才執行。$shared")
+            .setNegativeButton("取消",null).setPositiveButton("同步並前往"){_,_->
+                runCatching{BtRuleApply.applyTo(this,snapshot,scope)}.onSuccess{
+                    android.widget.Toast.makeText(this,"已同步至$name",android.widget.Toast.LENGTH_SHORT).show()
+                    val target=if(scope==com.rex.twboardingscanner.domain.StockScope.SCANNER)MainActivity::class.java else BacktestActivity::class.java
+                    startActivity(Intent(this,target).apply{if(scope==StockScope.SCANNER)addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)})
+                }.onFailure{android.widget.Toast.makeText(this,"同步失敗：${it.message}",android.widget.Toast.LENGTH_LONG).show()}
+            }.show()
+    }
     private fun syncToRobot(id:String,row:JSONObject){
         val desired=runCatching{BtRobotJournalSync.fromJournal(row)}.getOrElse{
             android.widget.Toast.makeText(this,"無法同步：${it.message}",android.widget.Toast.LENGTH_LONG).show()
@@ -209,11 +232,17 @@ class BacktestJournalActivity:AppCompatActivity(){
             panel.addView(NeonUi.gap(this,8))
             panel.addView(NeonUi.row(this,listOf(NeonUi.button(this,"條件快照"){BtSnapshotDialog.show(this,s,"回測條件 · ${id.take(8)}")},NeonUi.button(this,"檢閱日誌",color){startActivity(Intent(this,BacktestActivity::class.java).putExtra("journalId",id))})))
             panel.addView(NeonUi.gap(this,6))
-            panel.addView(NeonUi.primary(this,"同步至自動機器人"){syncToRobot(id,row)}.apply{
-                tag="journal-sync-$id"
-                isEnabled=complete
-                contentDescription="將日誌 ${id.take(8)} 保存的完整條件套用到自動測試機器人"
-            })
+            val syncButtons=listOf(
+                NeonUi.button(this,"同步\n主偵測器",NeonUi.cyan){syncToPage(id,row,com.rex.twboardingscanner.domain.StockScope.SCANNER)}.apply{tag="journal-sync-scanner-$id"},
+                NeonUi.button(this,"同步\n歷史回測",NeonUi.mint){syncToPage(id,row,com.rex.twboardingscanner.domain.StockScope.BACKTEST)}.apply{tag="journal-sync-backtest-$id"},
+                NeonUi.button(this,"同步\n自動機器人",NeonUi.pink){syncToRobot(id,row)}.apply{tag="journal-sync-$id"}
+            )
+            syncButtons.forEach{button->
+                button.isEnabled=complete;button.textSize=11f;button.minHeight=NeonUi.dp(this,48)
+                button.maxLines=2;button.setPadding(NeonUi.dp(this,4),NeonUi.dp(this,4),NeonUi.dp(this,4),NeonUi.dp(this,4))
+                button.contentDescription="將日誌 ${id.take(8)} 保存的條件"+button.text.toString().replace("\n","至")
+            }
+            panel.addView(NeonUi.row(this,syncButtons))
             entries.addView(panel);entries.addView(NeonUi.gap(this,10))
         }
         if(shown<rows.size)entries.addView(NeonUi.button(this,"載入更多（已顯示 $shown / ${rows.size}）"){shown+=20;renderPage()}.apply{tag="journal-load-more"})

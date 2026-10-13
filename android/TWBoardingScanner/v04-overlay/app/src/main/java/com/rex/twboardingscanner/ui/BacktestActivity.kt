@@ -62,7 +62,7 @@ class BacktestActivity:AppCompatActivity(){
     private fun tint(v:Double)=if(v>=0)NeonUi.pink else NeonUi.mint
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState);store=BacktestStore(this)
-        appliedRevision=getSharedPreferences("scanner_filters",0).getString(BtRuleApply.REVISION,"").orEmpty()
+        appliedRevision=BtRuleApply.revision(this)
         intent.getStringExtra("robotSession")?.let { id -> viewingLog=true;openRobotReport(id,intent.getStringExtra("robotKey").orEmpty());return }
         val logId=intent.getStringExtra("journalId")
         if(logId!=null){viewingLog=true;openJournal(logId);return}
@@ -300,7 +300,7 @@ class BacktestActivity:AppCompatActivity(){
     }
     private fun showRules(settings:JSONObject){BtSnapshotDialog.show(this,settings,afterApply={if(!viewingLog)reloadApplied()})}
     private fun reloadApplied(){
-        val revision=getSharedPreferences("scanner_filters",0).getString(BtRuleApply.REVISION,"").orEmpty()
+        val revision=BtRuleApply.revision(this)
         if(revision==appliedRevision||!::codes.isInitialized)return
         val saved=runCatching{BtSettingsCodec.decode(store.configuration()!!)}.getOrNull()?:return
         appliedRevision=revision;start=saved.start;end=saved.end;btRules=saved.rules;btSectors=saved.sectors;exitRules=saved.exitRules
