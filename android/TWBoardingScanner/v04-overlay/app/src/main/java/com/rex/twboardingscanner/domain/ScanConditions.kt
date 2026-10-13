@@ -193,6 +193,8 @@ class RuleMetrics(val s: StockSnapshot) {
     val breakout: Boolean? get() = if (previous.size < 19) null else last!!.close > previous.takeLast(19).maxOf { it.close }
     fun volumeAtLeast(multiplier: Double): Boolean? {
         if (previous.size < 20) return null
+        // Missing Yahoo volumes are decoded as zero; do not dilute the baseline.
+        if (last == null || last.volumeShares <= 0 || previous.takeLast(20).any { it.volumeShares <= 0 }) return null
         val average = previous.takeLast(20).map { it.volumeShares.toDouble() }.average()
         return if (average <= 0) null else last!!.volumeShares >= average * multiplier
     }

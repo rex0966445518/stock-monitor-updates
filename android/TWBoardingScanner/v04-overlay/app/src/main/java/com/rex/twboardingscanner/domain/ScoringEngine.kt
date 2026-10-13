@@ -21,6 +21,7 @@ class ScoringEngine {
         if (upgraded) reasons += "技術升級：RSI>50 且收盤站上20日線"
         val light = if (blockers.isNotEmpty()) SignalLight.NONE else if (upgraded) SignalLight.RED else SignalLight.ORANGE
         val evidence=listOfNotNull(
+            if(type==RadarType.C_LONG_RED_VOLUME)CSignalEvidence.format(metrics,selected) else null,
             if(type==RadarType.D_MAIN_FORCE)metrics.dPattern.format() else null,
             if(type==RadarType.F_VOLUME_CONTRACTION)metrics.fPattern.format() else null,
             if(type==RadarType.E_DIF_TOUCH)metrics.ePattern?.format()?:"E 日K資料不足，待查核" else null,
