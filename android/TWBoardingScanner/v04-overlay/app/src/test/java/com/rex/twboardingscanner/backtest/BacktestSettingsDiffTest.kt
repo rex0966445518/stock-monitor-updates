@@ -130,6 +130,55 @@ class BacktestSettingsDiffTest {
         val missing=BacktestDiffView(a,current,JSONObject().put("id","old"));assertTrue(text(missing).contains("無法確認是否相同"))
         ctl.stop().destroy()
     }
+    @Test fun independentExitSwitchesAreComparedInBothDirectionsAndIgnoreOrdering(){
+        fun rules(mask:Int)=listOf(ExitRule(days=15))+buildList{
+            if(mask and 1!=0)add(ExitRule(ma5Exit=true))
+            if(mask and 2!=0)add(ExitRule(bearishExit=true))
+        }
+        for(before in 0..3)for(after in 0..3){
+            val diff=BacktestSettingsDiff.compare(snapshot(settings().copy(exitRules=rules(after))),snapshot(settings().copy(exitRules=rules(before))))
+            assertTrue(diff.unavailable.isEmpty())
+            assertEquals(Integer.bitCount(before xor after),diff.changes.size)
+            for(bit in listOf(1,2))if((before xor after) and bit!=0){
+                val change=diff.changes.single{if(bit==1)it.text.contains("不參考RSI") else it.text.contains(BearishTurn.LABEL)}
+                assertEquals(if(after and bit!=0)SettingChangeKind.ADDED else SettingChangeKind.REMOVED,change.kind)
+                assertTrue(change.text.endsWith(if(after and bit!=0)"關閉 → 啟用" else "啟用 → 關閉"))
+            }
+        }
+        val original=snapshot(settings().copy(exitRules=rules(3)))
+        val reordered=snapshot(settings().copy(exitRules=listOf(ExitRule(bearishExit=true),ExitRule(days=15),ExitRule(ma5Exit=true))))
+        assertTrue(BacktestSettingsDiff.compare(reordered,original).changes.isEmpty())
+    }
+    @Test fun missingAndMalformedExitSnapshotsAreUnknownRatherThanIdentical(){
+        val valid=snapshot()
+        for(bad in listOf(JSONObject(valid.toString()).apply{remove("exitRules")},
+            JSONObject(valid.toString()).put("exitRules",JSONArray().put(JSONObject().put("ma5Exit",true).put("days",15))))){
+            assertTrue(BacktestSettingsDiff.compare(valid,bad).unavailable.contains("下車條件"))
+            assertTrue(BacktestJournalUi.exitSummary(bad).contains("無法確認"))
+        }
+    }
+    @Test fun journalCardsDisplayTheirOwnArchivedExitRulesAndShowChanges(){
+        val before=snapshot(settings().copy(exitRules=listOf(ExitRule(days=15),ExitRule(bearishExit=true))))
+        val after=snapshot(settings().copy(exitRules=listOf(ExitRule(days=20),ExitRule(ma5Exit=true))))
+        val frozenBefore=before.toString();val frozenAfter=after.toString()
+        val ctl=Robolectric.buildActivity(BacktestJournalActivity::class.java).create().start();val activity=ctl.get()
+        activity.renderEntries(listOf(entry("exit-new",after,2),entry("exit-old",before,1)))
+        val root=activity.window.decorView
+        val newLabel=root.findViewWithTag<TextView>("journal-exit-exit-new")
+        val oldLabel=root.findViewWithTag<TextView>("journal-exit-exit-old")
+        assertTrue(newLabel.text.contains("20"));assertTrue(oldLabel.text.contains("15"))
+        assertTrue(newLabel.text.contains("✓ 已啟用 · 收盤跌破5日線"))
+        assertTrue(oldLabel.text.contains("— 未啟用 · 收盤跌破5日線"))
+        assertTrue(oldLabel.text.contains("✓ 已啟用 · "+BearishTurn.LABEL))
+        assertFalse(text(root.findViewWithTag<View>("journal-diff-exit-new")).contains("條件與前次相同"))
+        for(scale in listOf(1f,1.3f)){
+            RuntimeEnvironment.setFontScale(scale)
+            activity.renderEntries(listOf(entry("exit-new",after,2),entry("exit-old",before,1)))
+            capture(root.findViewWithTag<TextView>("journal-exit-exit-new").parent as View,"journal-exit-settings-$scale")
+        }
+        assertEquals(frozenBefore,before.toString());assertEquals(frozenAfter,after.toString())
+        ctl.stop().destroy()
+    }
     private fun capture(v:View,name:String,height:Int?=null){
         val width=NeonUi.dp(v.context,if(height==null)312 else 360)
         v.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(if(height==null)0 else NeonUi.dp(v.context,height),if(height==null)View.MeasureSpec.UNSPECIFIED else View.MeasureSpec.EXACTLY))

@@ -37,6 +37,18 @@ internal object BacktestJournalUi {
         val profit=if(target.isFinite())"獲利賣出 ${com.rex.twboardingscanner.backtest.btPercent(target)}%（扣費稅）" else "獲利目標未記錄"
         return "$limit · $profit" + (if(s.optBoolean("holdProfitUntilMa5Break",false))" · RSI>50／5MA 達標續抱" else "")
     }
+    fun exitSummary(s:JSONObject):String {
+        val raw=s.optJSONArray("exitRules")?:return "本次賣出條件：舊日誌未完整記錄，無法確認"
+        val rules=runCatching{ExitRules.read(raw)}.getOrNull()?:return "本次賣出條件：快照資料不完整，無法確認"
+        val lines=mutableListOf("本次賣出條件（保存快照）")
+        val ordinary=rules.filterNot{it.bearishExit||it.ma5Exit}
+        val active=ordinary.mapIndexedNotNull{i,r->if(r.active)"✓ 認賠第 ${i+1} 組：${r.description()}" else null}
+        lines+=if(active.isEmpty())listOf("認賠條件：未啟用") else active
+        lines+="${if(rules.any{it.ma5Exit})"✓ 已啟用" else "— 未啟用"} · 收盤跌破5日線即賣出（不參考RSI、不限盈虧）"
+        lines+="${if(rules.any{it.bearishExit})"✓ 已啟用" else "— 未啟用"} · ${BearishTurn.LABEL}"
+        lines+=if(s.has("holdProfitUntilMa5Break"))"${if(s.optBoolean("holdProfitUntilMa5Break"))"✓ 已啟用" else "— 未啟用"} · 淨利達標後 RSI>50／未跌破5MA續抱，收盤跌破5MA才賣出" else "達標續抱：舊日誌未記錄"
+        return lines.joinToString("\n")
+    }
     fun describe(s:JSONObject):String {
         val rules=s.optJSONObject("rules");val labels=s.optJSONObject("ruleLabels")
         val sectors=strings(s.optJSONArray("sectorLabels")).ifEmpty{strings(s.optJSONArray("sectors")).map{name->StockSector.entries.firstOrNull{it.name==name}?.label?:name}}
@@ -47,7 +59,7 @@ internal object BacktestJournalUi {
             "${s.optString("marketGuardSummary","此舊日誌未啟用大盤保護")}\n"+
             com.rex.twboardingscanner.domain.StockPolicy.read(s.optJSONObject("stockPolicy")).let{p->p.summary()+"\n禁股："+p.banned.sorted().joinToString("、").ifBlank{"無"}+"\n放行："+p.overrides.entries.joinToString("；"){"${it.key.label} ${it.value.sorted().joinToString("、")}"}.ifBlank{"無"}+"\n"}+
             "${s.optString("strategyLabel","舊版策略，請參考原始報告")}\n"+
-            com.rex.twboardingscanner.domain.ExitRules.summary(com.rex.twboardingscanner.domain.ExitRules.read(s.optJSONArray("exitRules")))+"\n"+
+            exitSummary(s)+"\n"+
             "條件版本 ${s.optString("rulesVersion","舊版未記錄")}"
         if(rules==null)return intro+"\n\n舊版沒有完整 ABC 勾選快照。"
         val body=RadarType.entries.joinToString("\n\n"){type->
@@ -168,6 +180,9 @@ class BacktestJournalActivity:AppCompatActivity(){
             if(complete)panel.addView(NeonUi.label(this,"買入 ${row.optInt("buys")} 張 · 賣出 ${row.optInt("closed")} 張 · 留倉 ${row.optInt("holdings")} 張",11f))
             panel.addView(NeonUi.label(this,"本金 ${String.format(Locale.TAIWAN,"%,.0f",s.optDouble("capital",0.0))} 元",12f))
             panel.addView(NeonUi.label(this,BacktestJournalUi.tradingSummary(s),12f,NeonUi.cyan))
+            panel.addView(NeonUi.label(this,BacktestJournalUi.exitSummary(s),12f,NeonUi.ink).apply{
+                tag="journal-exit-$id";setPadding(0,NeonUi.dp(context,10),0,NeonUi.dp(context,10))
+            })
             panel.addView(NeonUi.label(this,if(s.optInt("marketGuardVersion")>0)"大盤暴跌保護 · 已啟用" else "大盤保護 · 舊紀錄未啟用",11f,NeonUi.amber))
             val rules=s.optJSONObject("rules")
             val profits=row.optJSONObject("radarProfit")

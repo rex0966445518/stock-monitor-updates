@@ -71,8 +71,19 @@ object BacktestSettingsDiff {
             value("最高股價",scalar(oldPolicy,"ceiling","不限"),scalar(newPolicy,"ceiling","不限")){if(it=="不限")it else "$it 元"}
             StockScope.entries.forEach{scope->sets("${scope.label}限價放行",strings(oldPolicy.optJSONObject("overrides")?.optJSONArray(scope.name)),strings(newPolicy.optJSONObject("overrides")?.optJSONArray(scope.name)))}
         }
-        val oldExit=previous.optJSONArray("exitRules");val newExit=current.optJSONArray("exitRules")
-        if(oldExit==null||newExit==null)missing+="下車條件" else{
+        val oldExitRaw=previous.optJSONArray("exitRules");val newExitRaw=current.optJSONArray("exitRules")
+        val oldExitRules=oldExitRaw?.let{runCatching{ExitRules.read(it)}.getOrNull()}
+        val newExitRules=newExitRaw?.let{runCatching{ExitRules.read(it)}.getOrNull()}
+        if(oldExitRules==null||newExitRules==null)missing+="下車條件" else{
+            fun toggle(title:String,before:Boolean,after:Boolean){
+                if(before!=after)change(if(after)SettingChangeKind.ADDED else SettingChangeKind.REMOVED,
+                    "$title：${if(before)"啟用" else "關閉"} → ${if(after)"啟用" else "關閉"}")
+            }
+            toggle("獨立賣出 · 跌破5日線（不參考RSI、不限盈虧）",oldExitRules.any{it.ma5Exit},newExitRules.any{it.ma5Exit})
+            toggle("獨立風險退出 · "+BearishTurn.LABEL,oldExitRules.any{it.bearishExit},newExitRules.any{it.bearishExit})
+            // Independent switches are compared by identity, never by array position.
+            val oldExit=ExitRules.json(oldExitRules.filterNot{it.ma5Exit||it.bearishExit})
+            val newExit=ExitRules.json(newExitRules.filterNot{it.ma5Exit||it.bearishExit})
             val fields=linkedMapOf("days" to "留倉天數", "compare" to "虧損比較", "lossPct" to "虧損幅度", "macd" to "MACD 方向", "maDays" to "跌破均線")
             fun field(o:JSONObject?,key:String)=scalar(o,key)?.takeIf{it.isNotBlank()}
             fun display(key:String,v:String)=when(key){
