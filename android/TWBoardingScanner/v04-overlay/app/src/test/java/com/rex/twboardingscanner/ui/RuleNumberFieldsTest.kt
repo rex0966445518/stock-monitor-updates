@@ -57,6 +57,11 @@ class RuleNumberFieldsTest {
         open(a,type);assertEquals("4",number(current(),BPattern.STOP,"b-stopDays").text.toString())
         val decor=current().window!!.decorView
         decor.measure(View.MeasureSpec.makeMeasureSpec(720,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(1600,View.MeasureSpec.EXACTLY));decor.layout(0,0,720,1600)
+        val footer=current().getButton(-1)
+        assertTrue(footer.height>0)
+        val bounds=android.graphics.Rect(0,0,footer.width,footer.height)
+        (decor as ViewGroup).offsetDescendantRectToMyCoords(footer,bounds)
+        assertTrue("B apply button clipped: $bounds",bounds.top>=0&&bounds.bottom<=decor.height)
         val image=android.graphics.Bitmap.createBitmap(720,1600,android.graphics.Bitmap.Config.ARGB_8888);decor.draw(android.graphics.Canvas(image))
         val file=java.io.File("build/ui-previews/b-reversal-presets-360.png");file.parentFile!!.mkdirs()
         file.outputStream().use{image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)};image.recycle()

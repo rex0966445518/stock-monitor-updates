@@ -802,8 +802,11 @@ class MainActivity: AppCompatActivity() {
         }.apply{tag="scanner-d-copy-a"})
         if(type==RadarType.B_DEEP_REVERSAL){val presets=NeonUi.vertical(this);BReversalPresets.add(this,presets){ids->checks.forEach{(id,check)->check.isChecked=id in ids}};box.addView(presets,0)}
         val scroll = ScrollView(this).apply { addView(box) }
+        val selectionView=if(type==RadarType.B_DEEP_REVERSAL)NeonUi.vertical(this).apply{
+            addView(scroll,LinearLayout.LayoutParams(-1,(resources.displayMetrics.heightPixels*.58f).toInt()))
+        } else scroll
         val dialog = MaterialAlertDialogBuilder(this)
-            .setTitle(title).setView(scroll)
+            .setTitle(title).setView(selectionView)
             .setNeutralButton("恢復預設", null)
             .setNegativeButton("取消", null)
             .setPositiveButton("儲存條件", null).create()
