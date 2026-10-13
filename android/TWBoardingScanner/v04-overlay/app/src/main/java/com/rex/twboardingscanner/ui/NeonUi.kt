@@ -16,9 +16,9 @@ import com.google.android.material.button.MaterialButton
 
 /** Shared visual language: quiet surfaces, clear hierarchy and one primary action. */
 internal object NeonUi {
-    val canvas=Color.rgb(8,14,25)
-    val surface=Color.rgb(16,26,42)
-    val border=Color.rgb(36,51,70)
+    val canvas=Color.rgb(9,11,16)
+    val surface=Color.rgb(20,25,34)
+    val border=Color.rgb(53,64,79)
     val ink=Color.rgb(235,241,250)
     val muted=Color.rgb(148,164,185)
     val cyan=Color.rgb(111,218,235)
@@ -26,10 +26,29 @@ internal object NeonUi {
     val mint=Color.rgb(113,220,184)
     val amber=Color.rgb(231,192,123)
     val blue=Color.rgb(150,167,230)
+    val neonRed=Color.rgb(255,55,82)
+    val ruby=Color.rgb(143,24,47)
+    fun radarColor(type:com.rex.twboardingscanner.domain.RadarType):Int = when(type){
+        com.rex.twboardingscanner.domain.RadarType.A_EARLY_BREAKOUT->Color.rgb(99,213,196)
+        com.rex.twboardingscanner.domain.RadarType.B_DEEP_REVERSAL->Color.rgb(177,154,244)
+        com.rex.twboardingscanner.domain.RadarType.C_LONG_RED_VOLUME->Color.rgb(237,188,109)
+        com.rex.twboardingscanner.domain.RadarType.D_MAIN_FORCE->Color.rgb(128,175,255)
+        com.rex.twboardingscanner.domain.RadarType.E_DIF_TOUCH->Color.rgb(232,154,186)
+        com.rex.twboardingscanner.domain.RadarType.F_VOLUME_CONTRACTION->Color.rgb(130,203,168)
+    }
+    private fun labelAccent(value:CharSequence):Int? = com.rex.twboardingscanner.domain.RadarType.entries
+        .firstOrNull{value.length>1 && value[0]==it.name[0] && value[1]==' '}?.let{radarColor(it)}
+    fun tint(accent:Int,amount:Float=.10f)=androidx.core.graphics.ColorUtils.blendARGB(surface,accent,amount)
+    fun backdrop(c:Context)=NeonBackdrop(c.resources.displayMetrics.density)
+    fun categoryStyle(button:MaterialButton,type:com.rex.twboardingscanner.domain.RadarType){
+        val accent=radarColor(type)
+        button.setTextColor(accent);button.strokeColor=ColorStateList.valueOf(tint(accent,.48f))
+        button.backgroundTintList=ColorStateList.valueOf(tint(accent,.06f))
+    }
     fun dp(c:Context,n:Int)=(c.resources.displayMetrics.density*n).toInt()
     fun panel(c:Context,accent:Int=blue)=GradientDrawable(GradientDrawable.Orientation.TL_BR,
-        intArrayOf(Color.rgb(20,32,49),surface)).apply {
-        cornerRadius=dp(c,20).toFloat()
+        intArrayOf(Color.rgb(24,29,38),surface)).apply {
+        cornerRadius=dp(c,16).toFloat()
         setStroke(dp(c,1).coerceAtLeast(1),Color.rgb((Color.red(accent)*.12+31).toInt(),(Color.green(accent)*.12+39).toInt(),(Color.blue(accent)*.12+51).toInt()))
     }
     fun label(c:Context,value:String,size:Float=12f,color:Int=muted,bold:Boolean=false)=TextView(c).apply {
@@ -57,25 +76,26 @@ internal object NeonUi {
     fun button(c:Context,value:String,accent:Int=cyan,action:()->Unit)=MaterialButton(c).apply {
         text=value;isAllCaps=false;textSize=13f;minHeight=dp(c,50);minimumWidth=0
         insetTop=dp(c,3);insetBottom=dp(c,3);cornerRadius=dp(c,14);strokeWidth=dp(c,1).coerceAtLeast(1)
-        strokeColor=ColorStateList.valueOf(border);backgroundTintList=ColorStateList.valueOf(surface)
-        setTextColor(ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled),intArrayOf()),intArrayOf(muted,accent)))
+        val effectiveAccent=labelAccent(value)?:accent
+        strokeColor=ColorStateList.valueOf(tint(effectiveAccent,.35f));backgroundTintList=ColorStateList.valueOf(tint(effectiveAccent,.04f))
+        setTextColor(ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled),intArrayOf()),intArrayOf(muted,effectiveAccent)))
         setPadding(dp(c,12),dp(c,8),dp(c,12),dp(c,8));setOnClickListener { action() }
     }
     fun primary(c:Context,value:String,action:()->Unit)=button(c,value,cyan,action).apply{primaryStyle(this)}
     fun primaryStyle(button:MaterialButton){
-        button.setTextColor(ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled),intArrayOf()),intArrayOf(muted,canvas)))
-        button.backgroundTintList=ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled),intArrayOf()),intArrayOf(border,cyan))
-        button.strokeWidth=0;button.typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+        button.setTextColor(ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled),intArrayOf()),intArrayOf(muted,ink)))
+        button.backgroundTintList=ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled),intArrayOf()),intArrayOf(border,ruby))
+        button.strokeWidth=dp(button.context,1).coerceAtLeast(1);button.strokeColor=ColorStateList.valueOf(neonRed);button.typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
     }
-    fun selected(button:MaterialButton,active:Boolean){
+    fun selected(button:MaterialButton,active:Boolean,accent:Int=labelAccent(button.text)?:cyan){
         button.isSelected=active
-        button.backgroundTintList=ColorStateList.valueOf(if(active)Color.rgb(29,58,70) else surface)
-        button.strokeColor=ColorStateList.valueOf(if(active)cyan else border)
-        button.setTextColor(if(active)cyan else muted)
+        button.backgroundTintList=ColorStateList.valueOf(if(active)tint(accent,.15f) else surface)
+        button.strokeColor=ColorStateList.valueOf(if(active)accent else border)
+        button.setTextColor(if(active)accent else muted)
     }
     fun header(c:Context,title:String,kicker:String,subtitle:String="",back:()->Unit)=vertical(c).apply{
         layoutParams=LinearLayout.LayoutParams(-1,-2)
-        addView(label(c,kicker,10f,cyan,true).apply{letterSpacing=.16f})
+        addView(label(c,kicker,10f,neonRed,true).apply{letterSpacing=.16f})
         addView(LinearLayout(c).apply{
             layoutParams=LinearLayout.LayoutParams(-1,-2)
             gravity=Gravity.CENTER_VERTICAL
@@ -87,7 +107,7 @@ internal object NeonUi {
     }
     fun section(c:Context,title:String,subtitle:String="")=vertical(c).apply{
         background=panel(c);setPadding(dp(c,16),dp(c,16),dp(c,16),dp(c,16))
-        addView(label(c,title,17f,ink,true))
+        addView(label(c,"▍ $title",17f,ink,true))
         if(subtitle.isNotBlank()){addView(gap(c,5));addView(label(c,subtitle,12f))}
         addView(gap(c,12))
     }

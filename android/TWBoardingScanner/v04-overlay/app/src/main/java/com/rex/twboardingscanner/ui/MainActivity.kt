@@ -108,6 +108,7 @@ class MainActivity: AppCompatActivity() {
         super.onCreate(savedInstanceState)
         b = ActivityMainBinding.inflate(layoutInflater)
         setContentView(b.root)
+        b.root.background=NeonUi.backdrop(this)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(b.root) { view,insets ->
             val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
             view.setPadding(dp(16)+bars.left,dp(12)+bars.top,dp(16)+bars.right,dp(6)+bars.bottom)
@@ -139,11 +140,23 @@ class MainActivity: AppCompatActivity() {
         b.conditionDButton.setOnClickListener { showRadarConditions(RadarType.D_MAIN_FORCE) }
 
 
-        val extraConditionRow=NeonUi.row(this,listOf(
-            NeonUi.button(this,"E 條件",NeonUi.pink){showRadarConditions(RadarType.E_DIF_TOUCH)}.apply{tag="scanner-e-conditions"},
-            NeonUi.button(this,"F 縮量上漲",NeonUi.mint){showRadarConditions(RadarType.F_VOLUME_CONTRACTION)}.apply{tag="scanner-f-conditions"}
-        ))
-        b.settingsPanel.addView(extraConditionRow,b.settingsPanel.indexOfChild(b.conditionAButton.parent as android.view.View)+1)
+        val originalRow=b.conditionAButton.parent as ViewGroup
+        val editorIndex=b.settingsPanel.indexOfChild(originalRow)
+        val editors=listOf(b.conditionAButton,b.conditionBButton,b.conditionCButton,b.conditionDButton,
+            NeonUi.button(this,"E 條件"){showRadarConditions(RadarType.E_DIF_TOUCH)}.apply{tag="scanner-e-conditions"},
+            NeonUi.button(this,"F 縮量上漲"){showRadarConditions(RadarType.F_VOLUME_CONTRACTION)}.apply{tag="scanner-f-conditions"})
+        editors.forEachIndexed{i,button->
+            (button.parent as? ViewGroup)?.removeView(button)
+            NeonUi.categoryStyle(button,RadarType.entries[i])
+            button.minHeight=dp(56);button.textSize=14f
+            button.icon=RadarGlyph(RadarType.entries[i]);button.iconSize=dp(20)
+            button.iconTint=android.content.res.ColorStateList.valueOf(NeonUi.radarColor(RadarType.entries[i]))
+        }
+        b.settingsPanel.removeView(originalRow)
+        val extraConditionRow=NeonUi.vertical(this).apply{
+            editors.chunked(2).forEach{addView(NeonUi.row(this@MainActivity,it))}
+        }
+        b.settingsPanel.addView(extraConditionRow,editorIndex)
         // The six on/off buttons control computation, without deleting checked rules.
         val switchRow=NeonUi.vertical(this).apply{
             tag="scanner-radar-toggles"
@@ -226,7 +239,7 @@ class MainActivity: AppCompatActivity() {
         val panel=b.settingsPanel
         (panel.parent as? ViewGroup)?.removeView(panel)
         panel.visibility=android.view.View.VISIBLE
-        val body=NeonUi.vertical(this)
+        val body=NeonUi.vertical(this).apply{background=NeonUi.backdrop(this@MainActivity)}
         body.addView(NeonUi.label(this,"條件與工具",23f,NeonUi.ink,true).apply{setPadding(dp(16),dp(12),dp(16),dp(4))})
         body.addView(NeonUi.label(this,"入場、下車與股票管理集中設定",12f).apply{setPadding(dp(16),0,dp(16),dp(8))})
         body.addView(NeonUi.button(this,"匯入內／外盤成交量 CSV（主動買賣 ≥1.5 倍）",NeonUi.cyan){

@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:layout_marginBottom="6dp" app:cardBackgroundColor="#101A2A" app:cardCornerRadius="20dp" app:strokeWidth="1dp" app:cardElevation="0dp">
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:layout_marginBottom="6dp" app:cardBackgroundColor="#141922" app:cardCornerRadius="20dp" app:strokeWidth="1dp" app:cardElevation="0dp">
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
             <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
@@ -22,7 +22,7 @@
         <com.rex.twboardingscanner.ui.ClosingAuctionView android:id="@+id/closingAuction" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:layout_marginBottom="8dp" />
         <TextView android:id="@+id/trigger" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="4dp" android:textColor="#B7C4D6" android:textSize="12sp" />
         <com.rex.twboardingscanner.ui.FinancialPanelView android:id="@+id/financialPanel" android:layout_width="match_parent" android:layout_height="wrap_content" />
-        <com.google.android.material.button.MaterialButton android:id="@+id/financialButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="財務查核  ·  EPS 趨勢與明細  ›" android:textSize="12sp" android:textColor="#6FDAEB" app:backgroundTint="#142031" app:strokeColor="#243346" app:strokeWidth="1dp" app:cornerRadius="12dp" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/financialButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="財務查核  ·  EPS 趨勢與明細  ›" android:textSize="12sp" android:textColor="#6FDAEB" app:backgroundTint="#142031" app:strokeColor="#35404F" app:strokeWidth="1dp" app:cornerRadius="12dp" />
         <com.google.android.material.chip.ChipGroup android:id="@+id/indicatorChips" android:layout_width="match_parent" android:layout_height="wrap_content" app:chipSpacingHorizontal="4dp" app:chipSpacingVertical="2dp" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

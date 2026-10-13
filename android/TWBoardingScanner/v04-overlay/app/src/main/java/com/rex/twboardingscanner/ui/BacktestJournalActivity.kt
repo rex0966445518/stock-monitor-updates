@@ -73,7 +73,7 @@ class BacktestJournalActivity:AppCompatActivity(){
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState)
         val root=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(this@BacktestJournalActivity,16),NeonUi.dp(this@BacktestJournalActivity,16),NeonUi.dp(this@BacktestJournalActivity,16),NeonUi.dp(this@BacktestJournalActivity,28))}
-        val scroll=ScrollView(this).apply{setBackgroundColor(NeonUi.canvas);addView(root)};setContentView(scroll)
+        val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);addView(root)};setContentView(scroll)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
         root.addView(NeonUi.header(this,"回測日誌","STRATEGY ARCHIVE"){finish()})
         root.addView(NeonUi.label(this,"每次獨立保存 · 條件快照 · 完整買賣紀錄",12f,NeonUi.cyan))

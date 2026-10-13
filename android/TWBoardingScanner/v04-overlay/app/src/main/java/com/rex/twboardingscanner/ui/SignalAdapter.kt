@@ -58,14 +58,7 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
         h.b.root.setOnClickListener { onClick(r) }
         h.b.chartView.setOnClickListener { onClick(r) }
         h.b.root.contentDescription = "${r.code} ${r.name}，點擊開啟籌碼K線 App 查看日K"
-        val accent = when(r.radarType) {
-            RadarType.A_EARLY_BREAKOUT -> NeonUi.pink
-            RadarType.B_DEEP_REVERSAL -> NeonUi.amber
-            RadarType.C_LONG_RED_VOLUME -> NeonUi.cyan
-            RadarType.D_MAIN_FORCE -> NeonUi.mint
-            RadarType.F_VOLUME_CONTRACTION -> NeonUi.mint
-            RadarType.E_DIF_TOUCH -> NeonUi.pink
-        }
+        val accent = NeonUi.radarColor(r.radarType)
 
         h.b.root.strokeColor = NeonUi.border
         h.b.root.strokeWidth = (1 * h.b.root.resources.displayMetrics.density).toInt()

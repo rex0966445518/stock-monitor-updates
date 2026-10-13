@@ -28,7 +28,7 @@ internal object ResultFilters {
 class ResultFilterBar @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) : LinearLayout(context, attrs) {
     var onSelected: ((Int) -> Unit)? = null
     private val titles = listOf("A 起漲", "B 反轉", "C 爆量", "D 主力", "待查核", "未通過", "全部入選", "E DIF 接觸", "F 縮量上漲")
-    private val accents = listOf(NeonUi.pink, NeonUi.amber, NeonUi.cyan, NeonUi.mint, NeonUi.amber, NeonUi.muted, NeonUi.cyan, NeonUi.pink, NeonUi.mint)
+    private val accents = listOf(NeonUi.radarColor(RadarType.A_EARLY_BREAKOUT), NeonUi.radarColor(RadarType.B_DEEP_REVERSAL), NeonUi.radarColor(RadarType.C_LONG_RED_VOLUME), NeonUi.radarColor(RadarType.D_MAIN_FORCE), NeonUi.amber, NeonUi.muted, NeonUi.ink, NeonUi.radarColor(RadarType.E_DIF_TOUCH), NeonUi.radarColor(RadarType.F_VOLUME_CONTRACTION))
     private val buttons = titles.mapIndexed { index, title ->
         NeonUi.button(context, title, accents[index]) { onSelected?.invoke(index) }.apply {
             textSize = 12f
@@ -60,7 +60,7 @@ class ResultFilterBar @JvmOverloads constructor(context: Context, attrs: Attribu
             button.backgroundTintList = ColorStateList.valueOf(if(active)
                 Color.rgb((Color.red(color)*.23).toInt(), (Color.green(color)*.23).toInt()+12, (Color.blue(color)*.23).toInt()+20)
                 else NeonUi.surface)
-            button.setTextColor(if(active) NeonUi.ink else NeonUi.muted)
+            button.setTextColor(if(active) color else NeonUi.muted)
             button.contentDescription = "${titles[i]}，${counts.getOrElse(i) { 0 }} 筆${if(active) "，已選取" else ""}"
         }
     }

@@ -52,7 +52,7 @@ class PaperStrategyActivity:AppCompatActivity() {
         repo=PaperRepository(this);book=repo.read()
         preset=book.strategy?:PaperStrategyConfig.defaults(this,book.capital)
         loadDraft(preset,false)
-        val scroll=ScrollView(this).apply{setBackgroundColor(NeonUi.canvas)}
+        val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context)}
         root=NeonUi.vertical(this).apply{setPadding(dp(16),dp(16),dp(16),dp(32))}
         scroll.addView(root);setContentView(scroll)
         ViewCompat.setOnApplyWindowInsetsListener(scroll){v,i->
@@ -110,13 +110,9 @@ class PaperStrategyActivity:AppCompatActivity() {
         universe.addView(sectorButton)
         universe.addView(label("A／B／C／D／E／F 勾選條件（可全部取消一區）",13f,NeonUi.ink,true))
         val choices=RadarType.entries.map{type->
-            NeonUi.button(this,"",when(type){
-                RadarType.A_EARLY_BREAKOUT->NeonUi.pink
-                RadarType.B_DEEP_REVERSAL->NeonUi.amber
-                else->NeonUi.cyan
-            }){editRules(type)}.also{radarButtons[type]=it;it.tag="paper-rules-${type.name}"}
+            NeonUi.button(this,"",NeonUi.radarColor(type)){editRules(type)}.also{radarButtons[type]=it;it.tag="paper-rules-${type.name}"}
         }
-        universe.addView(NeonUi.row(this,choices))
+        universe.addView(NeonUi.radarRows(this,choices))
         universe.addView(label("保存設定後，請回主頁重新執行全市場掃描，才會依這套獨立條件更新候選股。未取得的財報／法人資料一律視為未通過。",11f,NeonUi.amber))
         root.addView(universe);root.addView(NeonUi.gap(this,12))
         val policy=section("04 禁股／限價與大盤保護","沿用主頁與自買自投共用禁股、限價與放行名單。")

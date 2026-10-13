@@ -25,7 +25,7 @@ class AppUpdateActivity:AppCompatActivity(){
         super.onCreate(savedInstanceState);store=AppUpdateStore(this)
         autoInstall=savedInstanceState?.getBoolean("autoInstall")?:false;awaitingPermission=savedInstanceState?.getBoolean("awaitingPermission")?:false
         val root=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(this@AppUpdateActivity,16),NeonUi.dp(this@AppUpdateActivity,16),NeonUi.dp(this@AppUpdateActivity,16),NeonUi.dp(this@AppUpdateActivity,28))}
-        val scroll=ScrollView(this).apply{setBackgroundColor(NeonUi.canvas);addView(root)};setContentView(scroll)
+        val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);addView(root)};setContentView(scroll)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val b=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(b.left,b.top,b.right,b.bottom);insets}
         root.addView(NeonUi.header(this,"軟件更新","SYSTEM UPDATE"){finish()})
         root.addView(NeonUi.label(this,"GitHub 官方更新包 · 支援跨版本更新",12f,NeonUi.cyan));root.addView(NeonUi.gap(this,16))

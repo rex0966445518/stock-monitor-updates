@@ -41,7 +41,7 @@ class StockToolsActivity:AppCompatActivity(){
         super.onCreate(savedInstanceState);store=StockPolicyStore(this)
         mode=intent.getStringExtra("mode")?:"BAN";scope=runCatching{StockScope.valueOf(intent.getStringExtra("scope")?:"SCANNER")}.getOrDefault(StockScope.SCANNER)
         val root=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(context,16),NeonUi.dp(context,16),NeonUi.dp(context,16),NeonUi.dp(context,28))}
-        val scroll=ScrollView(this).apply{setBackgroundColor(NeonUi.canvas);addView(root)};setContentView(scroll)
+        val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);addView(root)};setContentView(scroll)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,i->val b=i.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(b.left,b.top,b.right,b.bottom);i}
         root.addView(NeonUi.header(this,"股票管理中心","MARKET TOOLS"){finish()})
         root.addView(label("禁股優先 · 限價放行可分區設定",12f,NeonUi.cyan));root.addView(NeonUi.gap(this,12))

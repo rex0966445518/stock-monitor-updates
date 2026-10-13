@@ -34,7 +34,7 @@ class PaperTradingActivity:AppCompatActivity() {
     override fun onDestroy(){holdingCharts.values.forEach{it.dispose()};holdingCharts.clear();super.onDestroy()}
     override fun onCreate(savedInstanceState:Bundle?) {
         super.onCreate(savedInstanceState);repo=PaperRepository(this)
-        scroll=ScrollView(this).apply{setBackgroundColor(NeonUi.canvas);isFillViewport=true}
+        scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);isFillViewport=true}
         content=NeonUi.vertical(this).apply{setPadding(dp(16),dp(16),dp(16),dp(28))}
         scroll.addView(content);setContentView(scroll)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->

@@ -14,7 +14,7 @@ internal class NeonPoster(private val radar:RadarType,private val stocks:List<Po
     private val white=Color.rgb(235,245,255);private val muted=Color.rgb(150,181,209)
     private val pink=Color.rgb(255,75,121);private val blue=Color.rgb(52,171,255)
     private val mint=Color.rgb(70,246,197);private val gold=Color.rgb(255,190,70)
-    private val accent=when(radar){RadarType.A_EARLY_BREAKOUT->pink;RadarType.B_DEEP_REVERSAL->gold;RadarType.C_LONG_RED_VOLUME->blue;else->mint}
+    private val accent=NeonUi.radarColor(radar)
     private val letter=when(radar){RadarType.A_EARLY_BREAKOUT->"A";RadarType.B_DEEP_REVERSAL->"B";RadarType.C_LONG_RED_VOLUME->"C";RadarType.D_MAIN_FORCE->"D";RadarType.E_DIF_TOUCH->"E";else->"F"}
     private val title=when(radar){RadarType.A_EARLY_BREAKOUT->"早期起漲";RadarType.B_DEEP_REVERSAL->"深跌反轉";RadarType.C_LONG_RED_VOLUME->"長紅爆量";RadarType.D_MAIN_FORCE->"主力進場形態";RadarType.E_DIF_TOUCH->"DIF 向上接觸 MACD";else->"縮量上漲"}
     private val charts=stocks.map { ChartSeries.prepare(it.bars).takeLast(36) }

@@ -1,28 +1,28 @@
 <resources>
     <style name="Theme.TWBoardingScanner" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:windowBackground">#080E19</item>
-        <item name="android:statusBarColor">#080E19</item>
-        <item name="android:navigationBarColor">#080E19</item>
+        <item name="android:windowBackground">#090B10</item>
+        <item name="android:statusBarColor">#090B10</item>
+        <item name="android:navigationBarColor">#090B10</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
-        <item name="colorPrimary">#6FDAEB</item>
-        <item name="colorPrimaryVariant">#243346</item>
+        <item name="colorPrimary">#FF728B</item>
+        <item name="colorPrimaryVariant">#35404F</item>
         <item name="colorSecondary">#96A7E6</item>
-        <item name="colorSurface">#101A2A</item>
+        <item name="colorSurface">#141922</item>
         <item name="colorOnSurface">#EBF1FA</item>
-        <item name="android:colorBackground">#080E19</item>
+        <item name="android:colorBackground">#090B10</item>
         <item name="android:textColorPrimary">#EBF1FA</item>
         <item name="android:textColorSecondary">#94A4B9</item>
         <item name="android:colorAccent">#6FDAEB</item>
         <item name="materialAlertDialogTheme">@style/ThemeOverlay.Scanner.Dialog</item>
     </style>
     <style name="ThemeOverlay.Scanner.Dialog" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
-        <item name="colorSurface">#101A2A</item>
+        <item name="colorSurface">#141922</item>
         <item name="colorOnSurface">#EBF1FA</item>
         <item name="android:textColorPrimary">#EBF1FA</item>
         <item name="android:textColorSecondary">#94A4B9</item>
-        <item name="colorPrimary">#6FDAEB</item>
+        <item name="colorPrimary">#FF728B</item>
         <item name="shapeAppearanceMediumComponent">@style/Shape.Scanner.Dialog</item>
     </style>
     <style name="Shape.Scanner.Dialog" parent="ShapeAppearance.MaterialComponents.MediumComponent"><item name="cornerSize">24dp</item></style>
@@ -32,9 +32,9 @@
         <item name="android:paddingLeft">8dp</item><item name="android:paddingRight">8dp</item>
         <item name="android:insetTop">3dp</item><item name="android:insetBottom">3dp</item>
         <item name="cornerRadius">14dp</item><item name="strokeWidth">1dp</item>
-        <item name="strokeColor">#243346</item><item name="backgroundTint">#101A2A</item><item name="android:textColor">#D4DEEB</item>
+        <item name="strokeColor">#35404F</item><item name="backgroundTint">#141922</item><item name="android:textColor">#D4DEEB</item>
     </style>
     <style name="Widget.Scanner.Primary" parent="Widget.Scanner.Button">
-        <item name="backgroundTint">#6FDAEB</item><item name="android:textColor">#080E19</item><item name="strokeWidth">0dp</item><item name="android:fontFamily">sans-serif-medium</item>
+        <item name="backgroundTint">#8F182F</item><item name="android:textColor">#EBF1FA</item><item name="strokeWidth">1dp</item><item name="strokeColor">#FF3752</item><item name="android:fontFamily">sans-serif-medium</item>
     </style>
 </resources>

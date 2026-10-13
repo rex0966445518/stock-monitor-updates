@@ -42,7 +42,7 @@ class ScanArchiveActivity:AppCompatActivity(){
         root=NeonUi.vertical(this).apply{setPadding(dp(12),dp(12),dp(12),dp(16))}
         val base=LinearLayout(this).apply{
             orientation=LinearLayout.VERTICAL
-            setBackgroundColor(NeonUi.canvas)
+            background=NeonUi.backdrop(context)
             addView(root,LinearLayout.LayoutParams(-1,-1))
         }
         setContentView(base)
