@@ -24,6 +24,7 @@ class ExclusionAndRiskExitTest{
         RadarType.C_LONG_RED_VOLUME->ScoringEngine().evaluateC(s,setOf("price"),excluded)
         RadarType.D_MAIN_FORCE->ScoringEngine().evaluateD(s,setOf("price"),excluded)
         RadarType.E_DIF_TOUCH->ScoringEngine().evaluateE(s,setOf("price"),excluded)
+        RadarType.F_VOLUME_CONTRACTION->ScoringEngine().evaluateF(s,setOf("price"),excluded)
     }
     @Test fun bothFreshBearishEventsMustOccurOnTheSameDay(){
         assertTrue(BearishTurn.Evidence(.01,-.01,70.0,69.9).passes)
