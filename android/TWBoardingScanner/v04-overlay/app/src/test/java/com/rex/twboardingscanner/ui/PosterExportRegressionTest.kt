@@ -73,10 +73,10 @@ class PosterExportRegressionTest {
         PosterExport::class.java.getDeclaredMethod(name).apply{isAccessible=true}.invoke(poster)
     }
     @Test fun everyGeneratedTypeHasAUniquePosterFilenamePreviewButtonAndSafePreviewSample(){
-        assertEquals(5,RadarType.entries.size)
+        assertEquals(6,RadarType.entries.size)
         assertEquals(RadarType.entries.toList(),PosterCatalog.sections.map{it.radar})
-        assertEquals(listOf("A 起漲","B 反轉","C 爆量","D 主力","E DIF 接觸"),PosterCatalog.sections.map{it.label})
-        assertEquals(5,PosterCatalog.sections.map{PosterCatalog.fileName("2026-10-12",it)}.distinct().size)
+        assertEquals(listOf("A 起漲","B 反轉","C 爆量","D 主力","E DIF 接觸","F 縮量上漲"),PosterCatalog.sections.map{it.label})
+        assertEquals(6,PosterCatalog.sections.map{PosterCatalog.fileName("2026-10-12",it)}.distinct().size)
         assertEquals(1,PosterCatalog.previewSample(800,1400))
         val sample=PosterCatalog.previewSample(1080,35890)
         assertTrue(sample>=32)
@@ -84,9 +84,9 @@ class PosterExportRegressionTest {
         assertTrue(35890/sample<=1760)
         val activity=Robolectric.buildActivity(Host::class.java).setup()
         val files=prepared(activity.get())
-        assertEquals(5,files.size)
+        assertEquals(6,files.size)
         val tabBar=PosterCatalog.tabs(activity.get()){}
-        assertEquals(5,tabBar.childCount)
+        assertEquals(6,tabBar.childCount)
         assertNotNull(find(tabBar,"poster-tab-D"))
         files.forEach{it.delete()}
         activity.pause().stop().destroy()
@@ -127,9 +127,9 @@ class PosterExportRegressionTest {
         assertEquals(Intent.ACTION_SEND_MULTIPLE,share!!.action)
         assertEquals("image/png",share.type)
         val uris=share.getParcelableArrayListExtra<android.net.Uri>(Intent.EXTRA_STREAM)
-        assertEquals(5,uris?.size)
-        assertEquals(5,share.clipData?.itemCount)
-        assertEquals(5,uris?.distinct()?.size)
+        assertEquals(6,uris?.size)
+        assertEquals(6,share.clipData?.itemCount)
+        assertEquals(6,uris?.distinct()?.size)
         controller.pause().stop().destroy()
         files.forEach{it.delete()}
     }

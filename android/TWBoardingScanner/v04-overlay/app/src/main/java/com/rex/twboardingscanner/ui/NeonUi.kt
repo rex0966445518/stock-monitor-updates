@@ -49,9 +49,12 @@ internal object NeonUi {
         addView(label(c,subtitle,10f))
         contentDescription="$title $value $subtitle"
     }
-    fun row(c:Context,views:List<View>)=LinearLayout(c).apply {
+    fun row(c:Context,views:List<View>):LinearLayout=LinearLayout(c).apply {
         gravity=Gravity.CENTER_VERTICAL
-        views.forEachIndexed { i,v -> addView(v,LinearLayout.LayoutParams(0,-2,1f).apply { if(i>0)marginStart=dp(c,8) }) }
+        if(views.size>4){
+            orientation=LinearLayout.VERTICAL
+            views.chunked(3).forEach{group->addView(row(c,group),LinearLayout.LayoutParams(-1,-2))}
+        }else views.forEachIndexed { i,v -> addView(v,LinearLayout.LayoutParams(0,-2,1f).apply { if(i>0)marginStart=dp(c,8) }) }
     }
     fun button(c:Context,value:String,accent:Int=cyan,action:()->Unit)=MaterialButton(c).apply {
         text=value;isAllCaps=false;textSize=13f;minHeight=dp(c,50);minimumWidth=0

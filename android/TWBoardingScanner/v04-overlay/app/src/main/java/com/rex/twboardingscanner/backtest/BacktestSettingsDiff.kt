@@ -50,6 +50,8 @@ object BacktestSettingsDiff {
                 if(a!=null&&b!=null&&a!=b)change(SettingChangeKind.CHANGED,"$title · $a → $b")
             }
         }
+        sets("ABCDEF 啟用",strings(previous.optJSONArray("enabledRadars")),strings(current.optJSONArray("enabledRadars")))
+        value("F 縮量上漲門檻",FPatternConfig.read(previous.optJSONObject("fConfig")).toString(),FPatternConfig.read(current.optJSONObject("fConfig")).toString())
         sets("產業",strings(previous.optJSONArray("sectors")),strings(current.optJSONArray("sectors")),{id->StockSector.entries.firstOrNull{it.name==id}?.label?:id})
         fun codes(s:JSONObject)=scalar(s,"codes")?.split(Regex("[,，\\s]+"))?.filter{it.isNotBlank()}?.toSet()
         val oldCodes=codes(previous);val newCodes=codes(current)

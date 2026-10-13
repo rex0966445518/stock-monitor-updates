@@ -26,8 +26,8 @@ object BtRobotSpace {
     val mainCostSlots=RadarType.entries.take(4).map{it to ScanConditions.MAIN_FORCE_COST_20}
     val v5Slots=v4Slots+mainCostSlots
     val eSlots=ScanConditions.forRadar(RadarType.E_DIF_TOUCH).filterNot{it.id==RsiGoldenCross.ID}.map{RadarType.E_DIF_TOUCH to it.id}
-    val rsiSlots=RadarType.entries.map{it to RsiGoldenCross.ID}
-    val allSlots=v5Slots+eSlots+rsiSlots
+    val rsiSlots=RadarType.entries.take(5).map{it to RsiGoldenCross.ID}
+    val allSlots=v5Slots+eSlots+rsiSlots+ScanConditions.forRadar(RadarType.F_VOLUME_CONTRACTION).map{RadarType.F_VOLUME_CONTRACTION to it.id}
     val total:BigInteger=BigInteger.ONE.shiftLeft(allSlots.size)
     val legacyTotal:BigInteger=BigInteger.ONE.shiftLeft(legacySlots.size)
     fun key(rules:Map<RadarType,Set<String>>):String=allSlots.foldIndexed(BigInteger.ZERO){i,n,(type,id)->if(id in rules[type].orEmpty())n.setBit(i)else n}.toString(16)

@@ -34,7 +34,7 @@ class BtRobotStore(private val c:Context){
     fun sessions():List<JSONObject> = synchronized(lock){val out=mutableListOf<JSONObject>();db.rawQuery("SELECT json FROM sessions ORDER BY created DESC",null).use{while(it.moveToNext())out+=JSONObject(it.getString(0))};out}
     fun create(s:BtSettings,required:String="0",forbidden:String="0",sourceJournalId:String?=null,sweep:BtRobotSweep?=null):String=synchronized(lock){
         BtRobotSpace.validate(s);BtRobotSpace.validateConstraints(required,forbidden)
-        require(sweep==null||required=="0"&&forbidden=="0"){"參數網格固定本批次 ABCDE，不可同時調整必選／排除條件"}
+        require(sweep==null||required=="0"&&forbidden=="0"){"參數網格固定本批次 ABCDEF，不可同時調整必選／排除條件"}
         require(sourceJournalId==null||sourceJournalId.matches(Regex("[A-Za-z0-9_-]{1,100}"))){"日誌編號不合法"}
         session()?.let{if(it.optString("state") in setOf("RUNNING","RETRY"))putSession(it.put("state","PAUSED").put("token","").put("message","建立新測試；原進度已保存"))}
         val id=UUID.randomUUID().toString()
@@ -133,7 +133,7 @@ class BtRobotStore(private val c:Context){
         val s=session(id)!!
         val sweep=BtRobotSweep.read(s.optJSONObject("sweep"))
         val base=BtSettingsCodec.decode(s.getJSONObject("settings"))
-        if(sweep==null)require(BtRobotSpace.key(result.settings.rules)==candidate.key){"ABCDE 組合代碼不符"}
+        if(sweep==null)require(BtRobotSpace.key(result.settings.rules)==candidate.key){"ABCDEF 組合代碼不符"}
         else require(candidate.cursor==BigInteger.valueOf(s.getLong("tested")+1)&&
             sweep.next(s.getLong("tested"))?.key==candidate.key){"參數網格游標／組合不一致"}
         val expected=if(sweep==null)base.copy(rules=BtRobotSpace.rules(candidate.key)) else sweep.settings(base,candidate.key)
@@ -149,7 +149,7 @@ class BtRobotStore(private val c:Context){
             .put("requested",result.requested).put("loaded",result.loaded).put("excluded",org.json.JSONArray(result.excluded))
             .put("signalCounts",feedback).put("pendingChecks",result.pendingChecks).put("note",result.note).put("run",BacktestStore(c).runJson(result.run))
         val summary=JSONObject().put("key",candidate.key).put("seq",seq).put("startedAt",started).put("finishedAt",finished)
-            .put("mode",if(sweep==null)"ABCDE" else "GRID").put("signalCounts",feedback)
+            .put("mode",if(sweep==null)"ABCDEF" else "GRID").put("signalCounts",feedback)
             .put("maxHoldingStocks",result.settings.maxHoldingStocks?:JSONObject.NULL)
             .put("targetNetPct",result.settings.targetNetPct)
             .put("profit",result.run.profit).put("drawdown",result.run.drawdown).put("buys",result.run.buys).put("closed",result.run.closed.size)

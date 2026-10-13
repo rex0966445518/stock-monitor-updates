@@ -48,7 +48,7 @@ class RsiGoldenCrossTest{
         assertTrue(result.dEvidence!!.contains("RSI(5)"))
         val rules=RadarType.entries.associateWith{setOf(RsiGoldenCross.ID)}
         assertEquals(rules,BtRobotSpace.rules(BtRobotSpace.key(rules)))
-        assertEquals(RadarType.entries.map{it to RsiGoldenCross.ID},BtRobotSpace.allSlots.takeLast(5))
+        assertEquals(RadarType.entries.take(5).map{it to RsiGoldenCross.ID},BtRobotSpace.allSlots.drop(BtRobotSpace.v5Slots.size+BtRobotSpace.eSlots.size).take(5))
         assertEquals(106,BtRobotSpace.v5Slots.size)
     }
     @Test fun RobotCacheAndReferenceKeepAllFiveCrossResultsAndJournalChecks(){

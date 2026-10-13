@@ -99,7 +99,7 @@ class PaperStrategyActivity:AppCompatActivity() {
         trade.addView(exitButton)
         trade.addView(label("新自訂策略採用隔日起扣費稅淨利出場；留倉超過 5 個日曆日採保本條件，或依勾選的認賠規則賣出。不會在 13:15 強制清倉。",11f))
         root.addView(trade);root.addView(NeonUi.gap(this,12))
-        val universe=section("03 股票範圍與 ABCDE 入場篩查",
+        val universe=section("03 股票範圍與 ABCDEF 入場篩查",
             "與歷史回測相同勾選條件，獨立於主頁篩查器保存。")
         universe.addView(label("股票代號（留空為所有股票）",12f,NeonUi.ink,true))
         codes=NeonUi.field(EditText(this).apply{
@@ -108,7 +108,7 @@ class PaperStrategyActivity:AppCompatActivity() {
         universe.addView(codes)
         sectorButton=NeonUi.button(this,""){editSectors()}.apply{tag="paper-sectors"}
         universe.addView(sectorButton)
-        universe.addView(label("A／B／C／D／E 勾選條件（可全部取消一區）",13f,NeonUi.ink,true))
+        universe.addView(label("A／B／C／D／E／F 勾選條件（可全部取消一區）",13f,NeonUi.ink,true))
         val choices=RadarType.entries.map{type->
             NeonUi.button(this,"",when(type){
                 RadarType.A_EARLY_BREAKOUT->NeonUi.pink
@@ -179,6 +179,9 @@ class PaperStrategyActivity:AppCompatActivity() {
         if(type==RadarType.E_DIF_TOUCH)body.addView(NeonUi.button(this,"E 線距門檻與剛交叉設定",NeonUi.pink){
             EPatternEditor.show(this,preset.eConfig){cfg->preset=preset.copy(eConfig=cfg)}
         }.apply{tag="paper-e-parameters"})
+        if(type==RadarType.F_VOLUME_CONTRACTION)body.addView(NeonUi.button(this,"F 縮量上漲 · 天數與門檻",NeonUi.pink){
+            FPatternEditor.show(this,preset.fConfig){cfg->preset=preset.copy(fConfig=cfg)}
+        }.apply{tag="paper-e-parameters"})
         body.addView(label("同區勾選條件均須符合，資料待查核不得通過。",12f))
         val enabled=CheckBox(this).apply{text="啟用 ${type.name.take(1)} 區入場分析";setTextColor(NeonUi.cyan);isChecked=type in preset.enabledRadars;tag="paper-enabled-${type.name}"}
         body.addView(enabled)
@@ -221,7 +224,7 @@ class PaperStrategyActivity:AppCompatActivity() {
         val historical=runCatching{BtSettingsCodec.decode(BacktestStore(this).configuration()!!)}.getOrNull()
         if(historical==null){Toast.makeText(this,"找不到可載入的歷史回測設定，請先在歷史回測儲存條件",Toast.LENGTH_LONG).show();return}
         MaterialAlertDialogBuilder(this).setTitle("套用目前歷史回測設定？")
-            .setMessage("將載入回測的 ABCDE、產業、股號、日期、持倉上限、獲利及下車條件。禁買／限價仍讀取三區共用名單。\n\n請留意：自買自投不是歷史重播，若匯入的結束日已過去，將不會新增模擬買入。")
+            .setMessage("將載入回測的 ABCDEF、產業、股號、日期、持倉上限、獲利及下車條件。禁買／限價仍讀取三區共用名單。\n\n請留意：自買自投不是歷史重播，若匯入的結束日已過去，將不會新增模擬買入。")
             .setNegativeButton("取消",null).setPositiveButton("載入"){_,_->
                 loadDraft(historical.copy(stockScope=StockScope.SCANNER,
                     capital=if(book.trades.isEmpty())historical.capital else book.capital),true)

@@ -15,6 +15,7 @@ internal object PosterCatalog {
             RadarType.B_DEEP_REVERSAL -> PosterSection(type,"B","B 反轉")
             RadarType.C_LONG_RED_VOLUME -> PosterSection(type,"C","C 爆量")
             RadarType.D_MAIN_FORCE -> PosterSection(type,"D","D 主力")
+            RadarType.F_VOLUME_CONTRACTION -> PosterSection(type,"F","F 縮量上漲")
             RadarType.E_DIF_TOUCH -> PosterSection(type,"E","E DIF 接觸")
         }
     }

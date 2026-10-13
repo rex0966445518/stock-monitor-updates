@@ -43,6 +43,7 @@ class BacktestActivity:AppCompatActivity(){
     private var btDConfig:DPatternConfig = DPatternConfig.DEFAULT
     private var btExclusions=ExclusionConditions.empty()
     private var btEConfig:EPatternConfig = EPatternConfig.DEFAULT
+    private var btFConfig:FPatternConfig = FPatternConfig.DEFAULT
     private val radarModeButtons=mutableMapOf<RadarType,com.google.android.material.button.MaterialButton>()
     private fun updateRadarModes(){
         radarModeButtons.forEach{(type,button)->
@@ -70,7 +71,7 @@ class BacktestActivity:AppCompatActivity(){
         val config=store.configuration()
         val saved=runCatching{BtSettingsCodec.decode(config!!)}.getOrElse{BtSettingsCodec.capture(this,start,end,3000000.0,"")}
         btRules=saved.rules;btSectors=saved.sectors;exitRules=saved.exitRules
-        btEnabled=saved.enabledRadars;btDConfig=saved.dConfig;btEConfig=saved.eConfig;btExclusions=saved.exclusions
+        btEnabled=saved.enabledRadars;btDConfig=saved.dConfig;btEConfig=saved.eConfig;btFConfig=saved.fConfig;btExclusions=saved.exclusions
         lastLimit=saved.maxHoldingStocks?:25;lastTarget=saved.targetNetPct
         start=runCatching{LocalDate.parse(config?.getString("start"))}.getOrDefault(start);end=runCatching{LocalDate.parse(config?.getString("end"))}.getOrDefault(end)
         val root=NeonUi.vertical(this).apply{setPadding(dp(16),dp(16),dp(16),dp(28))}
@@ -122,7 +123,7 @@ class BacktestActivity:AppCompatActivity(){
         codes=NeonUi.field(EditText(this).apply{setText(config?.optString("codes")?:"");hint="全部股票，或 2330, 3661…";contentDescription="回測股票代號"})
         universe.addView(codes);universe.addView(label("留空掃描現存上市櫃；首次下載需較長時間。",11f))
         sectorButton=NeonUi.button(this,""){editSectors()};refreshSectorButton();universe.addView(sectorButton)
-        universe.addView(NeonUi.gap(this,12));universe.addView(label("回測專用 ABCDE 條件",15f,NeonUi.ink,true))
+        universe.addView(NeonUi.gap(this,12));universe.addView(label("回測專用 ABCDEF 條件",15f,NeonUi.ink,true))
         universe.addView(label("按鈕亮起才參與分析；關閉不會刪除該區勾選",11f))
         universe.addView(NeonUi.row(this,RadarType.entries.map{type->
             NeonUi.button(this,"",NeonUi.cyan){
@@ -189,7 +190,7 @@ class BacktestActivity:AppCompatActivity(){
         val trading=readTrading(true)?:return
         if(raw.split(Regex("[,，\\s]+" )).filter{it.isNotBlank()}.any{!it.matches(Regex("[1-9][0-9]{3}"))}){codes.error="請輸入四碼股票代號，以逗號分隔";NeonUi.reveal(codes);return}
         val id=UUID.randomUUID().toString();val s=BtSettingsCodec.capture(this,start,end,cash,raw).copy(rules=btRules.mapValues{it.value.toSet()},sectors=btSectors.toSet(),
-            enabledRadars=btEnabled,dConfig=btDConfig,eConfig=btEConfig,exclusions=btExclusions,maxHoldingStocks=trading.first,targetNetPct=trading.second,exitRules=exitRules,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
+            enabledRadars=btEnabled,dConfig=btDConfig,eConfig=btEConfig,fConfig=btFConfig,exclusions=btExclusions,maxHoldingStocks=trading.first,targetNetPct=trading.second,exitRules=exitRules,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
         if(s.sectors.isEmpty()){Toast.makeText(this,"請至少選擇一個產業類型",Toast.LENGTH_LONG).show();return}
         if(s.enabledRadars.none{ s.rules[it].orEmpty().isNotEmpty() }){
             Toast.makeText(this,"請至少亮起一區且該區有勾選條件",Toast.LENGTH_LONG).show();return
@@ -211,7 +212,7 @@ class BacktestActivity:AppCompatActivity(){
     private fun draft():BtSettings {
         readTrading(false)
         return BtSettingsCodec.capture(this,start,end,capital.text.toString().toDoubleOrNull()?.takeIf{it.isFinite()&&it>0}?:3000000.0,codes.text.toString().trim()).copy(rules=btRules.mapValues{it.value.toSet()},sectors=btSectors.toSet(),
-            enabledRadars=btEnabled,dConfig=btDConfig,eConfig=btEConfig,exclusions=btExclusions,maxHoldingStocks=lastLimit,targetNetPct=lastTarget,exitRules=exitRules,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
+            enabledRadars=btEnabled,dConfig=btDConfig,eConfig=btEConfig,fConfig=btFConfig,exclusions=btExclusions,maxHoldingStocks=lastLimit,targetNetPct=lastTarget,exitRules=exitRules,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
     }
     private fun refreshRuleButtons(){ruleButtons.forEach{(type,button)->button.text="${type.name.take(1)} 條件 (${btRules[type].orEmpty().size})"}}
     internal fun applyRules(type:RadarType,selected:Set<String>){
@@ -226,6 +227,9 @@ class BacktestActivity:AppCompatActivity(){
         }.apply{tag="backtest-d-parameters"})
         if(type==RadarType.E_DIF_TOUCH)content.addView(NeonUi.button(this,"E 線距門檻與剛交叉設定",NeonUi.pink){
             EPatternEditor.show(this,btEConfig){cfg->btEConfig=cfg;store.saveDraft(draft())}
+        }.apply{tag="backtest-e-parameters"})
+        if(type==RadarType.F_VOLUME_CONTRACTION)content.addView(NeonUi.button(this,"F 縮量上漲 · 天數與門檻",NeonUi.pink){
+            FPatternEditor.show(this,btFConfig){cfg->btFConfig=cfg;store.saveDraft(draft())}
         }.apply{tag="backtest-e-parameters"})
         content.addView(label("勾選才列入本區門檻；全部取消則該區不入選。",12f,NeonUi.ink))
         val boxes=options.mapIndexed{index,rule->
@@ -298,7 +302,7 @@ class BacktestActivity:AppCompatActivity(){
         if(revision==appliedRevision||!::codes.isInitialized)return
         val saved=runCatching{BtSettingsCodec.decode(store.configuration()!!)}.getOrNull()?:return
         appliedRevision=revision;start=saved.start;end=saved.end;btRules=saved.rules;btSectors=saved.sectors;exitRules=saved.exitRules
-        btEnabled=saved.enabledRadars;btDConfig=saved.dConfig;btEConfig=saved.eConfig;btExclusions=saved.exclusions;updateRadarModes()
+        btEnabled=saved.enabledRadars;btDConfig=saved.dConfig;btEConfig=saved.eConfig;btFConfig=saved.fConfig;btExclusions=saved.exclusions;updateRadarModes()
         startButton.text="起始 $start";endButton.text="結束 $end";capital.setText(saved.capital.toLong().toString());codes.setText(saved.codes)
         lastLimit=saved.maxHoldingStocks?:25;lastTarget=saved.targetNetPct
         maxHoldings.setText(lastLimit.toString());profitTarget.setText(btPercent(saved.targetNetPct))

@@ -22,7 +22,7 @@ internal object BtRobotRulesDialog {
         }
         summary();root.addView(count)
         root.addView(NeonUi.label(a,"單點 ✓ 必選；快速雙點 ✕ 排除，再單點解除。空白為機器人自由測試；✕ 不加入任何組合。長按也可排除。",12f))
-        val body=NeonUi.vertical(a);val tabs=NeonUi.row(a,RadarType.entries.map{type->NeonUi.button(a,when(type){RadarType.A_EARLY_BREAKOUT->"A 起漲";RadarType.B_DEEP_REVERSAL->"B 反轉";RadarType.C_LONG_RED_VOLUME->"C 爆量";RadarType.D_MAIN_FORCE->"D 主力";else->"E DIF 接觸"}){
+        val body=NeonUi.vertical(a);val tabs=NeonUi.row(a,RadarType.entries.map{type->NeonUi.button(a,when(type){RadarType.A_EARLY_BREAKOUT->"A 起漲";RadarType.B_DEEP_REVERSAL->"B 反轉";RadarType.C_LONG_RED_VOLUME->"C 爆量";RadarType.D_MAIN_FORCE->"D 主力";RadarType.E_DIF_TOUCH->"E DIF 接觸";else->"F 縮量上漲"}){
             populate(a,body,type,selected.getValue(type),excluded.getValue(type)){summary()}
         }})
         root.addView(tabs)
@@ -39,7 +39,7 @@ internal object BtRobotRulesDialog {
         val scroll=ScrollView(a).apply{addView(body)};val height=minOf(240,(a.resources.displayMetrics.heightPixels/a.resources.displayMetrics.density).toInt()-500).coerceAtLeast(100)
         root.addView(scroll,LinearLayout.LayoutParams(-1,NeonUi.dp(a,height)))
         populate(a,body,initialType,selected.getValue(initialType),excluded.getValue(initialType)){summary()}
-        root.addView(NeonUi.label(a,"ABCDE 各自設定；僅主頁/機器人亮燈的類型才會分析。儲存後另建條件組合測試批次（不再使用持倉×淨利網格）；排除只是停用條件，並非反向篩選。",11f,NeonUi.amber))
+        root.addView(NeonUi.label(a,"ABCDEF 各自設定；僅主頁/機器人亮燈的類型才會分析。儲存後另建條件組合測試批次（不再使用持倉×淨利網格）；排除只是停用條件，並非反向篩選。",11f,NeonUi.amber))
         root.addView(NeonUi.gap(a,10))
         root.addView(NeonUi.row(a,listOf(
             NeonUi.button(a,"全部自由",NeonUi.amber){onSave("0","0");dialog.dismiss()},

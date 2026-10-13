@@ -27,6 +27,8 @@ object ScanConditions {
     const val ACTIVE_BUY_SELL_15 = "active_buy_sell_15"
     val NEW_IDS=setOf(MA5_TOUCH_MA10,ACTIVE_BUY_SELL_15)
     fun forRadar(type: RadarType): List<ScanCondition> {
+        if(type==RadarType.F_VOLUME_CONTRACTION)return FPattern.rules()+forRadar(RadarType.A_EARLY_BREAKOUT).map{it.copy(extra=true)}
+
         if(type==RadarType.E_DIF_TOUCH){
             return listOf(
                 ScanCondition(EPattern.EVENT,"DIF 向上接觸 MACD 訊號線（線距門檻可調）"){it.ePattern?.passes},
@@ -77,7 +79,7 @@ object ScanConditions {
                 ScanCondition("declineVolume", "近 10 日下跌日均量 < 前 10 日下跌日均量（兩段都須有下跌日）") { it.declineContracting },
                 ScanCondition("ma5", "收盤價 > 5 日均線") { it.aboveMa5 }
             )
-            RadarType.D_MAIN_FORCE, RadarType.E_DIF_TOUCH -> emptyList()
+            RadarType.D_MAIN_FORCE, RadarType.E_DIF_TOUCH, RadarType.F_VOLUME_CONTRACTION -> emptyList()
             RadarType.C_LONG_RED_VOLUME -> listOf(
                 ScanCondition("red", "紅 K：收盤價 > 開盤價") { it.last?.let { b -> b.close > b.open } },
                 ScanCondition("gain", "相較前一日收盤價，上漲 ≥ 3%") { it.dayGain?.let { v -> v >= 3.0 - 1e-9 } },
@@ -125,6 +127,7 @@ class RuleMetrics(val s: StockSnapshot) {
     val belowMainForceCost20:Boolean? get() = MainForceCost.below(last?.close?:Double.NaN,estimatedMainCost20)
     val bearishTurn by lazy(LazyThreadSafetyMode.NONE){BearishTurn.inspect(bars.map{it.close})}
     val rsiGoldenCross by lazy(LazyThreadSafetyMode.NONE){RsiGoldenCross.inspect(bars.map{it.close})}
+    val fPattern by lazy(LazyThreadSafetyMode.NONE){FPattern.inspect(bars,s.fConfig)}
     val ePattern by lazy(LazyThreadSafetyMode.NONE){EPattern.inspect(bars.map{it.close},s.eConfig)}
     val dPattern by lazy(LazyThreadSafetyMode.NONE){DPattern.inspect(bars,s.dConfig,s.marketIndexCloses)}
     private val previous = bars.dropLast(1)

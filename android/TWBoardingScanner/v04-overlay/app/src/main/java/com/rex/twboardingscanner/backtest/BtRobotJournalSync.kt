@@ -16,7 +16,7 @@ object BtRobotJournalSync{
         require(entry.optString("state")=="DONE"){"只能同步已完成的回測日誌"}
         val archived=entry.optJSONObject("settings")?:error("這筆日誌沒有條件快照")
         require(archived.optJSONObject("rules")!=null&&archived.optJSONObject("stockPolicy")!=null&&archived.has("exitRules")){
-            "舊日誌缺少完整 ABCDE、禁股或下車條件，無法保證同步所有資料"
+            "舊日誌缺少完整 ABCDEF、禁股或下車條件，無法保證同步所有資料"
         }
         val base=try{BtSettingsCodec.decode(archived)}catch(e:Exception){
             throw IllegalArgumentException("此日誌條件版本無法直接套用：${e.message}")
