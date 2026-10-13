@@ -171,12 +171,13 @@ class PaperStrategyActivity:AppCompatActivity() {
     }
     private fun editRules(type:RadarType){
         val entries=ScanConditions.forRadar(type)
+        val numbers=RuleNumberFields(this,preset.dConfig,preset.fConfig)
         val body=NeonUi.vertical(this).apply{setPadding(dp(15),dp(10),dp(15),dp(10))}
         if(type==RadarType.E_DIF_TOUCH)body.addView(NeonUi.button(this,"E 線距門檻與剛交叉設定",NeonUi.pink){
             EPatternEditor.show(this,preset.eConfig){cfg->preset=preset.copy(eConfig=cfg)}
         }.apply{tag="paper-e-parameters"})
         if(type==RadarType.F_VOLUME_CONTRACTION)body.addView(NeonUi.button(this,"F 縮量上漲 · 天數與門檻",NeonUi.pink){
-            FPatternEditor.show(this,preset.fConfig){cfg->preset=preset.copy(fConfig=cfg)}
+            numbers.editF()
         }.apply{tag="paper-e-parameters"})
         body.addView(label("同區勾選條件均須符合，資料待查核不得通過。",12f))
         val enabled=CheckBox(this).apply{text="啟用 ${type.name.take(1)} 區入場分析";setTextColor(NeonUi.cyan);isChecked=type in preset.enabledRadars;tag="paper-enabled-${type.name}"}
@@ -185,7 +186,7 @@ class PaperStrategyActivity:AppCompatActivity() {
             CheckBox(this).apply{
                 text=cond.label;textSize=13f;setTextColor(NeonUi.ink)
                 isChecked=cond.id in rules[type].orEmpty();minHeight=dp(48)
-            }.also{body.addView(it)}
+            }.also{body.addView(it);numbers.add(body,type,cond.id)}
         }
         val readExclusions=ExclusionEditor.fields(this,body,type,preset.exclusions.getValue(type))
         val controls=NeonUi.row(this,listOf(
@@ -194,13 +195,18 @@ class PaperStrategyActivity:AppCompatActivity() {
         ))
         body.addView(controls)
         val scroller=ScrollView(this).apply{addView(body)}
-        MaterialAlertDialogBuilder(this).setTitle("${type.label} · 模擬入場條件")
+        val dialog=MaterialAlertDialogBuilder(this).setTitle("${type.label} · 模擬入場條件")
             .setView(scroller).setNegativeButton("取消",null)
-            .setPositiveButton("套用"){_,_->
-                preset=preset.copy(exclusions=preset.exclusions+mapOf(type to readExclusions()),enabledRadars=if(enabled.isChecked)preset.enabledRadars+type else preset.enabledRadars-type)
+            .setPositiveButton("套用",null).create()
+        dialog.setOnShowListener{dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener{
+            runCatching{
+                val d=numbers.readD();val f=numbers.readF()
+                preset=preset.copy(dConfig=d,fConfig=f,exclusions=preset.exclusions+mapOf(type to readExclusions()),enabledRadars=if(enabled.isChecked)preset.enabledRadars+type else preset.enabledRadars-type)
                 rules=rules+mapOf(type to entries.filterIndexed{i,_->boxes[i].isChecked}.map{it.id}.toSet())
                 refreshControls()
-            }.show()
+            }.onSuccess{dialog.dismiss()}.onFailure{Toast.makeText(this,it.message,Toast.LENGTH_LONG).show()}
+        }}
+        dialog.show()
     }
     private fun editSectors(){
         val all=StockSector.entries

@@ -20,12 +20,12 @@ data class FPatternConfig(val days:Int=1,val volumePct:Double=80.0,val averageDa
 object FPattern{
     const val EVENT="f_price_up_volume_down"
     fun rules()=listOf(
-        ScanCondition(EVENT,"連續 N 日收盤上漲，且每日量 ≤ 前日指定比例"){it.fPattern.passes},
-        ScanCondition("f_average","當日量 ≤ 前 N 日均量指定比例（不含當日）",true){it.fPattern.averagePass},
+        ScanCondition(EVENT,"連續收盤上漲，且每日量 ≤ 前日指定比例（日數／比例可填）"){it.fPattern.passes},
+        ScanCondition("f_average","當日量 ≤ 先前均量指定比例（日數可填，不含當日）",true){it.fPattern.averagePass},
         ScanCondition("f_min_volume","當日成交量 ≥ 設定最低張數",true){it.fPattern.minimumPass},
         ScanCondition("f_dif","DIF 高於前一交易日",true){it.fPattern.difPass},
-        ScanCondition("f_ma","收盤站上 N 日均線，且均線向上",true){it.fPattern.maPass},
-        ScanCondition("f_gain","近 N 交易日累計漲幅不超過設定上限",true){it.fPattern.gainPass}
+        ScanCondition("f_ma","收盤站上指定日數均線，且均線向上（日數可填）",true){it.fPattern.maPass},
+        ScanCondition("f_gain","近期累計漲幅不超過設定上限（日數／上限可填）",true){it.fPattern.gainPass}
     )
     class Evidence(val bars:List<DailyBar>,val config:FPatternConfig){
         private fun valid(b:DailyBar)=b.close.isFinite()&&b.close>0&&b.volumeShares>0

@@ -46,6 +46,7 @@ class EControlsTest{
         val host=ctl.get()
         assertTrue(find(host.window.decorView,"paper-rules-E_DIF_TOUCH")!!.performClick())
         val menu=ShadowDialog.getLatestDialog() as AlertDialog
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
         val enabled=find(menu.window!!.decorView,"paper-enabled-E_DIF_TOUCH") as CheckBox
         enabled.isChecked=true
         menu.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick()

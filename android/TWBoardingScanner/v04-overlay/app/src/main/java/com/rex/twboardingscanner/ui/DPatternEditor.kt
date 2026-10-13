@@ -17,7 +17,7 @@ internal object DPatternEditor {
         val box=NeonUi.vertical(c).apply{setPadding(NeonUi.dp(c,16),NeonUi.dp(c,12),
             NeonUi.dp(c,16),NeonUi.dp(c,12))}
         box.addView(NeonUi.label(c,"D 主力進場 · 六項證據的可調門檻",16f,NeonUi.cyan,true))
-        box.addView(NeonUi.label(c,"前三種事件共用最近 N 個交易日範圍；所有數值會完整保存於本次條件快照。",12f))
+        box.addView(NeonUi.label(c,"前三種事件共用最近觀察交易日範圍；所有數值會完整保存於本次條件快照。",12f))
         val fields=linkedMapOf<String,EditText>()
         fun row(title:String,key:String,value:String,decimal:Boolean=false){
             box.addView(NeonUi.gap(c,8))
@@ -35,12 +35,12 @@ internal object DPatternEditor {
             fields[key]=field;group.addView(field,LinearLayout.LayoutParams(0,-2,.85f))
             box.addView(group)
         }
-        row("最近觀察交易日 N（4～120）","lookback",initial.lookback.toString())
-        row("至少觸及漲停 K 次","limit",initial.minimumLimitHits.toString())
-        row("連續陽線 K 根","green",initial.bullishBars.toString())
-        row("最近連續放量 K 日","volumeDays",initial.volumeDays.toString())
-        row("放量之前的 N 日均量","base",initial.volumeBaseDays.toString())
-        row("每日至少 M 倍均量","multiple",initial.volumeMultiple.toString(),true)
+        row("最近觀察交易日（4～120）","lookback",initial.lookback.toString())
+        row("至少觸及漲停次數","limit",initial.minimumLimitHits.toString())
+        row("連續陽線根數","green",initial.bullishBars.toString())
+        row("最近連續放量日數","volumeDays",initial.volumeDays.toString())
+        row("放量前均量天數","base",initial.volumeBaseDays.toString())
+        row("每日至少均量倍數","multiple",initial.volumeMultiple.toString(),true)
         box.addView(NeonUi.gap(c,10))
         box.addView(NeonUi.label(c,
             "缺口定義：當日最低價嚴格高於前日最高價；後續任何一天最低價碰到缺口下緣即視為完全回補。" +

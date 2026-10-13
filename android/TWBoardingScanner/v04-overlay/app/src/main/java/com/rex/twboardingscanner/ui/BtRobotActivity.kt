@@ -640,7 +640,7 @@ class BtRobotActivity:AppCompatActivity(){
                     legacy=s.optInt("searchVersion",1)<3,
                     enabled=if(s.optInt("searchVersion",1)<4)defaultActiveRadars()
                             else BtSettingsCodec.decode(s.getJSONObject("settings")).enabledRadars,
-                    includeD=s.optInt("searchVersion",1)>=4,includeCost=s.optInt("searchVersion",1)>=5,includeE=s.optInt("searchVersion",1)>=6){it in preview||store.seen(id,it)}
+                    includeD=s.optInt("searchVersion",1)>=4,includeCost=s.optInt("searchVersion",1)>=5,includeE=s.optInt("searchVersion",1)>=6,includeMomentum=s.optInt("searchVersion",1)>=7){it in preview||store.seen(id,it)}
                 else grid.next(cursor.toLong())
             if(candidate!=null){
                 preview+=candidate.key;cursor=candidate.cursor
@@ -659,7 +659,8 @@ class BtRobotActivity:AppCompatActivity(){
     private fun openRuleOptions(type:RadarType){
         if(busy)return
         hideInput()
-        BtRobotRulesDialog.show(this,required(),forbidden(),enabledRadars,type){on,off->applyRequired(on,off)}
+        BtRobotRulesDialog.show(this,required(),forbidden(),enabledRadars,type,robotDConfig,robotFConfig,
+            onParameters={d,f->robotDConfig=d;robotFConfig=f}){on,off->applyRequired(on,off)}
     }
     internal fun applySectors(sectors:Set<StockSector>){
         if(busy)return
@@ -684,7 +685,8 @@ class BtRobotActivity:AppCompatActivity(){
     private fun forbidden()=store.session()?.optString("forbidden","0")?:getSharedPreferences("backtest_robot",0).getString("forbiddenDraft","0").orEmpty()
     internal fun applyRequired(key:String,forbiddenKey:String=forbidden()){
         BtRobotSpace.validateConstraints(key,forbiddenKey)
-        if(key==required()&&forbiddenKey==forbidden()&&!sweepCheck.isChecked)return
+        val savedParams=store.session()?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}
+        if(key==required()&&forbiddenKey==forbidden()&&!sweepCheck.isChecked&&savedParams?.dConfig==robotDConfig&&savedParams?.fConfig==robotFConfig)return
         val entered=runCatching{parameters()}.getOrElse{
             Toast.makeText(this,"請修正測試參數：${it.message}",Toast.LENGTH_LONG).show();return
         }

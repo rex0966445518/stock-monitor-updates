@@ -22,7 +22,7 @@ data class DPatternConfig(
     fun validated():DPatternConfig {
         require(lookback in 4..120){"觀察交易日限 4～120"}
         require(minimumLimitHits in 1..lookback){"漲停次數須介於 1 和觀察交易日"}
-        require(bullishBars in 2..lookback){"連陽 K 數須介於 2 和觀察交易日"}
+        require(bullishBars in 2..lookback){"連陽根數須介於 2 和觀察交易日"}
         require(volumeDays in 1..10){"連續放量日數限 1～10"}
         require(volumeBaseDays in 5..120){"放量前均量基期限 5～120 交易日"}
         require(volumeMultiple.isFinite()&&volumeMultiple in 1.0..20.0){"放量倍數限 1～20 倍"}

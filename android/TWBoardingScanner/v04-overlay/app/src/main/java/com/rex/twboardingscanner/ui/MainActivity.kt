@@ -741,6 +741,7 @@ class MainActivity: AppCompatActivity() {
 
     private fun showRadarConditions(type: RadarType) {
         val title = "${type.label} · 掃描條件"
+        val numbers=RuleNumberFields(this,dConfig,fConfig)
         val rules = ScanConditions.forRadar(type)
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -752,17 +753,15 @@ class MainActivity: AppCompatActivity() {
             MaterialAlertDialogBuilder(this).setTitle("條件判斷說明").setMessage("勾選條件全部滿足才入選；未勾選不限制。基本條件預設全選，額外查核預設關閉；E 預設僅勾 DIF 向上接觸，不強制 A 股價／量能。\nA/B/E/F 排除台灣當日日線；C/D 使用最新日 K。E 的 MACD 為 EMA9 訊號線，預設線距≤收盤價0.3%，DIF須上升且前日位於訊號線下方或相等；可調線距及是否納入剛向上交叉。\nB 通過後若 RSI>50 且收盤>20日線，另標示技術升級；不辨識 W 底形狀。\n額外資料不足標示待查核，勾選後會阻擋入選。5日／10日線碰觸以差距1%內且前一日差距較大定義；主動買賣比需提供來源可靠的內外盤成交量CSV，不能使用五檔委買委賣掛單量。HiStock 財報會查核技術候選股，快取24小時；HTTP403/429、格式變更、資料過期均待查核。逐日法人尚未接入。分數為所選條件通過率，不是公司評級。\n財務條件共用於ABCDEF、可各自勾選；EPS為正不代表現金流為正。產業EPS範圍不是通用及格線，未設成硬門檻。\n現金流使用原站最新列示期間，不跨季加總；金融業現金流需另行解讀。營業利益率為正不能排除一次性業外收益。\n風險估算：前20日最低價為支撐，支撐下1%為失效價，前60日最高價為壓力；(壓力−現價)/(現價−失效價)≥2。\n漲停估算：前收盤×1.1，按台股跳動單位向下取整；非交易所公告漲停價。\nC 為觀察訊號，尚無回測證明隔天一定續漲。\n估算主力成本為近20日的日K典型價（高＋低＋收）／3依成交股數加權；非券商揭露的真正大戶持股均價，也不保證股價反彈。當日資料若未收盤，估值可在收盤後改變；不足20根有效日K則顯示待查核。").setPositiveButton("關閉",null).show()
         })
         if(type==RadarType.D_MAIN_FORCE){
-            box.addView(NeonUi.button(this,"D 數值門檻 · 20日／1次漲停／4根陽線／3日2倍"){
-                DPatternEditor.show(this,dConfig){chosen->
-                    dConfig=chosen;saveScanSettings();requestConfiguredScan()
-                }
+            box.addView(NeonUi.button(this,"D 數值總覽（也可直接填寫下方欄位）"){
+                numbers.editD()
             }.apply{tag="scanner-d-parameters"})
         }
         if(type==RadarType.E_DIF_TOUCH)box.addView(NeonUi.button(this,"E 線距門檻與剛交叉設定",NeonUi.pink){
             EPatternEditor.show(this,eConfig){chosen->eConfig=chosen;saveScanSettings();requestConfiguredScan()}
         }.apply{tag="scanner-e-parameters"})
         if(type==RadarType.F_VOLUME_CONTRACTION)box.addView(NeonUi.button(this,"F 縮量上漲 · 天數與門檻",NeonUi.pink){
-            FPatternEditor.show(this,fConfig){chosen->fConfig=chosen;saveScanSettings();requestConfiguredScan()}
+            numbers.editF()
         }.apply{tag="scanner-f-parameters"})
         var extraHeadingShown = false
         val checks=rules.mapIndexed { index,rule ->
@@ -788,7 +787,7 @@ class MainActivity: AppCompatActivity() {
                 isChecked = rule.id in radarSelections.getValue(type)
                 minHeight = dp(48)
             }
-            box.addView(cb)
+            box.addView(cb);numbers.add(box,type,rule.id)
             rule.id to cb
         }.toMap()
         val readExclusions=ExclusionEditor.fields(this,box,type,scanExclusions.getValue(type))
@@ -813,6 +812,8 @@ class MainActivity: AppCompatActivity() {
                 if (selected.isEmpty()) {
                     Toast.makeText(this, "請至少勾選一項條件", Toast.LENGTH_SHORT).show()
                 } else {
+                    val configs=runCatching{numbers.readD() to numbers.readF()}.getOrElse{Toast.makeText(this,it.message,Toast.LENGTH_LONG).show();return@setOnClickListener}
+                    dConfig=configs.first;fConfig=configs.second
                     scanExclusions=scanExclusions+mapOf(type to readExclusions());saveScanSettings()
                     radarSelections[type] = selected
                     prefs.edit().putStringSet("rules_${ScanConditions.VERSION}_${type.name}", selected).apply()

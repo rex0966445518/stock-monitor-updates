@@ -222,15 +222,16 @@ class BacktestActivity:AppCompatActivity(){
     }
     private fun editRules(type:RadarType){
         val options=ScanConditions.forRadar(type);val selected=btRules[type].orEmpty()
+        val numbers=RuleNumberFields(this,btDConfig,btFConfig)
         val content=NeonUi.vertical(this).apply{setPadding(dp(14),dp(10),dp(14),dp(10))}
         if(type==RadarType.D_MAIN_FORCE)content.addView(NeonUi.button(this,"D 數值門檻 · 可調整觀察日、連陽、漲停與量比",NeonUi.mint){
-            DPatternEditor.show(this,btDConfig){cfg->btDConfig=cfg;store.saveDraft(draft())}
+            numbers.editD()
         }.apply{tag="backtest-d-parameters"})
         if(type==RadarType.E_DIF_TOUCH)content.addView(NeonUi.button(this,"E 線距門檻與剛交叉設定",NeonUi.pink){
             EPatternEditor.show(this,btEConfig){cfg->btEConfig=cfg;store.saveDraft(draft())}
         }.apply{tag="backtest-e-parameters"})
         if(type==RadarType.F_VOLUME_CONTRACTION)content.addView(NeonUi.button(this,"F 縮量上漲 · 天數與門檻",NeonUi.pink){
-            FPatternEditor.show(this,btFConfig){cfg->btFConfig=cfg;store.saveDraft(draft())}
+            numbers.editF()
         }.apply{tag="backtest-f-parameters"})
         content.addView(label("勾選才列入本區門檻；全部取消則該區不入選。",12f,NeonUi.ink))
         val boxes=options.mapIndexed{index,rule->
@@ -243,7 +244,7 @@ class BacktestActivity:AppCompatActivity(){
                     else->null
                 }
                 if(heading!=null)content.addView(label(heading,13f,NeonUi.amber,true))
-                content.addView(box)
+                content.addView(box);numbers.add(content,type,rule.id)
             }
         }
         if(type==RadarType.D_MAIN_FORCE)content.addView(NeonUi.button(this,"同步 A 已勾選條件至 D",NeonUi.cyan){
@@ -252,7 +253,7 @@ class BacktestActivity:AppCompatActivity(){
         }.apply{tag="backtest-d-copy-a"})
         val readExclusions=ExclusionEditor.fields(this,content,type,btExclusions.getValue(type))
         content.addView(NeonUi.row(this,listOf(NeonUi.button(this,"全不選"){boxes.forEach{it.isChecked=false}},NeonUi.button(this,"恢復基本條件"){boxes.forEachIndexed{i,box->box.isChecked=options[i].defaultEnabled}})))
-        showSelectionDialog("${type.label} · 回測條件",content){btExclusions=btExclusions+mapOf(type to readExclusions());applyRules(type,options.filterIndexed{i,_->boxes[i].isChecked}.map{it.id}.toSet())}
+        showSelectionDialog("${type.label} · 回測條件",content){val d=numbers.readD();val f=numbers.readF();btDConfig=d;btFConfig=f;btExclusions=btExclusions+mapOf(type to readExclusions());applyRules(type,options.filterIndexed{i,_->boxes[i].isChecked}.map{it.id}.toSet())}
     }
     private fun refreshSectorButton(){
         val names=btSectors.sortedBy{it.ordinal}.map{it.label}
@@ -278,7 +279,7 @@ class BacktestActivity:AppCompatActivity(){
             addView(NeonUi.gap(this@BacktestActivity,10))
             addView(NeonUi.row(this@BacktestActivity,listOf(
                 NeonUi.button(this@BacktestActivity,"取消",NeonUi.muted){dialog.dismiss()},
-                NeonUi.button(this@BacktestActivity,"套用",NeonUi.mint){onApply();dialog.dismiss()}
+                NeonUi.button(this@BacktestActivity,"套用",NeonUi.mint){runCatching{onApply()}.onSuccess{dialog.dismiss()}.onFailure{Toast.makeText(this@BacktestActivity,it.message,Toast.LENGTH_LONG).show()}}
             )))
         }
         dialog=MaterialAlertDialogBuilder(this).setBackground(NeonUi.panel(this,NeonUi.cyan)).setView(viewport).create()

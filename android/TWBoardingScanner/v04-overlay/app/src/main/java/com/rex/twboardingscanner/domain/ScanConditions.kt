@@ -44,11 +44,11 @@ object ScanConditions {
             // scoped to D). Newly copied high-selectivity basics are defaults;
             // optional A filters remain opt-in to avoid silently returning zero stocks.
             val originalD=listOf(
-                ScanCondition(DPattern.LIMIT,"近 N 交易日至少 K 次收盤達估算漲停價"){DPattern.checks(it.dPattern)[DPattern.LIMIT]},
-                ScanCondition(DPattern.GREEN,"近 N 交易日曾連續 K 根陽線"){DPattern.checks(it.dPattern)[DPattern.GREEN]},
-                ScanCondition(DPattern.GAP,"近 N 交易日曾有向上不重疊缺口"){DPattern.checks(it.dPattern)[DPattern.GAP]},
+                ScanCondition(DPattern.LIMIT,"近期收盤達估算漲停價（交易日範圍／次數可填）"){DPattern.checks(it.dPattern)[DPattern.LIMIT]},
+                ScanCondition(DPattern.GREEN,"近期曾出現連續陽線（交易日範圍／根數可填）"){DPattern.checks(it.dPattern)[DPattern.GREEN]},
+                ScanCondition(DPattern.GAP,"近期曾有向上不重疊缺口（交易日範圍可填）"){DPattern.checks(it.dPattern)[DPattern.GAP]},
                 ScanCondition(DPattern.UNFILLED,"至少一個向上缺口至今未完全回補",true){DPattern.checks(it.dPattern)[DPattern.UNFILLED]},
-                ScanCondition(DPattern.VOLUME,"最近 K 日成交量各達先前 N 日均量 M 倍"){DPattern.checks(it.dPattern)[DPattern.VOLUME]},
+                ScanCondition(DPattern.VOLUME,"最近連續放量，達放量前均量指定倍數（日數／倍數可填）"){DPattern.checks(it.dPattern)[DPattern.VOLUME]},
                 ScanCondition(DPattern.RELATIVE,"連陽期間個股漲幅高於加權指數（需官方同期資料）",true){DPattern.checks(it.dPattern)[DPattern.RELATIVE]}
             )
             val aOptions=forRadar(RadarType.A_EARLY_BREAKOUT).map{rule->
