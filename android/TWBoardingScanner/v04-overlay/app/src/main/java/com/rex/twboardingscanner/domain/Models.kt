@@ -165,7 +165,8 @@ data class StockSnapshot(
     val dConfig:DPatternConfig=DPatternConfig.DEFAULT,
     val eConfig:EPatternConfig=EPatternConfig.DEFAULT,
     val fConfig:FPatternConfig=FPatternConfig.DEFAULT,
-    val marketIndexCloses:Map<java.time.LocalDate,Double>?=null
+    val marketIndexCloses:Map<java.time.LocalDate,Double>?=null,
+    val bConfig:BPatternConfig=BPatternConfig.DEFAULT
 )
 
 data class SignalResult(

@@ -17,9 +17,9 @@ class ScanRulesTest {
         val a = ScanConditions.forRadar(RadarType.A_EARLY_BREAKOUT)
         val b = ScanConditions.forRadar(RadarType.B_DEEP_REVERSAL)
         val c = ScanConditions.forRadar(RadarType.C_LONG_RED_VOLUME)
-        assertEquals(11, a.count { !it.extra }); assertEquals(11, b.count { !it.extra }); assertEquals(7, c.count { !it.extra })
+        assertEquals(11, a.count { !it.extra }); assertEquals(BPattern.EARLY, b.filter{!it.extra}.map{it.id}.toSet()); assertEquals(7, c.count { !it.extra })
         for (list in listOf(a,b,c)) {
-            assertEquals(18, list.count { it.extra }); assertTrue(list.all { it.defaultEnabled == !it.extra })
+            assertEquals(if(list===b)26 else 18, list.count { it.extra }); assertTrue(list.all { it.defaultEnabled == !it.extra })
             assertEquals(list.size, list.map { it.id }.distinct().size)
         }
         assertFalse(c.any { it.id == "macd" || it.id == "heat" })

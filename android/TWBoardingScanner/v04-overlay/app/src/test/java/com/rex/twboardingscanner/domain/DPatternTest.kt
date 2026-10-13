@@ -54,7 +54,7 @@ class DPatternTest{
         val key=BtRobotSpace.key(BtRobotSpace.rules(fromOld))
         assertEquals(fromOld,key)
         assertEquals(BigInteger.ONE.shiftLeft(83),BtRobotSpace.total("0","0",
-            enabled=defaultActiveRadars(),includeD=false))
+            enabled=defaultActiveRadars(),includeD=false,includeB=false))
     }
     @Test fun limitGreenGapAndVolumeProvideTraceableDatesAndPreciseRatios(){
         val bars=candles()

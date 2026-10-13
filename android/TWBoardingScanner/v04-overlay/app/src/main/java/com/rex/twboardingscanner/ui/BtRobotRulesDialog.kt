@@ -11,8 +11,9 @@ internal object BtRobotRulesDialog {
              enabled:Set<RadarType> = RadarType.entries.toSet(),
              initialType:RadarType = RadarType.A_EARLY_BREAKOUT,
              dConfig:DPatternConfig=DPatternConfig.DEFAULT,fConfig:FPatternConfig=FPatternConfig.DEFAULT,
-             onParameters:(DPatternConfig,FPatternConfig)->Unit={_,_->},onSave:(String,String)->Unit){
-        val numbers=RuleNumberFields(a,dConfig,fConfig)
+             onParameters:(DPatternConfig,FPatternConfig)->Unit={_,_->},
+             bConfig:BPatternConfig=BPatternConfig.DEFAULT,onBParameters:(BPatternConfig)->Unit={},onSave:(String,String)->Unit){
+        val numbers=RuleNumberFields(a,dConfig,fConfig,bConfig)
         BtRobotSpace.validateConstraints(key,forbidden)
         val excluded=BtRobotSpace.rules(forbidden).mapValues{it.value.toMutableSet()}
         val selected=BtRobotSpace.rules(key).mapValues{it.value.toMutableSet()}
@@ -47,15 +48,18 @@ internal object BtRobotRulesDialog {
         val contentHeight=(a.resources.displayMetrics.heightPixels*0.60f).toInt()
         root.addView(ScrollView(a).apply{addView(content)},LinearLayout.LayoutParams(-1,contentHeight))
         root.addView(NeonUi.row(a,listOf(
-            NeonUi.button(a,"全部自由",NeonUi.amber){runCatching{val d=numbers.readD();val f=numbers.readF();onParameters(d,f);onSave("0","0")}.onSuccess{dialog.dismiss()}.onFailure{Toast.makeText(a,it.message,Toast.LENGTH_LONG).show()}},
+            NeonUi.button(a,"全部自由",NeonUi.amber){runCatching{val d=numbers.readD();val f=numbers.readF();val b=numbers.readB();onBParameters(b);onParameters(d,f);onSave("0","0")}.onSuccess{dialog.dismiss()}.onFailure{Toast.makeText(a,it.message,Toast.LENGTH_LONG).show()}},
             NeonUi.button(a,"取消",NeonUi.muted){dialog.dismiss()},
-            NeonUi.button(a,"儲存設定",NeonUi.mint){runCatching{val d=numbers.readD();val f=numbers.readF();onParameters(d,f);onSave(BtRobotSpace.key(selected),BtRobotSpace.key(excluded))}.onSuccess{dialog.dismiss()}.onFailure{Toast.makeText(a,it.message,Toast.LENGTH_LONG).show()}}.apply{tag="save-required-rules"}
+            NeonUi.button(a,"儲存設定",NeonUi.mint){runCatching{val d=numbers.readD();val f=numbers.readF();val b=numbers.readB();onBParameters(b);onParameters(d,f);onSave(BtRobotSpace.key(selected),BtRobotSpace.key(excluded))}.onSuccess{dialog.dismiss()}.onFailure{Toast.makeText(a,it.message,Toast.LENGTH_LONG).show()}}.apply{tag="save-required-rules"}
         )),LinearLayout.LayoutParams(-1,NeonUi.dp(a,52)))
         dialog=MaterialAlertDialogBuilder(a).setBackground(NeonUi.panel(a,NeonUi.cyan)).setView(root).create();dialog.show()
     }
     private fun populate(a:AppCompatActivity,body:LinearLayout,numbers:RuleNumberFields,type:RadarType,selected:MutableSet<String>,excluded:MutableSet<String>,change:()->Unit){
         body.removeAllViews();body.addView(NeonUi.label(a,"${type.label} · 必選／排除",15f,NeonUi.cyan,true))
-        ScanConditions.forRadar(type).forEachIndexed{index,rule->
+        if(type==RadarType.B_DEEP_REVERSAL)BReversalPresets.add(a,body){ids->
+            selected.clear();selected.addAll(ids);excluded.clear();populate(a,body,numbers,type,selected,excluded,change);change()
+        }
+        ScanConditions.forEditor(type).forEachIndexed{index,rule->
             if(type==RadarType.D_MAIN_FORCE&&index in setOf(0,6,17))
                 body.addView(NeonUi.label(a,when(index){
                     0->"D 原有主力形態"

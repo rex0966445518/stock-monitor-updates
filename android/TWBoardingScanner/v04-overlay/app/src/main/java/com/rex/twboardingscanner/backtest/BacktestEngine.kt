@@ -17,7 +17,8 @@ data class BtSettings(val start:LocalDate,val end:LocalDate,val capital:Double=3
     val dConfig:DPatternConfig=DPatternConfig.DEFAULT,
     val eConfig:EPatternConfig=EPatternConfig.DEFAULT,
     val fConfig:FPatternConfig=FPatternConfig.DEFAULT,
-    val exclusions:Map<RadarType,Set<String>> = ExclusionConditions.empty()){
+    val exclusions:Map<RadarType,Set<String>> = ExclusionConditions.empty(),
+    val bConfig:BPatternConfig=BPatternConfig.DEFAULT){
     fun validateTrading(){
         require(marketGuardVersion in 0..MarketCrashGuard.VERSION){"大盤保護版本不相容"}
         stockPolicy.validate()
@@ -28,7 +29,7 @@ data class BtSettings(val start:LocalDate,val end:LocalDate,val capital:Double=3
         else require(maxHoldingStocks==null&&targetNetPct==3.0){"舊策略必須保留原持倉及獲利規則"}
         require(targetNetPct.isFinite()&&targetNetPct in 0.01..1000.0){"獲利賣出請填 0.01～1000%"}
         require(enabledRadars.all{it in RadarType.entries}){"啟用區域不存在"}
-        dConfig.validated();eConfig.validated();fConfig.validated();ExclusionConditions.validate(exclusions)
+        dConfig.validated();eConfig.validated();fConfig.validated();bConfig.validated();ExclusionConditions.validate(exclusions)
     }
 }
 data class BtSeries(val code:String,val name:String,val market:Market,val bars:List<DailyBar>,val dividends:Map<LocalDate,Double> = emptyMap())
@@ -86,7 +87,7 @@ object BacktestEngine {
                         tradeSideVolume=flowFor(s.code,day))
                     val snap=calculator.build(stock,known).copy(
                         timestamp=day.atTime(13,30).atZone(RuleMetrics.TAIPEI).toInstant().toEpochMilli(),
-                        dConfig=settings.dConfig,eConfig=settings.eConfig,fConfig=settings.fConfig,marketIndexCloses=benchmark)
+                        dConfig=settings.dConfig,eConfig=settings.eConfig,fConfig=settings.fConfig,bConfig=settings.bConfig,marketIndexCloses=benchmark)
                     val metrics=RuleMetrics(snap)
                     val checks=ScanConditions.forRadar(type).filter{it.id in ids}.map{it.test(metrics)}
                     val vetoes=ExclusionConditions.forRadar(type).filter{it.id in settings.exclusions.getValue(type)}.map{it.test(metrics)}

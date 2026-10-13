@@ -29,6 +29,7 @@ object ScanConditions {
     const val MA5_TOUCH_MA10 = "ma5_touch_ma10"
     const val ACTIVE_BUY_SELL_15 = "active_buy_sell_15"
     val NEW_IDS=setOf(MA5_TOUCH_MA10,ACTIVE_BUY_SELL_15)
+    fun forEditor(type:RadarType)=forRadar(type).let{rules->if(type==RadarType.B_DEEP_REVERSAL)rules.sortedBy{if(it.defaultEnabled)0 else 1} else rules}
     fun forRadar(type: RadarType): List<ScanCondition> {
         if(type==RadarType.F_VOLUME_CONTRACTION)return FPattern.rules()+forRadar(RadarType.A_EARLY_BREAKOUT).map{it.copy(extra=true)}
 
@@ -91,7 +92,7 @@ object ScanConditions {
                 ScanCondition("closeHigh", "收盤位置位於當日振幅上方 25%") { it.closeHigh }
             )
         }
-        return basic + specific + listOf(
+        val result=basic + specific + (if(type==RadarType.B_DEEP_REVERSAL)BPattern.rules() else emptyList()) + listOf(
             ScanCondition("extra_eps", "EPS／營收：連續四季 EPS 均 > 0，且營收年增率 ≥ 0", true) { it.earnings },
             ScanCondition("fin_ttm", "近四季獲利：四個連續單季 EPS 合計 > 0", true) { it.financial?.ttm(it.today)?.let { v -> v > 0 } },
             ScanCondition("fin_positive", "穩定獲利：連續四季 EPS 每季均 > 0", true) { it.financial?.fourPositive(it.today) },
@@ -120,6 +121,7 @@ object ScanConditions {
             ScanCondition(MACD_ABOVE_ZERO,"MACD 訊號線（DIF 的 EMA9）在 0 軸上方",true){it.macdAboveZero},
             ScanCondition(RSI_30_TO_50,"近一日 RSI(14) 由 ≤30 上升突破 50（前日≤30、當日>50；Wilder）",true){it.rsi30To50}
         )
+        return if(type==RadarType.B_DEEP_REVERSAL)result.map{it.copy(extra=it.id !in BPattern.EARLY)} else result
     }
 }
 
@@ -132,6 +134,7 @@ class RuleMetrics(val s: StockSnapshot) {
     val belowMainForceCost20:Boolean? get() = MainForceCost.below(last?.close?:Double.NaN,estimatedMainCost20)
     val bearishTurn by lazy(LazyThreadSafetyMode.NONE){BearishTurn.inspect(bars.map{it.close})}
     val rsiGoldenCross by lazy(LazyThreadSafetyMode.NONE){RsiGoldenCross.inspect(bars.map{it.close})}
+    val bPattern by lazy(LazyThreadSafetyMode.NONE){BPattern.inspect(bars,s.bConfig)}
     val fPattern by lazy(LazyThreadSafetyMode.NONE){FPattern.inspect(bars,s.fConfig)}
     val ePattern by lazy(LazyThreadSafetyMode.NONE){EPattern.inspect(bars.map{it.close},s.eConfig)}
     val dPattern by lazy(LazyThreadSafetyMode.NONE){DPattern.inspect(bars,s.dConfig,s.marketIndexCloses)}

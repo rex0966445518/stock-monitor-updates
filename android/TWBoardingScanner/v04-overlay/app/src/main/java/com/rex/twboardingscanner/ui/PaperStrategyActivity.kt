@@ -170,8 +170,8 @@ class PaperStrategyActivity:AppCompatActivity() {
         picker.show()
     }
     private fun editRules(type:RadarType){
-        val entries=ScanConditions.forRadar(type)
-        val numbers=RuleNumberFields(this,preset.dConfig,preset.fConfig)
+        val entries=ScanConditions.forEditor(type)
+        val numbers=RuleNumberFields(this,preset.dConfig,preset.fConfig,preset.bConfig)
         val body=NeonUi.vertical(this).apply{setPadding(dp(15),dp(10),dp(15),dp(10))}
         if(type==RadarType.E_DIF_TOUCH)body.addView(NeonUi.button(this,"E 線距門檻與剛交叉設定",NeonUi.pink){
             EPatternEditor.show(this,preset.eConfig){cfg->preset=preset.copy(eConfig=cfg)}
@@ -188,6 +188,7 @@ class PaperStrategyActivity:AppCompatActivity() {
                 isChecked=cond.id in rules[type].orEmpty();minHeight=dp(48)
             }.also{body.addView(it);numbers.add(body,type,cond.id)}
         }
+        if(type==RadarType.B_DEEP_REVERSAL){val presets=NeonUi.vertical(this);BReversalPresets.add(this,presets){ids->entries.forEachIndexed{i,rule->boxes[i].isChecked=rule.id in ids}};body.addView(presets,0)}
         val readExclusions=ExclusionEditor.fields(this,body,type,preset.exclusions.getValue(type))
         val controls=NeonUi.row(this,listOf(
             NeonUi.button(this,"全不選"){boxes.forEach{it.isChecked=false}},
@@ -201,7 +202,7 @@ class PaperStrategyActivity:AppCompatActivity() {
         dialog.setOnShowListener{dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener{
             runCatching{
                 val d=numbers.readD();val f=numbers.readF()
-                preset=preset.copy(dConfig=d,fConfig=f,exclusions=preset.exclusions+mapOf(type to readExclusions()),enabledRadars=if(enabled.isChecked)preset.enabledRadars+type else preset.enabledRadars-type)
+                preset=preset.copy(dConfig=d,fConfig=f,bConfig=numbers.readB(),exclusions=preset.exclusions+mapOf(type to readExclusions()),enabledRadars=if(enabled.isChecked)preset.enabledRadars+type else preset.enabledRadars-type)
                 rules=rules+mapOf(type to entries.filterIndexed{i,_->boxes[i].isChecked}.map{it.id}.toSet())
                 refreshControls()
             }.onSuccess{dialog.dismiss()}.onFailure{Toast.makeText(this,it.message,Toast.LENGTH_LONG).show()}

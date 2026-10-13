@@ -9,14 +9,16 @@ import android.widget.LinearLayout
 import com.rex.twboardingscanner.domain.*
 
 /** Dialog-local values: no live settings change until the containing form is saved. */
-internal class RuleNumberFields(private val c:Context,d:DPatternConfig,f:FPatternConfig){
+internal class RuleNumberFields(private val c:Context,d:DPatternConfig,f:FPatternConfig,b:BPatternConfig=BPatternConfig.DEFAULT){
     private val values=linkedMapOf<String,String>()
     private val inputs=mutableMapOf<String,MutableList<EditText>>()
-    init{setD(d);setF(f)}
+    init{setD(d);setF(f);setB(b)}
     private fun put(key:String,value:Any){
         val raw=value.toString();values[key]=raw
         inputs[key].orEmpty().forEach{if(it.text.toString()!=raw)it.setText(raw)}
     }
+    fun setB(v:BPatternConfig){put("b-depthDays",v.depthDays);put("b-depthPct",v.depthPct);put("b-stopDays",v.stopDays);put("b-supportDays",v.supportDays);put("b-momentumDays",v.momentumDays);put("b-eventDays",v.eventDays);put("b-rsiLookback",v.rsiLookback);put("b-rsiThreshold",v.rsiThreshold);put("b-breakoutDays",v.breakoutDays);put("b-volumeDays",v.volumeDays);put("b-volumeMultiple",v.volumeMultiple)}
+    fun readB()=BPatternConfig(int("b-depthDays"),decimal("b-depthPct"),int("b-stopDays"),int("b-supportDays"),int("b-momentumDays"),int("b-eventDays"),int("b-rsiLookback"),decimal("b-rsiThreshold"),int("b-breakoutDays"),int("b-volumeDays"),decimal("b-volumeMultiple")).validated()
     fun setD(v:DPatternConfig){put("d-lookback",v.lookback);put("d-limit",v.minimumLimitHits);put("d-green",v.bullishBars);put("d-volumeDays",v.volumeDays);put("d-base",v.volumeBaseDays);put("d-multiple",v.volumeMultiple)}
     fun setF(v:FPatternConfig){put("f-days",v.days);put("f-pct",v.volumePct);put("f-averageDays",v.averageDays);put("f-averagePct",v.averagePct);put("f-lots",v.minLots);put("f-ma",v.maDays);put("f-gainDays",v.gainDays);put("f-gain",v.maxGainPct)}
     fun editD(){runCatching{readD()}.onSuccess{DPatternEditor.show(c,it,::setD)}.onFailure{android.widget.Toast.makeText(c,it.message,android.widget.Toast.LENGTH_LONG).show()}}
@@ -43,6 +45,13 @@ internal class RuleNumberFields(private val c:Context,d:DPatternConfig,f:FPatter
             })
             row.addView(input,LinearLayout.LayoutParams(NeonUi.dp(c,88),-2).apply{marginStart=NeonUi.dp(c,8)})
             parent.addView(row)
+        }
+        if(type==RadarType.B_DEEP_REVERSAL)when(id){
+            BPattern.DEPTH->{field("深跌觀察交易日（20～504）","b-depthDays");field("距最高收盤價跌幅（%，5～90）","b-depthPct",true)}
+            BPattern.STOP->{field("最近不破底日數（1～10）","b-stopDays");field("此前支撐觀察日（5～120）","b-supportDays")}
+            BPattern.MOMENTUM->field("DIF與柱狀體連續升高日數（1～5）","b-momentumDays")
+            BPattern.RSI,BPattern.EVENT->{field("近期反轉事件範圍（1～10日）","b-eventDays");field("RSI此前超賣觀察日（2～60）","b-rsiLookback");field("RSI向上突破門檻（30～50）","b-rsiThreshold",true)}
+            BPattern.BREAKOUT->{field("突破此前最高價日數（3～60）","b-breakoutDays");field("此前均量觀察日（5～120）","b-volumeDays");field("突破成交量倍數（1～5）","b-volumeMultiple",true)}
         }
         if(type==RadarType.D_MAIN_FORCE)when(id){
             DPattern.LIMIT->{field("最近交易日（4～120，共用範圍）","d-lookback");field("至少漲停次數（1～觀察日數）","d-limit")}

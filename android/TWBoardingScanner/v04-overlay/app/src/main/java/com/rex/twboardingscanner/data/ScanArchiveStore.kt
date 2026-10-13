@@ -76,12 +76,12 @@ class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationCont
         fun snapshot(date:String,time:Long,rules:Map<RadarType,Set<String>>,sectors:Set<StockSector>,
                      policy:StockPolicy,flowRevision:String,requested:Int,analyzed:Int,failed:Int,
                      enabledRadars:Set<RadarType> = com.rex.twboardingscanner.backtest.defaultActiveRadars(),
-                     dConfig:DPatternConfig=DPatternConfig.DEFAULT,eConfig:EPatternConfig=EPatternConfig.DEFAULT,fConfig:FPatternConfig=FPatternConfig.DEFAULT,exclusions:Map<RadarType,Set<String>> = ExclusionConditions.empty()):JSONObject {
+                     dConfig:DPatternConfig=DPatternConfig.DEFAULT,eConfig:EPatternConfig=EPatternConfig.DEFAULT,fConfig:FPatternConfig=FPatternConfig.DEFAULT,exclusions:Map<RadarType,Set<String>> = ExclusionConditions.empty(),bConfig:BPatternConfig=BPatternConfig.DEFAULT):JSONObject {
             require(Regex("\\d{4}-\\d{2}-\\d{2}").matches(date))
             return JSONObject().put("schema",1).put("date",date).put("created",time)
                 .put("rulesVersion",ScanConditions.VERSION)
                 .put("enabledRadars",JSONArray(enabledRadars.map{it.name}.sorted()))
-                .put("dConfig",dConfig.json()).put("eConfig",eConfig.json()).put("fConfig",fConfig.json()).put("exclusions",ExclusionConditions.json(exclusions))
+                .put("dConfig",dConfig.json()).put("eConfig",eConfig.json()).put("fConfig",fConfig.json()).put("bConfig",bConfig.json()).put("exclusions",ExclusionConditions.json(exclusions))
                 .put("rules",JSONObject().apply{RadarType.entries.forEach{put(it.name,JSONArray(rules[it].orEmpty().sorted()))}})
                 .put("sectors",JSONArray(sectors.map{it.name}.sorted()))
                 .put("policy",policy.json()).put("flowRevision",flowRevision)
@@ -90,7 +90,7 @@ class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationCont
         fun signature(settings:JSONObject):String{
             val stable=JSONObject().put("rules",settings.getJSONObject("rules")).put("exclusions",settings.optJSONObject("exclusions")?:ExclusionConditions.json(ExclusionConditions.empty()))
                 .put("enabledRadars",settings.optJSONArray("enabledRadars")?:JSONArray())
-                .put("dConfig",settings.optJSONObject("dConfig")?:DPatternConfig.DEFAULT.json()).put("eConfig",settings.optJSONObject("eConfig")?:EPatternConfig.DEFAULT.json()).put("fConfig",settings.optJSONObject("fConfig")?:FPatternConfig.DEFAULT.json())
+                .put("dConfig",settings.optJSONObject("dConfig")?:DPatternConfig.DEFAULT.json()).put("eConfig",settings.optJSONObject("eConfig")?:EPatternConfig.DEFAULT.json()).put("fConfig",settings.optJSONObject("fConfig")?:FPatternConfig.DEFAULT.json()).put("bConfig",settings.optJSONObject("bConfig")?:BPatternConfig.DEFAULT.json())
                 .put("sectors",settings.getJSONArray("sectors")).put("policy",settings.getJSONObject("policy"))
                 .put("flowRevision",settings.getString("flowRevision"))
             return MessageDigest.getInstance("SHA-256").digest(stable.toString().toByteArray(Charsets.UTF_8))
@@ -107,6 +107,7 @@ class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationCont
             val cEnabled=current.optJSONArray("enabledRadars")
                 ?.let(::strings)?:com.rex.twboardingscanner.backtest.defaultActiveRadars().map{it.name}.toSet()
             if(pEnabled!=cEnabled)lines+="ABCDEF 開關 ＋${(cEnabled-pEnabled).joinToString("、")}／−${(pEnabled-cEnabled).joinToString("、")}"
+            if(BPatternConfig.read(previous.optJSONObject("bConfig"))!=BPatternConfig.read(current.optJSONObject("bConfig")))lines+="B 深跌反轉門檻調整（詳見快照）"
             if(FPatternConfig.read(previous.optJSONObject("fConfig"))!=FPatternConfig.read(current.optJSONObject("fConfig")))lines+="F 縮量上漲門檻調整（詳見快照）"
             val oldD=DPatternConfig.read(previous.optJSONObject("dConfig"))
             val newD=DPatternConfig.read(current.optJSONObject("dConfig"))

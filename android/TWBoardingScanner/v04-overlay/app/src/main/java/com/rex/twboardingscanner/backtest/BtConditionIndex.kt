@@ -70,7 +70,7 @@ class BtConditionIndex private constructor(
         fun fingerprint(digest:String,settings:BtSettings,flowRevision:String="none")=
             "$digest:${settings.start}:${settings.end}:${ScanConditions.VERSION}:$flowRevision:"+
             settings.enabledRadars.sortedBy{it.ordinal}.joinToString(","){it.name}+":"+
-            settings.dConfig.json().toString()+":"+settings.eConfig.json().toString()+":"+settings.fConfig.json().toString()+":"+BtRobotSpace.allSlots.joinToString(","){"${it.first.name}/${it.second}"}
+            settings.dConfig.json().toString()+":"+settings.eConfig.json().toString()+":"+settings.fConfig.json().toString()+":"+settings.bConfig.json().toString()+":"+BtRobotSpace.allSlots.joinToString(","){"${it.first.name}/${it.second}"}
         fun read(file:File,series:List<BtSeries>,fingerprint:String):BtConditionIndex=
             DataInputStream(BufferedInputStream(GZIPInputStream(file.inputStream()))).use{input->
                 require(input.readUTF()=="BTINDEX5"&&input.readUTF()==fingerprint){"歷史 ABCDEF 條件快取或版本不一致"}
@@ -126,7 +126,7 @@ class BtConditionIndex private constructor(
                                 tradeSideVolume=flowFor(s.code,day))
                             RuleMetrics(calc.build(stock,known).copy(
                                 timestamp=day.atTime(13,30).atZone(RuleMetrics.TAIPEI).toInstant().toEpochMilli(),
-                                dConfig=settings.dConfig,eConfig=settings.eConfig,fConfig=settings.fConfig,marketIndexCloses=benchmark))
+                                dConfig=settings.dConfig,eConfig=settings.eConfig,fConfig=settings.fConfig,bConfig=settings.bConfig,marketIndexCloses=benchmark))
                         }
                         dates[i]=RuleMetrics.tradingDate(m.last!!.time)
                         options[i].forEachIndexed{bit,condition->

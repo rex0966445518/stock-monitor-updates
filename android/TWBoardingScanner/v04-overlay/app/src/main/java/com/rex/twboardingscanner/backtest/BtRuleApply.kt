@@ -40,7 +40,7 @@ object BtRuleApply {
             return s
         }
         edit.putStringSet("enabled_radars",s.enabledRadars.map{it.name}.toSet())
-            .putString("d_pattern_config",s.dConfig.json().toString()).putString("e_pattern_config",s.eConfig.json().toString()).putString("f_pattern_config",s.fConfig.json().toString())
+            .putString("d_pattern_config",s.dConfig.json().toString()).putString("e_pattern_config",s.eConfig.json().toString()).putString("f_pattern_config",s.fConfig.json().toString()).putString("b_pattern_config",s.bConfig.json().toString())
             .putString("scan_exclusions",ExclusionConditions.json(s.exclusions).toString())
         s.rules.forEach{(type,ids)->edit.putStringSet("rules_${ScanConditions.VERSION}_${type.name}",ids.toSet())}
         edit.putStringSet("enabled_sectors",s.sectors.map{it.name}.toSet())

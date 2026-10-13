@@ -57,7 +57,7 @@ object PaperStrategyConfig {
         if(!ExclusionConditions.allowed(r.snapshot,r.radarType,settings.exclusions.getValue(r.radarType)))return false
         val selected=settings.rules[r.radarType].orEmpty()
         if(selected.isEmpty())return false
-        val checks=if(r.radarType==RadarType.E_DIF_TOUCH)ScoringEngine().evaluateE(r.snapshot.copy(eConfig=settings.eConfig),selected).checks else if(r.radarType==RadarType.F_VOLUME_CONTRACTION)ScoringEngine().evaluateF(r.snapshot.copy(fConfig=settings.fConfig),selected).checks else r.checks
+        val checks=if(r.radarType==RadarType.B_DEEP_REVERSAL)ScoringEngine().evaluateB(r.snapshot.copy(bConfig=settings.bConfig),selected).checks else if(r.radarType==RadarType.E_DIF_TOUCH)ScoringEngine().evaluateE(r.snapshot.copy(eConfig=settings.eConfig),selected).checks else if(r.radarType==RadarType.F_VOLUME_CONTRACTION)ScoringEngine().evaluateF(r.snapshot.copy(fConfig=settings.fConfig),selected).checks else r.checks
         val observed=checks.associateBy{it.id}
         return selected.all{observed[it]?.state==CheckState.PASS}
     }

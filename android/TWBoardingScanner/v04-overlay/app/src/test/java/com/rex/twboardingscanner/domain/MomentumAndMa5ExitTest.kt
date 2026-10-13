@@ -93,7 +93,7 @@ class MomentumAndMa5ExitTest {
     @Test fun appendedRobotBitsPreserveEveryHistoricalPosition(){
         val old=BtRobotSpace.v6Slots
         assertEquals(old,BtRobotSpace.allSlots.take(old.size))
-        assertEquals(12,BtRobotSpace.allSlots.size-old.size)
+        assertEquals(12,BtRobotSpace.v7Slots.size-old.size)
         old.forEachIndexed{i,pair->assertTrue(pair.second in BtRobotSpace.rules(java.math.BigInteger.ONE.shiftLeft(i).toString(16)).getValue(pair.first))}
         assertEquals(java.math.BigInteger.ONE.shiftLeft(old.size),BtRobotSpace.total("0",includeMomentum=false))
         val settings=BtRobotSpace.settings(RadarType.entries.associateWith{ScanConditions.MOMENTUM_IDS})

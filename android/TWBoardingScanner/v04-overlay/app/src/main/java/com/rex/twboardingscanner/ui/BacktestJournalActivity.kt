@@ -74,7 +74,7 @@ internal object BacktestJournalUi {
         val costs=s.optJSONObject("costModel")?.let{"\n\n買／賣手續費各 ${it.optDouble("buyFeeRate")*100}%／${it.optDouble("sellFeeRate")*100}%（最低 ${it.optInt("minimumFee")} 元）\n賣出稅 ${it.optDouble("sellTaxRate")*100}% · 滑價 ${it.optDouble("slippageRate")*100}%"}.orEmpty()
         val f=com.rex.twboardingscanner.domain.FPatternConfig.read(s.optJSONObject("fConfig"))
         val fText="\n\nF 縮量上漲：連續 ${f.days} 日；每日量≤前日 ${f.volumePct}%；前 ${f.averageDays} 日均量 ${f.averagePct}%；最低 ${f.minLots} 張；${f.maDays} 日線向上；${f.gainDays} 日漲幅≤${f.maxGainPct}%（僅套用已勾選項）"
-        return intro+"\n\n"+body+fText+exclusionText+costs+(if(labels==null)"\n\n舊版僅保存條件代碼；上列名稱依目前版本對照。" else "")
+        return intro+"\n\n"+body+"\n\n"+(s.optJSONObject("bConfig")?.let{com.rex.twboardingscanner.domain.BPatternConfig.read(it).describe()}?:"B 新增門檻：舊日誌未記錄")+fText+exclusionText+costs+(if(labels==null)"\n\n舊版僅保存條件代碼；上列名稱依目前版本對照。" else "")
     }
 }
 

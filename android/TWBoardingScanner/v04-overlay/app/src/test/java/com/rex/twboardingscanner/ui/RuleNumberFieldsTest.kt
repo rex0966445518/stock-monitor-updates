@@ -34,6 +34,65 @@ class RuleNumberFieldsTest {
     private fun open(a:Any,type:RadarType){a.javaClass.getDeclaredMethod(if(a is MainActivity)"showRadarConditions" else "editRules",RadarType::class.java).apply{isAccessible=true}.invoke(a,type);idle()}
     private fun clickApply(dialog:AlertDialog){find(dialog.window!!.decorView){it is TextView&&it.text.toString()=="套用"}!!.performClick();idle()}
     private fun mainD(a:MainActivity)=MainActivity::class.java.getDeclaredField("dConfig").apply{isAccessible=true}.get(a) as DPatternConfig
+    @Test fun bPresetsSaveOnlyAfterApplyAndNumericFieldsSurviveReopen(){
+        val ctl=Robolectric.buildActivity(MainActivity::class.java).setup();val a=ctl.get()
+        val type=RadarType.B_DEEP_REVERSAL
+        open(a,type);var dialog=current()
+        number(dialog,BPattern.STOP,"b-stopDays").setText("4")
+        number(dialog,BPattern.DEPTH,"b-depthPct").setText("35")
+        dialog.window!!.decorView.findViewWithTag<View>("b-preset-confirmed").performClick()
+        dialog.getButton(-2).performClick()
+        assertNull(app.getSharedPreferences("scanner_filters",0).getString("b_pattern_config",null))
+        open(a,type);dialog=current()
+        dialog.window!!.decorView.findViewWithTag<View>("b-preset-early").performClick()
+        number(dialog,BPattern.STOP,"b-stopDays").setText("4")
+        number(dialog,BPattern.DEPTH,"b-depthPct").setText("35")
+        number(dialog,BPattern.EVENT,"b-eventDays").setText("5")
+        assertEquals("5",number(dialog,BPattern.RSI,"b-eventDays").text.toString())
+        dialog.getButton(-1).performClick();idle()
+        val prefs=app.getSharedPreferences("scanner_filters",0)
+        assertEquals(BPattern.EARLY,prefs.getStringSet("rules_${ScanConditions.VERSION}_${type.name}",null))
+        val b=BPatternConfig.read(org.json.JSONObject(prefs.getString("b_pattern_config",null)!!))
+        assertEquals(4,b.stopDays);assertEquals(35.0,b.depthPct,0.0);assertEquals(5,b.eventDays)
+        open(a,type);assertEquals("4",number(current(),BPattern.STOP,"b-stopDays").text.toString())
+        val decor=current().window!!.decorView
+        decor.measure(View.MeasureSpec.makeMeasureSpec(720,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(1600,View.MeasureSpec.EXACTLY));decor.layout(0,0,720,1600)
+        val image=android.graphics.Bitmap.createBitmap(720,1600,android.graphics.Bitmap.Config.ARGB_8888);decor.draw(android.graphics.Canvas(image))
+        val file=java.io.File("build/ui-previews/b-reversal-presets-360.png");file.parentFile!!.mkdirs()
+        file.outputStream().use{image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)};image.recycle()
+        current().dismiss();ctl.pause().stop().destroy()
+    }
+    @Test fun bBacktestPresetPersistsFullThresholdSnapshot(){
+        val ctl=Robolectric.buildActivity(BacktestActivity::class.java).setup()
+        open(ctl.get(),RadarType.B_DEEP_REVERSAL);val dialog=current()
+        dialog.window!!.decorView.findViewWithTag<View>("b-preset-confirmed").performClick()
+        number(dialog,BPattern.BREAKOUT,"b-volumeMultiple").setText("2.0")
+        clickApply(dialog)
+        val s=BacktestActivity::class.java.getDeclaredMethod("draft").apply{isAccessible=true}.invoke(ctl.get()) as BtSettings
+        assertEquals(BPattern.CONFIRMED,s.rules.getValue(RadarType.B_DEEP_REVERSAL))
+        assertEquals(2.0,s.bConfig.volumeMultiple,0.0)
+        assertEquals(s.bConfig,BtSettingsCodec.decode(BtSettingsCodec.encode(s)).bConfig)
+        ctl.pause().stop().destroy()
+    }
+    @Test fun robotBThresholdOnlyEditCreatesNewBatchAndKeepsArchivedSeed(){
+        val store=BtRobotStore(app)
+        val old=store.create(BtRobotSpace.settings().copy(stockScope=StockScope.ROBOT))
+        val oldSession=store.session(old)!!
+        val oldSettings=BtSettingsCodec.decode(oldSession.getJSONObject("settings"))
+        val ctl=Robolectric.buildActivity(BtRobotActivity::class.java).setup()
+        ctl.get().window.decorView.findViewWithTag<View>("robot-rules-B_DEEP_REVERSAL").performClick();idle()
+        val dialog=current()
+        number(dialog,BPattern.STOP,"b-supportDays").setText("25")
+        dialog.window!!.decorView.findViewWithTag<View>("save-required-rules").performClick();idle()
+        val until=System.nanoTime()+5_000_000_000L
+        while(store.active()==old&&System.nanoTime()<until){Thread.sleep(10);idle()}
+        val next=store.active();assertNotEquals(old,next)
+        val archived=BtSettingsCodec.decode(store.session(old)!!.getJSONObject("settings"))
+        val changed=BtSettingsCodec.decode(store.session(next)!!.getJSONObject("settings"))
+        assertEquals(oldSettings.bConfig,archived.bConfig);assertEquals(25,changed.bConfig.supportDays)
+        assertEquals(oldSession.getString("required"),store.session(next)!!.getString("required"))
+        ctl.pause().stop().destroy()
+    }
     @Test fun allPlaceholdersHaveNumericFieldsAndSharedDRangeStaysInSync(){
         val a=Robolectric.buildActivity(MainActivity::class.java).setup()
         open(a.get(),d);val dialog=current()
