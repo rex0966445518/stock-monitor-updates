@@ -60,6 +60,7 @@ class MainForceCostTest {
                 RadarType.C_LONG_RED_VOLUME->ScoringEngine().evaluateC(unknown,setOf(id))
                 RadarType.D_MAIN_FORCE->ScoringEngine().evaluateD(unknown,setOf(id))
                 RadarType.E_DIF_TOUCH->ScoringEngine().evaluateE(unknown,setOf(id))
+                RadarType.F_VOLUME_CONTRACTION->ScoringEngine().evaluateF(unknown,setOf(id))
             }
             assertEquals(CheckState.PENDING,result.checks.single{it.id==id}.state)
             assertEquals(SignalLight.NONE,result.light)

@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
 class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
     companion object {
         const val WORK="backtest-robot"
-        const val NOTE="固定區間內調整條件，屬樣本內最佳化，可能過度擬合；目前已測最佳不等於全組合最高或未來收益。現存上市櫃及目前產業分類有存活偏差；已勾選財報／法人缺歷史證據即不通過。A/B/E 排除當日日線，C 包含當日；C 同收盤成交屬理想化假設。交易時刻為日線模型，並非逐筆成交。扣買賣費稅及滑價；留倉以扣估計賣出費稅估值。股息與折讓金列應收不再投資；超過 5 個日曆日可扣費稅保本賣出，虧損續抱；另有下車條件時，以前一完整日線判斷、下一可交易日開盤模擬認賠出場。"
+        const val NOTE="固定區間內調整條件，屬樣本內最佳化，可能過度擬合；目前已測最佳不等於全組合最高或未來收益。現存上市櫃及目前產業分類有存活偏差；已勾選財報／法人缺歷史證據即不通過。A/B/E/F 排除當日日線，C 包含當日；C 同收盤成交屬理想化假設。交易時刻為日線模型，並非逐筆成交。扣買賣費稅及滑價；留倉以扣估計賣出費稅估值。股息與折讓金列應收不再投資；超過 5 個日曆日可扣費稅保本賣出，虧損續抱；另有下車條件時，以前一完整日線判斷、下一可交易日開盤模擬認賠出場。"
         private data class Runtime(val id:String,val data:BacktestData.Loaded,val index:BtConditionIndex,val execution:BtExecutionIndex,val guards:Map<java.time.LocalDate,com.rex.twboardingscanner.domain.MarketGuardDecision>){
             // A grid tests identical ABC and historical observations each time.
             // Prepare once per loaded snapshot; only holdings and take-profit are varied.
@@ -139,7 +139,7 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
                 val feedback=signalCounts.entries.joinToString(" · "){"${it.key.name.take(1)} 符合 ${it.value} 筆"}
                 val run=BacktestEngine.run(prepared,settings,cancel=cancel,execution=runtime.execution)
                 check(!cancel()){ "已暫停測試" }
-                val note="條件掃描回饋：$feedback；待查核 ${prepared.pendingChecks} 項。\n"+NOTE+if(sweep!=null)"本批次固定 ABCDE 條件，逐一測試持倉 ${sweep.holdingFrom}～${sweep.holdingTo} 檔 × 扣費稅淨利 ${sweep.profitFrom}%～${sweep.profitTo}% 的 ${sweep.total} 組有限範圍；每組使用相同歷史樣本，沒有再搜尋 ABCDE。" else ""
+                val note="條件掃描回饋：$feedback；待查核 ${prepared.pendingChecks} 項。\n"+NOTE+if(sweep!=null)"本批次固定 ABCDEF 條件，逐一測試持倉 ${sweep.holdingFrom}～${sweep.holdingTo} 檔 × 扣費稅淨利 ${sweep.profitFrom}%～${sweep.profitTo}% 的 ${sweep.total} 組有限範圍；每組使用相同歷史樣本，沒有再搜尋 ABCDEF。" else ""
                 val better=store.commit(id,token,candidate,BtResult(settings,run,runtime.data.requested,runtime.data.series.size,runtime.data.excluded,note,prepared.pendingChecks),started,signalCounts)
                 if(better)notifyBest(seq,run.profit)
                 completed++

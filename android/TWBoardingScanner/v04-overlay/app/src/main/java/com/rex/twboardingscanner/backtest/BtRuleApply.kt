@@ -21,6 +21,9 @@ object BtRuleApply {
         com.rex.twboardingscanner.data.ExitRuleStore(c).saveProfitTrendHold(StockScope.SCANNER,s.holdProfitUntilMa5Break)
         com.rex.twboardingscanner.data.ExitRuleStore(c).saveProfitTrendHold(StockScope.BACKTEST,s.holdProfitUntilMa5Break)
         val edit=c.getSharedPreferences("scanner_filters",0).edit()
+        edit.putStringSet("enabled_radars",s.enabledRadars.map{it.name}.toSet())
+            .putString("d_pattern_config",s.dConfig.json().toString()).putString("e_pattern_config",s.eConfig.json().toString()).putString("f_pattern_config",s.fConfig.json().toString())
+            .putString("scan_exclusions",ExclusionConditions.json(s.exclusions).toString())
         s.rules.forEach{(type,ids)->edit.putStringSet("rules_${ScanConditions.VERSION}_${type.name}",ids.toSet())}
         check(edit.putStringSet("enabled_sectors",s.sectors.map{it.name}.toSet()).putString(REVISION,java.util.UUID.randomUUID().toString()).commit()){"無法儲存主頁條件"}
         return s

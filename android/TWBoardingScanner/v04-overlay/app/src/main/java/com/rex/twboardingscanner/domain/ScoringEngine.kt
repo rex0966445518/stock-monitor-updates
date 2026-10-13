@@ -22,6 +22,7 @@ class ScoringEngine {
         val light = if (blockers.isNotEmpty()) SignalLight.NONE else if (upgraded) SignalLight.RED else SignalLight.ORANGE
         val evidence=listOfNotNull(
             if(type==RadarType.D_MAIN_FORCE)metrics.dPattern.format() else null,
+            if(type==RadarType.F_VOLUME_CONTRACTION)metrics.fPattern.format() else null,
             if(type==RadarType.E_DIF_TOUCH)metrics.ePattern?.format()?:"E 日K資料不足，待查核" else null,
             if(RsiGoldenCross.ID in selected)metrics.rsiGoldenCross?.format()?:"RSI(5/10) 資料不足，待查核" else null,
             if(BearishTurn.ID in excluded)metrics.bearishTurn?.format()?:"排除區證據不足，待查核" else null
@@ -33,5 +34,6 @@ class ScoringEngine {
     fun evaluateC(s: StockSnapshot, selected: Set<String> = defaults(RadarType.C_LONG_RED_VOLUME),excluded:Set<String> = emptySet()) = evaluate(s, RadarType.C_LONG_RED_VOLUME, selected,excluded)
     fun evaluateD(s: StockSnapshot, selected: Set<String> = defaults(RadarType.D_MAIN_FORCE),excluded:Set<String> = emptySet()) = evaluate(s,RadarType.D_MAIN_FORCE,selected,excluded)
     fun evaluateE(s: StockSnapshot, selected: Set<String> = defaults(RadarType.E_DIF_TOUCH),excluded:Set<String> = emptySet()) = evaluate(s,RadarType.E_DIF_TOUCH,selected,excluded)
+    fun evaluateF(s: StockSnapshot, selected:Set<String> = defaults(RadarType.F_VOLUME_CONTRACTION), excluded:Set<String> = emptySet()) = evaluate(s,RadarType.F_VOLUME_CONTRACTION,selected,excluded)
     private fun defaults(type: RadarType) = ScanConditions.forRadar(type).filter { it.defaultEnabled }.map { it.id }.toSet()
 }

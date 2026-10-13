@@ -63,6 +63,7 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
             RadarType.B_DEEP_REVERSAL -> NeonUi.amber
             RadarType.C_LONG_RED_VOLUME -> NeonUi.cyan
             RadarType.D_MAIN_FORCE -> NeonUi.mint
+            RadarType.F_VOLUME_CONTRACTION -> NeonUi.mint
             RadarType.E_DIF_TOUCH -> NeonUi.pink
         }
 
@@ -75,6 +76,7 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
             RadarType.B_DEEP_REVERSAL -> "B 反轉"
             RadarType.C_LONG_RED_VOLUME -> "C 長紅爆量"
             RadarType.D_MAIN_FORCE -> "D 主力進場"
+            RadarType.F_VOLUME_CONTRACTION -> "F 縮量上漲"
             RadarType.E_DIF_TOUCH -> "E DIF 向上接觸"
         }
         h.b.badge.setTextColor(accent)

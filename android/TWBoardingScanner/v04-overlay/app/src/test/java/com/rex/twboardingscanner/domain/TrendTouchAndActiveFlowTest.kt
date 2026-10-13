@@ -80,7 +80,7 @@ class TrendTouchAndActiveFlowTest {
         o.put("rulesVersion",ScanConditions.LEGACY_VERSION)
         assertEquals(old,BtSettingsCodec.decode(o))
         val keys=rules.keys
-        assertEquals(5,keys.size)
+        assertEquals(6,keys.size)
         assertEquals(BtRobotSpace.key(rules),BtRobotSpace.key(BtSettingsCodec.decode(o).rules))
     }
 }

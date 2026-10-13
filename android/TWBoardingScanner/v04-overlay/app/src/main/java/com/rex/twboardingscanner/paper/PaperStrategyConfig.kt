@@ -40,9 +40,9 @@ object PaperStrategyConfig {
         // but no paper buys may occur outside its activation dates.
         require(settings.sectors.isNotEmpty()){"至少選擇一種產業"}
         require(settings.enabledRadars.any{settings.rules[it].orEmpty().isNotEmpty()}){"請至少開啟一個含條件的入場區域"}
-        require(settings.rules.keys==RadarType.entries.toSet()){"ABCDE 條件不完整"}
+        require(settings.rules.keys==RadarType.entries.toSet()){"ABCDEF 條件不完整"}
         settings.rules.forEach{(type,ids)->
-            require(ids.all{it in ScanConditions.forRadar(type).map{r->r.id}}){"ABCDE 條件版本不符"}
+            require(ids.all{it in ScanConditions.forRadar(type).map{r->r.id}}){"ABCDEF 條件版本不符"}
         }
         require(settings.codes.split(Regex("[,，\\s]+")).filter{it.isNotBlank()}
             .all{it.matches(Regex("[1-9][0-9]{3}"))}){"股號須為四位數字，請用逗號分隔"}
@@ -57,7 +57,7 @@ object PaperStrategyConfig {
         if(!ExclusionConditions.allowed(r.snapshot,r.radarType,settings.exclusions.getValue(r.radarType)))return false
         val selected=settings.rules[r.radarType].orEmpty()
         if(selected.isEmpty())return false
-        val checks=if(r.radarType==RadarType.E_DIF_TOUCH)ScoringEngine().evaluateE(r.snapshot.copy(eConfig=settings.eConfig),selected).checks else r.checks
+        val checks=if(r.radarType==RadarType.E_DIF_TOUCH)ScoringEngine().evaluateE(r.snapshot.copy(eConfig=settings.eConfig),selected).checks else if(r.radarType==RadarType.F_VOLUME_CONTRACTION)ScoringEngine().evaluateF(r.snapshot.copy(fConfig=settings.fConfig),selected).checks else r.checks
         val observed=checks.associateBy{it.id}
         return selected.all{observed[it]?.state==CheckState.PASS}
     }

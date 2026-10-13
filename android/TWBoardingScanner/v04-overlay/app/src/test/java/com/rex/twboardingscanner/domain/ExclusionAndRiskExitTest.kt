@@ -24,6 +24,7 @@ class ExclusionAndRiskExitTest{
         RadarType.C_LONG_RED_VOLUME->ScoringEngine().evaluateC(s,setOf("price"),excluded)
         RadarType.D_MAIN_FORCE->ScoringEngine().evaluateD(s,setOf("price"),excluded)
         RadarType.E_DIF_TOUCH->ScoringEngine().evaluateE(s,setOf("price"),excluded)
+        RadarType.F_VOLUME_CONTRACTION->ScoringEngine().evaluateF(s,setOf("price"),excluded)
     }
     @Test fun bothFreshBearishEventsMustOccurOnTheSameDay(){
         assertTrue(BearishTurn.Evidence(.01,-.01,70.0,69.9).passes)
@@ -57,7 +58,7 @@ class ExclusionAndRiskExitTest{
         val settings=BtRobotSpace.settings(rules).copy(start=day,end=day.plusDays(1),enabledRadars=RadarType.entries.toSet(),stockScope=StockScope.ROBOT,
             exclusions=RadarType.entries.associateWith{setOf(BearishTurn.ID)},exitRules=listOf(ExitRule(bearishExit=true)),marketGuardVersion=MarketCrashGuard.VERSION)
         val ref=BacktestEngine.prepare(series,settings)
-        assertEquals("A/B/E",ref.signals.getValue(day).single().radar)
+        assertEquals("A/B/E/F",ref.signals.getValue(day).single().radar)
         assertEquals("C/D",ref.signals.getValue(day.plusDays(1)).single().radar)
         val file=File(RuntimeEnvironment.getApplication().cacheDir,"veto-facts.gz")
         val fp=BtConditionIndex.fingerprint("fixture",settings)
