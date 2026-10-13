@@ -10,14 +10,7 @@ internal data class PosterSection(val radar:RadarType,val letter:String,val labe
 
 internal object PosterCatalog {
     val sections:List<PosterSection> = RadarType.entries.map{type->
-        when(type){
-            RadarType.A_EARLY_BREAKOUT -> PosterSection(type,"A","A 起漲")
-            RadarType.B_DEEP_REVERSAL -> PosterSection(type,"B","B 反轉")
-            RadarType.C_LONG_RED_VOLUME -> PosterSection(type,"C","C 爆量")
-            RadarType.D_MAIN_FORCE -> PosterSection(type,"D","D 主力")
-            RadarType.F_VOLUME_CONTRACTION -> PosterSection(type,"F","F 縮量上漲")
-            RadarType.E_DIF_TOUCH -> PosterSection(type,"E","E DIF 接觸")
-        }
+        PosterSection(type,type.name.take(1),type.label)
     }
     val count:Int get()=sections.size
     val summary:String get()=sections.joinToString("／"){it.letter}

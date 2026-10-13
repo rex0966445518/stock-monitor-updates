@@ -27,7 +27,7 @@ internal object ResultFilters {
 
 class ResultFilterBar @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) : LinearLayout(context, attrs) {
     var onSelected: ((Int) -> Unit)? = null
-    private val titles = listOf("A 起漲", "B 反轉", "C 爆量", "D 主力", "待查核", "未通過", "全部入選", "E DIF 接觸", "F 縮量上漲")
+    private val titles = listOf("A 準備起漲", "B 深跌反轉", "C 突發爆量", "D 主力進場", "待查核", "未通過", "全部入選", "E DIF金叉", "F 縮量上漲")
     private val accents = listOf(NeonUi.radarColor(RadarType.A_EARLY_BREAKOUT), NeonUi.radarColor(RadarType.B_DEEP_REVERSAL), NeonUi.radarColor(RadarType.C_LONG_RED_VOLUME), NeonUi.radarColor(RadarType.D_MAIN_FORCE), NeonUi.amber, NeonUi.muted, NeonUi.ink, NeonUi.radarColor(RadarType.E_DIF_TOUCH), NeonUi.radarColor(RadarType.F_VOLUME_CONTRACTION))
     private val buttons = titles.mapIndexed { index, title ->
         NeonUi.button(context, title, accents[index]) { onSelected?.invoke(index) }.apply {
@@ -44,9 +44,11 @@ class ResultFilterBar @JvmOverloads constructor(context: Context, attrs: Attribu
     }
     init {
         orientation = VERTICAL
-        addView(NeonUi.row(context, buttons.take(4)))
+        addView(NeonUi.row(context, buttons.take(3)))
         addView(NeonUi.gap(context, 3))
-        addView(NeonUi.row(context, listOf(buttons[6],buttons[7],buttons[8],buttons[4],buttons[5])))
+        addView(NeonUi.row(context, listOf(buttons[6],buttons[3],buttons[7])))
+        addView(NeonUi.gap(context, 3))
+        addView(NeonUi.row(context,listOf(buttons[8],buttons[4],buttons[5])))
         update(List(9) { 0 }, 6)
     }
     fun update(counts: List<Int>, selected: Int) {

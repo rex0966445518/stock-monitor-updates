@@ -53,7 +53,7 @@ internal object BacktestJournalUi {
         val body=RadarType.entries.joinToString("\n\n"){type->
             val ids=strings(rules.optJSONArray(type.name))
             val items=if(labels?.has(type.name)==true)strings(labels.getJSONArray(type.name)) else ids.map{id->ScanConditions.forRadar(type).firstOrNull{it.id==id}?.label?:"條件代碼 $id"}
-            "${type.name.take(1)} 區 · ${ids.size} 項\n"+if(ids.isEmpty())"未選條件，該區不入選" else items.joinToString("\n"){"✓ $it"}
+            "${type.label} · ${ids.size} 項\n"+if(ids.isEmpty())"未選條件，該區不入選" else items.joinToString("\n"){"✓ $it"}
         }
         val excluded=com.rex.twboardingscanner.domain.ExclusionConditions.read(s.optJSONObject("exclusions"))
         val exclusionText="\n\n排除區：\n"+excluded.entries.joinToString("\n"){(type,ids)->"${type.name.take(1)}："+if(ids.isEmpty())"未勾選" else com.rex.twboardingscanner.domain.ExclusionConditions.forRadar(type).filter{it.id in ids}.joinToString("；"){it.label}}
@@ -176,7 +176,7 @@ class BacktestJournalActivity:AppCompatActivity(){
                 panel.addView(NeonUi.row(this,group.map{type->
                     val code=type.name.take(1)
                     val amount=if(!complete||values==null||values.isNull(code))null else values.optDouble(code,Double.NaN).takeIf{it.isFinite()}
-                    val caption=if(rules==null)"$code 條件未記錄" else "$code ${rules.optJSONArray(type.name)?.length()?:0} 項"
+                    val caption=if(rules==null)"${type.label} 條件未記錄" else "${type.label} ${rules.optJSONArray(type.name)?.length()?:0} 項"
                     val text=amount?.let{(if(it>0)"盈利 " else if(it<0)"虧損 " else "損益 ")+String.format(Locale.TAIWAN,"%,.0f",kotlin.math.abs(it))}?:"待查核"
                     NeonUi.tile(this,caption,amount?.let{String.format(Locale.TAIWAN,"%+,.0f",it)}?:"待查核",
                         if(amount==null)"元" else if(amount>0)"盈利（元）" else if(amount<0)"虧損（元）" else "損益（元）",if(amount==null)NeonUi.muted else if(amount>=0)NeonUi.pink else NeonUi.mint)

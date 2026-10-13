@@ -64,14 +64,7 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
         h.b.root.strokeWidth = (1 * h.b.root.resources.displayMetrics.density).toInt()
         h.b.root.animate().cancel()
         h.b.root.alpha = 1f
-        h.b.badge.text = when(r.radarType) {
-            RadarType.A_EARLY_BREAKOUT -> "A 起漲"
-            RadarType.B_DEEP_REVERSAL -> "B 反轉"
-            RadarType.C_LONG_RED_VOLUME -> "C 長紅爆量"
-            RadarType.D_MAIN_FORCE -> "D 主力進場"
-            RadarType.F_VOLUME_CONTRACTION -> "F 縮量上漲"
-            RadarType.E_DIF_TOUCH -> "E DIF 向上接觸"
-        }
+        h.b.badge.text = r.radarType.label
         h.b.badge.setTextColor(accent)
         h.b.badge.background = GradientDrawable().apply {
             cornerRadius = 20f

@@ -1,6 +1,15 @@
 package com.rex.twboardingscanner.domain
 
-enum class RadarType { A_EARLY_BREAKOUT, B_DEEP_REVERSAL, C_LONG_RED_VOLUME, D_MAIN_FORCE, E_DIF_TOUCH, F_VOLUME_CONTRACTION }
+enum class RadarType(val displayName:String) {
+    A_EARLY_BREAKOUT("準備起漲"), B_DEEP_REVERSAL("深跌反轉"), C_LONG_RED_VOLUME("突發爆量"),
+    D_MAIN_FORCE("主力進場"), E_DIF_TOUCH("DIF金叉"), F_VOLUME_CONTRACTION("縮量上漲");
+    val label:String get()="${name.take(1)} $displayName"
+    companion object {
+        fun displayStored(value:String):String = value.split("/").joinToString(" / "){part->
+            entries.firstOrNull{it.name==part || it.name.take(1)==part}?.label?:part
+        }
+    }
+}
 enum class SignalLight { NONE, YELLOW, ORANGE, RED, WEAKENING }
 enum class Market { TWSE, TPEX }
 

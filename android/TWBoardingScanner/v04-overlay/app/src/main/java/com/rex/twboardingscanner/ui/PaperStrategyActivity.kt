@@ -143,7 +143,7 @@ class PaperStrategyActivity:AppCompatActivity() {
         startDateButton.text="起始日\n$start";endDateButton.text="結束日\n$end"
         exitButton.text="下車賣出條件 · ${exitRules.count{it.active}} / 6 項"
         sectorButton.text="產業篩選 · ${sectors.size} 類"
-        radarButtons.forEach{(type,button)->button.text="${type.name.take(1)} ${if(type in preset.enabledRadars)"●" else "○"} · ${rules[type].orEmpty().size} 項"}
+        radarButtons.forEach{(type,button)->button.text="${type.label}\n${if(type in preset.enabledRadars)"●" else "○"} · ${rules[type].orEmpty().size} 項"}
         refreshPolicy()
     }
     private fun loadDraft(s:BtSettings,show:Boolean=true){
@@ -194,7 +194,7 @@ class PaperStrategyActivity:AppCompatActivity() {
         ))
         body.addView(controls)
         val scroller=ScrollView(this).apply{addView(body)}
-        MaterialAlertDialogBuilder(this).setTitle("${type.name.take(1)} 區模擬入場條件")
+        MaterialAlertDialogBuilder(this).setTitle("${type.label} · 模擬入場條件")
             .setView(scroller).setNegativeButton("取消",null)
             .setPositiveButton("套用"){_,_->
                 preset=preset.copy(exclusions=preset.exclusions+mapOf(type to readExclusions()),enabledRadars=if(enabled.isChecked)preset.enabledRadars+type else preset.enabledRadars-type)

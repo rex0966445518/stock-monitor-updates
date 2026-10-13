@@ -71,7 +71,7 @@ class PaperTradingActivity:AppCompatActivity() {
             header.addView(NeonUi.gap(this,8))
             header.addView(label("自訂策略 · 持倉上限 ${s.maxHoldingStocks} 檔 · 扣費稅淨利 ${btPercent(s.targetNetPct)}% · 5 組認賠規則 ${s.exitRules.count{it.active}} 組",12f,NeonUi.cyan,true))
             header.addView(label("生效日期 ${s.start} → ${s.end} · 股票 ${s.codes.ifBlank{"全部"}} · 產業 ${s.sectors.size} 類",11f))
-            header.addView(label("已啟用的入場區域 "+RadarType.entries.joinToString(" / "){"${it.name.take(1)} ${s.rules[it].orEmpty().size} 項"},11f))
+            header.addView(label("已啟用的入場區域 "+RadarType.entries.joinToString(" / "){"${it.label} ${s.rules[it].orEmpty().size} 項"},11f))
         }
 
         val hero=panel(color(pnl))
@@ -103,7 +103,7 @@ class PaperTradingActivity:AppCompatActivity() {
         b.positions.forEach {p->
             val gain=PaperEngine.netSell(p.mark)-p.cost
             val card=panel(color(gain))
-            card.addView(label("${p.radar}  ${p.code}  ${p.name}",16f,NeonUi.ink,true))
+            card.addView(label("${com.rex.twboardingscanner.domain.RadarType.displayStored(p.radar)}  ${p.code}  ${p.name}",16f,NeonUi.ink,true))
             card.addView(label("1,000 股  ·  成交 ${p.entry}  →  最近價 ${p.mark}",13f))
             card.addView(label(signed(gain),25f,color(gain),true))
             card.addView(label("報價 ${stamp(p.markAt)}${if(System.currentTimeMillis()-p.markAt>90000) " · 非即時估值" else ""}",11f))
@@ -123,14 +123,14 @@ class PaperTradingActivity:AppCompatActivity() {
         if(b.strategy!=null&&b.candidateAt==0L)
             content.addView(label("新條件已儲存：請回主頁重新執行一次全市場掃描後再啟動策略。",11f,NeonUi.amber))
         val candidates=panel()
-        candidates.addView(label(if(b.candidates.isEmpty())"請回主頁完成 ABC 掃描；未通過與待查核不會進場。" else b.candidates.take(12).joinToString("\n"){"${it.radar}  ${it.code} ${it.name}  ·  ${it.score}%"},13f,NeonUi.ink))
+        candidates.addView(label(if(b.candidates.isEmpty())"請回主頁完成 ABC 掃描；未通過與待查核不會進場。" else b.candidates.take(12).joinToString("\n"){"${com.rex.twboardingscanner.domain.RadarType.displayStored(it.radar)}  ${it.code} ${it.name}  ·  ${it.score}%"},13f,NeonUi.ink))
         if(b.candidates.size>12)candidates.addView(label("另有 ${b.candidates.size-12} 檔；每輪依通過率、股號排序檢查前 60 檔。",11f))
         content.addView(candidates);NeonUi.group(content,candidatesTitle,candidates,"候選股票 · ${b.candidates.size} 檔","依最近一次完成的掃描建立","paper-candidates");space()
         val tradesTitle=label("交易紀錄  ${b.trades.size} 筆",17f,NeonUi.ink,true);content.addView(tradesTitle);space(6)
         if(b.trades.isEmpty())content.addView(label("尚無成交。休市、過期或缺少報價時不產生模擬交易。",13f))
         b.trades.asReversed().take(50).forEach{t->
             val card=panel(if(t.side=="BUY")NeonUi.pink else NeonUi.cyan)
-            card.addView(label("${if(t.side=="BUY")"買入" else "賣出"}  ${t.code} ${t.name}  ·  ${t.radar}",15f,NeonUi.ink,true))
+            card.addView(label("${if(t.side=="BUY")"買入" else "賣出"}  ${t.code} ${t.name}  ·  ${com.rex.twboardingscanner.domain.RadarType.displayStored(t.radar)}",15f,NeonUi.ink,true))
             card.addView(label("1,000 股 × ${t.price}  ·  ${stamp(t.at)}",13f))
             if(t.side=="SELL")card.addView(label("淨損益 ${signed(t.realized)}",20f,color(t.realized),true))
             card.addView(label(t.reason,12f,NeonUi.ink))
@@ -178,7 +178,7 @@ class PaperTradingActivity:AppCompatActivity() {
                     "本金 ${money(s.capital)} 元 · 最高持倉 ${s.maxHoldingStocks} 檔 · 淨利下車 ${btPercent(s.targetNetPct)}%（扣買賣費稅）\n"+
                     "有效日期 ${s.start} → ${s.end}（當日模擬生效，並非歷史 K 線重播）\n"+
                     "股票範圍 ${s.codes.ifBlank{"全部"}} · 產業 ${s.sectors.joinToString("、"){it.label}}\n"+
-                    "ABC："+RadarType.entries.joinToString("、"){"${it.name.take(1)} ${s.rules[it].orEmpty().size} 項"}+"\n"+
+                    "ABC："+RadarType.entries.joinToString("、"){"${it.label} ${s.rules[it].orEmpty().size} 項"}+"\n"+
                     com.rex.twboardingscanner.domain.ExitRules.summary(s.exitRules)+"\n\n"+
                     "入場：回到主頁完成全市場掃描，依本策略 ABC 勾選條件重新挑選候選股。已勾選的條件必須全部通過；缺法人／財報資料不能通過。"+
                     "09:00～13:15、當日 90 秒內且訊號之後的有效成交報價，才可模擬買入。大盤保護與共用禁買／限價名單始終有效。\n\n"+

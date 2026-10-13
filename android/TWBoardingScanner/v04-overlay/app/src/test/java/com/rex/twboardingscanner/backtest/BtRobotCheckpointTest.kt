@@ -200,9 +200,9 @@ class BtRobotCheckpointTest {
         val price=find(v){it.tag=="required-A_EARLY_BREAKOUT-price"} as BtRuleChoice
         assertEquals(BtRuleChoice.Choice.REQUIRED,price.choice)
         price.performClick();price.performClick();assertEquals(BtRuleChoice.Choice.EXCLUDED,price.choice)
-        find(v){it is TextView&&it.text.toString()=="B 反轉"}!!.performClick()
+        find(v){it is TextView&&it.text.toString()=="B 深跌反轉"}!!.performClick()
         (find(v){it.tag=="required-B_DEEP_REVERSAL-price"} as BtRuleChoice).performClick()
-        find(v){it is TextView&&it.text.toString()=="A 起漲"}!!.performClick()
+        find(v){it is TextView&&it.text.toString()=="A 準備起漲"}!!.performClick()
         assertEquals(BtRuleChoice.Choice.EXCLUDED,(find(v){it.tag=="required-A_EARLY_BREAKOUT-price"} as BtRuleChoice).choice)
         assertEquals(BtRuleChoice.Choice.EXCLUDED,(find(v){it.tag=="required-A_EARLY_BREAKOUT-volume"} as BtRuleChoice).choice)
         capture(v,"robot-exclusions-360.png",1450)
@@ -221,12 +221,18 @@ class BtRobotCheckpointTest {
         var selected="";BtRobotRulesDialog.show(a,"1"){required,_->selected=required}
         val dialog=ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
         (find(dialog.window!!.decorView){it.tag=="required-A_EARLY_BREAKOUT-volume"} as CheckBox).performClick()
-        find(dialog.window!!.decorView){it is TextView&&it.text.toString()=="C 爆量"}!!.performClick()
+        find(dialog.window!!.decorView){it is TextView&&it.text.toString()=="C 突發爆量"}!!.performClick()
         (find(dialog.window!!.decorView){it.tag=="required-C_LONG_RED_VOLUME-red"} as CheckBox).performClick()
         capture(dialog.window!!.decorView,"robot-required-360.png",1450)
         val save=find(dialog.window!!.decorView){it.tag=="save-required-rules"}!!
         val decor=dialog.window!!.decorView as ViewGroup;val rect=android.graphics.Rect(0,0,save.width,save.height);decor.offsetDescendantRectToMyCoords(save,rect)
         assertTrue("required actions clipped $rect",rect.height()>=80&&rect.bottom<=decor.height&&rect.top>=0)
+        var ancestor=save.parent as? ViewGroup
+        while(ancestor!=null){
+            val bounds=android.graphics.Rect(0,0,save.width,save.height);ancestor.offsetDescendantRectToMyCoords(save,bounds)
+            assertTrue("save button clipped by ${ancestor.javaClass.simpleName}: $bounds / ${ancestor.height}",bounds.top>=0&&bounds.bottom<=ancestor.height)
+            ancestor=ancestor.parent as? ViewGroup
+        }
         save.performClick()
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
         val rules=BtRobotSpace.rules(selected);assertEquals(setOf("price","volume"),rules[RadarType.A_EARLY_BREAKOUT]);assertEquals(setOf("red"),rules[RadarType.C_LONG_RED_VOLUME]);assertTrue(rules[RadarType.B_DEEP_REVERSAL]!!.isEmpty())

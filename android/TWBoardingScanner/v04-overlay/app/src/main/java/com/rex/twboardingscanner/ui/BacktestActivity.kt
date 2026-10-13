@@ -48,7 +48,7 @@ class BacktestActivity:AppCompatActivity(){
     private fun updateRadarModes(){
         radarModeButtons.forEach{(type,button)->
             val on=type in btEnabled
-            button.text="${type.name.take(1)} ${if(on)"●" else "○"}"
+            button.text="${type.label}\n${if(on)"●" else "○"}"
             NeonUi.selected(button,on)
             button.contentDescription="${type.name.take(1)} ${if(on)"開啟分析" else "停止分析"}"
         }
@@ -132,7 +132,7 @@ class BacktestActivity:AppCompatActivity(){
             }.apply{tag="backtest-enabled-${type.name}";textSize=12f}.also{radarModeButtons[type]=it}
         }))
         updateRadarModes()
-        universe.addView(NeonUi.radarRows(this,RadarType.entries.map{type->NeonUi.button(this,"",NeonUi.radarColor(type)){editRules(type)}.also{NeonUi.categoryStyle(it,type);ruleButtons[type]=it}}))
+        universe.addView(NeonUi.radarRows(this,RadarType.entries.map{type->NeonUi.button(this,"",NeonUi.radarColor(type)){editRules(type)}.also{NeonUi.categoryStyle(it,type);it.tag="backtest-rules-${type.name}";ruleButtons[type]=it}}))
         refreshRuleButtons()
         universe.addView(label("首次沿用主頁，之後獨立保存回測設定。",11f))
         universe.addView(NeonUi.button(this,"查看完整回測條件"){if(readTrading(true)!=null)showRules(BtSettingsCodec.encode(draft()))})
@@ -214,7 +214,7 @@ class BacktestActivity:AppCompatActivity(){
         return BtSettingsCodec.capture(this,start,end,capital.text.toString().toDoubleOrNull()?.takeIf{it.isFinite()&&it>0}?:3000000.0,codes.text.toString().trim()).copy(rules=btRules.mapValues{it.value.toSet()},sectors=btSectors.toSet(),
             enabledRadars=btEnabled,dConfig=btDConfig,eConfig=btEConfig,fConfig=btFConfig,exclusions=btExclusions,maxHoldingStocks=lastLimit,targetNetPct=lastTarget,exitRules=exitRules,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
     }
-    private fun refreshRuleButtons(){ruleButtons.forEach{(type,button)->button.text="${type.name.take(1)} 條件 (${btRules[type].orEmpty().size})"}}
+    private fun refreshRuleButtons(){ruleButtons.forEach{(type,button)->button.text="${type.label} (${btRules[type].orEmpty().size})"}}
     internal fun applyRules(type:RadarType,selected:Set<String>){
         btRules=btRules+mapOf(type to selected.intersect(ScanConditions.forRadar(type).map{it.id}.toSet()))
         store.saveDraft(draft());refreshRuleButtons()
@@ -230,13 +230,13 @@ class BacktestActivity:AppCompatActivity(){
         }.apply{tag="backtest-e-parameters"})
         if(type==RadarType.F_VOLUME_CONTRACTION)content.addView(NeonUi.button(this,"F 縮量上漲 · 天數與門檻",NeonUi.pink){
             FPatternEditor.show(this,btFConfig){cfg->btFConfig=cfg;store.saveDraft(draft())}
-        }.apply{tag="backtest-e-parameters"})
+        }.apply{tag="backtest-f-parameters"})
         content.addView(label("勾選才列入本區門檻；全部取消則該區不入選。",12f,NeonUi.ink))
         val boxes=options.mapIndexed{index,rule->
-            CheckBox(this).apply{text=rule.label;textSize=13f;setTextColor(NeonUi.ink);isChecked=rule.id in selected;minHeight=dp(48);setPadding(0,dp(5),0,dp(5));buttonTintList=android.content.res.ColorStateList.valueOf(NeonUi.cyan)}.also{box->
+            CheckBox(this).apply{text=rule.label;tag="backtest-rule-${type.name}-${rule.id}";textSize=13f;setTextColor(NeonUi.ink);isChecked=rule.id in selected;minHeight=dp(48);setPadding(0,dp(5),0,dp(5));buttonTintList=android.content.res.ColorStateList.valueOf(NeonUi.cyan)}.also{box->
                 val heading=when{
                     type==RadarType.D_MAIN_FORCE&&index==0->"D 原有六項主力形態"
-                    type==RadarType.D_MAIN_FORCE&&index==6->"A 起漲同步條件（獨立勾選）"
+                    type==RadarType.D_MAIN_FORCE&&index==6->"A 準備起漲同步條件（獨立勾選）"
                     type==RadarType.D_MAIN_FORCE&&index==17->"A 額外查核 · 缺資料時不通過"
                     type!=RadarType.D_MAIN_FORCE&&rule.id=="extra_eps"->"額外查核 · 缺歷史資料時不通過"
                     else->null
@@ -251,7 +251,7 @@ class BacktestActivity:AppCompatActivity(){
         }.apply{tag="backtest-d-copy-a"})
         val readExclusions=ExclusionEditor.fields(this,content,type,btExclusions.getValue(type))
         content.addView(NeonUi.row(this,listOf(NeonUi.button(this,"全不選"){boxes.forEach{it.isChecked=false}},NeonUi.button(this,"恢復基本條件"){boxes.forEachIndexed{i,box->box.isChecked=options[i].defaultEnabled}})))
-        showSelectionDialog("${type.name.take(1)} 區回測條件",content){btExclusions=btExclusions+mapOf(type to readExclusions());applyRules(type,options.filterIndexed{i,_->boxes[i].isChecked}.map{it.id}.toSet())}
+        showSelectionDialog("${type.label} · 回測條件",content){btExclusions=btExclusions+mapOf(type to readExclusions());applyRules(type,options.filterIndexed{i,_->boxes[i].isChecked}.map{it.id}.toSet())}
     }
     private fun refreshSectorButton(){
         val names=btSectors.sortedBy{it.ordinal}.map{it.label}

@@ -75,7 +75,7 @@ class PosterExportRegressionTest {
     @Test fun everyGeneratedTypeHasAUniquePosterFilenamePreviewButtonAndSafePreviewSample(){
         assertEquals(6,RadarType.entries.size)
         assertEquals(RadarType.entries.toList(),PosterCatalog.sections.map{it.radar})
-        assertEquals(listOf("A 起漲","B 反轉","C 爆量","D 主力","E DIF 接觸","F 縮量上漲"),PosterCatalog.sections.map{it.label})
+        assertEquals(listOf("A 準備起漲","B 深跌反轉","C 突發爆量","D 主力進場","E DIF金叉","F 縮量上漲"),PosterCatalog.sections.map{it.label})
         assertEquals(6,PosterCatalog.sections.map{PosterCatalog.fileName("2026-10-12",it)}.distinct().size)
         assertEquals(1,PosterCatalog.previewSample(800,1400))
         val sample=PosterCatalog.previewSample(1080,35890)

@@ -101,7 +101,7 @@ class BacktestJournalTest {
         val ctl=Robolectric.buildActivity(BacktestActivity::class.java).setup()
         fun find(v:View,match:(View)->Boolean):View?{if(match(v))return v;if(v is ViewGroup)for(i in 0 until v.childCount){val found=find(v.getChildAt(i),match);if(found!=null)return found};return null}
         val activity=ctl.get()
-        find(activity.window.decorView){it is TextView&&it.text.toString().startsWith("A 條件")}!!.performClick()
+        find(activity.window.decorView){it.tag=="backtest-rules-A_EARLY_BREAKOUT"}!!.performClick()
         val dialog=org.robolectric.shadows.ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
         val box=find(dialog.window!!.decorView){it is android.widget.CheckBox&&it.text.toString().startsWith("MACD 起轉")} as android.widget.CheckBox
         assertTrue(box.isChecked);box.performClick();assertFalse(box.isChecked)

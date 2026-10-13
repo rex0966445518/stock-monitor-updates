@@ -47,7 +47,7 @@ class AllSignalsAndDOptionsTest {
         // MaterialButton requires the actual AppCompat activity theme.
         val ctl=org.robolectric.Robolectric.buildActivity(MainActivity::class.java).setup()
         val view=ResultFilterBar(ctl.get())
-        assertEquals(3,view.childCount) // two rows and existing gap
+        assertEquals(5,view.childCount) // three rows with readable complete category names
         view.update(listOf(0,3,13,2,50,200,18),6)
         var selected=-1;view.onSelected={selected=it}
         val lower=view.getChildAt(2) as android.view.ViewGroup

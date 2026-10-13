@@ -32,7 +32,7 @@ object ScanConditions {
         if(type==RadarType.E_DIF_TOUCH){
             return listOf(
                 ScanCondition(EPattern.EVENT,"DIF 向上接觸 MACD 訊號線（線距門檻可調）"){it.ePattern?.passes},
-                ScanCondition(EPattern.CROSS,"僅限本日剛向上交叉（同時須勾向上接觸）",true){it.ePattern?.let{e->e.passes&&e.crossed}}
+                ScanCondition(EPattern.CROSS,"DIF金叉：僅限本日剛向上交叉（須符合接觸門檻並納入交叉）",true){it.ePattern?.let{e->e.passes&&e.crossed}}
             )+forRadar(RadarType.A_EARLY_BREAKOUT).map{it.copy(extra=true)}
         }
         if(type==RadarType.D_MAIN_FORCE){

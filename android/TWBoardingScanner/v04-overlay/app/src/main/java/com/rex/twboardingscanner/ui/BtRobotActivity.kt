@@ -50,7 +50,7 @@ class BtRobotActivity:AppCompatActivity(){
     private fun refreshRadarModes(){
         radarModeButtons.forEach{(type,button)->
             val lit=type in enabledRadars
-            button.text="${type.name.take(1)} ${if(lit)"●" else "○"}"
+            button.text="${type.label}\n${if(lit)"●" else "○"}"
             NeonUi.selected(button,lit)
             button.contentDescription="${type.name.take(1)} ${if(lit)"已啟動" else "不參與計算"}"
         }
@@ -261,7 +261,7 @@ class BtRobotActivity:AppCompatActivity(){
             }.apply{tag="robot-enabled-${type.name}";textSize=12f}.also{radarModeButtons[type]=it}
         }))
         options.addView(NeonUi.radarRows(this,RadarType.entries.map{type->
-            NeonUi.button(this,"${type.name.take(1)} 條件 ▾",NeonUi.mint){openRuleOptions(type)}
+            NeonUi.button(this,"${type.label} ▾",NeonUi.mint){openRuleOptions(type)}
                 .apply{tag="robot-rules-${type.name}";textSize=11f}.also{radarRuleButtons[type]=it}
         }))
         options.addView(NeonUi.radarRows(this,RadarType.entries.map{type->NeonUi.button(this,"${type.name.take(1)} 排除",NeonUi.pink){
@@ -271,7 +271,7 @@ class BtRobotActivity:AppCompatActivity(){
         options.addView(NeonUi.button(this,"D 主力進場 · 數值門檻",NeonUi.mint){
             DPatternEditor.show(this,robotDConfig){cfg->robotDConfig=cfg;refreshRadarModes()}
         }.apply{tag="robot-d-parameters"})
-        options.addView(NeonUi.button(this,"E DIF 向上接觸 · 線距與交叉設定",NeonUi.pink){
+        options.addView(NeonUi.button(this,"E DIF金叉 · 線距與交叉設定",NeonUi.pink){
             EPatternEditor.show(this,robotEConfig){cfg->robotEConfig=cfg;refreshRadarModes()}
         }.apply{tag="robot-e-parameters"})
         options.addView(NeonUi.button(this,"F 縮量上漲 · 天數與門檻",NeonUi.pink){
@@ -496,7 +496,7 @@ class BtRobotActivity:AppCompatActivity(){
             else "目前條件：必選 $fixed／排除 $blocked；其餘由機器人自由測試"
         val selectedRules=BtRobotSpace.rules(required());val excludedRules=BtRobotSpace.rules(forbidden())
         radarRuleButtons.forEach{(type,button)->
-            button.text="${type.name.take(1)} 條件 ▾\n必選 ${selectedRules[type].orEmpty().size}／排除 ${excludedRules[type].orEmpty().size}"
+            button.text="${type.label} ▾\n必選 ${selectedRules[type].orEmpty().size}／排除 ${excludedRules[type].orEmpty().size}"
             button.isEnabled=!busy
         }
         val sectors=s?.let{BtSettingsCodec.decode(it.getJSONObject("settings")).sectors}?:base().sectors

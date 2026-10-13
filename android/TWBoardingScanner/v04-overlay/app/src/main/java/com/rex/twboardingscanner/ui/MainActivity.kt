@@ -98,9 +98,9 @@ class MainActivity: AppCompatActivity() {
     private fun refreshRadarSwitches(){
         radarSwitches.forEach{(type,button)->
             val on=type in radarEnabled
-            button.text="${type.name.take(1)} ${if(on)"● 分析" else "○ 停用"}"
+            button.text="${type.label}\n${if(on)"● 分析" else "○ 停用"}"
             NeonUi.selected(button,on)
-            button.contentDescription="${type.name.take(1)} 區${if(on)"已啟用，參與篩選" else "已停用，不參與篩選"}"
+            button.contentDescription="${type.label} ${if(on)"已啟用，參與篩選" else "已停用，不參與篩選"}"
         }
     }
 
@@ -143,12 +143,13 @@ class MainActivity: AppCompatActivity() {
         val originalRow=b.conditionAButton.parent as ViewGroup
         val editorIndex=b.settingsPanel.indexOfChild(originalRow)
         val editors=listOf(b.conditionAButton,b.conditionBButton,b.conditionCButton,b.conditionDButton,
-            NeonUi.button(this,"E 條件"){showRadarConditions(RadarType.E_DIF_TOUCH)}.apply{tag="scanner-e-conditions"},
+            NeonUi.button(this,"E DIF金叉"){showRadarConditions(RadarType.E_DIF_TOUCH)}.apply{tag="scanner-e-conditions"},
             NeonUi.button(this,"F 縮量上漲"){showRadarConditions(RadarType.F_VOLUME_CONTRACTION)}.apply{tag="scanner-f-conditions"})
         editors.forEachIndexed{i,button->
             (button.parent as? ViewGroup)?.removeView(button)
+            button.text=RadarType.entries[i].label
             NeonUi.categoryStyle(button,RadarType.entries[i])
-            button.minHeight=dp(56);button.textSize=14f
+            button.minHeight=dp(56);button.textSize=13f
             button.icon=RadarGlyph(RadarType.entries[i]);button.iconSize=dp(20)
             button.iconTint=android.content.res.ColorStateList.valueOf(NeonUi.radarColor(RadarType.entries[i]))
         }
@@ -593,12 +594,12 @@ class MainActivity: AppCompatActivity() {
             isScanning->"正在整理市場訊號"
             selectedTab==6&&latestScanAt>0->"本次沒有符合條件的股票"
             selectedTab==3&&RadarType.D_MAIN_FORCE !in radarEnabled->"D 主力進場尚未啟用"
-            selectedTab==7&&RadarType.E_DIF_TOUCH !in radarEnabled->"E DIF 向上接觸尚未啟用"
+            selectedTab==7&&RadarType.E_DIF_TOUCH !in radarEnabled->"E DIF金叉尚未啟用"
             latestScanAt>0->"此分類尚無入選股票"
             else->"等待市場訊號"
         }
         val available=RadarType.entries.mapIndexedNotNull{i,type->
-            groups[if(type==RadarType.F_VOLUME_CONTRACTION)8 else if(type==RadarType.E_DIF_TOUCH)7 else i].size.takeIf{it>0}?.let{"${type.name.take(1)} 區 $it 筆"}
+            groups[if(type==RadarType.F_VOLUME_CONTRACTION)8 else if(type==RadarType.E_DIF_TOUCH)7 else i].size.takeIf{it>0}?.let{"${type.label} $it 筆"}
         }.joinToString("、")
         (b.emptyState.getChildAt(1) as TextView).text=when{
             isScanning->"已完成的股票會陸續出現在「全部入選」；可切換 A/B/C/D/E/F。"
@@ -740,22 +741,16 @@ class MainActivity: AppCompatActivity() {
     }
 
     private fun showRadarConditions(type: RadarType) {
-        val title = when (type) {
-            RadarType.A_EARLY_BREAKOUT -> "A｜起漲掃描條件"
-            RadarType.B_DEEP_REVERSAL -> "B｜深跌反轉掃描條件"
-            RadarType.C_LONG_RED_VOLUME -> "C｜長紅爆量掃描條件"
-            RadarType.D_MAIN_FORCE -> "D｜主力形態＋A 起漲條件"
-            RadarType.F_VOLUME_CONTRACTION -> "F｜縮量上漲"
-            RadarType.E_DIF_TOUCH -> "E｜DIF 向上接觸 MACD"
-        }
+        val title = "${type.label} · 掃描條件"
         val rules = ScanConditions.forRadar(type)
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(8), dp(16), dp(8))
         }
-        box.addView(TextView(this).apply {
-            text = "勾選條件全部滿足才入選；未勾選不限制。基本條件預設全選，額外查核預設關閉；E 預設僅勾 DIF 向上接觸，不強制 A 股價／量能。\nA/B/E/F 排除台灣當日日線；C/D 使用最新日 K。E 的 MACD 為 EMA9 訊號線，預設線距≤收盤價0.3%，DIF須上升且前日位於訊號線下方或相等；可調線距及是否納入剛向上交叉。\nB 通過後若 RSI>50 且收盤>20日線，另標示技術升級；不辨識 W 底形狀。\n額外資料不足標示待查核，勾選後會阻擋入選。5日／10日線碰觸以差距1%內且前一日差距較大定義；主動買賣比需提供來源可靠的內外盤成交量CSV，不能使用五檔委買委賣掛單量。HiStock 財報會查核技術候選股，快取24小時；HTTP403/429、格式變更、資料過期均待查核。逐日法人尚未接入。分數為所選條件通過率，不是公司評級。\n財務條件共用於ABCDEF、可各自勾選；EPS為正不代表現金流為正。產業EPS範圍不是通用及格線，未設成硬門檻。\n現金流使用原站最新列示期間，不跨季加總；金融業現金流需另行解讀。營業利益率為正不能排除一次性業外收益。\n風險估算：前20日最低價為支撐，支撐下1%為失效價，前60日最高價為壓力；(壓力−現價)/(現價−失效價)≥2。\n漲停估算：前收盤×1.1，按台股跳動單位向下取整；非交易所公告漲停價。\nC 為觀察訊號，尚無回測證明隔天一定續漲。\n估算主力成本為近20日的日K典型價（高＋低＋收）／3依成交股數加權；非券商揭露的真正大戶持股均價，也不保證股價反彈。當日資料若未收盤，估值可在收盤後改變；不足20根有效日K則顯示待查核。"
-            setTextColor(Color.parseColor("#9FBAD0"))
+        box.addView(NeonUi.label(this,"勾選的條件須全部符合；未勾選不限制。",13f,NeonUi.ink))
+        if(type==RadarType.E_DIF_TOUCH)box.addView(NeonUi.label(this,"要只找剛金叉：勾選『DIF金叉』，並於參數設定開啟『納入剛向上交叉』；仍須符合線距門檻。",12f,NeonUi.amber))
+        box.addView(NeonUi.button(this,"查看完整判斷說明",NeonUi.muted){
+            MaterialAlertDialogBuilder(this).setTitle("條件判斷說明").setMessage("勾選條件全部滿足才入選；未勾選不限制。基本條件預設全選，額外查核預設關閉；E 預設僅勾 DIF 向上接觸，不強制 A 股價／量能。\nA/B/E/F 排除台灣當日日線；C/D 使用最新日 K。E 的 MACD 為 EMA9 訊號線，預設線距≤收盤價0.3%，DIF須上升且前日位於訊號線下方或相等；可調線距及是否納入剛向上交叉。\nB 通過後若 RSI>50 且收盤>20日線，另標示技術升級；不辨識 W 底形狀。\n額外資料不足標示待查核，勾選後會阻擋入選。5日／10日線碰觸以差距1%內且前一日差距較大定義；主動買賣比需提供來源可靠的內外盤成交量CSV，不能使用五檔委買委賣掛單量。HiStock 財報會查核技術候選股，快取24小時；HTTP403/429、格式變更、資料過期均待查核。逐日法人尚未接入。分數為所選條件通過率，不是公司評級。\n財務條件共用於ABCDEF、可各自勾選；EPS為正不代表現金流為正。產業EPS範圍不是通用及格線，未設成硬門檻。\n現金流使用原站最新列示期間，不跨季加總；金融業現金流需另行解讀。營業利益率為正不能排除一次性業外收益。\n風險估算：前20日最低價為支撐，支撐下1%為失效價，前60日最高價為壓力；(壓力−現價)/(現價−失效價)≥2。\n漲停估算：前收盤×1.1，按台股跳動單位向下取整；非交易所公告漲停價。\nC 為觀察訊號，尚無回測證明隔天一定續漲。\n估算主力成本為近20日的日K典型價（高＋低＋收）／3依成交股數加權；非券商揭露的真正大戶持股均價，也不保證股價反彈。當日資料若未收盤，估值可在收盤後改變；不足20根有效日K則顯示待查核。").setPositiveButton("關閉",null).show()
         })
         if(type==RadarType.D_MAIN_FORCE){
             box.addView(NeonUi.button(this,"D 數值門檻 · 20日／1次漲停／4根陽線／3日2倍"){
@@ -774,7 +769,7 @@ class MainActivity: AppCompatActivity() {
         val checks=rules.mapIndexed { index,rule ->
             val heading=when{
                 type==RadarType.D_MAIN_FORCE&&index==0->"D 原有六項主力形態"
-                type==RadarType.D_MAIN_FORCE&&index==6->"A 起漲同步條件（可獨立選擇）"
+                type==RadarType.D_MAIN_FORCE&&index==6->"A 準備起漲同步條件（可獨立選擇）"
                 type==RadarType.D_MAIN_FORCE&&index==17->"A 額外財報／風險查核（選填）"
                 type!=RadarType.D_MAIN_FORCE&&rule.extra&&!extraHeadingShown->"額外查核（選填）"
                 else->null
@@ -789,6 +784,7 @@ class MainActivity: AppCompatActivity() {
             }
             val cb = CheckBox(this).apply {
                 text = rule.label
+                tag="scanner-rule-${type.name}-${rule.id}"
                 setTextColor(Color.WHITE)
                 isChecked = rule.id in radarSelections.getValue(type)
                 minHeight = dp(48)
@@ -879,7 +875,7 @@ class MainActivity: AppCompatActivity() {
         val n = NotificationCompat.Builder(this, "signals")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("${r.code} ${r.name} 新觸發")
-            .setContentText("${r.radarType.name}｜條件通過 ${r.score}%｜${r.reasons.take(2).joinToString("+")}")
+            .setContentText("${r.radarType.label}｜條件通過 ${r.score}%｜${r.reasons.take(2).joinToString("+")}")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .build()

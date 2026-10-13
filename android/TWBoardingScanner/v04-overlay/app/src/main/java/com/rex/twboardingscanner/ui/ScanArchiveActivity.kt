@@ -130,7 +130,7 @@ class ScanArchiveActivity:AppCompatActivity(){
             }
             card.addView(text("${dateOf(item.created)} · ${item.name}",15f,NeonUi.ink,true))
             card.addView(NeonUi.gap(this,6))
-            card.addView(text("A 起漲 ${item.a} · B 反轉 ${item.b} · C 長紅 ${item.c} · D 主力 ${item.d} · E 接觸 ${item.e} · F 縮量 ${item.f} 檔",14f,NeonUi.cyan,true))
+            card.addView(text("A 準備起漲 ${item.a} · B 深跌反轉 ${item.b} · C 突發爆量 ${item.c} · D 主力進場 ${item.d} · E DIF金叉 ${item.e} · F 縮量上漲 ${item.f} 檔",14f,NeonUi.cyan,true))
             card.addView(text("去重 ${item.uniqueStocks} 檔 · 估算資金 ${cash(item.estimatedCash)} 元",15f,NeonUi.amber,true))
             card.addView(NeonUi.gap(this,6))
             card.addView(text("與前次掃描條件比較",12f,NeonUi.muted,true))
@@ -153,7 +153,7 @@ class ScanArchiveActivity:AppCompatActivity(){
             val a=json.getJSONObject("rules").optJSONArray(type.name)?:org.json.JSONArray()
             val selected=(0 until a.length()).map{a.getString(it)}
             val options=ScanConditions.forRadar(type).associate{it.id to it.label}
-            "${type.name.take(1)}（${selected.size} 項）：\n"+
+            "${type.label}（${selected.size} 項）：\n"+
                 selected.joinToString("\n"){"• ${options[it]?:it}"}.ifBlank{"（本區未勾選）"}
         }
         val industry=json.getJSONArray("sectors")

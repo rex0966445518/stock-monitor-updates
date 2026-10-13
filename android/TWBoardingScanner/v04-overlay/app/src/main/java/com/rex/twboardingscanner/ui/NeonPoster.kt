@@ -16,7 +16,7 @@ internal class NeonPoster(private val radar:RadarType,private val stocks:List<Po
     private val mint=Color.rgb(70,246,197);private val gold=Color.rgb(255,190,70)
     private val accent=NeonUi.radarColor(radar)
     private val letter=when(radar){RadarType.A_EARLY_BREAKOUT->"A";RadarType.B_DEEP_REVERSAL->"B";RadarType.C_LONG_RED_VOLUME->"C";RadarType.D_MAIN_FORCE->"D";RadarType.E_DIF_TOUCH->"E";else->"F"}
-    private val title=when(radar){RadarType.A_EARLY_BREAKOUT->"早期起漲";RadarType.B_DEEP_REVERSAL->"深跌反轉";RadarType.C_LONG_RED_VOLUME->"長紅爆量";RadarType.D_MAIN_FORCE->"主力進場形態";RadarType.E_DIF_TOUCH->"DIF 向上接觸 MACD";else->"縮量上漲"}
+    private val title=radar.displayName
     private val charts=stocks.map { ChartSeries.prepare(it.bars).takeLast(36) }
     private fun text(c:Canvas,s:String,x:Float,y:Float,size:Float,color:Int=white,bold:Boolean=false,maxWidth:Float=1000f) {
         p.shader=null;p.style=Paint.Style.FILL;p.color=color;p.textSize=size;p.typeface=Typeface.create("sans-serif",if(bold)Typeface.BOLD else Typeface.NORMAL)
@@ -52,7 +52,7 @@ internal class NeonPoster(private val radar:RadarType,private val stocks:List<Po
             text(c,"最新掃描快照",824f,63f,20f,blue)
             text(c,day,824f,97f,24f,white,true)
             text(c,"$time 台灣時間",824f,132f,20f,muted)
-            val labels=listOf("掃描狀態","已處理股數","A 早期起漲","B 深跌反轉","C 長紅爆量","D 主力進場")
+            val labels=listOf("掃描狀態","已處理股數","A 準備起漲","B 深跌反轉","C 突發爆量","D 主力進場")
             val values=listOf(if(scanning)"掃描中" else "已完成","$done / $total", "${counts.getOrElse(0){0}} 檔","${counts.getOrElse(1){0}} 檔","${counts.getOrElse(2){0}} 檔","${counts.getOrElse(3){0}} 檔")
             val colors=listOf(mint,blue,pink,gold,blue,mint)
             for(i in 0..5){

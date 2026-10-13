@@ -15,7 +15,7 @@ internal object EPatternEditor{
         box.addView(input)
         val cross=CheckBox(c).apply{text="包含本日剛向上交叉（仍須在線距內）";setTextColor(NeonUi.ink);isChecked=initial.includeCross;tag="e-include-cross"}
         box.addView(cross)
-        val dialog=MaterialAlertDialogBuilder(c).setTitle("E｜DIF 向上接觸 MACD")
+        val dialog=MaterialAlertDialogBuilder(c).setTitle("E｜DIF金叉")
             .setView(ScrollView(c).apply{addView(box)}).setNegativeButton("取消",null).setPositiveButton("儲存",null).create()
         dialog.setOnShowListener{dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener{
             runCatching{EPatternConfig(input.text.toString().toDouble(),cross.isChecked).validated()}
