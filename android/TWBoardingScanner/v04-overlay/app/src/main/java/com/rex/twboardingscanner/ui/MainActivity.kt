@@ -137,6 +137,9 @@ class MainActivity: AppCompatActivity() {
         loadScanSettings()
 
         b.recycler.layoutManager = LinearLayoutManager(this)
+        // Streaming results and financial tiles resize cards frequently. RecyclerView's
+        // change/predictive animations can reattach a holder already being rebound.
+        b.recycler.itemAnimator=null
         b.recycler.adapter = adapter
 
         b.marketGuardButton.setOnClickListener { showMarketGuard() }

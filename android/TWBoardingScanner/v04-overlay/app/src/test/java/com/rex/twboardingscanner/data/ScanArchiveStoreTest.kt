@@ -139,13 +139,26 @@ class ScanArchiveStoreTest {
         assertEquals(value,restored)
         assertSame(restored.main[0],restored.paper[0])
         assertTrue(restored.main.all{it.snapshot.bars===restored.main[0].snapshot.bars})
-        val legacyJson=com.google.gson.GsonBuilder().serializeSpecialFloatingPointValues().create().toJson(value)
+        val newJson=java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(bytes)).bufferedReader().use{it.readText()}
+        val wire=org.json.JSONObject(newJson).getJSONObject("payload")
+        val legacyObject=org.json.JSONObject(wire.getJSONObject("scan").toString())
+        fun expand(key:String):org.json.JSONArray {
+            val result=org.json.JSONArray()
+            val ids=wire.getJSONArray(key)
+            for(i in 0 until ids.length()){
+                val signal=wire.getJSONArray("signals").getJSONObject(ids.getInt(i))
+                val row=org.json.JSONObject(signal.getJSONObject("result").toString())
+                row.getJSONObject("snapshot").put("bars",wire.getJSONArray("bars").getJSONArray(signal.getInt("series")))
+                result.put(row)
+            }
+            return result
+        }
+        val legacyJson=legacyObject.put("main",expand("main")).put("paper",expand("paper")).toString()
         val legacy=java.io.ByteArrayOutputStream().let{buf->java.util.zip.GZIPOutputStream(buf).use{it.write(legacyJson.toByteArray())};buf.toByteArray()}
         val older=ScanSavedCodec.decode(legacy)
         assertEquals(value,older)
         assertTrue(older.main.all{it.snapshot.bars[0]===older.main[0].snapshot.bars[0]})
         assertSame(older.main[0].snapshot.bars[0],older.paper[5].snapshot.bars[0])
-        val newJson=java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(bytes)).bufferedReader().use{it.readText()}
         assertTrue("Candles should not be stored twelve times",newJson.length*3<legacyJson.length)
     }
     @Test fun fullMarketSixRadarSaveAndRestoreKeepsOnlyOneCandleSeriesPerStock(){
