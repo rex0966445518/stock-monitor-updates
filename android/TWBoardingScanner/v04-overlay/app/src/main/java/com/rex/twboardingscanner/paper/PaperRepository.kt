@@ -52,7 +52,7 @@ class PaperRepository(context:Context) {
         b.enabled=enabled;b.status=if(enabled)"已啟動 · 等待交易時段及有效報價" else "已暫停 · 持股與紀錄保留"
         save(b)
     }
-    fun publish(results:List<SignalResult>,now:Long=System.currentTimeMillis())=synchronized(lock) {
+    fun publish(results:List<SignalResult>,now:Long=System.currentTimeMillis(),scanId:String="")=synchronized(lock) {
         val b=read()
         // MainActivity may republish its PREVIOUS scan when returning from settings.
         // Do not let an old snapshot repopulate the pool after a strategy change.
@@ -70,7 +70,7 @@ class PaperRepository(context:Context) {
                     if(!r.code.matches(Regex("[1-9][0-9]{3}")))return@mapNotNull null
                     PaperCandidate(r.code,r.name,if(market==Market.TWSE)"tse" else "otc",r.radarType.name.take(1),r.score,now)
                 }
-        b.candidates.addAll(candidates)
+        b.candidates.addAll(candidates.map{it.copy(scanId=scanId)})
         b.candidateAt=now;save(b)
     }
     fun tick():PaperBook {
@@ -94,9 +94,9 @@ class PaperRepository(context:Context) {
     internal fun encode(b:PaperBook):String {
         fun arr(list:List<JSONObject>)=JSONArray(list)
         return JSONObject().put("version",if(b.strategy==null)1 else 2).put("strategy",b.strategy?.let{BtSettingsCodec.encode(it)}?:JSONObject.NULL).put("strategySavedAt",b.strategySavedAt).put("holdingLimit",b.holdingLimit).put("capital",b.capital).put("cash",b.cash).put("enabled",b.enabled).put("lastRun",b.lastRun).put("status",b.status).put("candidateAt",b.candidateAt)
-            .put("candidates",arr(b.candidates.map{JSONObject().put("code",it.code).put("name",it.name).put("exchange",it.exchange).put("radar",it.radar).put("score",it.score).put("observedAt",it.observedAt)}))
-            .put("positions",arr(b.positions.map{JSONObject().put("code",it.code).put("name",it.name).put("exchange",it.exchange).put("radar",it.radar).put("entry",it.entry).put("cost",it.cost).put("boughtAt",it.boughtAt).put("peak",it.peak).put("mark",it.mark).put("markAt",it.markAt).put("trendHoldActivated",it.trendHoldActivated)}))
-            .put("trades",arr(b.trades.map{JSONObject().put("code",it.code).put("name",it.name).put("radar",it.radar).put("side",it.side).put("at",it.at).put("quoteAt",it.quoteAt).put("price",it.price).put("fee",it.fee).put("tax",it.tax).put("realized",it.realized).put("reason",it.reason).put("shares",it.shares)}))
+            .put("candidates",arr(b.candidates.map{JSONObject().put("code",it.code).put("name",it.name).put("exchange",it.exchange).put("radar",it.radar).put("score",it.score).put("observedAt",it.observedAt).put("scanId",it.scanId)}))
+            .put("positions",arr(b.positions.map{JSONObject().put("code",it.code).put("name",it.name).put("exchange",it.exchange).put("radar",it.radar).put("entry",it.entry).put("cost",it.cost).put("boughtAt",it.boughtAt).put("peak",it.peak).put("mark",it.mark).put("markAt",it.markAt).put("trendHoldActivated",it.trendHoldActivated).put("scanId",it.scanId)}))
+            .put("trades",arr(b.trades.map{JSONObject().put("code",it.code).put("name",it.name).put("radar",it.radar).put("side",it.side).put("at",it.at).put("quoteAt",it.quoteAt).put("price",it.price).put("fee",it.fee).put("tax",it.tax).put("realized",it.realized).put("reason",it.reason).put("shares",it.shares).put("scanId",it.scanId)}))
             .put("days",arr(b.days.map{JSONObject().put("date",it.date).put("equity",it.equity).put("at",it.at)})).toString()
     }
     internal fun decode(raw:String):PaperBook {
@@ -109,9 +109,9 @@ class PaperRepository(context:Context) {
             require(b.strategy!=null&&kotlin.math.abs(b.strategy!!.capital-b.capital)<0.0001){"模擬策略本金與帳本不一致"}
         }
         fun each(key:String,block:(JSONObject)->Unit){val a=o.getJSONArray(key);for(i in 0 until a.length())block(a.getJSONObject(i))}
-        each("candidates"){b.candidates.add(PaperCandidate(it.getString("code"),it.getString("name"),it.getString("exchange"),it.getString("radar"),it.getInt("score"),it.getLong("observedAt")))}
-        each("positions"){b.positions.add(PaperPosition(it.getString("code"),it.getString("name"),it.getString("exchange"),it.getString("radar"),it.getDouble("entry"),it.getDouble("cost"),it.getLong("boughtAt"),it.getDouble("peak"),it.getDouble("mark"),it.getLong("markAt"),it.optBoolean("trendHoldActivated",false)))}
-        each("trades"){b.trades.add(PaperTrade(it.getString("code"),it.getString("name"),it.getString("radar"),it.getString("side"),it.getLong("at"),it.getLong("quoteAt"),it.getDouble("price"),it.getDouble("fee"),it.getDouble("tax"),it.getDouble("realized"),it.getString("reason"),it.getInt("shares")))}
+        each("candidates"){b.candidates.add(PaperCandidate(it.getString("code"),it.getString("name"),it.getString("exchange"),it.getString("radar"),it.getInt("score"),it.getLong("observedAt"),it.optString("scanId","")))}
+        each("positions"){b.positions.add(PaperPosition(it.getString("code"),it.getString("name"),it.getString("exchange"),it.getString("radar"),it.getDouble("entry"),it.getDouble("cost"),it.getLong("boughtAt"),it.getDouble("peak"),it.getDouble("mark"),it.getLong("markAt"),it.optBoolean("trendHoldActivated",false),it.optString("scanId","")))}
+        each("trades"){b.trades.add(PaperTrade(it.getString("code"),it.getString("name"),it.getString("radar"),it.getString("side"),it.getLong("at"),it.getLong("quoteAt"),it.getDouble("price"),it.getDouble("fee"),it.getDouble("tax"),it.getDouble("realized"),it.getString("reason"),it.getInt("shares"),it.optString("scanId","")))}
         each("days"){b.days.add(PaperDay(it.getString("date"),it.getDouble("equity"),it.getLong("at")))}
         require(b.capital.isFinite()&&b.capital>0&&b.cash.isFinite()&&b.cash>=0 && b.trades.all{it.shares==1000}){"模擬帳本異常，請保留資料以供檢查"}
         return b

@@ -54,7 +54,7 @@ object ScanRanker {
 }
 
 class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationContext,
-    "scanner-folders-v1.db",null,4){
+    "scanner-folders-v1.db",null,5){
     override fun onCreate(db:SQLiteDatabase){
         db.execSQL("""CREATE TABLE folders(
             id TEXT PRIMARY KEY,date TEXT NOT NULL,created INTEGER NOT NULL,name TEXT NOT NULL,
@@ -63,11 +63,31 @@ class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationCont
             unique_count INTEGER NOT NULL,
             cash REAL NOT NULL,changes TEXT NOT NULL)""")
         db.execSQL("CREATE INDEX folders_date_idx ON folders(date,created DESC)")
+        createResults(db)
     }
     override fun onUpgrade(db:SQLiteDatabase,oldVersion:Int,newVersion:Int){
+        if(oldVersion<5)createResults(db)
         if(oldVersion<4)db.execSQL("ALTER TABLE folders ADD COLUMN f INTEGER NOT NULL DEFAULT 0")
         if(oldVersion<3)db.execSQL("ALTER TABLE folders ADD COLUMN e INTEGER NOT NULL DEFAULT 0")
         if(oldVersion<2)db.execSQL("ALTER TABLE folders ADD COLUMN d INTEGER NOT NULL DEFAULT 0")
+    }
+    private fun createResults(db:SQLiteDatabase){
+        // Small chunks keep an entire market snapshot below CursorWindow's per-row limit.
+        db.execSQL("CREATE TABLE saved_results(folder_id TEXT NOT NULL,part INTEGER NOT NULL,payload BLOB NOT NULL,PRIMARY KEY(folder_id,part))")
+    }
+    @Synchronized fun saved(id:String):ScanSavedResults? {
+        val buffer=ByteArrayOutputStream()
+        readableDatabase.query("saved_results",arrayOf("payload"),"folder_id=?",arrayOf(id),null,null,"part ASC").use{c->
+            while(c.moveToNext())buffer.write(c.getBlob(0))
+        }
+        if(buffer.size()==0)return null // Older archives have ranked cards only.
+        return ScanSavedCodec.decode(buffer.toByteArray()).also{check(it.id==id)}
+    }
+    @Synchronized fun latestSaved():ScanSavedResults? {
+        val id=readableDatabase.rawQuery("SELECT id FROM folders WHERE EXISTS (SELECT 1 FROM saved_results WHERE folder_id=folders.id) ORDER BY created DESC,id DESC LIMIT 1",null).use{c->
+            if(c.moveToFirst())c.getString(0) else null
+        } ?:return null
+        return saved(id)
     }
     companion object{
         private val lock=Any()
@@ -78,7 +98,7 @@ class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationCont
                      enabledRadars:Set<RadarType> = com.rex.twboardingscanner.backtest.defaultActiveRadars(),
                      dConfig:DPatternConfig=DPatternConfig.DEFAULT,eConfig:EPatternConfig=EPatternConfig.DEFAULT,fConfig:FPatternConfig=FPatternConfig.DEFAULT,exclusions:Map<RadarType,Set<String>> = ExclusionConditions.empty(),bConfig:BPatternConfig=BPatternConfig.DEFAULT):JSONObject {
             require(Regex("\\d{4}-\\d{2}-\\d{2}").matches(date))
-            return JSONObject().put("schema",1).put("date",date).put("created",time)
+            return JSONObject().put("schema",2).put("profitTracking",true).put("date",date).put("created",time)
                 .put("rulesVersion",ScanConditions.VERSION)
                 .put("enabledRadars",JSONArray(enabledRadars.map{it.name}.sorted()))
                 .put("dConfig",dConfig.json()).put("eConfig",eConfig.json()).put("fConfig",fConfig.json()).put("bConfig",bConfig.json()).put("exclusions",ExclusionConditions.json(exclusions))
@@ -214,7 +234,7 @@ class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationCont
                 .sortedWith(compareByDescending<HistoryRow>{it.score}.thenBy{it.code}.thenBy{it.radar})
         }
     }
-    @Synchronized fun addCompleteScan(date:String,time:Long,settings:JSONObject,signals:List<SignalResult>):ScanArchiveFolder {
+    @Synchronized fun addCompleteScan(date:String,time:Long,settings:JSONObject,signals:List<SignalResult>,paperSignals:List<SignalResult> = signals):ScanArchiveFolder {
         require(date==settings.getString("date")){"條件日期與掃描日期不符"}
         require(time==settings.getLong("created")){"掃描條件快照必須以當次掃描建立"}
         val enabled=settings.optJSONArray("enabledRadars")
@@ -251,10 +271,22 @@ class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationCont
             put("unique_count",folder.uniqueStocks);put("cash",folder.estimatedCash)
             put("changes",folder.changes)
         }
+        val saved=ScanSavedCodec.encode(ScanSavedResults(id,date,time,signals.toList(),paperSignals.toList(),
+            enabled.map{RadarType.valueOf(it)}.toSet(),
+            settings.getJSONArray("sectors").let{a->(0 until a.length()).map{StockSector.valueOf(a.getString(it))}.toSet()},
+            StockPolicy.read(settings.getJSONObject("policy")),settings.getInt("requested"),settings.getInt("analyzed"),settings.getInt("failed")))
         val db=writableDatabase
         db.beginTransaction()
         try{
             check(db.insertOrThrow("folders",null,row)>0){"無法儲存掃描資料夾"}
+            var offset=0;var part=0
+            while(offset<saved.size){
+                val end=minOf(offset+256*1024,saved.size)
+                db.insertOrThrow("saved_results",null,ContentValues().apply{
+                    put("folder_id",id);put("part",part++);put("payload",saved.copyOfRange(offset,end))
+                })
+                offset=end
+            }
             db.setTransactionSuccessful()
         }finally{db.endTransaction()}
         return folder

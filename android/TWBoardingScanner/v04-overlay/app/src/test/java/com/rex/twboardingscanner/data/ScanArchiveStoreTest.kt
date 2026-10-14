@@ -55,6 +55,80 @@ class ScanArchiveStoreTest {
         if(root is ViewGroup)for(i in 0 until root.childCount)find(root.getChildAt(i),tagPrefix)?.let{return it}
         return null
     }
+    @Test fun fullResultsSurviveDatabaseReopenWithPendingChecksEvidenceAndEmptyLatestScan(){
+        val t=at("2026-10-09")
+        val a=sample("2330",RadarType.A_EARLY_BREAKOUT).copy(
+            light=SignalLight.NONE,
+            checks=listOf(ConditionCheck("eps","EPS",CheckState.PENDING,true,false)),
+            snapshot=sample("2330",RadarType.A_EARLY_BREAKOUT).snapshot.copy(
+                marketIndexCloses=mapOf(LocalDate.of(2026,10,8) to 22000.0)))
+        val db=ScanArchiveStore(app)
+        val folder=db.addCompleteScan("2026-10-09",t,settings(t),listOf(a),emptyList())
+        assertTrue(db.rows(folder.id).isEmpty())
+        db.close()
+        ScanArchiveStore(app).use{reopened->
+            val restored=reopened.latestSaved()!!
+            assertEquals(folder.id,restored.id)
+            assertEquals(listOf(a),restored.main)
+            assertTrue(restored.paper.isEmpty())
+            assertEquals(CheckState.PENDING,restored.main.single().checks.single().state)
+            val second=reopened.addCompleteScan("2026-10-09",t+1,settings(t+1),emptyList())
+            assertEquals(second.id,reopened.latestSaved()!!.id)
+            assertTrue(reopened.latestSaved()!!.main.isEmpty())
+            assertEquals(listOf(a),reopened.saved(folder.id)!!.main)
+        }
+    }
+    @Test fun recreatingHomeRestoresCompletedScanAndFolderEntryIsVisible(){
+        val t=at("2026-10-09")
+        val signals=listOf(sample("2330",RadarType.A_EARLY_BREAKOUT))
+        ScanArchiveStore(app).use{it.addCompleteScan("2026-10-09",t,settings(t),signals)}
+        org.robolectric.Shadows.shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        repeat(2){
+            val controller=Robolectric.buildActivity(com.rex.twboardingscanner.ui.MainActivity::class.java).setup()
+            val activity=controller.get()
+            val executor=com.rex.twboardingscanner.ui.MainActivity::class.java.getDeclaredField("coordinator").apply{isAccessible=true}.get(activity) as java.util.concurrent.ExecutorService
+            executor.submit{}.get(10,java.util.concurrent.TimeUnit.SECONDS)
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            val latest=com.rex.twboardingscanner.ui.MainActivity::class.java.getDeclaredField("latest").apply{isAccessible=true}.get(activity)
+            assertEquals(signals,latest)
+            com.rex.twboardingscanner.ui.MainActivity::class.java.getDeclaredMethod("requestConfiguredScan").apply{isAccessible=true}.invoke(activity)
+            assertEquals(signals,com.rex.twboardingscanner.ui.MainActivity::class.java.getDeclaredField("latest").apply{isAccessible=true}.get(activity))
+            assertTrue(activity.findViewById<TextView>(com.rex.twboardingscanner.R.id.progressTitle).text.contains("已還原"))
+            val button=activity.findViewById<View>(com.rex.twboardingscanner.R.id.logButton)
+            assertEquals(View.VISIBLE,(button.parent as View).visibility)
+            controller.pause().stop().destroy()
+        }
+    }
+    @Test fun payloadsLargerThanOneChunkAreStoredWithoutCursorWindowOverflow(){
+        val t=at("2026-10-09")
+        val huge=sample("2330",RadarType.A_EARLY_BREAKOUT).copy(light=SignalLight.NONE,
+            reasons=(0 until 24000).map{java.util.UUID.randomUUID().toString()})
+        ScanArchiveStore(app).use{db->
+            val folder=db.addCompleteScan("2026-10-09",t,settings(t),listOf(huge),emptyList())
+            val count=db.readableDatabase.rawQuery("SELECT COUNT(*) FROM saved_results WHERE folder_id=?",arrayOf(folder.id)).use{c->c.moveToFirst();c.getInt(0)}
+            assertTrue(count>1)
+            assertEquals(huge,db.saved(folder.id)!!.main.single())
+        }
+    }
+    @Test fun versionFourUpgradePreservesLegacyFoldersAndDoesNotInventTradingProfit(){
+        val legacy=android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(app.getDatabasePath("scanner-folders-v1.db"),null)
+        legacy.execSQL("CREATE TABLE folders(id TEXT PRIMARY KEY,date TEXT,created INTEGER,name TEXT,signature TEXT,settings TEXT,details BLOB,a INTEGER,b INTEGER,c INTEGER,d INTEGER,e INTEGER,f INTEGER,unique_count INTEGER,cash REAL,changes TEXT)")
+        val oldSettings=settings(at("2026-10-09")).put("schema",1).apply{remove("profitTracking")}
+        val rows=java.io.ByteArrayOutputStream().let{buffer->
+            java.util.zip.GZIPOutputStream(buffer).use{it.write("[]".toByteArray())};buffer.toByteArray()
+        }
+        legacy.execSQL("INSERT INTO folders VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",arrayOf("legacy","2026-10-09",1L,"舊掃描","sig",oldSettings.toString(),rows,0,0,0,0,0,0,0,0.0,"保留"))
+        legacy.version=4;legacy.close()
+        ScanArchiveStore(app).use{db->
+            assertEquals("legacy",db.list().single().id)
+            assertNull(db.latestSaved())
+            assertFalse(db.settings("legacy")!!.optBoolean("profitTracking",false))
+            val t=at("2026-10-09")
+            val new=db.addCompleteScan("2026-10-09",t,settings(t),emptyList())
+            assertEquals(2,db.list().size)
+            assertEquals(new.id,db.latestSaved()!!.id)
+        }
+    }
     @Test fun everyScanHasItsOwnFolderWithFrozenConditionsDiffCountsAndEstimatedFunding(){
         val db=ScanArchiveStore(app)
         val a=sample("2330",RadarType.A_EARLY_BREAKOUT)

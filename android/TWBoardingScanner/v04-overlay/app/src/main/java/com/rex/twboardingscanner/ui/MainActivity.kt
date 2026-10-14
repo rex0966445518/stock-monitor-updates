@@ -79,6 +79,10 @@ class MainActivity: AppCompatActivity() {
     private var isScanning = false
     private var latestScanDate = ""
     private var latestScanAt = 0L
+    private var latestFolderId = ""
+    private var resultRadars:Set<RadarType>? = null
+    private var resultSectors:Set<StockSector>? = null
+    private var resultPolicy:com.rex.twboardingscanner.domain.StockPolicy? = null
 
     private val prefs by lazy { getSharedPreferences("scanner_filters", MODE_PRIVATE) }
     private var enabledSectors: MutableSet<StockSector> = mutableSetOf()
@@ -138,6 +142,7 @@ class MainActivity: AppCompatActivity() {
         b.robotButton.setOnClickListener { startActivity(android.content.Intent(this,BtRobotActivity::class.java)) }
         b.resultFilters.onSelected = { index ->
             selectedTab=index
+            prefs.edit().putString("resultFolder",latestFolderId).putInt("resultTab",index).apply()
             render()
             b.recycler.scrollToPosition(0)
         }
@@ -187,7 +192,7 @@ class MainActivity: AppCompatActivity() {
             val snapshot=admitted()
             posterExport.generate(isScanning,ScanPoster.collect(snapshot),b.scanProgress.progress,b.scanProgress.max)
         }
-        b.logButton.text="掃描日誌資料夾"
+        b.logButton.text="掃描資料夾"
         b.logButton.setOnClickListener { startActivity(android.content.Intent(this,ScanArchiveActivity::class.java)) }
         b.searchButton.setOnClickListener { StockToolsActivity.open(this,"SEARCH") }
         b.exitRulesButton.setOnClickListener {
@@ -229,6 +234,35 @@ class MainActivity: AppCompatActivity() {
         b.etaText.text="待命中"
         b.scanProgress.isIndeterminate=false
         render()
+        restoreLatestScan()
+    }
+
+    private fun restoreLatestScan(){
+        val revision=scanRevision.get()
+        coordinator.submit {
+            val result=runCatching{com.rex.twboardingscanner.data.ScanArchiveStore(this).use{it.latestSaved()}}
+            runOnUiThread {
+                if(isFinishing||isDestroyed||isScanning||scanRevision.get()!=revision||latestScanAt!=0L)return@runOnUiThread
+                result.onSuccess{saved->
+                    if(saved==null)return@onSuccess
+                    latest=saved.main;latestPaper=saved.paper
+                    latestScanDate=saved.date;latestScanAt=saved.created;latestFolderId=saved.id
+                    resultRadars=saved.radars;resultSectors=saved.sectors;resultPolicy=saved.policy
+                    selectedTab=if(prefs.getString("resultFolder","")==saved.id)prefs.getInt("resultTab",6).coerceIn(0,8) else 6
+                    b.progressTitle.text="已還原上次掃描 · ${saved.date}"
+                    b.scanProgress.max=saved.requested.coerceAtLeast(1)
+                    b.scanProgress.progress=b.scanProgress.max
+                    b.progressCount.text="已保存 ${saved.requested} 檔掃描結果"
+                    b.progressStats.text="已分析 ${saved.analyzed}｜失敗 ${saved.failed} · 完整條件見掃描資料夾"
+                    b.etaText.text="已保存"
+                    render()
+                    // Restoring display must not republish an old candidate pool or trigger trades.
+                }.onFailure{
+                    b.progressTitle.text="上次掃描讀取失敗"
+                    b.progressCount.text="請至掃描資料夾查看已保存的入選紀錄"
+                }
+            }
+        }
     }
 
     private fun refreshMarketGuard(force:Boolean=false){
@@ -267,7 +301,7 @@ class MainActivity: AppCompatActivity() {
         dialog.behavior.state=com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
     }
 
-    override fun onResume() { super.onResume();guardHandler.post(guardPoll);loadScanSettings();if(::trendHoldCheck.isInitialized)trendHoldCheck.isChecked=com.rex.twboardingscanner.data.ExitRuleStore(this).readProfitTrendHold(StockScope.SCANNER);b.exitRulesButton.text="下車賣出條件 · ${com.rex.twboardingscanner.data.ExitRuleStore(this).read(com.rex.twboardingscanner.domain.StockScope.SCANNER).count{it.active}} / 7 項";if(::paperLoop.isInitialized){paperLoop.start();render();if(latest.isNotEmpty())coordinator.submit{runCatching{publishLists()}}} }
+    override fun onResume() { super.onResume();guardHandler.post(guardPoll);loadScanSettings();if(::trendHoldCheck.isInitialized)trendHoldCheck.isChecked=com.rex.twboardingscanner.data.ExitRuleStore(this).readProfitTrendHold(StockScope.SCANNER);b.exitRulesButton.text="下車賣出條件 · ${com.rex.twboardingscanner.data.ExitRuleStore(this).read(com.rex.twboardingscanner.domain.StockScope.SCANNER).count{it.active}} / 7 項";if(::paperLoop.isInitialized){paperLoop.start();render()} }
     override fun onPause() { guardHandler.removeCallbacks(guardPoll);if(::paperLoop.isInitialized)paperLoop.stop();super.onPause() }
 
     private fun startFullScan() {
@@ -277,7 +311,7 @@ class MainActivity: AppCompatActivity() {
         }
 
         if(radarEnabled.isEmpty()) {
-            latest=emptyList();latestPaper=emptyList();render()
+            if(latestFolderId.isBlank()){latest=emptyList();latestPaper=emptyList()};render()
             b.scanProgress.isIndeterminate=false;b.scanProgress.progress=0
             b.progressCount.text="未執行掃描";b.etaText.text="請選擇條件"
             b.progressTitle.text="未啟用任何入場條件"
@@ -297,6 +331,8 @@ class MainActivity: AppCompatActivity() {
         val scanDate = java.time.LocalDate.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI)
         latestScanDate=scanDate.toString()
         latestScanAt=System.currentTimeMillis()
+        latestFolderId=""
+        resultRadars=null;resultSectors=null;resultPolicy=null
         val scanRules = radarSelections.mapValues { it.value.toSet() }
         val scanEnabled=radarEnabled.toSet()
         val scanDConfig=dConfig
@@ -511,6 +547,7 @@ class MainActivity: AppCompatActivity() {
             val allResults = synchronized(results) { results.toList() }
             val copy = participation.mainResults(allResults)
             latest = copy
+            resultRadars=scanEnabled;resultSectors=mainSectors;resultPolicy=scanPolicy
             latestPaper = if(paperSettings==null)copy else participation.paperResults(allResults)
             val elapsedSec=(System.currentTimeMillis()-started).coerceAtLeast(0L)/1000L
             val workerHistorySec=historyWaitMs.get()/1000L
@@ -536,8 +573,9 @@ class MainActivity: AppCompatActivity() {
                     scanDate.toString(),latestScanAt,scanRules,mainSectors,scanPolicy,
                     flowRevision,total,analyzed.get(),failed.get(),
                     enabledRadars=scanEnabled,dConfig=scanDConfig,eConfig=scanEConfig,fConfig=scanFConfig,bConfig=scanBConfig,exclusions=exclusionSnapshot)
+                    .put("paperStrategy",paperSettings?.let{com.rex.twboardingscanner.backtest.BtSettingsCodec.encode(it)}?:org.json.JSONObject.NULL)
                 com.rex.twboardingscanner.data.ScanArchiveStore(this).use{store->
-                    store.addCompleteScan(scanDate.toString(),latestScanAt,snapshot,copy)
+                    latestFolderId=store.addCompleteScan(scanDate.toString(),latestScanAt,snapshot,copy,latestPaper).id
                 }
             }.onFailure{failure->runOnUiThread{
                 Toast.makeText(this,"此次掃描未能存入獨立資料夾：${failure.message}",Toast.LENGTH_LONG).show()
@@ -596,6 +634,7 @@ class MainActivity: AppCompatActivity() {
 
     private fun admitted():List<SignalResult>{
         val policy=com.rex.twboardingscanner.data.StockPolicyStore(this).read()
+        if(resultRadars!=null&&resultSectors!=null)return latest.filter{it.radarType in resultRadars!!&&it.sector in resultSectors!!&&resultPolicy?.decision(it.code,it.snapshot.sourceStock?.close?:it.snapshot.price,StockScope.SCANNER)==com.rex.twboardingscanner.domain.StockDecision.ALLOW}
         return latest.filter{it.radarType in radarEnabled && it.sector in enabledSectors &&
             policy.decision(it.code,it.snapshot.sourceStock?.close?:it.snapshot.price,com.rex.twboardingscanner.domain.StockScope.SCANNER)==com.rex.twboardingscanner.domain.StockDecision.ALLOW}
     }
@@ -611,7 +650,7 @@ class MainActivity: AppCompatActivity() {
         val file=java.io.File(filesDir,"scanner-search.json");val temp=java.io.File(file.path+".tmp");temp.writeText(current.toString());check(temp.renameTo(file))
         store.candidates(com.rex.twboardingscanner.domain.StockScope.SCANNER,rows,"主頁掃描 · $date",policy)
         // Publish all evaluated stocks; PaperRepository applies its OWN saved rule set.
-        com.rex.twboardingscanner.paper.PaperRepository(this).publish(latestPaper,latestScanAt)
+        com.rex.twboardingscanner.paper.PaperRepository(this).publish(latestPaper,latestScanAt,latestFolderId)
     }
     private fun render() {
         val source=admitted()
@@ -757,7 +796,8 @@ class MainActivity: AppCompatActivity() {
 
     private fun requestConfiguredScan() {
         scanRevision.incrementAndGet()
-        latest=emptyList();latestPaper=emptyList();render()
+        if(isScanning||latestFolderId.isBlank()){latest=emptyList();latestPaper=emptyList()}
+        render()
         if(isScanning){
             restartScan=true
             b.progressTitle.text="條件已變更，正在停止舊掃描…"

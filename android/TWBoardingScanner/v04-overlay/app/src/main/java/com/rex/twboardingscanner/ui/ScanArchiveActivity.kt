@@ -51,7 +51,7 @@ class ScanArchiveActivity:AppCompatActivity(){
             v.setPadding(bars.left,bars.top,bars.right,bars.bottom);i
         }
         root.addView(NeonUi.header(this,"掃描條件資料夾","STRATEGY ARCHIVE",
-            "每次完成掃描都獨立保留條件、入選股票與技術評分排名"){if(selected!=null)showFolders()else finish()})
+            "每次掃描的日期、完整條件、入選股票與模擬交易盈虧"){if(selected!=null)showFolders()else finish()})
         val controls=NeonUi.row(this,listOf(
             NeonUi.button(this,"選擇日期"){pickDate()}.apply{tag="folder-date-filter"},
             NeonUi.button(this,"全部資料夾"){dateFilter=null;showFolders()}.apply{tag="folder-all"}
@@ -76,6 +76,7 @@ class ScanArchiveActivity:AppCompatActivity(){
         root.addView(ranked,LinearLayout.LayoutParams(-1,0,1f))
         showFolders()
     }
+    override fun onResume(){super.onResume();if(::folderContent.isInitialized&&selected==null)showFolders()}
     private fun pickDate(){
         val today=LocalDate.now(RuleMetrics.TAIPEI)
         DatePickerDialog(this,{_,y,m,d->
@@ -122,6 +123,7 @@ class ScanArchiveActivity:AppCompatActivity(){
                 "每次完成主頁全市場掃描後，會自動建立一個條件與股票結果的獨立資料夾。舊版紀錄請使用上方日曆。"))
             return
         }
+        val paper=runCatching{com.rex.twboardingscanner.paper.PaperRepository(this).read()}.getOrNull()
         items.forEachIndexed{index,item->
             val card=NeonUi.vertical(this).apply{
                 background=NeonUi.panel(this@ScanArchiveActivity,if(index==0)NeonUi.cyan else NeonUi.blue)
@@ -129,6 +131,20 @@ class ScanArchiveActivity:AppCompatActivity(){
                 tag="scan-folder-${item.id}"
             }
             card.addView(text("${dateOf(item.created)} · ${item.name}",15f,NeonUi.ink,true))
+            val settings=archive.settings(item.id)
+            card.addView(text(conditionSummary(settings),12f,NeonUi.ink))
+            val profit=paper?.let{com.rex.twboardingscanner.paper.PaperEngine.scanProfit(it,item.id)}
+            val tracked=settings?.optBoolean("profitTracking",false)==true
+            card.addView(text(when{
+                !tracked->"總盈利：舊紀錄未關聯交易"
+                profit==null->"總盈利：帳本讀取失敗"
+                profit.buys==0->"總盈利 0 元 · 尚未交易"
+                else->"總盈利 ${cash(profit.total)} 元（模擬淨損益）"
+            },17f,if(profit!=null&&profit.total<0)NeonUi.cyan else NeonUi.amber,true).apply{tag="folder-profit-${item.id}"})
+            if(tracked&&profit!=null&&profit.buys>0){
+                card.addView(text("已實現 ${cash(profit.realized)} 元 · 未實現 ${cash(profit.unrealized)} 元 · 已買入 ${profit.buys} 筆",12f))
+                profit.markAt?.let{card.addView(text("持倉估值報價 ${dateOf(it)} · 已扣估計賣出費稅",11f))}
+            }
             card.addView(NeonUi.gap(this,6))
             card.addView(text("A 準備起漲 ${item.a} · B 深跌反轉 ${item.b} · C 突發爆量 ${item.c} · D 主力進場 ${item.d} · E DIF金叉 ${item.e} · F 縮量上漲 ${item.f} 檔",14f,NeonUi.cyan,true))
             card.addView(text("去重 ${item.uniqueStocks} 檔 · 估算資金 ${cash(item.estimatedCash)} 元",15f,NeonUi.amber,true))
@@ -147,6 +163,17 @@ class ScanArchiveActivity:AppCompatActivity(){
         }
         folderContent.addView(text(ScanArchiveStore.CASH_NOTE+"\n"+ScanArchiveStore.RANK_NOTE,11f))
     }
+    private fun conditionSummary(json:JSONObject?):String {
+        if(json==null)return "條件快照讀取失敗"
+        val enabled=json.optJSONArray("enabledRadars")?.let{a->(0 until a.length()).map{a.getString(it)}.toSet()}
+            ?:com.rex.twboardingscanner.backtest.defaultActiveRadars().map{it.name}.toSet()
+        return RadarType.entries.filter{it.name in enabled}.joinToString("\n"){type->
+            val rules=json.getJSONObject("rules").optJSONArray(type.name)
+            val labels=ScanConditions.forRadar(type).associate{it.id to it.label}
+            "${type.label}："+(if(rules==null||rules.length()==0)"無勾選條件" else
+                (0 until rules.length()).joinToString("、"){i->labels[rules.getString(i)]?:rules.getString(i)})
+        }
+    }
     private fun showSettings(id:String){
         val json=archive.settings(id)?:return
         val types=RadarType.entries.joinToString("\n\n"){type->
@@ -162,6 +189,7 @@ class ScanArchiveActivity:AppCompatActivity(){
         val details=text("日期 ${json.getString("date")} · 版本 ${json.getString("rulesVersion")}\n"+
             "參與分析區域：${json.optJSONArray("enabledRadars")?.let{a->(0 until a.length()).joinToString("、"){a.getString(it).take(1)}}?:"ABC"}\n"+
             "排除區：${com.rex.twboardingscanner.domain.ExclusionConditions.read(json.optJSONObject("exclusions")).entries.joinToString("；"){(t,ids)->"${t.name.take(1)} ${ids.size} 項"}}\n"+
+            "B 門檻：${com.rex.twboardingscanner.domain.BPatternConfig.read(json.optJSONObject("bConfig"))}\n"+
             "F 門檻：${com.rex.twboardingscanner.domain.FPatternConfig.read(json.optJSONObject("fConfig"))}\n"+
             "E 門檻：${com.rex.twboardingscanner.domain.EPatternConfig.read(json.optJSONObject("eConfig"))}\n"+
             "D 門檻：${com.rex.twboardingscanner.domain.DPatternConfig.read(json.optJSONObject("dConfig"))}\n"+
@@ -169,7 +197,14 @@ class ScanArchiveActivity:AppCompatActivity(){
             "產業：${sectors.joinToString("、")}\n"+
             "禁股限價：${policy.summary()}\n"+
             "內外盤資料版本：${json.optString("flowRevision")}\n\n"+
-            types+"\n\n"+ScanArchiveStore.RANK_NOTE,12f,NeonUi.ink)
+            types+"\n\n"+(json.optJSONObject("paperStrategy")?.let{
+                val strategy=com.rex.twboardingscanner.backtest.BtSettingsCodec.decode(it)
+                "模擬交易採獨立策略條件，盈虧歸屬本次掃描產生的候選股：\n"+
+                    strategy.enabledRadars.joinToString("\n"){type->
+                        val labels=ScanConditions.forRadar(type).associate{rule->rule.id to rule.label}
+                        "${type.label}："+strategy.rules[type].orEmpty().sorted().joinToString("、"){key->labels[key]?:key}
+                    }+"\n獲利賣出 ${strategy.targetNetPct}% · 持倉上限 ${strategy.maxHoldingStocks} 檔\n\n"
+            }?:"模擬交易採本次主頁入選結果\n\n")+ScanArchiveStore.RANK_NOTE,12f,NeonUi.ink)
         details.setPadding(dp(15),dp(10),dp(15),dp(16))
         MaterialAlertDialogBuilder(this).setTitle("本次掃描完整條件快照")
             .setView(ScrollView(this).apply{addView(details)})
