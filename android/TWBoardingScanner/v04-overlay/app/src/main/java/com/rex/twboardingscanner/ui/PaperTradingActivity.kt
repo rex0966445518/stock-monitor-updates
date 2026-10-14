@@ -62,6 +62,8 @@ class PaperTradingActivity:AppCompatActivity() {
         space(8)
 
         val b=runCatching{repo.read()}.getOrElse{content.addView(label("帳本無法讀取，已停止操作：${it.message}",14f,NeonUi.pink));return}
+        content.addView(NeonUi.button(this,"持倉上限 ${b.maxHoldings} 檔 · 修改（可到24檔）",NeonUi.cyan){editHoldingLimit(b)}.apply{tag="paper-edit-holding-limit"})
+        space(8)
         val equity=PaperEngine.equity(b);val pnl=equity-b.capital
         val header=panel(NeonUi.mint)
         header.addView(label(if(b.enabled)"● 自動策略已啟動" else "○ 自動策略已暫停",13f,if(b.enabled)NeonUi.mint else NeonUi.amber,true))
@@ -85,7 +87,7 @@ class PaperTradingActivity:AppCompatActivity() {
         val sells=b.trades.filter{it.side=="SELL"};val wins=sells.count{it.realized>0}
         content.addView(NeonUi.row(this,listOf(
             NeonUi.tile(this,"已實現",signed(PaperEngine.realized(b)),"平倉 ${sells.size} 筆",color(PaperEngine.realized(b))),
-            NeonUi.tile(this,"未實現",signed(PaperEngine.unrealized(b)),"持有 ${b.positions.size} / ${b.strategy?.maxHoldingStocks?:5} 檔",color(PaperEngine.unrealized(b))))))
+            NeonUi.tile(this,"未實現",signed(PaperEngine.unrealized(b)),"持有 ${b.positions.size} / ${b.maxHoldings} 檔",color(PaperEngine.unrealized(b))))))
         space(6)
         content.addView(label("平倉勝率 ${if(sells.isEmpty())"—" else "${wins*100/sells.size}%"}  ·  獲利 $wins / ${sells.size} 筆  ·  成交費稅 ${money(b.trades.sumOf{it.fee+it.tax})} 元",12f))
         space()
@@ -145,6 +147,25 @@ class PaperTradingActivity:AppCompatActivity() {
         content.addView(label("前景每 30 秒；背景約每 15 分鐘（省電可能延後）。強制停止／離線期間不交易、不補單。持股估值會顯示原始報價時間。",11f))
         scroll.post{scroll.scrollTo(0,y);updateChartVisibility()}
     }
+    private fun editHoldingLimit(b:PaperBook){
+        val box=NeonUi.vertical(this).apply{setPadding(dp(20),dp(8),dp(20),dp(8))}
+        box.addView(label("同時持有的股票種類：1～24 檔。每筆仍為1,000股；調低上限不會強制賣出已有持股。",13f,NeonUi.ink))
+        val input=EditText(this).apply{
+            inputType=android.text.InputType.TYPE_CLASS_NUMBER
+            setText(b.maxHoldings.toString());hint="最高持倉檔數（1～24）";tag="paper-holding-limit-input"
+        }
+        box.addView(input)
+        val dialog=MaterialAlertDialogBuilder(this).setTitle("修改機器人持倉上限").setView(box)
+            .setNegativeButton("取消",null).setPositiveButton("儲存",null).create()
+        dialog.setOnShowListener{dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener{
+            val limit=input.text.toString().trim().toIntOrNull()
+            if(limit==null||limit !in 1..24){input.error="請填1～24的整數";return@setOnClickListener}
+            runCatching{repo.setHoldingLimit(limit)}.onSuccess{
+                dialog.dismiss();render();Toast.makeText(this,"持倉上限已改為 $limit 檔，下次檢查套用",Toast.LENGTH_SHORT).show()
+            }.onFailure{input.error=it.message}
+        }}
+        dialog.show()
+    }
     private fun toggle(b:PaperBook){
         if(b.enabled){
             MaterialAlertDialogBuilder(this).setTitle("暫停自動模擬？").setMessage("暫停後不再自動買賣，已有持股和紀錄會保留，直到再次啟動。").setNegativeButton("取消",null).setPositiveButton("暫停"){_,_->runCatching{repo.setEnabled(false);PaperWorker.cancel(this)}.onFailure{error=it.message};render()}.show();return
@@ -161,7 +182,7 @@ class PaperTradingActivity:AppCompatActivity() {
             return
         }
         val body=NeonUi.vertical(this).apply{setPadding(dp(20),dp(8),dp(20),dp(8))}
-        body.addView(label("策略 v1 · 每股 1,000 股，最多 5 檔\n停損 3% / 停利 6% / 13:15 嘗試平倉\n13:20 停止買賣，未平倉持股保留。",14f,NeonUi.ink))
+        body.addView(label("策略 v1 · 每檔 1,000 股，最多 ${b.maxHoldings} 檔\n停損 3% / 停利 6% / 13:15 嘗試平倉\n13:20 停止買賣，未平倉持股保留。",14f,NeonUi.ink))
         val input=EditText(this).apply{inputType=android.text.InputType.TYPE_CLASS_NUMBER;setText(b.capital.toLong().toString());hint="模擬本金 TWD";isEnabled=b.trades.isEmpty()}
         body.addView(input);body.addView(label(if(b.trades.isEmpty())"本金可設 50,000～100,000,000 元。" else "已有成交，本金固定以維持績效可比性。",11f))
         val dialog=MaterialAlertDialogBuilder(this).setTitle("啟動自買自投").setView(body).setNegativeButton("取消",null).setPositiveButton("啟動",null).create()
@@ -191,7 +212,7 @@ class PaperTradingActivity:AppCompatActivity() {
         MaterialAlertDialogBuilder(this).setTitle("自動策略 v1").setMessage(
         "這是固定規則自動模擬，並非語言模型預測。\n\n"+
         "候選：最新一次完整 ABC 掃描，所有已勾條件通過；同股跨區只買一次，依通過率、股號排序。清單保存至下次掃描，超過 7 天停止新買。背景不重跑全市場掃描。\n\n"+
-        "進場：台北週一～週五 09:00–13:15，必須取得當日 90 秒內且晚於訊號的真實成交報價；至少 500 張、股價 50 元、賣一至少 1 張、現金充足。同股每日最多買一次、同時最多 5 檔。休市無當日报價不成交。\n\n"+
+        "進場：台北週一～週五 09:00–13:15，必須取得當日 90 秒內且晚於訊號的真實成交報價；至少 500 張、股價 50 元、賣一至少 1 張、現金充足。同股每日最多買一次、同時最多 ${repo.read().maxHoldings} 檔。休市無當日报價不成交。\n\n"+
         "出場：跌 3%、漲 6%，或曾漲 3% 後由峰值回落 2%；13:15 起嘗試賣出全部持股。買一須至少 1 張。13:20 起嚴禁所有成交；無法平倉時留倉。\n\n"+
         "成本：買賣手續費各 0.1425%，最低 20 元；賣出稅保守採 0.3%（不套當沖優惠）。買賣一再加入不利滑價 0.1%，按股票跳動單位取整；超出漲跌停價不成交。每筆固定 1,000 股。\n\n"+
         "績效：總損益＝現金＋持股預估賣出淨值−初始本金；未實現含預估賣出費稅。使用取樣報價，不重建漏掉的盤中行情；未含股息、除權息與拆併股調整，亦不模擬真實排隊及市場衝擊。\n\n"+

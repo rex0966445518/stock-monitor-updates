@@ -13,7 +13,9 @@ data class PaperTrade(val code:String,val name:String,val radar:String,val side:
 data class PaperDay(val date:String,var equity:Double,var at:Long)
 data class PaperBook(var capital:Double=3000000.0,var cash:Double=3000000.0,var enabled:Boolean=false,var lastRun:Long=0,var status:String="尚未啟動",var candidateAt:Long=0,
     val candidates:MutableList<PaperCandidate> = mutableListOf(),val positions:MutableList<PaperPosition> = mutableListOf(),val trades:MutableList<PaperTrade> = mutableListOf(),val days:MutableList<PaperDay> = mutableListOf(),
-    var strategy:BtSettings?=null,var strategySavedAt:Long=0L)
+    var strategy:BtSettings?=null,var strategySavedAt:Long=0L,var holdingLimit:Int=5) {
+    val maxHoldings:Int get()=strategy?.maxHoldingStocks?:holdingLimit
+}
 
 /** Paper strategy v1. Deterministic and auditable, never submits a broker order. */
 object PaperEngine {
@@ -44,7 +46,7 @@ object PaperEngine {
         val strategy=b.strategy
         val tradeDay=local(now).toLocalDate()
         val mayEnter=strategy==null||tradeDay in strategy.start..strategy.end
-        val maxHoldings=strategy?.maxHoldingStocks?:5
+        val maxHoldings=b.maxHoldings
         val activeExitRules=strategy?.exitRules?:exitRules
         var sells=0;var buys=0;var skipped=0
         b.positions.toList().forEach {p->
