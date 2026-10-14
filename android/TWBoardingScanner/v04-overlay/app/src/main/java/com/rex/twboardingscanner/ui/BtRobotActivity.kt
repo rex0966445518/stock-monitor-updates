@@ -65,6 +65,7 @@ class BtRobotActivity:AppCompatActivity(){
     private var busy=false;private var recovering=false;private var exportId=""
     private var stamp="";private var lastId="";private var page=0
     private var screenFailed=false
+    private lateinit var scanAnimation:RobotScanPanel
     private var visible=false
     private var alert:androidx.appcompat.app.AlertDialog?=null
     private val handler=Handler(Looper.getMainLooper())
@@ -338,6 +339,7 @@ class BtRobotActivity:AppCompatActivity(){
         root.addView(label("修改下車條件會保存成新批次、保留舊結果；按開始測試才執行。",11f))
         root.addView(NeonUi.gap(this,12))
         val configLast=root.getChildAt(root.childCount-1)
+        scanAnimation=RobotScanPanel(this){if(!busy)BtRobotWorker.pause(this,store.active());render()};root.addView(scanAnimation)
         val progress=panel(NeonUi.amber);progress.tag="robot-progress"
         progress.addView(MarketGuardPanel(this,"所有組合共用同一份大盤歷史快照"));progress.addView(NeonUi.gap(this,10))
         progress.addView(label("組合探索進度",16f,NeonUi.ink,true));progress.addView(NeonUi.gap(this,8))
@@ -415,8 +417,9 @@ class BtRobotActivity:AppCompatActivity(){
         NeonUi.group(root,manageFirst,manageLast,"批次管理","測試紀錄、匯入匯出與續跑","robot-management")
         render()
     }
-    override fun onResume(){super.onResume();visible=true;if(!screenFailed)handler.post(poll)}
+    override fun onResume(){super.onResume();if(::scanAnimation.isInitialized)scanAnimation.foreground(true);visible=true;if(!screenFailed)handler.post(poll)}
     override fun onPause(){
+        if(::scanAnimation.isInitialized)scanAnimation.foreground(false)
         visible=false;handler.removeCallbacks(poll)
         if(!screenFailed&&::robotCapital.isInitialized)getSharedPreferences("robot-params-draft",0).edit()
             .putString("session",store.active()).putString("capital",robotCapital.text.toString())
@@ -474,6 +477,7 @@ class BtRobotActivity:AppCompatActivity(){
             refreshParameterHint();return
         }
         busy=true;startButton.isEnabled=false
+        scanAnimation.update(true,"準備機器人掃描文件…");NeonUi.reveal(scanAnimation)
         Thread{
             val result=runCatching{val id=policySession(params,grid,range);BtRobotWorker.start(this,id)}
             runOnUiThread{if(!isFinishing&&!isDestroyed){
@@ -546,6 +550,7 @@ class BtRobotActivity:AppCompatActivity(){
         val policyChanged=s?.let{BtSettingsCodec.decode(it.getJSONObject("settings")).stockPolicy!=com.rex.twboardingscanner.data.StockPolicyStore(this).read()}?:false
         val guardChanged=s?.getJSONObject("settings")?.optInt("marketGuardVersion",0)==0
         val running=!guardChanged&&s?.optString("state") in setOf("RUNNING","RETRY")
+        scanAnimation.update(running,s?.optString("message")?:"正在準備掃描…")
         val entered=runCatching{parameters()}.getOrNull()
         val dateError=runCatching{dates().validated()}.exceptionOrNull()?.message
         val matching=s?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}

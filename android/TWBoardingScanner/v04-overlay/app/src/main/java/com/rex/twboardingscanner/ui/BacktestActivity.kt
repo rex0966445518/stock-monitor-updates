@@ -35,6 +35,7 @@ class BacktestActivity:AppCompatActivity(){
     private lateinit var status:TextView;private lateinit var results:LinearLayout
     private lateinit var runButton:com.google.android.material.button.MaterialButton
     private var displayed=""
+    private lateinit var scanAnimation:RobotScanPanel
     private var viewingLog=false
     private var appliedRevision=""
     private var btRules:Map<RadarType,Set<String>> = emptyMap()
@@ -81,12 +82,13 @@ class BacktestActivity:AppCompatActivity(){
             NeonUi.button(this,"自動測試機器人",NeonUi.blue){startActivity(Intent(this,BtRobotActivity::class.java))},
             NeonUi.button(this,"回測日誌"){startActivity(Intent(this,BacktestJournalActivity::class.java))})))
         root.addView(NeonUi.gap(this,12))
+        scanAnimation=RobotScanPanel(this){stopBacktest()};root.addView(scanAnimation)
         val execution=NeonUi.section(this,"回測控制","開始時保存本次條件；執行中修改供下次使用。")
         status=label("準備中",13f,NeonUi.ink);execution.addView(status);execution.addView(NeonUi.gap(this,10))
         runButton=NeonUi.primary(this,"開始自動回測"){launch()}
         execution.addView(runButton)
         execution.addView(NeonUi.row(this,listOf(
-            NeonUi.button(this,"停止回測",NeonUi.muted){store.update(store.active(),"使用者停止回測；未完成結果不列為績效","CANCELED");WorkManager.getInstance(this).cancelUniqueWork("historical-backtest");refreshStatus()},
+            NeonUi.button(this,"停止回測",NeonUi.muted){stopBacktest()},
             NeonUi.button(this,"清除歸零",NeonUi.muted){clearCurrent()})))
         root.addView(execution);root.addView(NeonUi.gap(this,12));root.addView(MarketGuardPanel(this));root.addView(NeonUi.gap(this,16))
 
@@ -182,8 +184,8 @@ class BacktestActivity:AppCompatActivity(){
         if(!limitOk||!targetOk){if(showErrors)NeonUi.reveal(if(!limitOk)maxHoldings else profitTarget);return null}
         lastLimit=limit!!;lastTarget=target!!;return limit to target
     }
-    override fun onResume(){super.onResume();if(!viewingLog){reloadApplied();handler.post(refresh)}}
-    override fun onPause(){handler.removeCallbacks(refresh);if(!viewingLog&&::codes.isInitialized){reloadApplied();if(readTrading(false)!=null)store.saveDraft(draft())};super.onPause()}
+    override fun onResume(){super.onResume();if(!viewingLog){scanAnimation.foreground(true);reloadApplied();handler.post(refresh)}}
+    override fun onPause(){if(::scanAnimation.isInitialized)scanAnimation.foreground(false);handler.removeCallbacks(refresh);if(!viewingLog&&::codes.isInitialized){reloadApplied();if(readTrading(false)!=null)store.saveDraft(draft())};super.onPause()}
     private fun pick(first:Boolean){val d=if(first)start else end;val dialog=DatePickerDialog(this,{_,y,m,day->val date=LocalDate.of(y,m+1,day);if(first){start=date;startButton.text="起始 $start"}else{end=date;endButton.text="結束 $end"}},d.year,d.monthValue-1,d.dayOfMonth);dialog.datePicker.minDate=LocalDate.of(2016,1,1).atStartOfDay(RuleMetrics.TAIPEI).toInstant().toEpochMilli();dialog.datePicker.maxDate=today.minusDays(1).atStartOfDay(RuleMetrics.TAIPEI).toInstant().toEpochMilli();dialog.show()}
     private fun launch(){
         val cash=capital.text.toString().toDoubleOrNull();val raw=codes.text.toString().trim()
@@ -202,10 +204,15 @@ class BacktestActivity:AppCompatActivity(){
         // REPLACE also handles a process stopped before the old progress label was saved.
         runCatching{store.begin(id,s);WorkManager.getInstance(this).enqueueUniqueWork("historical-backtest",ExistingWorkPolicy.REPLACE,request)}
             .onFailure{store.update(id,"無法開始回測：${it.message}","ERROR");Toast.makeText(this,"無法開始：${it.message}",Toast.LENGTH_LONG).show()}
-        displayed="";refreshStatus()
+        displayed="";refreshStatus();if(store.state()=="RUNNING")NeonUi.reveal(scanAnimation)
+    }
+    private fun stopBacktest(){
+        store.update(store.active(),"使用者停止回測；未完成結果不列為績效","CANCELED")
+        WorkManager.getInstance(this).cancelUniqueWork("historical-backtest");refreshStatus()
     }
     private fun refreshStatus(){
         status.text=store.status()
+        if(::scanAnimation.isInitialized)scanAnimation.update(store.state()=="RUNNING",store.status())
         runButton.text=if(store.state()=="RUNNING")"重新開始本次回測" else "開始自動回測"
         val id=store.resultId();if(id.isBlank()){if(displayed!="zero"){showZero();displayed="zero"};return};if(displayed==id)return
         val data=store.result()?:return
@@ -292,7 +299,7 @@ class BacktestActivity:AppCompatActivity(){
         runCatching{store.saveDraft(draft());store.resetCurrent()}.onSuccess{
             // The run ID is already invalidated, so even a late worker cannot restore it.
             if(wasRunning)runCatching{WorkManager.getInstance(this).cancelUniqueWork("historical-backtest")}
-            displayed="";refreshStatus()
+            displayed="";refreshStatus();if(store.state()=="RUNNING")NeonUi.reveal(scanAnimation)
             Toast.makeText(this,"已歸零，歷史日誌仍保留",Toast.LENGTH_SHORT).show()
         }.onFailure{Toast.makeText(this,"歸零失敗：${it.message}",Toast.LENGTH_LONG).show()}
     }
