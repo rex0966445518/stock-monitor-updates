@@ -64,11 +64,27 @@ class RobotUpgradeRecoveryTest {
         if(v is ViewGroup)for(i in 0 until v.childCount)find(v.getChildAt(i),tag)?.let{return it}
         return null
     }
+    @Test fun versionFourAddsStarsWithoutResettingCompletedHistoryIndex() {
+        val name="robot-stars-upgrade-${UUID.randomUUID()}.db"
+        android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(app.getDatabasePath(name),null).use{db->
+            db.execSQL("CREATE TABLE trials(n INTEGER PRIMARY KEY,summary TEXT NOT NULL,report BLOB NOT NULL)")
+            db.execSQL("CREATE TABLE robot_meta(name TEXT PRIMARY KEY,value INTEGER NOT NULL)")
+            db.execSQL("INSERT INTO robot_meta VALUES('history_index',1)")
+            db.execSQL("INSERT INTO trials VALUES(1,'legacy-summary',?)",arrayOf(byteArrayOf(1,2,3)))
+            db.version=4
+        }
+        BtRobotStore.Db(app,name).use{helper->val db=helper.writableDatabase
+            assertEquals(5,db.version)
+            db.rawQuery("SELECT favorite,summary,report FROM trials",null).use{it.moveToFirst();assertEquals(0,it.getInt(0));assertEquals("legacy-summary",it.getString(1));assertArrayEquals(byteArrayOf(1,2,3),it.getBlob(2))}
+            db.rawQuery("SELECT value FROM robot_meta WHERE name='history_index'",null).use{it.moveToFirst();assertEquals(1,it.getInt(0))}
+        }
+        app.deleteDatabase(name)
+    }
     @Test fun realVersionTwoUpgradeDoesNotParseHistoryOrLoseBytes() {
         val name="robot-upgrade-${UUID.randomUUID()}.db";legacy(name)
         BtRobotStore.Db(app,name).use{helper->
             val db=helper.writableDatabase
-            assertEquals(4,db.version)
+            assertEquals(5,db.version)
             db.rawQuery("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='trial_rank'",null).use{it.moveToFirst();assertEquals(0,it.getInt(0))}
             db.rawQuery("SELECT value FROM robot_meta WHERE name='history_index'",null).use{it.moveToFirst();assertEquals(0,it.getInt(0))}
             db.rawQuery("SELECT report,summary FROM trials ORDER BY n",null).use{rows->

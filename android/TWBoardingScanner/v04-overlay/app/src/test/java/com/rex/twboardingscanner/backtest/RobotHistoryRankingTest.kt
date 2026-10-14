@@ -110,6 +110,34 @@ class RobotHistoryRankingTest {
         assertEquals(451L,store.historyCount(a))
         assertEquals(449.0,pnl(store.rankedHistory(a)).first(),0.0)
     }
+    @Test fun zeroCleanupAndLargePagedDeletionRespectStarsAndLateStarChanges() {
+        val (id,key)=record(setOf(a),0.0,baseline=true)
+        assertTrue(store.setFavorite(id,key,true));assertEquals(0,store.clearZero(id));assertNotNull(store.report(id,key))
+        store.locked{db->
+            val raw=db.rawQuery("SELECT summary FROM trials WHERE session=? AND key=?",arrayOf(id,key)).use{it.moveToFirst();it.getString(0)}
+            repeat(450){i->
+                val k=(i+1).toString(16)
+                val row=org.json.JSONObject(raw).put("key",k).put("seq",i+2).put("profit",i.toDouble()).put("favorite",false)
+                db.execSQL("INSERT INTO trials(session,key,summary,report,net_profit) VALUES(?,?,?,?,?)",arrayOf(id,k,row.toString(),byteArrayOf(1),i.toDouble()))
+            }
+        }
+        store.locked{db->
+            val session=store.session(id)!!.put("tested",451).put("bestKey",450.toString(16)).put("bestProfit",449.0).put("bestSeq",451)
+            db.execSQL("UPDATE sessions SET json=? WHERE id=?",arrayOf(session.toString(),id))
+        }
+        val snapshot=store.unstarredSnapshot();assertEquals(450L,snapshot.second)
+        val keepKey=450.toString(16)
+        var pages=0
+        val deleted=store.deleteUnstarred(snapshot.first){
+            pages++
+            if(pages==1)assertTrue(store.setFavorite(id,keepKey,true))
+        }
+        assertEquals(449L,deleted);assertTrue(pages>=3)
+        assertEquals(2L,store.historyCount());assertFalse(store.deleteTrial(id,keepKey))
+        assertEquals(keepKey,store.session(id)!!.getString("bestKey"));assertEquals(449L,store.session(id)!!.getLong("deleted"))
+        assertTrue(store.seen(id,"1"));assertNull(store.report(id,"1"))
+        assertEquals(0L,store.deleteUnstarred(snapshot.first))
+    }
     private fun find(v:View,tag:String):View? {
         if(v.tag==tag)return v
         if(v is ViewGroup)for(i in 0 until v.childCount)find(v.getChildAt(i),tag)?.let{return it}

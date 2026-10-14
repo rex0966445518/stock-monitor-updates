@@ -30,6 +30,8 @@ class BtRobotHistoryActivity:AppCompatActivity(){
     private var reader:Thread?=null
     private var lastError=""
     private var loading=false
+    private var mutating=false
+    private lateinit var cleanup:MaterialButton
     private val store get()=BtRobotStore(this)
     private fun money(value:Double)=String.format(Locale.TAIWAN,"%+,.0f",value)
     private fun label(value:String,size:Float=12f,color:Int=NeonUi.muted,bold:Boolean=false)=NeonUi.label(this,value,size,color,bold)
@@ -58,6 +60,9 @@ class BtRobotHistoryActivity:AppCompatActivity(){
             (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("回測紀錄讀取",details))
             Toast.makeText(this,"已複製讀取資訊",Toast.LENGTH_SHORT).show()
         }.apply{tag="robot-history-copy-error"})
+        cleanup=NeonUi.button(this,"刪除未加星紀錄",NeonUi.pink){confirmDeleteUnstarred()}.apply{tag="robot-history-delete-unstarred"}
+        root.addView(cleanup)
+        root.addView(label("★ 保留的卡片不會被刪除；批次刪除涵蓋全部類別及所有頁面。",11f))
         status=label("讀取回測紀錄…").apply{tag="robot-history-status"};root.addView(status)
         root.addView(NeonUi.gap(this,10));entries=NeonUi.vertical(this).apply{tag="robot-history-cards"};root.addView(entries)
         previous=NeonUi.button(this,"上一頁"){if(!loading&&cursors.size>1){cursors.removeAt(cursors.lastIndex);reload()}}.apply{tag="robot-history-previous"}
@@ -121,14 +126,20 @@ class BtRobotHistoryActivity:AppCompatActivity(){
                 background=NeonUi.panel(this@BtRobotHistoryActivity,tint)
                 setPadding(NeonUi.dp(context,14),NeonUi.dp(context,14),NeonUi.dp(context,14),NeonUi.dp(context,14))
             }
+            val starred=entry.optBoolean("favorite")
+            val keep=NeonUi.button(this,if(starred)"★ 已保留" else "☆ 保留此卡",NeonUi.amber){toggleFavorite(entry)}.apply{
+                tag="robot-history-star-${entry.getLong("n")}";NeonUi.selected(this,starred)
+                contentDescription=if(starred)"已保留此卡，點擊取消保留" else "保留此卡，避免刪除"
+            }
+            card.addView(keep)
             card.addView(label("第 ${entry.optLong("rank",rows.indexOf(entry)+1L)} 名",18f,NeonUi.amber,true))
             val classified=entry.optInt("categories")
             if(classified!=0)card.addView(label("類別 "+RadarType.entries.filter{classified and (1 shl it.ordinal)!=0}.joinToString("／"){it.name.take(1)},12f,NeonUi.cyan,true))
             card.addView(label("${BacktestJournalUi.time(summary.optLong("finishedAt"))} · 第 ${summary.getLong("seq")} 輪",12f))
             card.addView(label("批次 ${id.take(8)}",11f,NeonUi.cyan))
             card.addView(label("總淨利潤 ${money(pnl)} 元",24f,tint,true))
-            if(summary.optBoolean("baseline"))card.addView(label("★ 空白基準測試 · 未勾選選股條件",14f,NeonUi.amber,true))
-            else summary.optJSONObject("testedOption")?.let{card.addView(label("★ 本輪新增條件\n${it.getString("radarLabel")} · ${it.getString("label")}",14f,NeonUi.amber,true))}
+            if(summary.optBoolean("baseline"))card.addView(label("空白基準測試 · 未勾選選股條件",14f,NeonUi.amber,true))
+            else summary.optJSONObject("testedOption")?.let{card.addView(label("本輪新增條件\n${it.getString("radarLabel")} · ${it.getString("label")}",14f,NeonUi.amber,true))}
             if(summary.optString("mode")=="GRID")card.addView(label("參數測試 · 持倉 ${summary.optInt("maxHoldingStocks")} 檔 · 淨利 ${summary.optDouble("targetNetPct")}%",14f,NeonUi.amber,true))
             if(settings!=null){
                 card.addView(label("${settings.optString("start")} → ${settings.optString("end")}",14f,NeonUi.ink,true))
@@ -142,12 +153,61 @@ class BtRobotHistoryActivity:AppCompatActivity(){
             card.addView(NeonUi.button(this,"詳細買入／賣出紀錄"){
                 startActivity(Intent(this,BacktestActivity::class.java).putExtra("robotSession",id).putExtra("robotKey",key))
             }.apply{tag="robot-history-details-${entry.getLong("n")}"})
-            card.addView(NeonUi.button(this,"刪除此卡片",NeonUi.pink){confirmDelete(entry)}.apply{tag="robot-history-delete-${entry.getLong("n")}"})
+            card.addView(NeonUi.button(this,"刪除此卡片",NeonUi.pink){confirmDelete(entry)}.apply{tag="robot-history-delete-${entry.getLong("n")}";isEnabled=!starred})
             entries.addView(card);entries.addView(NeonUi.gap(this,12))
         }
         previous.isEnabled=cursors.size>1;next.isEnabled=nextCursor!=null
     }
+    private fun toggleFavorite(entry:JSONObject){
+        if(mutating)return
+        val desired=!entry.optBoolean("favorite")
+        mutating=true;cleanup.isEnabled=false
+        Thread{
+            val result=runCatching{store.setFavorite(entry.getString("session"),entry.getString("key"),desired)}
+            runOnUiThread{if(!isFinishing&&!isDestroyed){
+                mutating=false;cleanup.isEnabled=true
+                result.fold({changed->
+                    if(changed){entry.put("favorite",desired);reload()}
+                    else {Toast.makeText(this,"此紀錄已移除",Toast.LENGTH_SHORT).show();reload()}
+                },{Toast.makeText(this,"保留設定失敗：${it.message}",Toast.LENGTH_LONG).show()})
+            }}
+        }.start()
+    }
+    private fun confirmDeleteUnstarred(){
+        if(mutating||loading)return
+        mutating=true;cleanup.isEnabled=false
+        Thread{
+            val result=runCatching{store.unstarredSnapshot()}
+            runOnUiThread{if(!isFinishing&&!isDestroyed){
+                mutating=false;cleanup.isEnabled=true
+                result.fold({(through,count)->
+                    if(count==0L){Toast.makeText(this,"沒有未加星的紀錄可刪除",Toast.LENGTH_SHORT).show();return@fold}
+                    MaterialAlertDialogBuilder(this).setTitle("刪除未加星紀錄？")
+                        .setMessage("將刪除全部類別、所有頁面中 $count 筆未加星紀錄及其買賣報告。\n所有 ★ 已保留卡片與機器人已測進度會保留。本次之後新增的測試紀錄不會被刪除。")
+                        .setNegativeButton("取消",null).setPositiveButton("刪除未加星紀錄"){_,_->deleteUnstarred(through)}.show()
+                },{Toast.makeText(this,"無法讀取刪除筆數：${it.message}",Toast.LENGTH_LONG).show()})
+            }}
+        }.start()
+    }
+    private fun deleteUnstarred(through:Long){
+        if(mutating)return
+        mutating=true;cleanup.isEnabled=false
+        status.text="正在刪除未加星紀錄…"
+        Thread{
+            val result=runCatching{store.deleteUnstarred(through){count->runOnUiThread{
+                if(!isFinishing&&!isDestroyed)status.text="正在刪除未加星紀錄… 已刪除 $count 筆"
+            }}}
+            runOnUiThread{if(!isFinishing&&!isDestroyed){
+                mutating=false;cleanup.isEnabled=true
+                result.fold({count->Toast.makeText(this,"已刪除 $count 筆未加星紀錄，★ 保留卡片仍在",Toast.LENGTH_LONG).show()},
+                    {Toast.makeText(this,"刪除未完成：${it.message}，可重試",Toast.LENGTH_LONG).show()})
+                resetPage();reload()
+            }}
+        }.start()
+    }
     private fun confirmDelete(entry:JSONObject){
+        if(mutating)return
+        if(entry.optBoolean("favorite")){Toast.makeText(this,"請先取消星號保留，才能刪除此卡",Toast.LENGTH_SHORT).show();return}
         val r=entry.getJSONObject("summary")
         MaterialAlertDialogBuilder(this).setTitle("刪除此測試紀錄？")
             .setMessage("批次 ${entry.getString("session").take(8)} · 第 ${r.getLong("seq")} 輪\n將刪除此卡片與詳細買賣報告。其他紀錄及機器人已測進度會保留。")
@@ -155,7 +215,7 @@ class BtRobotHistoryActivity:AppCompatActivity(){
                 Thread{
                     val result=runCatching{store.deleteTrial(entry.getString("session"),entry.getString("key"))}
                     runOnUiThread{if(!isFinishing&&!isDestroyed){
-                        result.fold({Toast.makeText(this,if(it)"已刪除測試紀錄" else "此紀錄已移除",Toast.LENGTH_SHORT).show();reload()},
+                        result.fold({Toast.makeText(this,if(it)"已刪除測試紀錄" else "此紀錄已保留或移除",Toast.LENGTH_SHORT).show();reload()},
                             {Toast.makeText(this,"刪除失敗：${it.message}",Toast.LENGTH_LONG).show()})
                     }}
                 }.start()
