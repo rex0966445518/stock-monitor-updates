@@ -15,6 +15,7 @@
  </service>
  <activity android:name=".ui.StockToolsActivity" android:exported="false"/>
  <activity android:name=".ui.AppUpdateActivity" android:exported="false"/>
+ <activity android:name=".ui.BtRobotHistoryActivity" android:exported="false"/>
  <activity android:name=".ui.BtRobotActivity" android:exported="false"/>
  <activity android:name=".ui.BacktestJournalActivity" android:exported="false"/>
  <activity android:name=".ui.BacktestActivity" android:exported="false"/>

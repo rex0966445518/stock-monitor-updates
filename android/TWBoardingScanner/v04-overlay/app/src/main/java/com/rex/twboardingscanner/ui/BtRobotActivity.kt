@@ -247,6 +247,7 @@ class BtRobotActivity:AppCompatActivity(){
         val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);addView(root)};setContentView(scroll)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
         root.addView(NeonUi.header(this,"自動測試機器人","AUTOMATION LAB"){finish()})
+        root.addView(NeonUi.button(this,"機器人回測紀錄",NeonUi.cyan){startActivity(Intent(this,BtRobotHistoryActivity::class.java))}.apply{tag="robot-history-entry"})
         val toolsRow=NeonUi.row(this,listOf(NeonUi.button(this,"禁股名單",NeonUi.pink){StockToolsActivity.open(this,"BAN",StockScope.ROBOT)},NeonUi.button(this,"限價名單",NeonUi.amber){StockToolsActivity.open(this,"LIMIT",StockScope.ROBOT)},NeonUi.button(this,"搜尋股票"){StockToolsActivity.open(this,"SEARCH",StockScope.ROBOT)}));root.addView(toolsRow)
         root.addView(NeonUi.button(this,"匯入主動買／賣成交量 CSV",NeonUi.cyan){
             if(!busy)startActivity(Intent(this,TradeSideVolumeImportActivity::class.java))
@@ -346,7 +347,7 @@ class BtRobotActivity:AppCompatActivity(){
             .apply{tag="robot-grid-ranking"}
         root.addView(topButton)
         root.addView(NeonUi.gap(this,6))
-        val manageFirst=NeonUi.row(this,listOf(NeonUi.button(this,"未測組合"){untested()}.apply{tag="robot-untested"},NeonUi.button(this,"測試紀錄"){sessions()}));root.addView(manageFirst)
+        val manageFirst=NeonUi.row(this,listOf(NeonUi.button(this,"未測組合"){untested()}.apply{tag="robot-untested"},NeonUi.button(this,"切換測試批次"){sessions()}));root.addView(manageFirst)
         root.addView(NeonUi.gap(this,6))
 
         root.addView(NeonUi.gap(this,6))
@@ -562,7 +563,7 @@ class BtRobotActivity:AppCompatActivity(){
             (changed||guardChanged||policyChanged||s?.optString("state")!="DONE")
         pauseButton.isEnabled=running;bestButton.isEnabled=key.isNotEmpty()
         topButton.isEnabled=tested>0
-        val signature="$id-$tested-${s?.optLong("cleared")?:0}-$page"
+        val signature="$id-$tested-${s?.optLong("cleared")?:0}-${s?.optLong("deleted")?:0}-$page"
         if(stamp!=signature){stamp=signature;renderTrials(id)}
         if(visible&&s!=null&&key.isNotEmpty()&&s.optLong("bestSeq")>s.optLong("ack")&&alert?.isShowing!=true){
             val seq=s.getLong("bestSeq");store.acknowledge(id,seq)

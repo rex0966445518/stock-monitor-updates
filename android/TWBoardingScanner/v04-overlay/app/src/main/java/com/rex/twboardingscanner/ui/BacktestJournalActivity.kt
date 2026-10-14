@@ -67,7 +67,7 @@ internal object BacktestJournalUi {
         val body=RadarType.entries.joinToString("\n\n"){type->
             val ids=strings(rules.optJSONArray(type.name))
             val items=if(labels?.has(type.name)==true)strings(labels.getJSONArray(type.name)) else ids.map{id->ScanConditions.forRadar(type).firstOrNull{it.id==id}?.label?:"條件代碼 $id"}
-            "${type.label} · ${ids.size} 項\n"+if(ids.isEmpty())"未選條件，該區不入選" else items.joinToString("\n"){"✓ $it"}
+            "${type.label} · ${ids.size} 項\n"+if(ids.isEmpty())if(s.optBoolean("robotBaseline"))"空白基準：不套用選股條件" else "未選條件，該區不入選" else items.joinToString("\n"){"✓ $it"}
         }
         val excluded=com.rex.twboardingscanner.domain.ExclusionConditions.read(s.optJSONObject("exclusions"))
         val exclusionText="\n\n排除區：\n"+excluded.entries.joinToString("\n"){(type,ids)->"${type.name.take(1)}："+if(ids.isEmpty())"未勾選" else com.rex.twboardingscanner.domain.ExclusionConditions.forRadar(type).filter{it.id in ids}.joinToString("；"){it.label}}

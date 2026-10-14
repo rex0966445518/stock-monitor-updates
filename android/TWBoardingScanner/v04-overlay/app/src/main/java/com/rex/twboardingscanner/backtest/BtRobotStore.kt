@@ -211,6 +211,41 @@ class BtRobotStore(private val c:Context){
         val out=mutableListOf<JSONObject>()
         db.rawQuery("SELECT n,session,key FROM trials WHERE cleared=0 AND n<? ORDER BY n DESC LIMIT 30",arrayOf(before.toString())).use{r->while(r.moveToNext())out+=JSONObject().put("n",r.getLong(0)).put("session",r.getString(1)).put("key",r.getString(2))};out
     }
+    /** All batches, newest first. Page summaries only; never decompress every trade report. */
+    fun historyPage(before:Long=Long.MAX_VALUE,limit:Int=20):List<JSONObject> = synchronized(lock){
+        require(limit in 1..100)
+        val rows=mutableListOf<JSONObject>()
+        db.rawQuery("SELECT t.n,t.session,t.key,t.summary,s.json FROM trials t LEFT JOIN sessions s ON s.id=t.session WHERE t.cleared=0 AND t.n<? ORDER BY t.n DESC LIMIT ?",
+            arrayOf(before.toString(),limit.toString())).use{cursor->while(cursor.moveToNext()){
+            rows+=JSONObject().put("n",cursor.getLong(0)).put("session",cursor.getString(1)).put("key",cursor.getString(2))
+                .put("summary",JSONObject(cursor.getString(3))).put("batch",if(cursor.isNull(4))JSONObject.NULL else JSONObject(cursor.getString(4)))
+        }}
+        rows
+    }
+    fun historyCount():Long=synchronized(lock){db.rawQuery("SELECT COUNT(*) FROM trials WHERE cleared=0",null).use{it.moveToFirst();it.getLong(0)}}
+    /** Delete report bytes but keep a minimal completed-key tombstone so resuming cannot retest it. */
+    fun deleteTrial(id:String,key:String):Boolean=synchronized(lock){
+        val s=session(id)?:return@synchronized false
+        val summary=db.rawQuery("SELECT summary FROM trials WHERE session=? AND key=? AND cleared=0",arrayOf(id,key)).use{
+            if(it.moveToFirst())JSONObject(it.getString(0)) else null
+        }?:return@synchronized false
+        val tombstone=JSONObject().put("key",key).put("seq",summary.getLong("seq")).put("deleted",true)
+            .put("profit",0.0).put("realized",0.0).put("unrealized",0.0).put("buys",0).put("closed",0).put("drawdown",0.0)
+        listOf("maxHoldingStocks","targetNetPct").forEach{if(summary.has(it))tombstone.put(it,summary.get(it))}
+        db.beginTransaction()
+        try{
+            check(db.update("trials",ContentValues().apply{put("cleared",2);put("summary",tombstone.toString());put("report",ByteArray(0))},"session=? AND key=? AND cleared=0",arrayOf(id,key))==1)
+            s.put("deleted",s.optLong("deleted")+1)
+            if(s.optString("bestKey")==key){
+                s.put("bestKey","").put("bestSeq",0);s.remove("bestProfit")
+                db.rawQuery("SELECT summary FROM trials WHERE session=? AND cleared=0 ORDER BY n",arrayOf(id)).use{rows->while(rows.moveToNext()){
+                    val r=JSONObject(rows.getString(0))
+                    if(!s.has("bestProfit")||r.getDouble("profit")>s.getDouble("bestProfit"))s.put("bestKey",r.getString("key")).put("bestProfit",r.getDouble("profit")).put("bestSeq",r.getLong("seq"))
+                }}
+            }
+            putSession(s);db.setTransactionSuccessful();true
+        }finally{db.endTransaction()}
+    }
     fun report(id:String,key:String):JSONObject?=synchronized(lock){
         db.rawQuery("SELECT report FROM trials WHERE session=? AND key=? AND cleared=0",arrayOf(id,key)).use{cursor->
             if(!cursor.moveToFirst())null else GZIPInputStream(ByteArrayInputStream(cursor.getBlob(0))).bufferedReader().use{JSONObject(it.readText())}

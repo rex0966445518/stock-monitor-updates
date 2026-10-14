@@ -70,7 +70,7 @@ object BtRobotCheckpoint {
                 if(store.conditionFile(id).exists())store.conditionFile(id).copyTo(File(dir,"conditions.bin.gz"))
             }
             val snapshot=JSONObject(File(dir,"session.json").readText(Charsets.UTF_8))
-            val archiveVersion=if(snapshot.optInt("searchVersion",1)>=10)14 else if(snapshot.optInt("searchVersion",1)>=9)13 else if(snapshot.optInt("searchVersion",1)>=8)12 else if(snapshot.optInt("searchVersion",1)>=7)11 else if(snapshot.optInt("searchVersion",1)>=6)10 else if(snapshot.optInt("searchVersion",1)>=5)9 else if(snapshot.optInt("searchVersion",1)>=4)8 else if(snapshot.optInt("searchVersion",1)>=3)7 else if(BtRobotSweep.read(snapshot.optJSONObject("sweep"))!=null)6 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).marketGuardVersion>0)5 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).exitRules.any{it.active})4 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).stockPolicy.active())3 else if(snapshot.optInt("searchVersion",1)>=2||BtRobotSpace.required(snapshot.optString("forbidden","0")).signum()!=0)2 else 1
+            val archiveVersion=if(snapshot.optLong("deleted")>0)15 else if(snapshot.optInt("searchVersion",1)>=10)14 else if(snapshot.optInt("searchVersion",1)>=9)13 else if(snapshot.optInt("searchVersion",1)>=8)12 else if(snapshot.optInt("searchVersion",1)>=7)11 else if(snapshot.optInt("searchVersion",1)>=6)10 else if(snapshot.optInt("searchVersion",1)>=5)9 else if(snapshot.optInt("searchVersion",1)>=4)8 else if(snapshot.optInt("searchVersion",1)>=3)7 else if(BtRobotSweep.read(snapshot.optJSONObject("sweep"))!=null)6 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).marketGuardVersion>0)5 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).exitRules.any{it.active})4 else if(BtSettingsCodec.decode(snapshot.getJSONObject("settings")).stockPolicy.active())3 else if(snapshot.optInt("searchVersion",1)>=2||BtRobotSpace.required(snapshot.optString("forbidden","0")).signum()!=0)2 else 1
             val files=dir.listFiles()!!.sortedBy{it.name};val hashes=JSONObject()
             files.forEach{hashes.put(it.name,JSONObject().put("size",it.length()).put("sha256",digest(it)))}
             val manifest=JSONObject().put("format","AI-離職神器-robot").put("version",archiveVersion).put("engine",ENGINE).put("files",hashes)
@@ -96,7 +96,7 @@ object BtRobotCheckpoint {
             }}
             require(seen.containsAll(setOf("manifest.json","session.json","trials.bin","results.csv"))){"備份不完整"}
             fun json(name:String)=JSONObject(File(dir,name).inputStream().use{String(readBounded(it,1024*1024),Charsets.UTF_8)})
-            val manifest=json("manifest.json");require(manifest.getString("format")=="AI-離職神器-robot"&&manifest.getInt("version") in 1..14&&manifest.getString("engine")==ENGINE){"備份版本不相容"}
+            val manifest=json("manifest.json");require(manifest.getString("format")=="AI-離職神器-robot"&&manifest.getInt("version") in 1..15&&manifest.getString("engine")==ENGINE){"備份版本不相容"}
             val hashes=manifest.getJSONObject("files");require(hashes.keys().asSequence().toSet()==seen-"manifest.json")
             (seen-"manifest.json").forEach{name->val f=File(dir,name);val h=hashes.getJSONObject(name);require(f.length()==h.getLong("size")&&digest(f)==h.getString("sha256")){"備份校驗失敗：$name"}}
             val s=json("session.json");require(compatible(s)){"回測引擎版本不相容"}
@@ -139,7 +139,7 @@ object BtRobotCheckpoint {
             store.locked{db->
                 db.beginTransaction()
                 try{
-                    var cleared=0L;var best:JSONObject?=null
+                    var cleared=0L;var removed=0L;var best:JSONObject?=null
                     DataInputStream(BufferedInputStream(File(dir,"trials.bin").inputStream())).use{data->
                         require(data.readUTF()=="BTTRIALS1"&&data.readLong()==tested)
                         repeat(tested.toInt()){i->
@@ -153,9 +153,12 @@ object BtRobotCheckpoint {
                                 val point=sweep.parseKey(key)
                                 require(r.getInt("maxHoldingStocks")==point.holding&&r.getDouble("targetNetPct")==point.profit.toDouble()){"參數網格摘要與條件不一致"}
                             }
-                            val deleted=data.readInt();require(deleted in 0..1)
+                            val deleted=data.readInt();require(deleted in 0..2&&(deleted!=2||manifest.getInt("version")>=15))
                             val size=data.readInt();require(size in 0..32*1024*1024);val bytes=ByteArray(size);data.readFully(bytes)
-                            if(deleted==1){require(size==0&&kotlin.math.abs(r.getDouble("profit"))<0.005);cleared++}else{
+                            if(deleted>0){
+                                require(size==0&&kotlin.math.abs(r.getDouble("profit"))<0.005)
+                                if(deleted==1)cleared++ else {require(r.optBoolean("deleted"));removed++}
+                            }else{
                                 val report=GZIPInputStream(ByteArrayInputStream(bytes)).use{JSONObject(String(readBounded(it,64*1024*1024),Charsets.UTF_8))}
                                 val actual=BtSettingsCodec.decode(report.getJSONObject("settings"))
                                 val expected=if(sweep==null)BtRobotSingleOption.settings(settings,key,BtRobotSingleOption.baseline(s,key)) else sweep.settings(settings,key)
@@ -165,7 +168,7 @@ object BtRobotCheckpoint {
                             db.insertOrThrow("trials",null,ContentValues().apply{put("session",id);put("key",key);put("summary",r.toString());put("report",bytes);put("cleared",deleted)})
                         };require(data.read()==-1)
                     }
-                    val original=s.getString("id");s.put("importedFrom",original).put("id",id).put("created",System.currentTimeMillis()).put("state","PAUSED").put("token","").put("cleared",cleared).put("engineVersion",ENGINE)
+                    val original=s.getString("id");s.put("importedFrom",original).put("id",id).put("created",System.currentTimeMillis()).put("state","PAUSED").put("token","").put("cleared",cleared).put("deleted",removed).put("engineVersion",ENGINE)
                         .put("message","已匯入斷點；按繼續接續未測組合").put("bestKey",best?.getString("key")?:"").put("bestSeq",best?.getLong("seq")?:0).put("ack",tested)
                     s.remove("bestProfit");best?.let{s.put("bestProfit",it.getDouble("profit"))}
                     db.insertOrThrow("sessions",null,ContentValues().apply{put("id",id);put("created",s.getLong("created"));put("json",s.toString())})
