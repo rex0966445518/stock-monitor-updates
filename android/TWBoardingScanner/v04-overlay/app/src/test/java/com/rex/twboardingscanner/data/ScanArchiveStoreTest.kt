@@ -129,6 +129,44 @@ class ScanArchiveStoreTest {
             assertEquals(new.id,db.latestSaved()!!.id)
         }
     }
+    @Test fun sixRadarAndPaperSnapshotsShareCandlesAndRestoreTheOldUnpooledFormat(){
+        val t=at("2026-10-09")
+        val original=sample("2330",RadarType.A_EARLY_BREAKOUT).copy(light=SignalLight.NONE)
+        val all=RadarType.entries.map{original.copy(radarType=it)}
+        val value=ScanSavedResults("shared","2026-10-09",t,all,all,RadarType.entries.toSet(),setOf(StockSector.SEMICONDUCTOR),StockPolicy(),1,1,0)
+        val bytes=ScanSavedCodec.encode(value)
+        val restored=ScanSavedCodec.decode(bytes)
+        assertEquals(value,restored)
+        assertSame(restored.main[0],restored.paper[0])
+        assertTrue(restored.main.all{it.snapshot.bars===restored.main[0].snapshot.bars})
+        val legacyJson=com.google.gson.GsonBuilder().serializeSpecialFloatingPointValues().create().toJson(value)
+        val legacy=java.io.ByteArrayOutputStream().let{buf->java.util.zip.GZIPOutputStream(buf).use{it.write(legacyJson.toByteArray())};buf.toByteArray()}
+        val older=ScanSavedCodec.decode(legacy)
+        assertEquals(value,older)
+        assertTrue(older.main.all{it.snapshot.bars[0]===older.main[0].snapshot.bars[0]})
+        assertSame(older.main[0].snapshot.bars[0],older.paper[5].snapshot.bars[0])
+        val newJson=java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(bytes)).bufferedReader().use{it.readText()}
+        assertTrue("Candles should not be stored twelve times",newJson.length*3<legacyJson.length)
+    }
+    @Test fun fullMarketSixRadarSaveAndRestoreKeepsOnlyOneCandleSeriesPerStock(){
+        val t=at("2026-10-09")
+        val original=sample("2330",RadarType.A_EARLY_BREAKOUT).copy(light=SignalLight.NONE)
+        val all=(1000 until 3000).flatMap{code->
+            val snapshot=original.snapshot.copy(code=code.toString(),bars=(0 until 320).map{i->
+                DailyBar(t-(320-i)*86400000L,code+i*.01,code+1.0+i*.01,code-1.0+i*.01,code+i*.01,1000000L+i)
+            })
+            RadarType.entries.map{original.copy(code=code.toString(),radarType=it,snapshot=snapshot)}
+        }
+        ScanArchiveStore(app).use{db->
+            val folder=db.addCompleteScan("2026-10-09",t,settings(t),all,all)
+            val restored=db.saved(folder.id)!!
+            assertEquals(all,restored.main)
+            assertEquals(12000,restored.main.size)
+            assertSame(restored.main[0],restored.paper[0])
+            assertEquals(2000,restored.main.map{it.snapshot.bars}.distinct().size)
+            assertTrue(restored.main.chunked(6).all{group->group.all{it.snapshot.bars===group[0].snapshot.bars}})
+        }
+    }
     @Test fun everyScanHasItsOwnFolderWithFrozenConditionsDiffCountsAndEstimatedFunding(){
         val db=ScanArchiveStore(app)
         val a=sample("2330",RadarType.A_EARLY_BREAKOUT)
