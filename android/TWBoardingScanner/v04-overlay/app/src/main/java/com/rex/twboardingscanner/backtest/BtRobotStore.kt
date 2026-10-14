@@ -33,7 +33,7 @@ class BtRobotStore(private val c:Context){
             db.execSQL("INSERT OR REPLACE INTO robot_meta(name,value) VALUES('history_index',?)",arrayOf(0))
         }
     }
-    companion object { private val lock=Any();private var helper:Db?=null
+    companion object { private val lock=Any();private val historyIndexLock=Any();private var helper:Db?=null
         private fun database(c:Context)=synchronized(lock){(helper?:Db(c.applicationContext).also{helper=it}).writableDatabase}
     }
     private val db get()=database(c)
@@ -235,28 +235,46 @@ class BtRobotStore(private val c:Context){
         }}
         rows
     }
-    /** Called by archive reads on their background thread, never while opening the robot screen. */
-    private fun ensureHistoryIndex(){
-        val database=db
-        val ready=database.rawQuery("SELECT value FROM robot_meta WHERE name='history_index'",null).use{it.moveToFirst()&&it.getInt(0)==1}
-        if(ready)return
-        database.beginTransaction()
-        try{
-            RobotHistoryCategory.backfill(database)
-            database.execSQL("CREATE INDEX IF NOT EXISTS trial_rank ON trials(cleared,net_profit DESC,n DESC)")
-            database.execSQL("INSERT OR REPLACE INTO robot_meta(name,value) VALUES('history_index',1)")
-            database.setTransactionSuccessful()
-        }finally{database.endTransaction()}
+    /** Only one index repair runs at a time; worker writes can proceed between bounded pages. */
+    private fun ensureHistoryIndex(progress:(Long)->Unit={},cancel:()->Boolean={false})=synchronized(historyIndexLock){
+        var after=0L
+        while(true){
+            check(!cancel()){ "紀錄讀取已取消" }
+            val completed=synchronized(lock) page@{
+                val database=db
+                val ready=database.rawQuery("SELECT value FROM robot_meta WHERE name='history_index'",null).use{it.moveToFirst()&&it.getInt(0)==1}
+                if(ready)return@page true
+                database.beginTransaction()
+                try{
+                    val last=RobotHistoryCategory.backfillPage(database,after,200)
+                    val done=last==after
+                    if(done){
+                        database.execSQL("CREATE INDEX IF NOT EXISTS trial_rank ON trials(cleared,net_profit DESC,n DESC)")
+                        database.execSQL("INSERT OR REPLACE INTO robot_meta(name,value) VALUES('history_index',1)")
+                    }
+                    after=last
+                    database.setTransactionSuccessful()
+                    done
+                }finally{database.endTransaction()}
+            }
+            if(completed)return@synchronized
+            progress(after)
+        }
     }
-    fun historyCount(category:com.rex.twboardingscanner.domain.RadarType?=null):Long=synchronized(lock){
+    /** Background archive entry point. Progress and cancellation keep legacy upgrades observable. */
+    fun prepareHistory(progress:(Long)->Unit={},cancel:()->Boolean={false})=ensureHistoryIndex(progress,cancel)
+    fun historyCount(category:com.rex.twboardingscanner.domain.RadarType?=null):Long {
         ensureHistoryIndex()
+        return synchronized(lock){
         val filter=if(category==null)"" else " AND (radars & ${RobotHistoryCategory.bit(category)})!=0"
         db.rawQuery("SELECT COUNT(*) FROM trials WHERE cleared=0 AND summary_valid=1$filter",null).use{it.moveToFirst();it.getLong(0)}
     }
+    }
     /** Global profit order with a stable tie-breaker; filtering happens before paging and ranking. */
-    fun rankedHistory(category:com.rex.twboardingscanner.domain.RadarType?=null,beforeProfit:Double?=null,beforeN:Long=Long.MAX_VALUE,limit:Int=20):List<JSONObject> = synchronized(lock){
+    fun rankedHistory(category:com.rex.twboardingscanner.domain.RadarType?=null,beforeProfit:Double?=null,beforeN:Long=Long.MAX_VALUE,limit:Int=20):List<JSONObject> {
         require(limit in 1..100&& (beforeProfit==null||beforeProfit.isFinite()))
         ensureHistoryIndex()
+        return synchronized(lock){
         val categoryFilter=if(category==null)"" else " AND (t.radars & ${RobotHistoryCategory.bit(category)})!=0"
         val cursorFilter=if(beforeProfit==null)"" else " AND (t.net_profit<? OR (t.net_profit=? AND t.n<?))"
         val args=if(beforeProfit==null)arrayOf(limit.toString()) else arrayOf(beforeProfit.toString(),beforeProfit.toString(),beforeN.toString(),limit.toString())
@@ -271,6 +289,7 @@ class BtRobotStore(private val c:Context){
             rows.forEachIndexed{i,row->row.put("rank",ahead+i+1)}
         }
         rows
+    }
     }
     /** Delete report bytes but keep a minimal completed-key tombstone so resuming cannot retest it. */
     fun deleteTrial(id:String,key:String):Boolean=synchronized(lock){
