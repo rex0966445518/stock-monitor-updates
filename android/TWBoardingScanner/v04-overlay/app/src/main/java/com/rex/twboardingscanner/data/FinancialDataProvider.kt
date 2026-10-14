@@ -14,7 +14,7 @@ class FinancialDataProvider(context: Context) {
     private var blockedUntil = 0L
     private var nextRequest = 0L
     /** Keep requests rate-limited; fetch only statements needed by checked rules. */
-    @Synchronized fun load(code: String, topics:Set<String> = ALL_TOPICS, forceRefresh:Boolean = false): FinancialReport {
+    @Synchronized fun load(code: String, topics:Set<String> = ALL_TOPICS, forceRefresh:Boolean = false, onPartial:((FinancialReport)->Unit)? = null): FinancialReport {
         require(code.matches(Regex("[0-9]{4}")))
         val messages = mutableListOf<String>()
         val times = mutableListOf<Long>()
@@ -44,7 +44,10 @@ class FinancialDataProvider(context: Context) {
                         check(status == 200) { "HTTP $status，無法取得資料" }
                         val raw = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
                         val value = parse(raw)
-                        runCatching { file.writeText(raw) }
+                        runCatching {
+                            val temp=File(cache,"${code}_$slug.tmp")
+                            temp.writeText(raw);check(temp.renameTo(file))
+                        }
                         times.add(System.currentTimeMillis())
                         failures.remove(key)
                         value
@@ -61,11 +64,31 @@ class FinancialDataProvider(context: Context) {
                 null
             }
         }
-        val eps = if("每股盈餘" in topics)page("每股盈餘") { HistockParser.eps(it,code) } else null
-        val cash = if("現金流量表" in topics)page("現金流量表") { HistockParser.periodValues(it,code,"現金流量表","營業現金流") } else null
-        val margin = if("利潤比率" in topics)page("利潤比率") { HistockParser.periodValues(it,code,"利潤比率","營業利益率") } else null
-        return FinancialReport(eps?.first.orEmpty(),eps?.second.orEmpty(),cash.orEmpty(),margin.orEmpty(),
-            times.minOrNull() ?: System.currentTimeMillis(),messages)
+        var eps:Pair<List<QuarterEps>,Map<Int,Double>>?=null
+        var cash:List<PeriodValue>?=null
+        var margin:List<PeriodValue>?=null
+        fun report()=FinancialReport(eps?.first.orEmpty(),eps?.second.orEmpty(),cash.orEmpty(),margin.orEmpty(),
+            times.minOrNull() ?: System.currentTimeMillis(),messages.toList())
+        fun publish(){onPartial?.let{runCatching{it(report())}}}
+        if("每股盈餘" in topics){eps=page("每股盈餘") { HistockParser.eps(it,code) };publish()}
+        if("利潤比率" in topics){margin=page("利潤比率") { HistockParser.periodValues(it,code,"利潤比率","營業利益率") };publish()}
+        if("現金流量表" in topics){cash=page("現金流量表") { HistockParser.periodValues(it,code,"現金流量表","營業現金流") };publish()}
+        return report()
+    }
+    /** Cache reads never wait behind another stock's network request. No HTTP on this path. */
+    fun cached(code:String,now:Long=System.currentTimeMillis()):FinancialReport? {
+        require(code.matches(Regex("[0-9]{4}")))
+        val times=mutableListOf<Long>()
+        fun <T> read(slug:String,parse:(String)->T):T?=runCatching{
+            val f=File(cache,"${code}_$slug.html")
+            if(!f.exists()||now-f.lastModified() !in 0 until 86_400_000L)return@runCatching null
+            val data=parse(f.readText());times+=f.lastModified();data
+        }.getOrNull()
+        val eps=read("每股盈餘"){HistockParser.eps(it,code)}
+        val margin=read("利潤比率"){HistockParser.periodValues(it,code,"利潤比率","營業利益率")}
+        val cash=read("現金流量表"){HistockParser.periodValues(it,code,"現金流量表","營業現金流")}
+        if(times.isEmpty())return null
+        return FinancialReport(eps?.first.orEmpty(),eps?.second.orEmpty(),cash.orEmpty(),margin.orEmpty(),times.minOrNull()?:now)
     }
     companion object {
         val ALL_TOPICS=setOf("每股盈餘","現金流量表","利潤比率")

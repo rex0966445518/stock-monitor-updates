@@ -51,7 +51,10 @@ class MainActivity: AppCompatActivity() {
     private var chartDialog: StockChartDialog? = null
     private val adapter = SignalAdapter(onClick = { result ->
         ChipKLauncher.open(this@MainActivity,result.code,result.name)
-    }, onFinancial = { result -> showFinancialReport(result) })
+    }, onFinancial = { result -> showFinancialReport(result) },onFinancialVisible={result->
+        if(::financialCards.isInitialized)handler.post{if(!isFinishing&&!isDestroyed)financialCards.request(result.code,result.snapshot.sourceStock?.financials)}
+    })
+    private lateinit var financialCards:com.rex.twboardingscanner.data.FinancialCardLoader
     private lateinit var financialProvider: com.rex.twboardingscanner.data.FinancialDataProvider
     private val auctionProvider = com.rex.twboardingscanner.data.ClosingAuctionProvider()
     private val engine = ScoringEngine()
@@ -117,6 +120,11 @@ class MainActivity: AppCompatActivity() {
 
         provider = MarketDataProvider(this)
         financialProvider = com.rex.twboardingscanner.data.FinancialDataProvider(this)
+        financialCards=com.rex.twboardingscanner.data.FinancialCardLoader(
+            {code->financialProvider.cached(code)},
+            {code,partial->financialProvider.load(code,onPartial=partial)},
+            {code,report,loading->handler.post{if(!isFinishing&&!isDestroyed)adapter.updateFinancial(code,report,loading)}})
+
         history = SignalHistoryDb(this)
         createNotificationChannel()
         askNotificationPermission()
@@ -760,7 +768,7 @@ class MainActivity: AppCompatActivity() {
     private var financialDialog: FinancialDialog? = null
     private fun showFinancialReport(result: SignalResult) {
         financialDialog?.dismiss()
-        financialDialog=FinancialDialog(this,financialProvider,result.code,result.name,result.snapshot.sourceStock?.financials).also { it.show() }
+        financialDialog=FinancialDialog(this,financialProvider,result.code,result.name,adapter.financialReport(result.code)?:result.snapshot.sourceStock?.financials){report->adapter.updateFinancial(result.code,report,false)}.also { it.show() }
     }
 
     private fun showRadarConditions(type: RadarType) {
@@ -945,6 +953,7 @@ class MainActivity: AppCompatActivity() {
         workers.shutdownNow()
         enrichmentWorkers.shutdownNow()
         financialDialog?.dismiss()
+        if(::financialCards.isInitialized)financialCards.close()
         posterExport.close()
         history.close()
         super.onDestroy()
