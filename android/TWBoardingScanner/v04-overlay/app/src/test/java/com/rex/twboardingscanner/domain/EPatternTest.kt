@@ -83,7 +83,9 @@ class EPatternTest{
         assertEquals(s,BtRobotJournalSync.fromJournal(journal))
         val id=BtRobotJournalSync.createBatch(store,s,"e-journal")
         val session=store.session(id)!!
-        assertEquals(9,session.getInt("searchVersion"))
+        assertEquals(10,session.getInt("searchVersion"))
+        assertTrue(BtRobotSingleOption.baselineFirst(session))
+        assertEquals("0",store.next(id)!!.key)
         assertEquals(s.rules,BtRobotSpace.rules(session.getString("required")))
         assertEquals(s.eConfig,BtSettingsCodec.decode(session.getJSONObject("settings")).eConfig)
         val zip=File(app.cacheDir,"e-checkpoint.zip")
