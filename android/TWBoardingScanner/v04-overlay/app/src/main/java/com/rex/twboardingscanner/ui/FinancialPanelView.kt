@@ -10,17 +10,17 @@ import java.util.Locale
 
 class FinancialPanelView @JvmOverloads constructor(context:Context,attrs:AttributeSet?=null):LinearLayout(context,attrs) {
     init { orientation=VERTICAL }
-    fun bind(report:FinancialReport?,today:LocalDate,expanded:Boolean=false) {
+    fun bind(report:FinancialReport?,today:LocalDate,expanded:Boolean=false,loading:Boolean=false) {
         removeAllViews()
         val eps=report?.ttm(today)
         val cash=report?.latest(report.operatingCash,today)
         val margin=report?.latest(report.operatingMargin,today)
         val positive=report?.fourPositive(today)
-        val cashText=cash?.let{if(it.value>0) "✓ 正值" else if(it.value<0) "! 負值" else "零"}?:"待查核"
+        val cashText=cash?.let{if(it.value>0) "✓ 正值" else if(it.value<0) "! 負值" else "零"}?:(if(loading)"讀取中" else "未取得")
         val cashColor=if(cash==null)NeonUi.muted else if(cash.value>0)NeonUi.mint else NeonUi.amber
         addView(NeonUi.label(context,if(expanded) "財務指標" else "基本面快覽  ·  HiStock",12f,NeonUi.cyan,true).apply { setPadding(0,NeonUi.dp(context,12),0,NeonUi.dp(context,8)) })
-        val e=NeonUi.tile(context,"近四季 EPS",eps?.let{String.format(Locale.TAIWAN,"%.2f",it)}?:"待查核","四季合計 · 元",if(eps==null)NeonUi.muted else if(eps>0)NeonUi.pink else NeonUi.amber,expanded)
-        val m=NeonUi.tile(context,"營業利益率",margin?.let{String.format(Locale.TAIWAN,"%.2f%%",it.value)}?:"待查核",margin?.label?:"最新列示期間",if(margin==null)NeonUi.muted else if(margin.value>0)NeonUi.cyan else NeonUi.amber,expanded)
+        val e=NeonUi.tile(context,"近四季 EPS",eps?.let{String.format(Locale.TAIWAN,"%.2f",it)}?:(if(loading)"讀取中" else "未取得"),"四季合計 · 元",if(eps==null)NeonUi.muted else if(eps>0)NeonUi.pink else NeonUi.amber,expanded)
+        val m=NeonUi.tile(context,"營業利益率",margin?.let{String.format(Locale.TAIWAN,"%.2f%%",it.value)}?:(if(loading)"讀取中" else "未取得"),margin?.label?:"最新列示期間",if(margin==null)NeonUi.muted else if(margin.value>0)NeonUi.cyan else NeonUi.amber,expanded)
         val c=NeonUi.tile(context,"營業現金流",cashText,cash?.label?:"最新列示期間",cashColor,expanded)
         if(expanded) {
             addView(NeonUi.row(context,listOf(e,m)))
@@ -61,7 +61,8 @@ class FinancialPanelView @JvmOverloads constructor(context:Context,attrs:Attribu
         } else {
             addView(NeonUi.row(context,listOf(e,m,c)))
             val status=when {
-                report==null -> "○ 尚未查核 · 點下方查看財報"
+                loading -> "◌ 正在讀取基本面 · 已取得的項目先顯示"
+                report==null -> "○ 基本面尚未載入"
                 report.messages.isNotEmpty() -> "! 部分資料待查核 · 查看原因 ›"
                 eps==null||cash==null||margin==null -> "○ 期間缺漏或過期 · 查看明細 ›"
                 else -> "✓ 財報已讀取 · 查看四季 EPS 趨勢 ›"

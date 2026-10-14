@@ -19,7 +19,16 @@ import com.rex.twboardingscanner.domain.RsiGoldenCross
 import com.rex.twboardingscanner.domain.SignalLight
 import com.rex.twboardingscanner.domain.SignalResult
 
-class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private val onFinancial: (SignalResult) -> Unit = {}):RecyclerView.Adapter<SignalAdapter.VH>() {
+class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private val onFinancial: (SignalResult) -> Unit = {}, private val onFinancialVisible:(SignalResult)->Unit = {}):RecyclerView.Adapter<SignalAdapter.VH>() {
+    private val financialReports=mutableMapOf<String,com.rex.twboardingscanner.domain.FinancialReport>()
+    private val loadingFinancials=mutableSetOf<String>()
+    fun financialReport(code:String)=financialReports[code]
+    fun updateFinancial(code:String,report:com.rex.twboardingscanner.domain.FinancialReport?,loading:Boolean){
+        val changed=financialReports[code]!=report||(code in loadingFinancials)!=loading
+        if(report!=null)financialReports[code]=report
+        if(loading)loadingFinancials+=code else loadingFinancials-=code
+        if(changed)items.indices.filter{items[it].code==code}.forEach{notifyItemChanged(it)}
+    }
     private val items = mutableListOf<SignalResult>()
     init { setHasStableIds(true) }
     override fun getItemId(position:Int)=
@@ -104,7 +113,8 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
         h.b.dEvidence?.visibility=if(r.dEvidence!=null)android.view.View.VISIBLE else android.view.View.GONE
         h.b.dEvidence?.text=r.dEvidence.orEmpty()
         h.b.closingAuction.bind(s.sourceStock?.closingAuction)
-        h.b.financialPanel.bind(s.sourceStock?.financials,RuleMetrics(s).today)
+        h.b.financialPanel.bind(financialReports[r.code]?:s.sourceStock?.financials,RuleMetrics(s).today,loading=r.code in loadingFinancials)
+        onFinancialVisible(r)
         h.b.financialButton.setOnClickListener { onFinancial(r) }
         h.b.indicatorChips.removeAllViews()
         r.checks.filter { it.selected }.forEach { check ->
