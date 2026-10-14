@@ -210,7 +210,7 @@ class BtRobotActivity:AppCompatActivity(){
         pFrom.setText(gridValue("profitFrom",grid.profitFrom))
         pTo.setText(gridValue("profitTo",grid.profitTo))
         sweepCheck.isChecked=if(useDraft)prefs.getBoolean("gridEnabled",false) else
-            store.session()==null||BtRobotSweep.read(store.session()?.optJSONObject("sweep"))!=null
+            BtRobotSweep.read(store.session()?.optJSONObject("sweep"))!=null
         fieldsSession=store.active()
     }
     private fun refreshParameterHint(){
@@ -380,7 +380,7 @@ class BtRobotActivity:AppCompatActivity(){
                             val mustHave=if(sweep!=null)"0" else required()
                             val excludes=if(sweep!=null)"0" else forbidden()
                             if(original.isNotBlank())BtRobotWorker.pause(this,original)
-                            store.create(RobotRuleSelection.prepare(settings,fixedRules=sweep!=null),mustHave,excludes,
+                            store.createSingle(RobotRuleSelection.prepare(settings,fixedRules=sweep!=null),mustHave,excludes,
                                 previous?.takeIf{!it.isNull("sourceJournalId")}?.optString("sourceJournalId"),sweep)
                             "已建立新批次，請按開始測試；舊結果保留"
                         }
@@ -436,13 +436,13 @@ class BtRobotActivity:AppCompatActivity(){
             .copy(enabledRadars=enabledRadars,dConfig=robotDConfig,eConfig=robotEConfig,fConfig=robotFConfig,bConfig=robotBConfig,exclusions=robotExclusions,stockPolicy=policy,stockScope=StockScope.ROBOT,marketGuardVersion=MarketCrashGuard.VERSION,
                 holdProfitUntilMa5Break=trendHoldCheck.isChecked),fixedRules=sweep!=null)
         BtRobotSpace.validate(next)
-        if(old!=null&&old.optInt("analysisVersion")>=2&&old.optInt("searchVersion")>=6&&next==saved&&sweep==previousSweep)return old.getString("id")
+        if(old!=null&&old.optInt("analysisVersion")>=2&&(sweep!=null||old.optInt("searchVersion")>=9)&&old.optInt("searchVersion")>=6&&next==saved&&sweep==previousSweep)return old.getString("id")
         val oldId=old?.optString("id").orEmpty()
         val required=if(sweep!=null)"0" else old?.optString("required","0")?:required()
         val forbidden=if(sweep!=null)"0" else old?.optString("forbidden","0")?:forbidden()
         if(oldId.isNotBlank())BtRobotWorker.pause(this,oldId)
         val source=old?.takeIf{!it.isNull("sourceJournalId")}?.optString("sourceJournalId")?.takeIf{it.isNotBlank()}
-        val created=store.create(next,required,forbidden,source,sweep)
+        val created=store.createSingle(next,required,forbidden,source,sweep)
         if(oldId.isNotBlank()&&saved!=null&&saved.start==next.start&&saved.end==next.end
             &&saved.codes==next.codes&&saved.sectors==next.sectors&&saved.marketGuardVersion==next.marketGuardVersion)
             BtRobotCheckpoint.cloneData(store,oldId,created)
@@ -489,13 +489,13 @@ class BtRobotActivity:AppCompatActivity(){
         val activeRuleSet=if(s==null)enabledRadars else BtSettingsCodec.decode(s.getJSONObject("settings")).enabledRadars
         val searchVersion=s?.optInt("searchVersion",6)?:6
         val total=(sessionSweep?:if(s==null)desiredSweep else null)?.total?.let{BigInteger.valueOf(it.toLong())}
-            ?:BtRobotSpace.total(required(),forbidden(),legacy=legacySpace,
+            ?:if(s==null||BtRobotSingleOption.active(s))BtRobotSingleOption.total(required(),forbidden(),activeRuleSet) else BtRobotSpace.total(required(),forbidden(),legacy=legacySpace,
                 enabled=if(searchVersion<4)defaultActiveRadars() else activeRuleSet,
                 includeD=searchVersion>=4,includeCost=searchVersion>=5,includeE=searchVersion>=6)
         val remaining=total-BigInteger.valueOf(tested)
         val fixed=BtRobotSpace.required(required()).bitCount();val blocked=BtRobotSpace.required(forbidden()).bitCount()
-        ruleSummary.text=if(sweepCheck.isChecked)"目前為持倉×淨利網格；啟用區域若無固定條件，開始時會補上該區預設條件。儲存區域條件可切換自由組合測試。"
-            else "目前條件：必選 $fixed／排除 $blocked；其餘由機器人自由測試"
+        ruleSummary.text=if(sweepCheck.isChecked)"目前為持倉×淨利網格；啟用區域若無固定條件，開始時會補上該區預設條件。儲存區域條件可切換逐項測試。"
+            else "逐項測試：必選 $fixed／排除 $blocked；每輪只新增一個留空選項，測完取消再換下一項"
         val selectedRules=BtRobotSpace.rules(required());val excludedRules=BtRobotSpace.rules(forbidden())
         radarRuleButtons.forEach{(type,button)->
             button.text="${type.label} · 設定\n必選 ${selectedRules[type].orEmpty().size}／排除 ${excludedRules[type].orEmpty().size}"
@@ -507,7 +507,8 @@ class BtRobotActivity:AppCompatActivity(){
         val effectiveSweep=sessionSweep?:if(s==null)desiredSweep else null
         spaceLabel.text=if(effectiveSweep!=null)
             "持倉 ${effectiveSweep.holdingFrom}～${effectiveSweep.holdingTo} 檔 × 淨利 ${effectiveSweep.profitFrom}%～${effectiveSweep.profitTo}% · 共 ${effectiveSweep.total} 組。當前 ABCDEF 啟用區域固定，逐組測試直到全部完成."
-        else "必選 $fixed 項 · 排除 $blocked 項 · 啟用 ${activeRuleSet.joinToString(""){it.name.take(1)}} · 共 ${num(total)} 種 ABCDEF 組合。"
+        else if(s==null||BtRobotSingleOption.active(s))"逐項測試 · 必選 $fixed／排除 $blocked · 啟用 ${activeRuleSet.sortedBy{it.ordinal}.joinToString(""){it.name.take(1)}} · 共 ${num(total)} 輪，全部留空選項測完即停止。"
+        else "舊組合批次 · 共 ${num(total)} 組；按開始會建立逐項測試新批次，原結果保留。"
 
         val policyChanged=s?.let{BtSettingsCodec.decode(it.getJSONObject("settings")).stockPolicy!=com.rex.twboardingscanner.data.StockPolicyStore(this).read()}?:false
         val guardChanged=s?.getJSONObject("settings")?.optInt("marketGuardVersion",0)==0
@@ -576,6 +577,15 @@ class BtRobotActivity:AppCompatActivity(){
         return BtRobotSweep.read(s.optJSONObject("sweep"))?.settings(base,key)?:base.copy(rules=BtRobotSpace.rules(key))
     }
     private fun showBestRules(s:JSONObject){val key=s.optString("bestKey");if(key.isNotEmpty())BtSnapshotDialog.show(this,BtSettingsCodec.encode(settings(s,key)),"目前已測最佳 · 條件快照")}
+    private fun showTestedOption(box:LinearLayout,row:JSONObject){
+        val option=row.optJSONObject("testedOption")?:return
+        box.addView(label("★ 本輪新增條件\n${option.getString("radarLabel")} · ${option.getString("label")}",15f,NeonUi.amber,true).apply{
+            tag="robot-tested-option"
+            background=NeonUi.panel(this@BtRobotActivity,NeonUi.amber)
+            setPadding(NeonUi.dp(context,12),NeonUi.dp(context,10),NeonUi.dp(context,12),NeonUi.dp(context,10))
+        })
+        box.addView(NeonUi.gap(this,8))
+    }
     private fun showRankings(){
         val session=store.session()?:run{Toast.makeText(this,"尚無測試批次",Toast.LENGTH_SHORT).show();return}
         val top=store.topTrials(session.getString("id"),10)
@@ -593,6 +603,7 @@ class BtRobotActivity:AppCompatActivity(){
             val summary=grid?.parseKey(key)?.label?:BtRobotSpace.rules(key).entries.joinToString(" · "){"${it.key.name.take(1)} ${it.value.size} 項"}
             val tile=panel(if(pnl>=0)NeonUi.pink else NeonUi.mint)
             tile.addView(label("第 ${i+1} 名 · ${signed(pnl)} 元",19f,color(pnl),true))
+            showTestedOption(tile,r)
             tile.addView(label(summary,13f,NeonUi.cyan,true))
             tile.addView(label("總交易：買 ${r.optInt("buys")} 張／賣 ${r.optInt("closed")} 張 · 最大回撤 ${String.format(Locale.TAIWAN,"%.2f",r.getDouble("drawdown"))}%",11f))
             tile.addView(NeonUi.button(this,"查看這組完整成交紀錄"){openReport(session.getString("id"),key)})
@@ -612,6 +623,7 @@ class BtRobotActivity:AppCompatActivity(){
             val key=r.getString("key");val pnl=r.getDouble("profit");val box=panel(color(pnl))
             box.addView(label("第 ${r.getLong("seq")} 組 · ${BacktestJournalUi.time(r.getLong("finishedAt"))}",11f))
             box.addView(label("${signed(pnl)} 元",24f,color(pnl),true))
+            showTestedOption(box,r)
             box.addView(label(if(sweep!=null)sweep.parseKey(key).label else
                 BtRobotSpace.rules(key).entries.joinToString(" · "){"${it.key.name.take(1)} ${it.value.size} 項"},13f,NeonUi.cyan))
             box.addView(label("買 ${r.getInt("buys")} 張／賣 ${r.getInt("closed")} 張 · 最大回撤 ${String.format(Locale.TAIWAN,"%.2f",r.getDouble("drawdown"))}%",11f))
@@ -635,8 +647,9 @@ class BtRobotActivity:AppCompatActivity(){
         val grid=BtRobotSweep.read(s.optJSONObject("sweep"))
         var cursor=BigInteger(s.getString("cursor"))
         repeat(10){
-            val candidate=if(grid==null)
-                BtRobotSpace.next(BtRobotSpace.key(BtSettingsCodec.decode(s.getJSONObject("settings")).rules),
+            val candidate=if(BtRobotSingleOption.active(s))BtRobotSingleOption.next(s.optString("required","0"),s.optString("forbidden","0"),
+                BtSettingsCodec.decode(s.getJSONObject("settings")).enabledRadars,cursor){it in preview||store.seen(id,it)}
+                else if(grid==null)BtRobotSpace.next(BtRobotSpace.key(BtSettingsCodec.decode(s.getJSONObject("settings")).rules),
                     s.optString("bestKey").ifBlank{null},cursor,BigInteger(s.getString("seed")),
                     s.optString("required","0"),s.optString("forbidden","0"),
                     legacy=s.optInt("searchVersion",1)<3,
@@ -646,13 +659,13 @@ class BtRobotActivity:AppCompatActivity(){
                 else grid.next(cursor.toLong())
             if(candidate!=null){
                 preview+=candidate.key;cursor=candidate.cursor
-                val title=grid?.parseKey(candidate.key)?.label?:
+                val title=if(BtRobotSingleOption.active(s))BtRobotSingleOption.label(s.optString("required","0"),candidate.key,BtSettingsCodec.decode(s.getJSONObject("settings")).enabledRadars) else grid?.parseKey(candidate.key)?.label?:
                     BtRobotSpace.rules(candidate.key).entries.joinToString(" · "){"${it.key.name.take(1)} ${it.value.size} 項"}
                 content.addView(NeonUi.button(this,title){BtSnapshotDialog.show(this,BtSettingsCodec.encode(settings(s,candidate.key)),"尚未測試 · 候選規則")})
                 content.addView(NeonUi.gap(this,6))
             }
         }
-        val wrap=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(context,16),NeonUi.dp(context,10),NeonUi.dp(context,16),NeonUi.dp(context,10));addView(label("未測試 ${num(store.remaining(id))} 組\n以下預覽最多 10 組；${if(grid!=null)"依持倉、淨利數值逐一掃描，全部測完即結束。"else"找到新最佳後順序可能調整。"}",12f,NeonUi.ink));addView(content)}
+        val wrap=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(context,16),NeonUi.dp(context,10),NeonUi.dp(context,16),NeonUi.dp(context,10));addView(label("未測試 ${num(store.remaining(id))} 組\n以下預覽最多 10 組；${if(grid!=null)"依持倉、淨利數值逐一掃描，全部測完即結束。"else if(BtRobotSingleOption.active(s))"每輪只新增一項留空條件，按固定順序測完即停止。" else"舊版組合順序可能調整。"}",12f,NeonUi.ink));addView(content)}
         MaterialAlertDialogBuilder(this).setTitle("未測試組合").setView(ScrollView(this).apply{addView(wrap)}).setPositiveButton("關閉",null).show()
     }
     private fun hideInput(){
@@ -678,7 +691,7 @@ class BtRobotActivity:AppCompatActivity(){
         val old=store.active()
         runTask("正在儲存產業範圍…"){
             if(old.isNotBlank())BtRobotWorker.pause(this,old)
-            store.create(settings,if(grid!=null)"0" else required(),if(grid!=null)"0" else forbidden(),
+            store.createSingle(settings,if(grid!=null)"0" else required(),if(grid!=null)"0" else forbidden(),
                 previous?.takeIf{!it.isNull("sourceJournalId")}?.optString("sourceJournalId"),grid)
             "產業範圍已保存；舊批次保留，按開始測試重新取得所選產業資料"
         }
@@ -701,7 +714,7 @@ class BtRobotActivity:AppCompatActivity(){
         sweepCheck.isChecked=false
         runTask("正在保存必選／排除條件並沿用快取…"){
             if(old.isNotBlank())BtRobotWorker.pause(this,old)
-            val id=store.create(settings,key,forbiddenKey,previous?.takeIf{!it.isNull("sourceJournalId")}?.optString("sourceJournalId"))
+            val id=store.createSingle(settings,key,forbiddenKey,previous?.takeIf{!it.isNull("sourceJournalId")}?.optString("sourceJournalId"))
             if(old.isNotBlank())BtRobotCheckpoint.cloneData(store,old,id)
             getSharedPreferences("backtest_robot",0).edit().putString("requiredDraft",key).putString("forbiddenDraft",forbiddenKey).commit()
             "必選／自由測試／排除已保存，已切換條件組合測試；舊批次保留，按開始測試執行"
@@ -728,7 +741,7 @@ class BtRobotActivity:AppCompatActivity(){
            BtRobotSweep.read(previous?.optJSONObject("sweep"))==sweep)return
         runTask("正在保存下車條件與新測試批次…"){
             if(old.isNotBlank())BtRobotWorker.pause(this,old)
-            val id=store.create(settings.copy(exitRules=rules),
+            val id=store.createSingle(settings.copy(exitRules=rules),
                 if(sweep!=null)"0" else required(),if(sweep!=null)"0" else forbidden(),
                 previous?.takeIf{!it.isNull("sourceJournalId")}?.optString("sourceJournalId"),sweep)
             if(old.isNotBlank())BtRobotCheckpoint.cloneData(store,old,id)

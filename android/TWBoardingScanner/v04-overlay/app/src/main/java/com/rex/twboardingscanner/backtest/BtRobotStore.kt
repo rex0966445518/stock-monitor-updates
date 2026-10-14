@@ -32,7 +32,7 @@ class BtRobotStore(private val c:Context){
     fun session(id:String=active()):JSONObject?=synchronized(lock){db.rawQuery("SELECT json FROM sessions WHERE id=?",arrayOf(id)).use{if(it.moveToFirst())JSONObject(it.getString(0))else null}}
     private fun putSession(o:JSONObject){check(db.update("sessions",ContentValues().apply{put("json",o.toString())},"id=?",arrayOf(o.getString("id")))==1)}
     fun sessions():List<JSONObject> = synchronized(lock){val out=mutableListOf<JSONObject>();db.rawQuery("SELECT json FROM sessions ORDER BY created DESC",null).use{while(it.moveToNext())out+=JSONObject(it.getString(0))};out}
-    fun create(s:BtSettings,required:String="0",forbidden:String="0",sourceJournalId:String?=null,sweep:BtRobotSweep?=null):String=synchronized(lock){
+    fun create(s:BtSettings,required:String="0",forbidden:String="0",sourceJournalId:String?=null,sweep:BtRobotSweep?=null,singleOption:Boolean=false):String=synchronized(lock){
         BtRobotSpace.validate(s);BtRobotSpace.validateConstraints(required,forbidden)
         require(sweep==null||required=="0"&&forbidden=="0"){"參數網格固定本批次 ABCDEF，不可同時調整必選／排除條件"}
         require(sourceJournalId==null||sourceJournalId.matches(Regex("[A-Za-z0-9_-]{1,100}"))){"日誌編號不合法"}
@@ -43,17 +43,19 @@ class BtRobotStore(private val c:Context){
             .put("sweep",sweep?.json()?:JSONObject.NULL)
             .put("flowRevision",com.rex.twboardingscanner.data.TradeSideVolumeStore(c).revision()).put("tested",0).put("bestKey","").put("bestSeq",0).put("ack",0)
             .put("seed",BigInteger(80,java.security.SecureRandom()).toString()).put("cursor","0").put("message","按開始測試啟動")
-            .put("analysisVersion",2).put("appVersion",c.packageManager.getPackageInfo(c.packageName,0).versionName).put("searchVersion",8).put("required",required).put("forbidden",forbidden).put("engineVersion",BtRobotCheckpoint.ENGINE).put("cleared",0)
+            .put("analysisVersion",2).put("appVersion",c.packageManager.getPackageInfo(c.packageName,0).versionName).put("searchVersion",if(singleOption&&sweep==null)9 else 8).put("required",required).put("forbidden",forbidden).put("engineVersion",BtRobotCheckpoint.ENGINE).put("cleared",0)
         check(db.insertOrThrow("sessions",null,ContentValues().apply{put("id",id);put("created",o.getLong("created"));put("json",o.toString())})>0)
         check(prefs.edit().putString("active",id).commit());id
     }
+    fun createSingle(s:BtSettings,required:String="0",forbidden:String="0",sourceJournalId:String?=null,sweep:BtRobotSweep?=null)=
+        create(s,required,forbidden,sourceJournalId,sweep,singleOption=true)
     fun activate(id:String)=synchronized(lock){require(session(id)!=null);check(prefs.edit().putString("active",id).commit())}
     fun resume(id:String):String=synchronized(lock){
         val o=session(id)?:error("找不到測試紀錄")
         require(o.getString("state")!="DONE"){"此測試已完成"}
         BtRobotSpace.validate(BtSettingsCodec.decode(o.getJSONObject("settings")))
         BtRobotSpace.validateConstraints(o.optString("required","0"),o.optString("forbidden","0"))
-        require(o.optInt("searchVersion",1) in 1..8){"搜尋版本不相容"}
+        require(o.optInt("searchVersion",1) in 1..9){"搜尋版本不相容"}
         if(o.has("flowRevision"))require(o.getString("flowRevision")==com.rex.twboardingscanner.data.TradeSideVolumeStore(c).revision()){
             "盤中內外盤資料已更新；請以新條件建立新批次，原測試紀錄保留"
         }
@@ -61,6 +63,11 @@ class BtRobotStore(private val c:Context){
             require(o.optString("required","0")=="0"&&o.optString("forbidden","0")=="0"){"網格批次條件不可改動"}
             val tested=o.getLong("tested")
             require(tested in 0..sweep.total.toLong()&&BigInteger(o.getString("cursor"))==BigInteger.valueOf(tested)){"網格斷點數量不一致"}
+        }
+        if(BtRobotSingleOption.active(o)){
+            val base=BtSettingsCodec.decode(o.getJSONObject("settings"))
+            val total=BtRobotSingleOption.total(o.optString("required","0"),o.optString("forbidden","0"),base.enabledRadars)
+            require(BigInteger(o.getString("cursor"))==BigInteger.valueOf(o.getLong("tested"))&&BigInteger.valueOf(o.getLong("tested"))<=total){"逐項測試斷點不一致"}
         }
         val token=UUID.randomUUID().toString();putSession(o.put("state","RUNNING").put("token",token).put("message","排入測試工作…").put("updatedAt",System.currentTimeMillis()));token
     }
@@ -77,7 +84,10 @@ class BtRobotStore(private val c:Context){
         val s=session(id)?:error("找不到測試紀錄")
         val sweep=BtRobotSweep.read(s.optJSONObject("sweep"))
         if(sweep!=null)sweep.next(s.getLong("tested"))
-        else {
+        else if(BtRobotSingleOption.active(s)){
+            val current=BtSettingsCodec.decode(s.getJSONObject("settings"))
+            BtRobotSingleOption.next(s.optString("required","0"),s.optString("forbidden","0"),current.enabledRadars,BigInteger(s.getString("cursor"))){seen(id,it)}
+        }else {
             val version=s.optInt("searchVersion",1)
             val current=BtSettingsCodec.decode(s.getJSONObject("settings"))
             BtRobotSpace.next(BtRobotSpace.key(current.rules),
@@ -89,7 +99,9 @@ class BtRobotStore(private val c:Context){
                 includeD=version>=4,includeCost=version>=5,includeE=version>=6,includeMomentum=version>=7,includeB=version>=8){seen(id,it)}
         }
     }
-    fun remaining(id:String):BigInteger {val s=session(id);return (BtRobotSweep.read(s?.optJSONObject("sweep"))?.total?.let{BigInteger.valueOf(it.toLong())}
+    fun remaining(id:String):BigInteger {val s=session(id)
+        if(BtRobotSingleOption.active(s))return (BtRobotSingleOption.total(s!!.optString("required","0"),s.optString("forbidden","0"),BtSettingsCodec.decode(s.getJSONObject("settings")).enabledRadars)-BigInteger.valueOf(s.optLong("tested"))).max(BigInteger.ZERO)
+        return (BtRobotSweep.read(s?.optJSONObject("sweep"))?.total?.let{BigInteger.valueOf(it.toLong())}
         ?:BtRobotSpace.total(s?.optString("required","0")?:"0",s?.optString("forbidden","0")?:"0",
             legacy=(s?.optInt("searchVersion",1)?:1)<3,
             enabled=if((s?.optInt("searchVersion",1)?:1)<4)defaultActiveRadars() else
@@ -136,6 +148,7 @@ class BtRobotStore(private val c:Context){
         if(sweep==null)require(BtRobotSpace.key(result.settings.rules)==candidate.key){"ABCDEF 組合代碼不符"}
         else require(candidate.cursor==BigInteger.valueOf(s.getLong("tested")+1)&&
             sweep.next(s.getLong("tested"))?.key==candidate.key){"參數網格游標／組合不一致"}
+        if(BtRobotSingleOption.active(s))require(next(id)==candidate){"逐項測試游標／條件不一致"}
         val expected=if(sweep==null)base.copy(rules=BtRobotSpace.rules(candidate.key)) else sweep.settings(base,candidate.key)
         require(result.settings==expected){"測試條件與批次不一致"}
         if(com.rex.twboardingscanner.data.StockPolicyStore(c).read()!=result.settings.stockPolicy)return@synchronized false
@@ -154,6 +167,11 @@ class BtRobotStore(private val c:Context){
             .put("targetNetPct",result.settings.targetNetPct)
             .put("profit",result.run.profit).put("drawdown",result.run.drawdown).put("buys",result.run.buys).put("closed",result.run.closed.size)
             .put("realized",result.run.realized).put("unrealized",result.run.unrealized).put("pendingChecks",result.pendingChecks)
+        if(BtRobotSingleOption.active(s)){
+            val option=BtRobotSingleOption.option(s.optString("required","0"),candidate.key,base.enabledRadars)
+            summary.put("mode","SINGLE_OPTION").put("testedOption",option?:JSONObject.NULL)
+            report.put("testedOption",option?:JSONObject.NULL).put("robotSearchMode","SINGLE_OPTION")
+        }
         val bytes=ByteArrayOutputStream().also{buffer->GZIPOutputStream(buffer).use{it.write(report.toString().toByteArray(Charsets.UTF_8))}}.toByteArray()
         val better=s.optString("bestKey").isEmpty()||result.run.profit>s.getDouble("bestProfit")+0.005
         db.beginTransaction()
@@ -161,7 +179,8 @@ class BtRobotStore(private val c:Context){
             db.insertOrThrow("trials",null,ContentValues().apply{put("session",id);put("key",candidate.key);put("summary",summary.toString());put("report",bytes)})
             if(better)s.put("bestKey",candidate.key).put("bestProfit",result.run.profit).put("bestSeq",seq)
             s.put("updatedAt",finished).put("tested",seq).put("cursor",candidate.cursor.toString())
-                .put("message",if(sweep==null)"已完成第 $seq 組；持續搜尋更高收益"
+                .put("message",if(BtRobotSingleOption.active(s))"逐項測試已完成第 $seq 組 · ${BtRobotSingleOption.label(s.optString("required","0"),candidate.key,base.enabledRadars)}"
+                    else if(sweep==null)"已完成第 $seq 組；持續搜尋更高收益"
                     else "參數範圍第 $seq／${sweep.total} 組完成 · ${sweep.parseKey(candidate.key).label}")
             putSession(s);db.setTransactionSuccessful()
         }finally{db.endTransaction()}

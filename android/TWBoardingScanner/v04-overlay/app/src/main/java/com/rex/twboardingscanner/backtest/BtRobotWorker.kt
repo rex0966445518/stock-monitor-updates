@@ -121,14 +121,16 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
                 val candidate=store.next(id)
                 if(candidate==null){
                     val end=store.session(id)!!
-                    val message=if(sweep==null)"所有 ${base.enabledRadars.sortedBy{it.ordinal}.joinToString(""){it.name.take(1)}} 組合測試完成；最佳收益僅限本次歷史樣本"
+                    val message=if(BtRobotSingleOption.active(session))"所有留空選項已逐項測試完成；每輪只新增一項條件"
+                        else if(sweep==null)"所有 ${base.enabledRadars.sortedBy{it.ordinal}.joinToString(""){it.name.take(1)}} 組合測試完成；最佳收益僅限本次歷史樣本"
                         else "參數範圍 ${sweep.total} 組全部完成；已測最佳 ${end.optString("bestKey").ifBlank{"無"}}，可於結果榜檢閱"
                     store.status(id,token,message,"DONE");cached=null;return@synchronized Result.success()
                 }
                 val settings=if(sweep==null)base.copy(rules=BtRobotSpace.rules(candidate.key)) else sweep.settings(base,candidate.key)
                 val started=System.currentTimeMillis()
                 val seq=store.session(id)!!.optLong("tested")+1
-                store.status(id,token,if(sweep==null)"正在測試第 $seq 組 · ${candidate.key}"
+                store.status(id,token,if(BtRobotSingleOption.active(session))"正在逐項測試第 $seq 組 · ${BtRobotSingleOption.label(session.optString("required","0"),candidate.key,base.enabledRadars)}"
+                    else if(sweep==null)"正在測試第 $seq 組 · ${candidate.key}"
                     else "正在測試第 $seq／${sweep.total} 組 · ${sweep.parseKey(candidate.key).label}")
                 val prepared=if(sweep==null)runtime.index.prepare(settings,cancel).copy(marketGuards=runtime.guards)
                     else runtime.gridPrepared?:runtime.index.prepare(base,cancel).copy(marketGuards=runtime.guards)

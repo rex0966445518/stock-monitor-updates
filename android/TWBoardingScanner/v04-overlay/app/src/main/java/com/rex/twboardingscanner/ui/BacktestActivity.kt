@@ -374,6 +374,12 @@ class BacktestActivity:AppCompatActivity(){
         panel.addView(label(if(hasRebate)"總損益＝已實現＋未實現＋應收股息＋估計應收折讓金。" else "總損益＝已實現＋未實現＋應收股息；本次舊策略未計折讓金。",11f))
         if(!viewingLog&&data.getString("id")!=store.active())results.addView(label("以下為上次已完成報告，本次尚無新結果。",12f,NeonUi.amber))
         results.addView(panel);results.addView(NeonUi.gap(this,8))
+        data.optJSONObject("testedOption")?.let{option->
+            results.addView(label("★ 本輪新增條件\n${option.getString("radarLabel")} · ${option.getString("label")}",16f,NeonUi.amber,true).apply{
+                tag="backtest-robot-tested-option";background=NeonUi.panel(this@BacktestActivity,NeonUi.amber);setPadding(dp(12),dp(10),dp(12),dp(10))
+            })
+            results.addView(NeonUi.gap(this,8))
+        }
         val realized=r.getDouble("realized");val unrealized=r.optDouble("unrealized",pnl-realized-r.getDouble("dividend")-r.optDouble("rebateAccrued",0.0))
         results.addView(BacktestProfitPanel(this,trades,holdings,realized,unrealized,r.getInt("closed"),curve.getJSONObject(curve.length()-1).getString("date")))
         results.addView(label("應收股息 ${money(r.getDouble("dividend"))} · 可用資金 ${money(r.getDouble("cash"))}",12f))
