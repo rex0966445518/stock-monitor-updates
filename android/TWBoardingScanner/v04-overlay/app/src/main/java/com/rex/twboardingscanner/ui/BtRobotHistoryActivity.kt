@@ -25,7 +25,10 @@ class BtRobotHistoryActivity:AppCompatActivity(){
     private var nextCursor:RankCursor?=null
     private var category:RadarType?=null
     private val categoryButtons=mutableMapOf<RadarType?,MaterialButton>()
-    private var generation=0
+    @Volatile private var generation=0
+    private val handler=android.os.Handler(android.os.Looper.getMainLooper())
+    private var reader:Thread?=null
+    private var lastError=""
     private var loading=false
     private val store get()=BtRobotStore(this)
     private fun money(value:Double)=String.format(Locale.TAIWAN,"%+,.0f",value)
@@ -50,6 +53,11 @@ class BtRobotHistoryActivity:AppCompatActivity(){
         RadarType.entries.chunked(3).forEach{types->root.addView(NeonUi.row(this,types.map{categoryButton(it)}))}
         root.addView(label("跨類條件列入相關類別；空白基準依啟用區域歸檔。",11f))
         root.addView(NeonUi.button(this,"重新整理") {resetPage();reload()}.apply{tag="robot-history-refresh"})
+        root.addView(NeonUi.button(this,"複製讀取錯誤"){
+            val details=lastError.ifBlank{"尚無讀取錯誤；"+status.text}
+            (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("回測紀錄讀取",details))
+            Toast.makeText(this,"已複製讀取資訊",Toast.LENGTH_SHORT).show()
+        }.apply{tag="robot-history-copy-error"})
         status=label("讀取回測紀錄…").apply{tag="robot-history-status"};root.addView(status)
         root.addView(NeonUi.gap(this,10));entries=NeonUi.vertical(this).apply{tag="robot-history-cards"};root.addView(entries)
         previous=NeonUi.button(this,"上一頁"){if(!loading&&cursors.size>1){cursors.removeAt(cursors.lastIndex);reload()}}.apply{tag="robot-history-previous"}
@@ -66,21 +74,36 @@ class BtRobotHistoryActivity:AppCompatActivity(){
         category=type;categoryButtons.forEach{(key,button)->NeonUi.selected(button,key==type)}
         resetPage();reload()
     }
-    override fun onDestroy(){generation++;super.onDestroy()}
+    override fun onDestroy(){generation++;reader?.interrupt();handler.removeCallbacksAndMessages(null);super.onDestroy()}
     internal fun reload(){
         val ticket=++generation;loading=true;previous.isEnabled=false;next.isEnabled=false
         status.text="讀取回測紀錄…"
         val before=cursors.last();val selected=category
-        Thread{
-            val result=runCatching{store.rankedHistory(selected,before.profit,before.n,21) to store.historyCount(selected)}
+        reader?.interrupt()
+        val slow=Runnable{if(ticket==generation&&loading&&!isDestroyed){status.text="紀錄仍在讀取中，可能正在整理舊資料。可按重新整理重試。"}}
+        handler.postDelayed(slow,10000)
+        reader=Thread{
+            val cancelled={ticket!=generation||Thread.currentThread().isInterrupted}
+            val result=runCatching{
+                val source=store
+                source.prepareHistory({n->runOnUiThread{if(ticket==generation&&!isDestroyed)status.text="正在整理舊回測紀錄… 已處理至第 $n 筆"}},cancelled)
+                check(!cancelled())
+                source.rankedHistory(selected,before.profit,before.n,21) to source.historyCount(selected)
+            }
             runOnUiThread{if(!isFinishing&&!isDestroyed&&ticket==generation){
-                loading=false
+                handler.removeCallbacks(slow);loading=false
                 result.fold({(rows,total)->
                     if(rows.isEmpty()&&cursors.size>1){cursors.removeAt(cursors.lastIndex);reload();return@fold}
-                    renderRows(rows,total)
-                },{status.text="紀錄讀取失敗：${it.message}";previous.isEnabled=cursors.size>1})
+                    runCatching{renderRows(rows,total)}.onFailure{showReadError(it)}
+                },{showReadError(it)})
             }}
-        }.start()
+        }.apply{name="robot-history-reader";start()}
+    }
+    private fun showReadError(error:Throwable){
+        lastError=error.stackTraceToString()
+        android.util.Log.e("RobotArchive","History load failed",error)
+        status.text="紀錄讀取失敗：${error.message.orEmpty().take(180)}\n請按重新整理重試，或複製讀取錯誤。"
+        previous.isEnabled=cursors.size>1;next.isEnabled=false
     }
     internal fun renderRows(rows:List<JSONObject>,total:Long){
         entries.removeAllViews()

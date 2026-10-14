@@ -79,6 +79,37 @@ class RobotHistoryRankingTest {
         assertEquals(listOf(50000.0),pnl(rows));assertEquals(1L,rows.single().getLong("rank"))
         assertEquals(other.first,store.rankedHistory(b).single().getString("session"))
     }
+    @Test fun legacyRepairYieldsToWorkerWritesAndCanResumeAfterCancellation() {
+        val (id,key)=record(setOf(a),25.0,baseline=true)
+        store.locked{db->
+            val summary=db.rawQuery("SELECT summary FROM trials WHERE session=? AND key=?",arrayOf(id,key)).use{it.moveToFirst();it.getString(0)}
+            repeat(450){n->
+                val k=(n+1).toString(16)
+                val row=org.json.JSONObject(summary).put("key",k).put("seq",n+2).put("profit",n.toDouble())
+                db.execSQL("INSERT INTO trials(session,key,summary,report) VALUES(?,?,?,?)",arrayOf(id,k,row.toString(),byteArrayOf(1)))
+            }
+            db.execSQL("UPDATE robot_meta SET value=0 WHERE name='history_index'")
+        }
+        val writes=java.util.concurrent.atomic.AtomicInteger()
+        var stop=false
+        try{
+            store.prepareHistory({
+                // A different worker must be able to acquire the store lock between repair pages.
+                val writer=Thread{store.locked{db->db.execSQL("UPDATE sessions SET created=created+1 WHERE id=?",arrayOf(id))};writes.incrementAndGet()}
+                writer.start();writer.join(2000)
+                assertFalse("index repair held the worker lock",writer.isAlive)
+                stop=true
+            },{stop})
+            fail("cancelled repair must not advertise a complete index")
+        }catch(_:IllegalStateException){}
+        assertEquals(1,writes.get())
+        store.locked{db->assertEquals(0,db.rawQuery("SELECT value FROM robot_meta WHERE name='history_index'",null).use{it.moveToFirst();it.getInt(0)})}
+        val pages=mutableListOf<Long>()
+        store.prepareHistory({pages+=it})
+        assertTrue(pages.size>=3)
+        assertEquals(451L,store.historyCount(a))
+        assertEquals(449.0,pnl(store.rankedHistory(a)).first(),0.0)
+    }
     private fun find(v:View,tag:String):View? {
         if(v.tag==tag)return v
         if(v is ViewGroup)for(i in 0 until v.childCount)find(v.getChildAt(i),tag)?.let{return it}
