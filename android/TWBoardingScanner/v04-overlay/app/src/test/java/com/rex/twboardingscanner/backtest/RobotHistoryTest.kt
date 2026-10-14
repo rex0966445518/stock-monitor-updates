@@ -100,6 +100,7 @@ class RobotHistoryTest {
             assertEquals(1L,store.session(restored)!!.getLong("deleted"));assertEquals(0L,store.session(restored)!!.getLong("cleared"))
             assertEquals(remaining,store.remaining(restored));assertEquals(candidate,store.next(restored))
             assertEquals(1,store.historyPage(limit=100).count{it.getString("session")==restored})
+            if(sweep==null)assertTrue(store.rankedHistory(RadarType.C_LONG_RED_VOLUME).any{it.getString("session")==restored})
             zip.delete()
         }
     }

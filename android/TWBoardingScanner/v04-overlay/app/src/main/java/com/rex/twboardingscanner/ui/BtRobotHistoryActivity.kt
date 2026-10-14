@@ -20,8 +20,11 @@ class BtRobotHistoryActivity:AppCompatActivity(){
     private lateinit var status:TextView
     private lateinit var previous:MaterialButton
     private lateinit var next:MaterialButton
-    private val cursors=mutableListOf(Long.MAX_VALUE)
-    private var nextCursor:Long?=null
+    private data class RankCursor(val profit:Double?,val n:Long)
+    private val cursors=mutableListOf(RankCursor(null,Long.MAX_VALUE))
+    private var nextCursor:RankCursor?=null
+    private var category:RadarType?=null
+    private val categoryButtons=mutableMapOf<RadarType?,MaterialButton>()
     private var generation=0
     private var loading=false
     private val store get()=BtRobotStore(this)
@@ -29,12 +32,24 @@ class BtRobotHistoryActivity:AppCompatActivity(){
     private fun label(value:String,size:Float=12f,color:Int=NeonUi.muted,bold:Boolean=false)=NeonUi.label(this,value,size,color,bold)
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState)
-        savedInstanceState?.getLongArray("cursors")?.takeIf{it.isNotEmpty()}?.let{cursors.clear();cursors.addAll(it.toList())}
+        category=savedInstanceState?.getString("category")?.let{runCatching{RadarType.valueOf(it)}.getOrNull()}
+        val savedN=savedInstanceState?.getLongArray("cursors")
+        val savedProfits=savedInstanceState?.getDoubleArray("profits")
+        if(savedN!=null&&savedProfits!=null&&savedN.isNotEmpty()&&savedN.size==savedProfits.size){
+            cursors.clear();savedN.indices.forEach{i->cursors+=RankCursor(savedProfits[i].takeIf{it.isFinite()},savedN[i])}
+        }
         val root=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(context,16),NeonUi.dp(context,16),NeonUi.dp(context,16),NeonUi.dp(context,28))}
         val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);addView(root)};setContentView(scroll)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
         root.addView(NeonUi.header(this,"機器人回測紀錄","ROBOT ARCHIVE","所有批次 · 每輪條件 · 詳細買賣紀錄"){finish()})
-        root.addView(NeonUi.button(this,"重新整理") {cursors.clear();cursors+=Long.MAX_VALUE;reload()}.apply{tag="robot-history-refresh"})
+        fun categoryButton(type:RadarType?):MaterialButton=NeonUi.button(this,type?.label?:"全部類別"){selectCategory(type)}.apply{
+            tag="robot-history-category-${type?.name?.take(1)?:"ALL"}";categoryButtons[type]=this
+            NeonUi.selected(this,category==type)
+        }
+        root.addView(categoryButton(null))
+        RadarType.entries.chunked(3).forEach{types->root.addView(NeonUi.row(this,types.map{categoryButton(it)}))}
+        root.addView(label("跨類條件列入相關類別；空白基準依啟用區域歸檔。",11f))
+        root.addView(NeonUi.button(this,"重新整理") {resetPage();reload()}.apply{tag="robot-history-refresh"})
         status=label("讀取回測紀錄…").apply{tag="robot-history-status"};root.addView(status)
         root.addView(NeonUi.gap(this,10));entries=NeonUi.vertical(this).apply{tag="robot-history-cards"};root.addView(entries)
         previous=NeonUi.button(this,"上一頁"){if(!loading&&cursors.size>1){cursors.removeAt(cursors.lastIndex);reload()}}.apply{tag="robot-history-previous"}
@@ -42,14 +57,22 @@ class BtRobotHistoryActivity:AppCompatActivity(){
         root.addView(NeonUi.row(this,listOf(previous,next)))
     }
     override fun onResume(){super.onResume();reload()}
-    override fun onSaveInstanceState(outState:Bundle){outState.putLongArray("cursors",cursors.toLongArray());super.onSaveInstanceState(outState)}
+    override fun onSaveInstanceState(outState:Bundle){
+        outState.putString("category",category?.name);outState.putLongArray("cursors",cursors.map{it.n}.toLongArray())
+        outState.putDoubleArray("profits",cursors.map{it.profit?:Double.NaN}.toDoubleArray());super.onSaveInstanceState(outState)
+    }
+    private fun resetPage(){cursors.clear();cursors+=RankCursor(null,Long.MAX_VALUE)}
+    private fun selectCategory(type:RadarType?){
+        category=type;categoryButtons.forEach{(key,button)->NeonUi.selected(button,key==type)}
+        resetPage();reload()
+    }
     override fun onDestroy(){generation++;super.onDestroy()}
     internal fun reload(){
         val ticket=++generation;loading=true;previous.isEnabled=false;next.isEnabled=false
         status.text="讀取回測紀錄…"
-        val before=cursors.last()
+        val before=cursors.last();val selected=category
         Thread{
-            val result=runCatching{store.historyPage(before,21) to store.historyCount()}
+            val result=runCatching{store.rankedHistory(selected,before.profit,before.n,21) to store.historyCount(selected)}
             runOnUiThread{if(!isFinishing&&!isDestroyed&&ticket==generation){
                 loading=false
                 result.fold({(rows,total)->
@@ -61,9 +84,9 @@ class BtRobotHistoryActivity:AppCompatActivity(){
     }
     internal fun renderRows(rows:List<JSONObject>,total:Long){
         entries.removeAllViews()
-        nextCursor=if(rows.size>20)rows[19].getLong("n") else null
-        status.text="共 $total 筆測試結果 · 第 ${cursors.size} 頁"
-        if(rows.isEmpty())entries.addView(NeonUi.empty(this,"尚無機器人回測紀錄","完成每輪測試後，結果會保存在這裡。"))
+        nextCursor=if(rows.size>20)RankCursor(rows[19].getJSONObject("summary").getDouble("profit"),rows[19].getLong("n")) else null
+        status.text="${category?.label?:"全部類別"} · 共 $total 筆 · 第 ${cursors.size} 頁\n總淨利潤由高到低"
+        if(rows.isEmpty())entries.addView(NeonUi.empty(this,"此類別尚無回測紀錄","完成對應類別的測試後，結果會保存在這裡。"))
         rows.take(20).forEach{entry->
             val id=entry.getString("session");val key=entry.getString("key");val summary=entry.getJSONObject("summary")
             val settings=entry.optJSONObject("batch")?.optJSONObject("settings")?.let{JSONObject(it.toString()).apply{
@@ -75,9 +98,12 @@ class BtRobotHistoryActivity:AppCompatActivity(){
                 background=NeonUi.panel(this@BtRobotHistoryActivity,tint)
                 setPadding(NeonUi.dp(context,14),NeonUi.dp(context,14),NeonUi.dp(context,14),NeonUi.dp(context,14))
             }
+            card.addView(label("第 ${entry.optLong("rank",rows.indexOf(entry)+1L)} 名",18f,NeonUi.amber,true))
+            val classified=entry.optInt("categories")
+            if(classified!=0)card.addView(label("類別 "+RadarType.entries.filter{classified and (1 shl it.ordinal)!=0}.joinToString("／"){it.name.take(1)},12f,NeonUi.cyan,true))
             card.addView(label("${BacktestJournalUi.time(summary.optLong("finishedAt"))} · 第 ${summary.getLong("seq")} 輪",12f))
             card.addView(label("批次 ${id.take(8)}",11f,NeonUi.cyan))
-            card.addView(label("${money(pnl)} 元",28f,tint,true))
+            card.addView(label("總淨利潤 ${money(pnl)} 元",24f,tint,true))
             if(summary.optBoolean("baseline"))card.addView(label("★ 空白基準測試 · 未勾選選股條件",14f,NeonUi.amber,true))
             else summary.optJSONObject("testedOption")?.let{card.addView(label("★ 本輪新增條件\n${it.getString("radarLabel")} · ${it.getString("label")}",14f,NeonUi.amber,true))}
             if(summary.optString("mode")=="GRID")card.addView(label("參數測試 · 持倉 ${summary.optInt("maxHoldingStocks")} 檔 · 淨利 ${summary.optDouble("targetNetPct")}%",14f,NeonUi.amber,true))

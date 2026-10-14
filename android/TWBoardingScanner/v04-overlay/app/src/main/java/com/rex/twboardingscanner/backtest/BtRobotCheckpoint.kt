@@ -165,7 +165,7 @@ object BtRobotCheckpoint {
                                 require(actual==expected&&report.getJSONObject("run").getDouble("profit")==r.getDouble("profit")){"組合報告與摘要不符"}
                                 if(best==null||r.getDouble("profit")>best!!.getDouble("profit"))best=r
                             }
-                            db.insertOrThrow("trials",null,ContentValues().apply{put("session",id);put("key",key);put("summary",r.toString());put("report",bytes);put("cleared",deleted)})
+                            db.insertOrThrow("trials",null,ContentValues().apply{put("session",id);put("key",key);put("summary",r.toString());put("report",bytes);put("cleared",deleted);put("radars",RobotHistoryCategory.mask(BtSettingsCodec.encode(settings),key,r));put("net_profit",r.getDouble("profit"))})
                         };require(data.read()==-1)
                     }
                     val original=s.getString("id");s.put("importedFrom",original).put("id",id).put("created",System.currentTimeMillis()).put("state","PAUSED").put("token","").put("cleared",cleared).put("deleted",removed).put("engineVersion",ENGINE)

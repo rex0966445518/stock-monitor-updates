@@ -13,13 +13,22 @@ import java.util.zip.GZIPOutputStream
 
 /** Transactions commit a completed trial, its best score and search cursor together. */
 class BtRobotStore(private val c:Context){
-    private class Db(c:Context):SQLiteOpenHelper(c,"backtest-robot.db",null,2){
+    private class Db(c:Context):SQLiteOpenHelper(c,"backtest-robot.db",null,3){
         override fun onCreate(db:SQLiteDatabase){
             db.execSQL("CREATE TABLE sessions(id TEXT PRIMARY KEY, created INTEGER NOT NULL, json TEXT NOT NULL)")
-            db.execSQL("CREATE TABLE trials(n INTEGER PRIMARY KEY AUTOINCREMENT, session TEXT NOT NULL, key TEXT NOT NULL, summary TEXT NOT NULL, report BLOB NOT NULL, cleared INTEGER NOT NULL DEFAULT 0, UNIQUE(session,key))")
+            db.execSQL("CREATE TABLE trials(n INTEGER PRIMARY KEY AUTOINCREMENT, session TEXT NOT NULL, key TEXT NOT NULL, summary TEXT NOT NULL, report BLOB NOT NULL, cleared INTEGER NOT NULL DEFAULT 0, radars INTEGER NOT NULL DEFAULT 0, net_profit REAL NOT NULL DEFAULT 0, UNIQUE(session,key))")
             db.execSQL("CREATE INDEX trial_session ON trials(session,n)")
+            db.execSQL("CREATE INDEX trial_rank ON trials(cleared,net_profit DESC,n DESC)")
         }
-        override fun onUpgrade(db:SQLiteDatabase,old:Int,new:Int){if(old<2)db.execSQL("ALTER TABLE trials ADD COLUMN cleared INTEGER NOT NULL DEFAULT 0")}
+        override fun onUpgrade(db:SQLiteDatabase,old:Int,new:Int){
+            if(old<2)db.execSQL("ALTER TABLE trials ADD COLUMN cleared INTEGER NOT NULL DEFAULT 0")
+            if(old<3){
+                db.execSQL("ALTER TABLE trials ADD COLUMN radars INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE trials ADD COLUMN net_profit REAL NOT NULL DEFAULT 0")
+                RobotHistoryCategory.backfill(db)
+                db.execSQL("CREATE INDEX trial_rank ON trials(cleared,net_profit DESC,n DESC)")
+            }
+        }
     }
     companion object { private val lock=Any();private var helper:Db?=null
         private fun database(c:Context)=synchronized(lock){(helper?:Db(c.applicationContext).also{helper=it}).writableDatabase}
@@ -176,7 +185,7 @@ class BtRobotStore(private val c:Context){
         val better=s.optString("bestKey").isEmpty()||result.run.profit>s.getDouble("bestProfit")+0.005
         db.beginTransaction()
         try{
-            db.insertOrThrow("trials",null,ContentValues().apply{put("session",id);put("key",candidate.key);put("summary",summary.toString());put("report",bytes)})
+            db.insertOrThrow("trials",null,ContentValues().apply{put("session",id);put("key",candidate.key);put("summary",summary.toString());put("report",bytes);put("radars",RobotHistoryCategory.mask(BtSettingsCodec.encode(result.settings),candidate.key,summary));put("net_profit",result.run.profit)})
             if(better)s.put("bestKey",candidate.key).put("bestProfit",result.run.profit).put("bestSeq",seq)
             s.put("updatedAt",finished).put("tested",seq).put("cursor",candidate.cursor.toString())
                 .put("message",if(BtRobotSingleOption.active(s))"逐項測試已完成第 $seq 組 · ${BtRobotSingleOption.label(s.optString("required","0"),candidate.key,base.enabledRadars)}"
@@ -222,7 +231,28 @@ class BtRobotStore(private val c:Context){
         }}
         rows
     }
-    fun historyCount():Long=synchronized(lock){db.rawQuery("SELECT COUNT(*) FROM trials WHERE cleared=0",null).use{it.moveToFirst();it.getLong(0)}}
+    fun historyCount(category:com.rex.twboardingscanner.domain.RadarType?=null):Long=synchronized(lock){
+        val filter=if(category==null)"" else " AND (radars & ${RobotHistoryCategory.bit(category)})!=0"
+        db.rawQuery("SELECT COUNT(*) FROM trials WHERE cleared=0$filter",null).use{it.moveToFirst();it.getLong(0)}
+    }
+    /** Global profit order with a stable tie-breaker; filtering happens before paging and ranking. */
+    fun rankedHistory(category:com.rex.twboardingscanner.domain.RadarType?=null,beforeProfit:Double?=null,beforeN:Long=Long.MAX_VALUE,limit:Int=20):List<JSONObject> = synchronized(lock){
+        require(limit in 1..100&& (beforeProfit==null||beforeProfit.isFinite()))
+        val categoryFilter=if(category==null)"" else " AND (t.radars & ${RobotHistoryCategory.bit(category)})!=0"
+        val cursorFilter=if(beforeProfit==null)"" else " AND (t.net_profit<? OR (t.net_profit=? AND t.n<?))"
+        val args=if(beforeProfit==null)arrayOf(limit.toString()) else arrayOf(beforeProfit.toString(),beforeProfit.toString(),beforeN.toString(),limit.toString())
+        val rows=mutableListOf<JSONObject>()
+        db.rawQuery("SELECT t.n,t.session,t.key,t.summary,s.json,t.radars FROM trials t LEFT JOIN sessions s ON s.id=t.session WHERE t.cleared=0$categoryFilter$cursorFilter ORDER BY t.net_profit DESC,t.n DESC LIMIT ?",args).use{cursor->while(cursor.moveToNext()){
+            rows+=JSONObject().put("n",cursor.getLong(0)).put("session",cursor.getString(1)).put("key",cursor.getString(2)).put("summary",JSONObject(cursor.getString(3)))
+                .put("batch",if(cursor.isNull(4))JSONObject.NULL else JSONObject(cursor.getString(4))).put("categories",cursor.getInt(5))
+        }}
+        rows.firstOrNull()?.let{first->
+            val profit=first.getJSONObject("summary").getDouble("profit").toString()
+            val ahead=db.rawQuery("SELECT COUNT(*) FROM trials t WHERE t.cleared=0$categoryFilter AND (t.net_profit>? OR (t.net_profit=? AND t.n>?))",arrayOf(profit,profit,first.getLong("n").toString())).use{it.moveToFirst();it.getLong(0)}
+            rows.forEachIndexed{i,row->row.put("rank",ahead+i+1)}
+        }
+        rows
+    }
     /** Delete report bytes but keep a minimal completed-key tombstone so resuming cannot retest it. */
     fun deleteTrial(id:String,key:String):Boolean=synchronized(lock){
         val s=session(id)?:return@synchronized false
@@ -234,7 +264,7 @@ class BtRobotStore(private val c:Context){
         listOf("maxHoldingStocks","targetNetPct").forEach{if(summary.has(it))tombstone.put(it,summary.get(it))}
         db.beginTransaction()
         try{
-            check(db.update("trials",ContentValues().apply{put("cleared",2);put("summary",tombstone.toString());put("report",ByteArray(0))},"session=? AND key=? AND cleared=0",arrayOf(id,key))==1)
+            check(db.update("trials",ContentValues().apply{put("cleared",2);put("summary",tombstone.toString());put("report",ByteArray(0));put("net_profit",0.0)},"session=? AND key=? AND cleared=0",arrayOf(id,key))==1)
             s.put("deleted",s.optLong("deleted")+1)
             if(s.optString("bestKey")==key){
                 s.put("bestKey","").put("bestSeq",0);s.remove("bestProfit")
