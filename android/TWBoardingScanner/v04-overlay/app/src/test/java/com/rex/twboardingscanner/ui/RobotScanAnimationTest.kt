@@ -47,6 +47,9 @@ class RobotScanAnimationTest {
         val output=File("build/ui-previews/robot-scan-animation.png");output.parentFile.mkdirs()
         output.outputStream().use{assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG,100,it))}
         assertNotEquals(bitmap.getPixel(360,50),bitmap.getPixel(360,360))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(300))
+        val nextFrame=Bitmap.createBitmap(w,panel.height,Bitmap.Config.ARGB_8888);panel.draw(Canvas(nextFrame))
+        assertFalse("The robot and scan beam must actually move between frames",bitmap.sameAs(nextFrame))
         panel.foreground(false);assertFalse(panel.illustration.animationRunning)
         panel.foreground(true);assertTrue(panel.illustration.animationRunning)
         panel.update(false,"完成");assertEquals(View.GONE,panel.visibility);assertFalse(panel.illustration.animationRunning)

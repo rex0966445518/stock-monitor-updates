@@ -1,10 +1,8 @@
 package com.rex.twboardingscanner.ui
 
-import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.*
 import android.view.View
-import android.view.animation.LinearInterpolator
 import kotlin.math.*
 
 /** Native, resolution-independent illustration. Only progress is data-driven; motion is decorative. */
@@ -35,8 +33,16 @@ class RobotScanView(c:Context):View(c){
     private var hostVisible=true
     internal var active=false;private set
     internal val percentage:Int? get()=frame.percent
-    internal val animationRunning:Boolean get()=animator?.isRunning==true
-    private var animator:ValueAnimator?=null
+    internal var animationRunning=false;private set
+    private var startedAt=0L
+    private fun canAnimate()=active&&hostVisible&&isAttachedToWindow&&isShown&&windowVisibility==VISIBLE
+    private val frameTick=object:Runnable{
+        override fun run(){
+            if(!canAnimate()){animationRunning=false;return}
+            phase=((android.os.SystemClock.uptimeMillis()-startedAt)%4200L)/4200f
+            invalidate();postOnAnimation(this)
+        }
+    }
     init{tag="robot-scan-animation";visibility=GONE;importantForAccessibility=IMPORTANT_FOR_ACCESSIBILITY_YES}
     fun update(running:Boolean,message:String){
         active=running;frame=RobotScanFrame.read(message)
@@ -46,16 +52,15 @@ class RobotScanView(c:Context):View(c){
     }
     fun foreground(visible:Boolean){hostVisible=visible;syncAnimation()}
     private fun syncAnimation(){
-        if(active&&hostVisible&&isAttachedToWindow&&isShown&&windowVisibility==VISIBLE){
-            if(animator==null)animator=ValueAnimator.ofFloat(0f,1f).apply{
-                duration=4200;repeatCount=ValueAnimator.INFINITE;interpolator=LinearInterpolator()
-                addUpdateListener{phase=it.animatedValue as Float;invalidate()}
-            }
-            if(animator?.isStarted!=true)animator?.start()
-        }else animator?.cancel()
+        if(canAnimate()){
+            if(!animationRunning){animationRunning=true;startedAt=android.os.SystemClock.uptimeMillis();postOnAnimation(frameTick)}
+        }else stopAnimation()
+    }
+    private fun stopAnimation(){
+        if(animationRunning){animationRunning=false;removeCallbacks(frameTick)}
     }
     override fun onAttachedToWindow(){super.onAttachedToWindow();syncAnimation()}
-    override fun onDetachedFromWindow(){animator?.cancel();super.onDetachedFromWindow()}
+    override fun onDetachedFromWindow(){stopAnimation();super.onDetachedFromWindow()}
     override fun onWindowVisibilityChanged(visibility:Int){super.onWindowVisibilityChanged(visibility);syncAnimation()}
     override fun onVisibilityChanged(changedView:View,visibility:Int){super.onVisibilityChanged(changedView,visibility);syncAnimation()}
     override fun onLayout(changed:Boolean,left:Int,top:Int,right:Int,bottom:Int){
