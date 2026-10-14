@@ -34,13 +34,14 @@ class RobotScanAnimationTest {
     @Test fun motionStopsOnHideBackgroundAndDetachAndProducesPreview(){
         val controller=Robolectric.buildActivity(AppCompatActivity::class.java)
         controller.get().setTheme(com.google.android.material.R.style.Theme_MaterialComponents_DayNight_NoActionBar)
-        controller.setup();val activity=controller.get()
+        controller.create();val activity=controller.get()
         val panel=RobotScanPanel(activity){}
         activity.setContentView(panel)
+        controller.start().resume().visible()
         panel.update(true,"條件掃描 68 / 100 檔\n預估剩餘約 12秒")
         val w=720;panel.measure(View.MeasureSpec.makeMeasureSpec(w,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(1200,View.MeasureSpec.AT_MOST));panel.layout(0,0,w,panel.measuredHeight)
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(200))
-        assertTrue(panel.illustration.active);assertTrue(panel.illustration.animationRunning)
+        assertTrue(panel.illustration.active);assertTrue("attached=${panel.illustration.isAttachedToWindow}, shown=${panel.illustration.isShown}, window=${panel.illustration.windowVisibility}",panel.illustration.animationRunning)
         assertEquals(68,panel.illustration.percentage)
         val bitmap=Bitmap.createBitmap(w,panel.height,Bitmap.Config.ARGB_8888);panel.draw(Canvas(bitmap))
         val output=File("build/ui-previews/robot-scan-animation.png");output.parentFile.mkdirs()
