@@ -346,7 +346,7 @@ class BtRobotActivity:AppCompatActivity(){
             .apply{tag="robot-grid-ranking"}
         root.addView(topButton)
         root.addView(NeonUi.gap(this,6))
-        val manageFirst=NeonUi.row(this,listOf(NeonUi.button(this,"未測組合"){untested()},NeonUi.button(this,"測試紀錄"){sessions()}));root.addView(manageFirst)
+        val manageFirst=NeonUi.row(this,listOf(NeonUi.button(this,"未測組合"){untested()}.apply{tag="robot-untested"},NeonUi.button(this,"測試紀錄"){sessions()}));root.addView(manageFirst)
         root.addView(NeonUi.gap(this,6))
 
         root.addView(NeonUi.gap(this,6))
@@ -644,31 +644,34 @@ class BtRobotActivity:AppCompatActivity(){
     }
     private fun untested(){
         if(busy)return
-        val s=store.session();if(s==null){Toast.makeText(this,"請先開始或建立測試批次",Toast.LENGTH_SHORT).show();return}
-        val id=s.getString("id");val content=NeonUi.vertical(this);val preview=mutableSetOf<String>()
-        val grid=BtRobotSweep.read(s.optJSONObject("sweep"))
-        var cursor=BigInteger(s.getString("cursor"))
+        val stored=store.session()
+        val base=(stored?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()).copy(enabledRadars=enabledRadars)
+        val grid=runCatching{selectedSweep()}.getOrElse{Toast.makeText(this,it.message,Toast.LENGTH_LONG).show();return}
+        val samePlan=stored!=null&&BtSettingsCodec.decode(stored.getJSONObject("settings")).enabledRadars==enabledRadars&&
+            (if(grid!=null)grid==BtRobotSweep.read(stored.optJSONObject("sweep")) else BtRobotSingleOption.active(stored))
+        val total=grid?.let{BigInteger.valueOf(it.total.toLong())}?:BtRobotSingleOption.total(required(),forbidden(),enabledRadars)
+        val tested=if(samePlan)stored!!.optLong("tested")else 0L
+        val remaining=(total-BigInteger.valueOf(tested)).max(BigInteger.ZERO)
+        var cursor=if(samePlan)BigInteger(stored!!.getString("cursor"))else BigInteger.ZERO
+        val content=NeonUi.vertical(this);val preview=mutableSetOf<String>()
         repeat(10){
-            val candidate=if(BtRobotSingleOption.active(s))BtRobotSingleOption.next(s.optString("required","0"),s.optString("forbidden","0"),
-                BtSettingsCodec.decode(s.getJSONObject("settings")).enabledRadars,cursor){it in preview||store.seen(id,it)}
-                else if(grid==null)BtRobotSpace.next(BtRobotSpace.key(BtSettingsCodec.decode(s.getJSONObject("settings")).rules),
-                    s.optString("bestKey").ifBlank{null},cursor,BigInteger(s.getString("seed")),
-                    s.optString("required","0"),s.optString("forbidden","0"),
-                    legacy=s.optInt("searchVersion",1)<3,
-                    enabled=if(s.optInt("searchVersion",1)<4)defaultActiveRadars()
-                            else BtSettingsCodec.decode(s.getJSONObject("settings")).enabledRadars,
-                    includeD=s.optInt("searchVersion",1)>=4,includeCost=s.optInt("searchVersion",1)>=5,includeE=s.optInt("searchVersion",1)>=6,includeMomentum=s.optInt("searchVersion",1)>=7){it in preview||store.seen(id,it)}
-                else grid.next(cursor.toLong())
+            val candidate=grid?.next(cursor.toLong())?:if(grid==null)BtRobotSingleOption.next(required(),forbidden(),enabledRadars,cursor){
+                it in preview||(samePlan&&store.seen(stored!!.getString("id"),it))
+            }else null
             if(candidate!=null){
                 preview+=candidate.key;cursor=candidate.cursor
-                val title=if(BtRobotSingleOption.active(s))BtRobotSingleOption.label(s.optString("required","0"),candidate.key,BtSettingsCodec.decode(s.getJSONObject("settings")).enabledRadars) else grid?.parseKey(candidate.key)?.label?:
-                    BtRobotSpace.rules(candidate.key).entries.joinToString(" · "){"${it.key.name.take(1)} ${it.value.size} 項"}
-                content.addView(NeonUi.button(this,title){BtSnapshotDialog.show(this,BtSettingsCodec.encode(settings(s,candidate.key)),"尚未測試 · 候選規則")})
+                val title=grid?.parseKey(candidate.key)?.label?:BtRobotSingleOption.label(required(),candidate.key,enabledRadars)
+                val chosen=grid?.settings(base,candidate.key)?:base.copy(rules=BtRobotSpace.rules(candidate.key))
+                content.addView(NeonUi.button(this,title){BtSnapshotDialog.show(this,BtSettingsCodec.encode(chosen),"尚未測試 · 本次設定")})
                 content.addView(NeonUi.gap(this,6))
             }
         }
-        val wrap=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(context,16),NeonUi.dp(context,10),NeonUi.dp(context,16),NeonUi.dp(context,10));addView(label("未測試 ${num(store.remaining(id))} 組\n以下預覽最多 10 組；${if(grid!=null)"依持倉、淨利數值逐一掃描，全部測完即結束。"else if(BtRobotSingleOption.active(s))"每輪只新增一項留空條件，按固定順序測完即停止。" else"舊版組合順序可能調整。"}",12f,NeonUi.ink));addView(content)}
-        MaterialAlertDialogBuilder(this).setTitle("未測試組合").setView(ScrollView(this).apply{addView(wrap)}).setPositiveButton("關閉",null).show()
+        val wrap=NeonUi.vertical(this).apply{
+            setPadding(NeonUi.dp(context,16),NeonUi.dp(context,10),NeonUi.dp(context,16),NeonUi.dp(context,10))
+            addView(label("未測試 ${num(remaining)} 輪 · 本次設定\n以下預覽最多10輪；全部測完即停止。",12f,NeonUi.ink).apply{tag="robot-untested-count"})
+            addView(content)
+        }
+        MaterialAlertDialogBuilder(this).setTitle("未測試選項").setView(ScrollView(this).apply{addView(wrap)}).setPositiveButton("關閉",null).show()
     }
     private fun hideInput(){
         currentFocus?.let{(getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(it.windowToken,0);it.clearFocus()}
