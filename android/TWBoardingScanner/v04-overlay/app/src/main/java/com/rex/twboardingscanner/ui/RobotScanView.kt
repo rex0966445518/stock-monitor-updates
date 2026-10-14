@@ -51,13 +51,18 @@ class RobotScanView(c:Context):View(c){
                 duration=4200;repeatCount=ValueAnimator.INFINITE;interpolator=LinearInterpolator()
                 addUpdateListener{phase=it.animatedValue as Float;invalidate()}
             }
-            if(animator?.isRunning!=true)animator?.start()
+            if(animator?.isStarted!=true)animator?.start()
         }else animator?.cancel()
     }
     override fun onAttachedToWindow(){super.onAttachedToWindow();syncAnimation()}
     override fun onDetachedFromWindow(){animator?.cancel();super.onDetachedFromWindow()}
     override fun onWindowVisibilityChanged(visibility:Int){super.onWindowVisibilityChanged(visibility);syncAnimation()}
     override fun onVisibilityChanged(changedView:View,visibility:Int){super.onVisibilityChanged(changedView,visibility);syncAnimation()}
+    override fun onLayout(changed:Boolean,left:Int,top:Int,right:Int,bottom:Int){
+        super.onLayout(changed,left,top,right,bottom)
+        // Attach/visibility callbacks may run before ancestors report this new panel as shown.
+        syncAnimation()
+    }
     override fun onMeasure(widthMeasureSpec:Int,heightMeasureSpec:Int){
         val w=MeasureSpec.getSize(widthMeasureSpec).coerceAtLeast(1)
         setMeasuredDimension(w,resolveSize((w*1.12f).toInt(),heightMeasureSpec))
