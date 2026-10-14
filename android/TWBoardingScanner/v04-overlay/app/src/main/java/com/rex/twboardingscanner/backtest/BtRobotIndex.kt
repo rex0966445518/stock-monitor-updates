@@ -1,0 +1,45 @@
+package com.rex.twboardingscanner.backtest
+
+import java.io.File
+import java.time.LocalDate
+import com.rex.twboardingscanner.domain.TradeSideVolume
+
+/** Disk-backed facts: never keep all stocks' indicator records or evidence strings in the heap. */
+internal class BtRobotIndex private constructor(private val series:List<BtSeries>,private val parts:File,
+    private val fingerprint:String,private val chunkSize:Int,val days:List<LocalDate>) {
+    private fun key(i:Int)="$fingerprint:chunk:$chunkSize:$i"
+    private fun file(i:Int)=File(parts,"$i.bin.gz")
+    fun prepare(settings:BtSettings,cancel:()->Boolean={false},progress:(String)->Unit={}):BtPrepared {
+        val signals=mutableMapOf<LocalDate,MutableList<BtSignal>>();var missing=0
+        series.chunked(chunkSize).forEachIndexed { i,chunk->
+            check(!cancel()){"已暫停測試"}
+            val prepared=BtConditionIndex.read(file(i),chunk,key(i)).prepare(settings,cancel)
+            prepared.signals.forEach { (day,items)->signals.getOrPut(day){mutableListOf()}.addAll(items) }
+            missing+=prepared.pendingChecks
+            progress("分段套用條件 ${minOf((i+1)*chunkSize,series.size)}/${series.size} 檔")
+        }
+        return BtPrepared(series,signals,days,missing)
+    }
+    companion object {
+        fun open(series:List<BtSeries>,settings:BtSettings,parts:File,fingerprint:String,
+            progress:(String)->Unit={},cancel:()->Boolean={false},
+            flowFor:(String,LocalDate)->TradeSideVolume?={_,_->null},benchmark:Map<LocalDate,Double>?=null,
+            chunkSize:Int=8):BtRobotIndex {
+            require(chunkSize in 1..64);parts.mkdirs()
+            val result=BtRobotIndex(series,parts,fingerprint,chunkSize,emptyList())
+            val days=sortedSetOf<LocalDate>()
+            series.chunked(chunkSize).forEachIndexed { i,chunk->
+                check(!cancel()){"已暫停測試"}
+                progress("歷史條件 ${i*chunkSize}/${series.size} 檔 · 讀取分段快取")
+                val cached=if(result.file(i).exists())runCatching{BtConditionIndex.read(result.file(i),chunk,result.key(i))}.getOrNull() else null
+                val part=cached?:BtConditionIndex.build(chunk,settings,progress={message->progress("歷史條件 ${i*chunkSize}/${series.size} 檔 · $message")},cancel=cancel,flowFor=flowFor,benchmark=benchmark).also{
+                    check(!cancel()){"已暫停測試"};it.save(result.file(i),result.key(i))
+                }
+                days.addAll(part.days)
+                progress("歷史條件 ${minOf((i+1)*chunkSize,series.size)}/${series.size} 檔 · ${if(cached==null)"已保存" else "沿用快取"}")
+                // Only this small part remains reachable; the next stock chunk can reclaim it.
+            }
+            return BtRobotIndex(series,parts,fingerprint,chunkSize,days.toList())
+        }
+    }
+}

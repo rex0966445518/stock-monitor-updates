@@ -130,6 +130,20 @@ object BacktestEngine {
     fun executionIndex(series:List<BtSeries>)=BtExecutionIndex(
         series.associate{it.code to it.bars.associateBy(::date)},series.associateBy{it.code},
         series.associate{s->s.code to s.bars.sortedBy{it.time}.distinctBy(::date).zipWithNext().associate{(prior,current)->date(current) to prior.close}})
+    /** Keep the full source in meta for exit indicators; execution lookups need only the tested dates. */
+    fun executionIndex(series:List<BtSeries>,start:LocalDate,end:LocalDate):BtExecutionIndex {
+        val bars=series.associate { s->s.code to s.bars.filter{date(it) in start..end}.associateBy(::date) }
+        val previous=series.associate { s->
+            val values=mutableMapOf<LocalDate,Double>();var prior:DailyBar?=null
+            s.bars.sortedBy{it.time}.distinctBy(::date).forEach { bar->
+                val day=date(bar)
+                if(day in start..end)prior?.let{values[day]=it.close}
+                prior=bar
+            }
+            s.code to values
+        }
+        return BtExecutionIndex(bars,series.associateBy{it.code},previous)
+    }
     fun run(prepared:BtPrepared,settings:BtSettings,progress:(String)->Unit={},cancel:()->Boolean={false},execution:BtExecutionIndex?=null):BtRun {
         require(settings.capital.isFinite()&&settings.capital>0)
         settings.validateTrading()
