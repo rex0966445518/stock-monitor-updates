@@ -82,7 +82,7 @@ class MainActivity: AppCompatActivity() {
     private var latestFolderId = ""
     private var resultRadars:Set<RadarType>? = null
     private var resultSectors:Set<StockSector>? = null
-    private var resultPolicy:StockPolicy? = null
+    private var resultPolicy:com.rex.twboardingscanner.domain.StockPolicy? = null
 
     private val prefs by lazy { getSharedPreferences("scanner_filters", MODE_PRIVATE) }
     private var enabledSectors: MutableSet<StockSector> = mutableSetOf()
