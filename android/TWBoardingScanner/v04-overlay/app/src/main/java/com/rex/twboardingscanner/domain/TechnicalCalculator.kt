@@ -7,8 +7,15 @@ class TechnicalCalculator {
         input.filter { RuleMetrics.tradingDate(it.time) <= today &&
             (type == RadarType.C_LONG_RED_VOLUME || type==RadarType.D_MAIN_FORCE || RuleMetrics.tradingDate(it.time) < today) }.sortedBy { it.time }.distinctBy { RuleMetrics.tradingDate(it.time) }
 
-    fun build(stock: MarketStock, inputBars: List<DailyBar>): StockSnapshot {
-        val bars = inputBars.sortedBy { it.time }.distinctBy { RuleMetrics.tradingDate(it.time) }
+    fun build(stock: MarketStock, inputBars: List<DailyBar>): StockSnapshot = buildInternal(stock,inputBars,false)
+
+    /** Rule-only input; caller supplies ordered, unique dates. Display MACD/KD are omitted.
+     * Shared rules compute their selected indicators from bars; snapshot RSI14 is retained.
+     */
+    internal fun buildForRules(stock:MarketStock,bars:List<DailyBar>):StockSnapshot = buildInternal(stock,bars,true)
+
+    private fun buildInternal(stock:MarketStock,inputBars:List<DailyBar>,rulesOnly:Boolean):StockSnapshot {
+        val bars = if(rulesOnly)inputBars else inputBars.sortedBy { it.time }.distinctBy { RuleMetrics.tradingDate(it.time) }
         require(bars.isNotEmpty()) { "No dated bars" }
         val trigger = bars.last()
         val priorClose = bars.dropLast(1).lastOrNull()?.close
@@ -23,8 +30,8 @@ class TechnicalCalculator {
         val ma60 = sma(closes, 60)
         val prevMa5 = sma(closes.dropLast(1), 5)
         val rsi = rsi(closes, 14)
-        val macd = macd(closes)
-        val kd = stochastic(highs, lows, closes, 9)
+        val macd = if(rulesOnly)null else macd(closes)
+        val kd = if(rulesOnly)null else stochastic(highs, lows, closes, 9)
         val avg20 = if (volsLots.size >= 21) volsLots.dropLast(1).takeLast(20).average() else 0.0
         val recentHigh = closes.dropLast(1).takeIf { it.size >= 19 }?.takeLast(19)?.maxOrNull()
         val high52 = closes.takeLast(252).maxOrNull()

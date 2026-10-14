@@ -124,7 +124,7 @@ class BtConditionIndex private constructor(
                                 bar.open,bar.high,bar.low,bar.close,0.0,
                                 (bar.volumeShares/1000).toInt(),null,null,
                                 tradeSideVolume=flowFor(s.code,day))
-                            RuleMetrics(calc.build(stock,known).copy(
+                            RuleMetrics(calc.buildForRules(stock,known).copy(
                                 timestamp=day.atTime(13,30).atZone(RuleMetrics.TAIPEI).toInstant().toEpochMilli(),
                                 dConfig=settings.dConfig,eConfig=settings.eConfig,fConfig=settings.fConfig,bConfig=settings.bConfig,marketIndexCloses=benchmark))
                         }

@@ -68,6 +68,9 @@ object BacktestEngine {
         flowFor:(String,LocalDate)->TradeSideVolume?={_,_->null},
         benchmark:Map<LocalDate,Double>?=null):BtPrepared {
         val signals=mutableMapOf<LocalDate,MutableList<BtSignal>>();var pending=0
+        val options=RadarType.entries.filter{it in settings.enabledRadars&&settings.rules[it].orEmpty().isNotEmpty()}
+            .associateWith{type->ScanConditions.forRadar(type).filter{it.id in settings.rules.getValue(type)}}
+        val exclusions=options.keys.associateWith{type->ExclusionConditions.forRadar(type).filter{it.id in settings.exclusions.getValue(type)}}
         val active=BacktestProgress.activeLabels(settings)
         progress("依本次 $active 條件掃描 0 / ${series.size} 檔")
         series.forEachIndexed{index,s->
@@ -78,24 +81,26 @@ object BacktestEngine {
                 val day=date(bars[j]);if(day<settings.start||day>settings.end)return@forEach
                 val matches=mutableListOf<Pair<RadarType,LocalDate>>()
                 var dDetails=""
-                RadarType.entries.forEach radarLoop@{type->
-                    if(type !in settings.enabledRadars)return@radarLoop
-                    val ids=settings.rules[type].orEmpty();if(ids.isEmpty())return@radarLoop
+                val dailyMetrics=mutableMapOf<Int,RuleMetrics>()
+                options.forEach radarLoop@{(type,conditions)->
+                    val ids=settings.rules.getValue(type)
                     // Match live scanner timing: A/B exclude today's candle; C includes it.
                     val end=if(type==RadarType.C_LONG_RED_VOLUME||type==RadarType.D_MAIN_FORCE)j+1 else j
                     if(end<60)return@radarLoop
-                    val known=bars.subList(max(0,end-320),end);val bar=known.last()
-                    val stock=MarketStock(s.code,s.name,s.market,StockSector.UNKNOWN,bar.open,bar.high,bar.low,bar.close,0.0,(bar.volumeShares/1000).toInt(),null,null,
-                        tradeSideVolume=flowFor(s.code,day))
-                    val snap=calculator.build(stock,known).copy(
-                        timestamp=day.atTime(13,30).atZone(RuleMetrics.TAIPEI).toInstant().toEpochMilli(),
-                        dConfig=settings.dConfig,eConfig=settings.eConfig,fConfig=settings.fConfig,bConfig=settings.bConfig,marketIndexCloses=benchmark)
-                    val metrics=RuleMetrics(snap)
-                    val checks=ScanConditions.forRadar(type).filter{it.id in ids}.map{it.test(metrics)}
-                    val vetoes=ExclusionConditions.forRadar(type).filter{it.id in settings.exclusions.getValue(type)}.map{it.test(metrics)}
+                    val metrics=dailyMetrics.getOrPut(end){
+                        val known=bars.subList(max(0,end-320),end);val bar=known.last()
+                        val stock=MarketStock(s.code,s.name,s.market,StockSector.UNKNOWN,bar.open,bar.high,bar.low,bar.close,0.0,(bar.volumeShares/1000).toInt(),null,null,
+                            tradeSideVolume=flowFor(s.code,day))
+                        val snap=calculator.buildForRules(stock,known).copy(
+                            timestamp=day.atTime(13,30).atZone(RuleMetrics.TAIPEI).toInstant().toEpochMilli(),
+                            dConfig=settings.dConfig,eConfig=settings.eConfig,fConfig=settings.fConfig,bConfig=settings.bConfig,marketIndexCloses=benchmark)
+                        RuleMetrics(snap)
+                    }
+                    val checks=conditions.map{it.test(metrics)}
+                    val vetoes=exclusions.getValue(type).map{it.test(metrics)}
                     pending+=checks.count{it==null}+vetoes.count{it==null}
                     if(checks.size==ids.size&&checks.all{it==true}&&vetoes.all{it==false}){
-                        matches.add(type to date(bar))
+                        matches.add(type to date(metrics.last!!))
                         if(type==RadarType.D_MAIN_FORCE)dDetails+=metrics.dPattern.format()+"\n"
                         if(type==RadarType.F_VOLUME_CONTRACTION)dDetails+=metrics.fPattern.format()+"\n"
                         if(type==RadarType.E_DIF_TOUCH)dDetails+=metrics.ePattern?.format().orEmpty()+"\n"

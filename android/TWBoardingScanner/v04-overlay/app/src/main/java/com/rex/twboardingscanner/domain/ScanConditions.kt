@@ -144,13 +144,14 @@ class RuleMetrics(val s: StockSnapshot) {
     private val ma5 = avg(5)
     private val ma10 = avg(10)
     private val ma20 = avg(20)
-    val macdAboveZero:Boolean? get() = if(closes.any{!it.isFinite()||it<=0})null else TechnicalCalculator().macd(closes)?.let{it.signal>0.0}
+    private val cachedMacd by lazy(LazyThreadSafetyMode.NONE){TechnicalCalculator().macd(closes)}
+    val macdAboveZero:Boolean? get() = if(closes.any{!it.isFinite()||it<=0})null else cachedMacd?.let{it.signal>0.0}
     val rsi30To50:Boolean? get() {
         if(closes.size<16||closes.any{!it.isFinite()||it<=0})return null
         val values=RsiGoldenCross.values(closes,14)
         return values[values.lastIndex-1]<=30.0&&values.last()>50.0
     }
-    val macdUp: Boolean? get() = TechnicalCalculator().macd(closes)?.let { it.difRising && it.histRising }
+    val macdUp: Boolean? get() = cachedMacd?.let { it.difRising && it.histRising }
     val notHot: Boolean? get() {
         if (closes.size < 20 || ma20 == null || ma20 <= 0 || closes[closes.lastIndex - 5] <= 0) return null
         val five = (closes.last() / closes[closes.lastIndex - 5] - 1) * 100
