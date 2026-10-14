@@ -93,6 +93,7 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
             require(base.marketGuardVersion>0){"舊批次未啟用大盤保護；按開始建立新批次，原紀錄保留"}
             var lastProgress=0L
             val progress={msg:String->check(!interrupted()){ "已暫停測試" };val now=System.currentTimeMillis();if(now-lastProgress>=800){store.status(id,token,msg);lastProgress=now}}
+            if(cached?.id!=id)cached=null // Release the previous session before reading another market snapshot.
             val runtime=cached?.takeIf{it.id==id}?:run{
                 val file=store.dataset(id)
                 val data=if(file.exists()){
