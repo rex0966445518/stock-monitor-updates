@@ -22,6 +22,7 @@ import java.util.concurrent.Future
 
 class FinancialDialog(context:Context,private val provider:FinancialDataProvider,private val code:String,
     private val name:String,private val initial:FinancialReport?,private val onLoaded:(FinancialReport)->Unit = {}):Dialog(context) {
+    private var currentReport=initial
     private val worker=Executors.newSingleThreadExecutor()
     private val handler=Handler(Looper.getMainLooper())
     private var job:Future<*>?=null
@@ -88,7 +89,9 @@ class FinancialDialog(context:Context,private val provider:FinancialDataProvider
         super.onStart()
         window?.setLayout(context.resources.displayMetrics.widthPixels.coerceAtMost(NeonUi.dp(context,680)),android.view.ViewGroup.LayoutParams.MATCH_PARENT)
     }
-    private fun bind(report:FinancialReport?) {
+    private fun bind(incoming:FinancialReport?) {
+        val report=incoming?.let{com.rex.twboardingscanner.data.FinancialCardLoader.merge(currentReport,it)}?:currentReport
+        currentReport=report
         val today=LocalDate.now(RuleMetrics.TAIPEI)
         panel.bind(report,today,true)
         val stamp=report?.let { java.text.SimpleDateFormat("MM/dd HH:mm",java.util.Locale.TAIWAN).apply { timeZone=java.util.TimeZone.getTimeZone("Asia/Taipei") }.format(java.util.Date(it.fetchedAt)) }
@@ -100,8 +103,8 @@ class FinancialDialog(context:Context,private val provider:FinancialDataProvider
     private fun reload(forceRefresh:Boolean = true) {
         refresh.isEnabled=false;refresh.text="查核中…";progress.visibility=View.VISIBLE
         job=worker.submit {
-            val report=runCatching{provider.load(code, forceRefresh=forceRefresh,onPartial={partial->handler.post{if(!closed&&isShowing){bind(partial);onLoaded(partial)}}})}.getOrElse{FinancialReport(messages=listOf("讀取失敗，請稍後再試"),fetchedAt=System.currentTimeMillis())}
-            handler.post { if(!closed&&isShowing){bind(report);onLoaded(report);refresh.isEnabled=true;refresh.text="↻  更新財報";progress.visibility=View.GONE} }
+            val report=runCatching{provider.load(code, forceRefresh=forceRefresh,onPartial={partial->handler.post{if(!closed&&isShowing){bind(partial);onLoaded(currentReport?:partial)}}})}.getOrElse{FinancialReport(messages=listOf("讀取失敗，請稍後再試"),fetchedAt=System.currentTimeMillis())}
+            handler.post { if(!closed&&isShowing){bind(report);onLoaded(currentReport?:report);refresh.isEnabled=true;refresh.text="↻  更新財報";progress.visibility=View.GONE} }
         }
     }
     override fun dismiss() { closed=true;job?.cancel(true);worker.shutdownNow();handler.removeCallbacksAndMessages(null);super.dismiss() }
