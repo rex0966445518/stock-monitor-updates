@@ -9,7 +9,7 @@ object BtRobotJournalSync{
      * No previous robot exclusions or draft settings may override this snapshot. */
     fun createBatch(store:BtRobotStore,settings:BtSettings,sourceJournalId:String):String {
         require(settings.stockScope==StockScope.ROBOT)
-        return store.create(settings,required=BtRobotSpace.key(settings.rules),
+        return store.createSingle(settings,required=BtRobotSpace.key(settings.rules),
             forbidden="0",sourceJournalId=sourceJournalId)
     }
     fun fromJournal(entry:JSONObject):BtSettings{
