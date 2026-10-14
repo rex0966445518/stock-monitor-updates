@@ -69,6 +69,7 @@ class RobotUpgradeRecoveryTest {
         BtRobotStore.Db(app,name).use{helper->
             val db=helper.writableDatabase
             assertEquals(4,db.version)
+            db.rawQuery("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='trial_rank'",null).use{it.moveToFirst();assertEquals(0,it.getInt(0))}
             db.rawQuery("SELECT value FROM robot_meta WHERE name='history_index'",null).use{it.moveToFirst();assertEquals(0,it.getInt(0))}
             db.rawQuery("SELECT report,summary FROM trials ORDER BY n",null).use{rows->
                 assertTrue(rows.moveToFirst());assertArrayEquals(byteArrayOf(1,2,3,4),rows.getBlob(0))

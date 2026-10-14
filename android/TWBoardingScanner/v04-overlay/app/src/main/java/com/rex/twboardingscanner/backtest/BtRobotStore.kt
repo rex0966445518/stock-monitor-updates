@@ -27,7 +27,6 @@ class BtRobotStore(private val c:Context){
             if(old<3){
                 db.execSQL("ALTER TABLE trials ADD COLUMN radars INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE trials ADD COLUMN net_profit REAL NOT NULL DEFAULT 0")
-                db.execSQL("CREATE INDEX trial_rank ON trials(cleared,net_profit DESC,n DESC)")
             }
             if(old<4)db.execSQL("ALTER TABLE trials ADD COLUMN summary_valid INTEGER NOT NULL DEFAULT 1")
             db.execSQL("CREATE TABLE IF NOT EXISTS robot_meta(name TEXT PRIMARY KEY,value INTEGER NOT NULL)")
@@ -244,6 +243,7 @@ class BtRobotStore(private val c:Context){
         database.beginTransaction()
         try{
             RobotHistoryCategory.backfill(database)
+            database.execSQL("CREATE INDEX IF NOT EXISTS trial_rank ON trials(cleared,net_profit DESC,n DESC)")
             database.execSQL("INSERT OR REPLACE INTO robot_meta(name,value) VALUES('history_index',1)")
             database.setTransactionSuccessful()
         }finally{database.endTransaction()}
