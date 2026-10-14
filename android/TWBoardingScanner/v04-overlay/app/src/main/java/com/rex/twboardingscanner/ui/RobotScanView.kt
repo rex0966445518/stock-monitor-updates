@@ -40,7 +40,7 @@ class RobotScanView(c:Context):View(c){
         override fun run(){
             if(!canAnimate()){animationRunning=false;return}
             phase=((android.os.SystemClock.uptimeMillis()-startedAt)%4200L)/4200f
-            invalidate();postOnAnimation(this)
+            invalidate();postDelayed(this,16L)
         }
     }
     init{tag="robot-scan-animation";visibility=GONE;importantForAccessibility=IMPORTANT_FOR_ACCESSIBILITY_YES}
@@ -53,7 +53,7 @@ class RobotScanView(c:Context):View(c){
     fun foreground(visible:Boolean){hostVisible=visible;syncAnimation()}
     private fun syncAnimation(){
         if(canAnimate()){
-            if(!animationRunning){animationRunning=true;startedAt=android.os.SystemClock.uptimeMillis();postOnAnimation(frameTick)}
+            if(!animationRunning){animationRunning=true;startedAt=android.os.SystemClock.uptimeMillis();postDelayed(frameTick,16L)}
         }else stopAnimation()
     }
     private fun stopAnimation(){
