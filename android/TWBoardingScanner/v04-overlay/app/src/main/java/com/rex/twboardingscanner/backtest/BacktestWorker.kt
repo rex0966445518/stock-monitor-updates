@@ -100,7 +100,8 @@ class BacktestWorker(c:Context,p:WorkerParameters):Worker(c,p){
             require(s.start<=s.end&&s.end<LocalDate.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI))
             require(java.time.temporal.ChronoUnit.DAYS.between(s.start,s.end)<=730)
             val cancel={isStopped||store.active()!=runId||store.state()!="RUNNING"||com.rex.twboardingscanner.data.StockPolicyStore(applicationContext).read()!=s.stockPolicy}
-            val progress={message:String->check(!cancel()){ "已取消回測" };store.update(runId,message)}
+            val tracker=BacktestProgress(s)
+            val progress={message:String->check(!cancel()){ "已取消回測" };store.update(runId,tracker.format(message))}
             val data=BacktestData(applicationContext).load(s,progress,cancel)
             val flows=com.rex.twboardingscanner.data.TradeSideVolumeStore(applicationContext)
             val flowRevision=flows.revision()

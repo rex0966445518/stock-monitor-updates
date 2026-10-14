@@ -44,7 +44,7 @@ class BacktestStore(private val c:Context){
             .put("appVersion",appVersion()).put("startedAt",System.currentTimeMillis())
             .put("finishedAt",0).put("state","RUNNING").put("message","排入工作，等待網路…").put("settings",settings)
         write(journalFile(id),entry)
-        check(prefs.edit().putString("id",id).putString("state","RUNNING").putString("status","排入工作，等待網路…")
+        check(prefs.edit().putString("id",id).putString("state","RUNNING").putString("status","本次執行：${BacktestProgress.activeLabels(s)}\n排入工作，等待網路…\n預估剩餘時間：等待工作啟動後估算")
             .putString("config",settings.toString()).remove("resultId").commit())
     }
     fun update(id:String,status:String,state:String="RUNNING")=synchronized(lock){

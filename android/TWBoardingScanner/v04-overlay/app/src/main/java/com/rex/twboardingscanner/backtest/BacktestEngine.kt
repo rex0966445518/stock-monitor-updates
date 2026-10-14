@@ -68,6 +68,8 @@ object BacktestEngine {
         flowFor:(String,LocalDate)->TradeSideVolume?={_,_->null},
         benchmark:Map<LocalDate,Double>?=null):BtPrepared {
         val signals=mutableMapOf<LocalDate,MutableList<BtSignal>>();var pending=0
+        val active=BacktestProgress.activeLabels(settings)
+        progress("依本次 $active 條件掃描 0 / ${series.size} 檔")
         series.forEachIndexed{index,s->
             check(!cancel()){ "已取消回測" }
             val bars=s.bars.sortedBy{it.time}.distinctBy{date(it)}
@@ -101,7 +103,7 @@ object BacktestEngine {
                 }
                 if(matches.isNotEmpty())signals.getOrPut(day){mutableListOf()}.add(BtSignal(s.code,matches.joinToString("/"){it.first.name.take(1)},matches.maxOf{it.second},dDetails.trimEnd()))
             }
-            if(index%10==0||index==series.lastIndex)progress("依目前 ABCDEF 亮燈與勾選條件掃描 ${index+1} / ${series.size} 檔")
+            if(index%10==0||index==series.lastIndex)progress("依本次 $active 條件掃描 ${index+1} / ${series.size} 檔")
         }
         return BtPrepared(series,signals,series.flatMap{it.bars.map(::date)}.distinct().sorted(),pending)
     }
@@ -131,6 +133,7 @@ object BacktestEngine {
         val ex=execution?:executionIndex(prepared.series)
         val indexed=ex.bars;val meta=ex.meta;val previous=ex.previous
         val result=BtRun(settings.capital,strategyVersion=settings.strategyVersion)
+        progress("尾盤買入／淨利 ${btPercent(settings.targetNetPct)}% 賣出 0/${dates.size}")
         dates.forEachIndexed{index,day->check(!cancel()){ "已取消回測" };advance(result,day,prepared.signals[day].orEmpty(),indexed,meta,previous,settings,prepared.marketGuards[day]);progress("尾盤買入／淨利 ${btPercent(settings.targetNetPct)}% 賣出 ${index+1}/${dates.size} · $day")}
         return result
     }

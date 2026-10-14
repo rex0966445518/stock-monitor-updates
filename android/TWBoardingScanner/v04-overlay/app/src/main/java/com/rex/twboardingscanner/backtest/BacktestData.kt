@@ -24,6 +24,7 @@ class BacktestData(private val context:Context) {
         require(selected.isNotEmpty()){ "目前產業設定與股號範圍內沒有股票" }
         val excluded=mutableListOf<String>();val loaded=mutableListOf<BtSeries>()
         codes.filter{c->selected.none{it.code==c}}.forEach{excluded.add("$it：不在目前產業範圍／現存名單")}
+        progress("歷史日線 0/${selected.size} · 準備下載")
         val pool=Executors.newFixedThreadPool(4)
         try {
             val completion=ExecutorCompletionService<Pair<BtSeries?,String?>>(pool)
