@@ -86,6 +86,44 @@ class RobotHistoryTest {
         assertEquals("",store.session(id)!!.getString("bestKey"));assertFalse(store.session(id)!!.has("bestProfit"))
         assertEquals(0,store.clearZero(id));assertEquals(remaining,store.remaining(id))
     }
+    @Test fun favoriteSurvivesReloadAndCheckpointAndProtectsEveryDeletePath() {
+        val id=batch();val key="0"
+        val report=store.report(id,key)!!.toString()
+        assertTrue(store.setFavorite(id,key,true))
+        assertTrue(store.rankedHistory().single{it.getString("session")==id&&it.getString("key")==key}.getBoolean("favorite"))
+        assertFalse(store.deleteTrial(id,key));assertEquals(report,store.report(id,key)!!.toString())
+        val (through,count)=store.unstarredSnapshot()
+        assertEquals(2L,count);assertEquals(2L,store.deleteUnstarred(through))
+        assertEquals(1L,store.historyCount());assertEquals(report,store.report(id,key)!!.toString())
+        assertEquals(3L,store.session(id)!!.getLong("tested"));assertEquals(2L,store.session(id)!!.getLong("deleted"))
+        BtRobotDataset.write(store.dataset(id),BacktestData.Loaded(stocks(),1,emptyList()))
+        store.coverage(id,store.session(id)!!.getString("token"),1,1,BtRobotCheckpoint.digest(store.dataset(id)));store.pause(id)
+        val zip=File(app.cacheDir,"star-checkpoint.zip");BtRobotCheckpoint.export(app,id,zip)
+        val restored=zip.inputStream().use{BtRobotCheckpoint.restore(app,it)}
+        assertTrue(store.historyPage(limit=100).single{it.getString("session")==restored}.getBoolean("favorite"))
+        assertFalse(store.deleteTrial(restored,key));assertNotNull(store.report(restored,key))
+        assertTrue(store.setFavorite(restored,key,false));assertTrue(store.deleteTrial(restored,key));zip.delete()
+    }
+    @Test fun cleanupKeepsNewResultsAndUiStarDisablesSingleDelete() {
+        val first=batch();val row=store.historyPage().first{it.getString("session")==first}
+        val controller=Robolectric.buildActivity(BtRobotHistoryActivity::class.java).create();val activity=controller.get()
+        activity.renderRows(listOf(row),3L);val root=activity.window.decorView
+        find(root,"robot-history-star-${row.getLong("n")}")!!.performClick()
+        val end=System.nanoTime()+TimeUnit.SECONDS.toNanos(10)
+        while(System.nanoTime()<end){
+            shadowOf(Looper.getMainLooper()).idle()
+            val button=find(root,"robot-history-star-${row.getLong("n")}") as? android.widget.Button
+            if(button?.text=="★ 已保留")break
+            Thread.yield()
+        }
+        assertTrue(store.historyPage().first{it.getLong("n")==row.getLong("n")}.getBoolean("favorite"))
+        assertFalse(find(root,"robot-history-delete-${row.getLong("n")}")!!.isEnabled)
+        val snapshot=store.unstarredSnapshot();val newer=batch()
+        assertEquals(2L,store.deleteUnstarred(snapshot.first))
+        assertEquals(3L,store.retained(newer));assertEquals(1L,store.retained(first))
+        assertTrue(store.seen(first,row.getString("key")))
+        controller.destroy()
+    }
     @Test fun deletionSurvivesExportRestoreIncludingGridPoints() {
         for(sweep in listOf(null,BtRobotSweep(5,5,1,3))){
             val id=batch(2,sweep);val key=store.trials(id).first().getString("key")
