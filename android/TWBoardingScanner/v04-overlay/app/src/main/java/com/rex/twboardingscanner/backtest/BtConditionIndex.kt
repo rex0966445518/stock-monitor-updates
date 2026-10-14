@@ -98,6 +98,27 @@ class BtConditionIndex private constructor(
                 require(days==days.distinct().sorted()&&input.read()==-1){"歷史 ABCDEF 條件快取不完整"}
                 BtConditionIndex(series,records,days)
             }
+        /** Atomic chunks survive a WorkManager time slice or process interruption. */
+        fun buildResumable(series:List<BtSeries>,settings:BtSettings,parts:File,fingerprint:String,
+            progress:(String)->Unit={},cancel:()->Boolean={false},
+            flowFor:(String,LocalDate)->TradeSideVolume?={_,_->null},benchmark:Map<LocalDate,Double>?=null,
+            chunkSize:Int=8):BtConditionIndex {
+            require(chunkSize in 1..64)
+            parts.mkdirs()
+            val records=mutableListOf<Record>();val days=sortedSetOf<LocalDate>();var completed=0
+            series.chunked(chunkSize).forEachIndexed{i,chunk->
+                check(!cancel()){"已暫停測試"}
+                val file=File(parts,"$i.bin.gz")
+                val key="$fingerprint:chunk:$chunkSize:$i"
+                val cached=if(file.exists())runCatching{read(file,chunk,key)}.getOrNull()else null
+                val part=cached?:build(chunk,settings,{},cancel,flowFor,benchmark).also{index->
+                    check(!cancel()){"已暫停測試"};index.save(file,key)
+                }
+                records.addAll(part.records);days.addAll(part.days);completed+=chunk.size
+                progress("歷史條件分段保存 $completed/${series.size} 檔 · ${if(cached!=null)"沿用快取" else "已保存"}")
+            }
+            return BtConditionIndex(series,records,days.toList())
+        }
         fun build(series:List<BtSeries>,settings:BtSettings,progress:(String)->Unit={},
                   cancel:()->Boolean={false},
                   flowFor:(String,LocalDate)->TradeSideVolume?={_,_->null},
