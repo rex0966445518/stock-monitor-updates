@@ -76,12 +76,24 @@ class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationCont
         db.execSQL("CREATE TABLE saved_results(folder_id TEXT NOT NULL,part INTEGER NOT NULL,payload BLOB NOT NULL,PRIMARY KEY(folder_id,part))")
     }
     @Synchronized fun saved(id:String):ScanSavedResults? {
-        val buffer=ByteArrayOutputStream()
         readableDatabase.query("saved_results",arrayOf("payload"),"folder_id=?",arrayOf(id),null,null,"part ASC").use{c->
-            while(c.moveToNext())buffer.write(c.getBlob(0))
+            if(!c.moveToFirst())return null // Older archives have ranked cards only.
+            val input=object:java.io.InputStream(){
+                private var bytes=c.getBlob(0)
+                private var offset=0
+                override fun read():Int {
+                    while(offset>=bytes.size){if(!c.moveToNext())return -1;bytes=c.getBlob(0);offset=0}
+                    return bytes[offset++].toInt() and 255
+                }
+                override fun read(target:ByteArray,start:Int,length:Int):Int {
+                    if(length==0)return 0
+                    while(offset>=bytes.size){if(!c.moveToNext())return -1;bytes=c.getBlob(0);offset=0}
+                    val count=minOf(length,bytes.size-offset)
+                    bytes.copyInto(target,start,offset,offset+count);offset+=count;return count
+                }
+            }
+            return ScanSavedCodec.decode(input).also{check(it.id==id)}
         }
-        if(buffer.size()==0)return null // Older archives have ranked cards only.
-        return ScanSavedCodec.decode(buffer.toByteArray()).also{check(it.id==id)}
     }
     @Synchronized fun latestSaved():ScanSavedResults? {
         val id=readableDatabase.rawQuery("SELECT id FROM folders WHERE EXISTS (SELECT 1 FROM saved_results WHERE folder_id=folders.id) ORDER BY created DESC,id DESC LIMIT 1",null).use{c->
@@ -183,10 +195,16 @@ class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationCont
         private fun metricsAvg(bars:List<DailyBar>):Double?=
             bars.dropLast(1).takeLast(20).takeIf{it.size==20}
                 ?.map{it.volumeShares/1000.0}?.average()
-        private fun zipped(rows:JSONArray):ByteArray{
-            val data=rows.toString().toByteArray(Charsets.UTF_8)
+        private fun zipped(rows:List<Pair<SignalResult,ScanRank>>):ByteArray{
             val buf=ByteArrayOutputStream()
-            GZIPOutputStream(buf).use{it.write(data)}
+            GZIPOutputStream(buf).bufferedWriter(Charsets.UTF_8).use{writer->
+                writer.write("[")
+                rows.forEachIndexed{i,(result,rank)->
+                    if(i>0)writer.write(",")
+                    writer.write(encode(result,rank).toString())
+                }
+                writer.write("]")
+            }
             return buf.toByteArray()
         }
         private fun unzip(bytes:ByteArray):JSONArray =
@@ -259,7 +277,6 @@ class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationCont
         val previous=list().firstOrNull()?.let{settings(it.id)}
         val diff=differences(previous,settings)
         val id=UUID.randomUUID().toString()
-        val docs=JSONArray().apply{byScore.forEach{(r,rank)->put(encode(r,rank))}}
         val folder=ScanArchiveFolder(id,date,time,"掃描條件 · ${signature(settings)}",
             counts.getValue(RadarType.A_EARLY_BREAKOUT),counts.getValue(RadarType.B_DEEP_REVERSAL),
             counts.getValue(RadarType.C_LONG_RED_VOLUME),byStock.size,funding,diff,signature(settings),
@@ -267,7 +284,7 @@ class ScanArchiveStore(context:Context):SQLiteOpenHelper(context.applicationCont
         val row=ContentValues().apply{
             put("id",id);put("date",date);put("created",time);put("name",folder.name)
             put("settings",settings.toString());put("signature",folder.signature)
-            put("details",zipped(docs));put("a",folder.a);put("b",folder.b);put("c",folder.c);put("d",folder.d);put("e",folder.e);put("f",folder.f)
+            put("details",zipped(byScore));put("a",folder.a);put("b",folder.b);put("c",folder.c);put("d",folder.d);put("e",folder.e);put("f",folder.f)
             put("unique_count",folder.uniqueStocks);put("cash",folder.estimatedCash)
             put("changes",folder.changes)
         }

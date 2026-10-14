@@ -63,6 +63,8 @@ class MainActivity: AppCompatActivity() {
     private lateinit var history: SignalHistoryDb
 
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val scanRenderQueue=ScanRenderQueue(handler)
+    internal var scanInput:MainScanInput?=null
     private val coordinator = Executors.newSingleThreadExecutor()
     private val guardExecutor=Executors.newSingleThreadExecutor()
     private val guardHandler=android.os.Handler(android.os.Looper.getMainLooper())
@@ -135,6 +137,9 @@ class MainActivity: AppCompatActivity() {
         loadScanSettings()
 
         b.recycler.layoutManager = LinearLayoutManager(this)
+        // Streaming results and financial tiles resize cards frequently. RecyclerView's
+        // change/predictive animations can reattach a holder already being rebound.
+        b.recycler.itemAnimator=null
         b.recycler.adapter = adapter
 
         b.marketGuardButton.setOnClickListener { showMarketGuard() }
@@ -289,6 +294,14 @@ class MainActivity: AppCompatActivity() {
         body.addView(NeonUi.button(this,"匯入內／外盤成交量 CSV（主動買賣 ≥1.5 倍）",NeonUi.cyan){
             startActivity(android.content.Intent(this,TradeSideVolumeImportActivity::class.java))
         }.apply{tag="scan-import-trade-side"})
+        panel.addView(NeonUi.button(this,"複製掃描診斷",NeonUi.cyan){
+            getSystemService(android.content.ClipboardManager::class.java).setPrimaryClip(
+                android.content.ClipData.newPlainText("主頁掃描診斷",com.rex.twboardingscanner.data.ScanDiagnostics.read(this)))
+            Toast.makeText(this,"掃描診斷已複製",Toast.LENGTH_SHORT).show()
+        }.apply{tag="copy-scan-diagnostics"}.also{button->
+            // The sheet is reused; keep one diagnostics action.
+            (0 until panel.childCount).map{panel.getChildAt(it)}.filter{it.tag=="copy-scan-diagnostics"}.forEach{panel.removeView(it)}
+        })
         body.addView(ScrollView(this).apply{addView(panel)},LinearLayout.LayoutParams(-1,0,1f))
         val dialog=com.google.android.material.bottomsheet.BottomSheetDialog(this)
         body.addView(NeonUi.button(this,"完成設定"){dialog.dismiss()}.apply{NeonUi.primaryStyle(this)},LinearLayout.LayoutParams(-1,-2).apply{setMargins(dp(16),dp(8),dp(16),dp(16))})
@@ -365,8 +378,10 @@ class MainActivity: AppCompatActivity() {
         b.progressStats.text = "已分析 0｜排除 0｜資料不足 0｜失敗 0"
 
         coordinator.submit {
+            try {
+            com.rex.twboardingscanner.data.ScanDiagnostics.phase(this,"掃描開始 v0.4.93 ${scanEnabled.joinToString{it.name.take(1)}}")
             if(!current()){finishCancelled();return@submit}
-            val guard=runCatching{com.rex.twboardingscanner.data.MarketIndexData(this).live()}.getOrElse{com.rex.twboardingscanner.domain.MarketCrashGuard.unknown("大盤檢查失敗，暫停買入")}
+            val guard=runCatching{scanInput?.guard()?:com.rex.twboardingscanner.data.MarketIndexData(this).live()}.getOrElse{com.rex.twboardingscanner.domain.MarketCrashGuard.unknown("大盤檢查失敗，暫停買入")}
             runOnUiThread{if(!current())return@runOnUiThread;b.marketGuardButton.text=guard.title+"  ›";b.marketGuardButton.setTextColor(if(guard.canBuy)NeonUi.cyan else NeonUi.amber)}
             val indexHistory=if(
                 (RadarType.D_MAIN_FORCE in scanEnabled&&DPattern.RELATIVE in scanRules[RadarType.D_MAIN_FORCE].orEmpty())||
@@ -376,7 +391,7 @@ class MainActivity: AppCompatActivity() {
                 com.rex.twboardingscanner.data.MarketIndexData(this).load(scanDate.minusDays(160),scanDate)
                     .associate{it.date to it.close}
             }.getOrNull() else null
-            val universe = provider.loadUniverse { msg ->
+            val universe = (scanInput?.let{it::universe}?:provider::loadUniverse).invoke { msg ->
                 runOnUiThread { if(current())b.progressTitle.text = msg }
             }
 
@@ -434,7 +449,7 @@ class MainActivity: AppCompatActivity() {
                             excluded.incrementAndGet()
                         } else {
                             val historyBegin=android.os.SystemClock.elapsedRealtime()
-                            val bars = runCatching{provider.loadHistory(stock)}.getOrDefault(emptyList())
+                            val bars = runCatching{scanInput?.history(stock)?:provider.loadHistory(stock)}.getOrDefault(emptyList())
                             historyWaitMs.addAndGet(android.os.SystemClock.elapsedRealtime()-historyBegin)
                             if (bars.isEmpty()) {
                                 failed.incrementAndGet()
@@ -499,8 +514,8 @@ class MainActivity: AppCompatActivity() {
                                         }catch(_:Exception){failed.incrementAndGet()}
                                         finally {
                                             val remaining=(enrichment.pending-1).coerceAtLeast(0)
-                                            runOnUiThread {
-                                                if(current()&&pricesDone.get()){
+                                            scanRenderQueue.submit {
+                                                if(current()&&pricesDone.get()&&!isDestroyed){
                                                     b.progressTitle.text="行情掃描完成 · 正在完成財報／收盤查核"
                                                     b.etaText.text="尚待查核 $remaining 檔"
                                                     latest=participation.mainResults(synchronized(results){results.toList()});render()
@@ -527,8 +542,8 @@ class MainActivity: AppCompatActivity() {
 
                         val rendered=lastRenderMs.get()
                         if(current()&&(d==total||(d%20==0&&now-rendered>=800L&&lastRenderMs.compareAndSet(rendered,now)))){
-                            runOnUiThread{
-                                if(current()){latest=participation.mainResults(synchronized(results){results.toList()});render()}
+                            scanRenderQueue.submit {
+                                if(current()&&!isDestroyed){latest=participation.mainResults(synchronized(results){results.toList()});render()}
                             }
                         }
                         latch.countDown()
@@ -543,12 +558,14 @@ class MainActivity: AppCompatActivity() {
                 b.etaText.text="尚待查核 ${enrichment.pending} 檔"
             }}
             enrichment.await()
+            com.rex.twboardingscanner.data.ScanDiagnostics.phase(this,"掃描計算完成 $total 檔 / ${results.size} 卡")
             if(!current()){finishCancelled();return@submit}
             val allResults = synchronized(results) { results.toList() }
             val copy = participation.mainResults(allResults)
             latest = copy
             resultRadars=scanEnabled;resultSectors=mainSectors;resultPolicy=scanPolicy
-            latestPaper = if(paperSettings==null)copy else participation.paperResults(allResults)
+            val paperCopy = if(paperSettings==null)copy else participation.paperResults(allResults)
+            latestPaper=paperCopy
             val elapsedSec=(System.currentTimeMillis()-started).coerceAtLeast(0L)/1000L
             val workerHistorySec=historyWaitMs.get()/1000L
             val workerFinanceSec=financeWaitMs.get()/1000L
@@ -574,6 +591,7 @@ class MainActivity: AppCompatActivity() {
                     flowRevision,total,analyzed.get(),failed.get(),
                     enabledRadars=scanEnabled,dConfig=scanDConfig,eConfig=scanEConfig,fConfig=scanFConfig,bConfig=scanBConfig,exclusions=exclusionSnapshot)
                     .put("paperStrategy",paperSettings?.let{com.rex.twboardingscanner.backtest.BtSettingsCodec.encode(it)}?:org.json.JSONObject.NULL)
+                com.rex.twboardingscanner.data.ScanDiagnostics.phase(this,"保存完整掃描資料夾")
                 com.rex.twboardingscanner.data.ScanArchiveStore(this).use{store->
                     latestFolderId=store.addCompleteScan(scanDate.toString(),latestScanAt,snapshot,copy,latestPaper).id
                 }
@@ -592,6 +610,8 @@ class MainActivity: AppCompatActivity() {
 
             runOnUiThread {
                 if(!current()){finishCancelled();return@runOnUiThread}
+                scanRenderQueue.cancel()
+                latest=copy;latestPaper=paperCopy
                 isScanning = false
                 b.startScanButton.isEnabled=true;b.startScanButton.text="開始掃描"
                 b.scanProgress.progress = total
@@ -607,10 +627,25 @@ class MainActivity: AppCompatActivity() {
                 if(!coverage.complete)Toast.makeText(this,"上市／上櫃資料來源不完整，本輪僅分析已取得的股票；請稍後重掃。",Toast.LENGTH_LONG).show()
                 b.progressStats.text = "已分析 ${analyzed.get()}｜排除 ${excluded.get()}｜資料不足 ${insufficient.get()}｜失敗 ${failed.get()}\n日K快取 ${metrics.cached}｜下載 ${metrics.downloaded}｜來源限流 ${metrics.rateLimited}｜財報查核 ${financeQueries.get()}"
                 render()
-                handler.removeCallbacksAndMessages(null)
-
+                com.rex.twboardingscanner.data.ScanDiagnostics.phase(this,"掃描完成並已保存")
+            }
+            }catch(error:Exception){
+                if(current()&&!isDestroyed)runOnUiThread{failScan(error,revision)}
             }
         }
+    }
+
+    private fun failScan(error:Exception,revision:Long){
+        if(isDestroyed||scanRevision.get()!=revision)return
+        com.rex.twboardingscanner.data.ScanDiagnostics.failure(this,error)
+        scanRevision.incrementAndGet();scanRenderQueue.cancel()
+        isScanning=false;restartScan=false
+        b.startScanButton.isEnabled=true;b.startScanButton.text="開始掃描"
+        b.scanProgress.isIndeterminate=false
+        b.progressTitle.text="掃描中斷 · 可重新掃描"
+        b.etaText.text="錯誤已記錄"
+        b.progressCount.text="${error.javaClass.simpleName}：${error.message.orEmpty().take(100)}"
+        b.progressStats.text="請至條件與工具 → 複製掃描診斷"
     }
 
     private fun updateProgress(
@@ -984,7 +1019,7 @@ class MainActivity: AppCompatActivity() {
     private fun dp(v:Int):Int = (v * resources.displayMetrics.density).toInt()
 
     override fun onDestroy() {
-        restartScan=false;scanRevision.incrementAndGet()
+        restartScan=false;scanRevision.incrementAndGet();scanRenderQueue.cancel()
         chartDialog?.dismiss()
         chartDialog = null
         handler.removeCallbacksAndMessages(null)

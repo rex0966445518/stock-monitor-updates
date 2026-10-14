@@ -27,7 +27,7 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
         val changed=financialReports[code]!=report||(code in loadingFinancials)!=loading
         if(report!=null)financialReports[code]=report
         if(loading)loadingFinancials+=code else loadingFinancials-=code
-        if(changed)items.indices.filter{items[it].code==code}.forEach{notifyItemChanged(it)}
+        if(changed)items.indices.filter{items[it].code==code}.forEach{notifyItemChanged(it,"financial")}
     }
     private val items = mutableListOf<SignalResult>()
     init { setHasStableIds(true) }
@@ -58,6 +58,14 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
         VH(ItemStockSignalBinding.inflate(LayoutInflater.from(p.context), p, false))
 
     override fun getItemCount() = items.size
+
+    override fun onBindViewHolder(h:VH,pos:Int,payloads:MutableList<Any>){
+        if(payloads.isNotEmpty()&&payloads.all{it=="financial"}){
+            val result=items[pos]
+            h.b.financialPanel.bind(financialReports[result.code]?:result.snapshot.sourceStock?.financials,
+                RuleMetrics(result.snapshot).today,loading=result.code in loadingFinancials)
+        }else onBindViewHolder(h,pos)
+    }
 
     override fun onBindViewHolder(h:VH, pos:Int) {
         val r = items[pos]
