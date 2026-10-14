@@ -311,7 +311,7 @@ class MainActivity: AppCompatActivity() {
         }
 
         if(radarEnabled.isEmpty()) {
-            latest=emptyList();latestPaper=emptyList();render()
+            if(latestFolderId.isBlank()){latest=emptyList();latestPaper=emptyList()};render()
             b.scanProgress.isIndeterminate=false;b.scanProgress.progress=0
             b.progressCount.text="未執行掃描";b.etaText.text="請選擇條件"
             b.progressTitle.text="未啟用任何入場條件"
@@ -573,6 +573,7 @@ class MainActivity: AppCompatActivity() {
                     scanDate.toString(),latestScanAt,scanRules,mainSectors,scanPolicy,
                     flowRevision,total,analyzed.get(),failed.get(),
                     enabledRadars=scanEnabled,dConfig=scanDConfig,eConfig=scanEConfig,fConfig=scanFConfig,bConfig=scanBConfig,exclusions=exclusionSnapshot)
+                    .put("paperStrategy",paperSettings?.let{com.rex.twboardingscanner.backtest.BtSettingsCodec.encode(it)}?:org.json.JSONObject.NULL)
                 com.rex.twboardingscanner.data.ScanArchiveStore(this).use{store->
                     latestFolderId=store.addCompleteScan(scanDate.toString(),latestScanAt,snapshot,copy,latestPaper).id
                 }
@@ -795,7 +796,8 @@ class MainActivity: AppCompatActivity() {
 
     private fun requestConfiguredScan() {
         scanRevision.incrementAndGet()
-        latest=emptyList();latestPaper=emptyList();render()
+        if(isScanning||latestFolderId.isBlank()){latest=emptyList();latestPaper=emptyList()}
+        render()
         if(isScanning){
             restartScan=true
             b.progressTitle.text="條件已變更，正在停止舊掃描…"

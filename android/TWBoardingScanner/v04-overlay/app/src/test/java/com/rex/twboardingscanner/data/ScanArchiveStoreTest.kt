@@ -91,6 +91,8 @@ class ScanArchiveStoreTest {
             org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
             val latest=com.rex.twboardingscanner.ui.MainActivity::class.java.getDeclaredField("latest").apply{isAccessible=true}.get(activity)
             assertEquals(signals,latest)
+            com.rex.twboardingscanner.ui.MainActivity::class.java.getDeclaredMethod("requestConfiguredScan").apply{isAccessible=true}.invoke(activity)
+            assertEquals(signals,com.rex.twboardingscanner.ui.MainActivity::class.java.getDeclaredField("latest").apply{isAccessible=true}.get(activity))
             assertTrue(activity.findViewById<TextView>(com.rex.twboardingscanner.R.id.progressTitle).text.contains("已還原"))
             val button=activity.findViewById<View>(com.rex.twboardingscanner.R.id.logButton)
             assertEquals(View.VISIBLE,(button.parent as View).visibility)

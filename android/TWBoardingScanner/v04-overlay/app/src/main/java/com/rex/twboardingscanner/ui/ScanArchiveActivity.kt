@@ -189,6 +189,7 @@ class ScanArchiveActivity:AppCompatActivity(){
         val details=text("日期 ${json.getString("date")} · 版本 ${json.getString("rulesVersion")}\n"+
             "參與分析區域：${json.optJSONArray("enabledRadars")?.let{a->(0 until a.length()).joinToString("、"){a.getString(it).take(1)}}?:"ABC"}\n"+
             "排除區：${com.rex.twboardingscanner.domain.ExclusionConditions.read(json.optJSONObject("exclusions")).entries.joinToString("；"){(t,ids)->"${t.name.take(1)} ${ids.size} 項"}}\n"+
+            "B 門檻：${com.rex.twboardingscanner.domain.BPatternConfig.read(json.optJSONObject("bConfig"))}\n"+
             "F 門檻：${com.rex.twboardingscanner.domain.FPatternConfig.read(json.optJSONObject("fConfig"))}\n"+
             "E 門檻：${com.rex.twboardingscanner.domain.EPatternConfig.read(json.optJSONObject("eConfig"))}\n"+
             "D 門檻：${com.rex.twboardingscanner.domain.DPatternConfig.read(json.optJSONObject("dConfig"))}\n"+
@@ -196,7 +197,14 @@ class ScanArchiveActivity:AppCompatActivity(){
             "產業：${sectors.joinToString("、")}\n"+
             "禁股限價：${policy.summary()}\n"+
             "內外盤資料版本：${json.optString("flowRevision")}\n\n"+
-            types+"\n\n"+ScanArchiveStore.RANK_NOTE,12f,NeonUi.ink)
+            types+"\n\n"+(json.optJSONObject("paperStrategy")?.let{
+                val strategy=com.rex.twboardingscanner.backtest.BtSettingsCodec.decode(it)
+                "模擬交易採獨立策略條件，盈虧歸屬本次掃描產生的候選股：\n"+
+                    strategy.enabledRadars.joinToString("\n"){type->
+                        val labels=ScanConditions.forRadar(type).associate{rule->rule.id to rule.label}
+                        "${type.label}："+strategy.rules[type].orEmpty().sorted().joinToString("、"){key->labels[key]?:key}
+                    }+"\n獲利賣出 ${strategy.targetNetPct}% · 持倉上限 ${strategy.maxHoldingStocks} 檔\n\n"
+            }?:"模擬交易採本次主頁入選結果\n\n")+ScanArchiveStore.RANK_NOTE,12f,NeonUi.ink)
         details.setPadding(dp(15),dp(10),dp(15),dp(16))
         MaterialAlertDialogBuilder(this).setTitle("本次掃描完整條件快照")
             .setView(ScrollView(this).apply{addView(details)})
