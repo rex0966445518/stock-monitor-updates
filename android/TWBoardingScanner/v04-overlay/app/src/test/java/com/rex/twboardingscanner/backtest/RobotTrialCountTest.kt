@@ -41,16 +41,16 @@ class RobotTrialCountTest {
         val token=store.resume(old);store.status(old,token,"舊組合完成","DONE")
         val ctl=Robolectric.buildActivity(BtRobotActivity::class.java).setup();val a=ctl.get();val root=a.window.decorView
         val total=find(root,"robot-trial-total") as TextView
-        assertTrue(total.text.toString().contains("共 26 輪"))
+        assertTrue(total.text.toString().contains("共 27 輪"))
         assertFalse(total.text.toString().contains("67,108,864"))
         assertTrue((find(root,"robot-trial-counts") as TextView).text.toString().contains("已完成 0 輪"))
         find(root,"robot-untested")!!.performClick()
         val dialog=org.robolectric.shadows.ShadowDialog.getLatestDialog()
-        assertTrue((find(dialog.window!!.decorView,"robot-untested-count") as TextView).text.toString().contains("未測試 26 輪"))
+        assertTrue((find(dialog.window!!.decorView,"robot-untested-count") as TextView).text.toString().contains("未測試 27 輪"))
         dialog.dismiss()
         val id=a.policySession(RobotTradingParams.of(settings),null,RobotBacktestDates.of(settings))
         assertNotEquals(old,id);assertTrue(BtRobotSingleOption.active(store.session(id)))
-        assertEquals(BigInteger.valueOf(26),store.remaining(id))
+        assertEquals(BigInteger.valueOf(27),store.remaining(id))
         assertEquals(setOf(e),BtSettingsCodec.decode(store.session(id)!!.getJSONObject("settings")).enabledRadars)
         assertEquals("DONE",store.session(old)!!.getString("state"))
         ctl.pause().stop().destroy()
@@ -62,13 +62,13 @@ class RobotTrialCountTest {
         val old=store.create(settings,must)
         val ctl=Robolectric.buildActivity(BtRobotActivity::class.java).setup();val a=ctl.get();val root=a.window.decorView
         RadarType.entries.filter{it!=e}.forEach{find(root,"robot-enabled-${it.name}")!!.performClick()}
-        assertTrue((find(root,"robot-trial-total") as TextView).text.toString().contains("共 26 輪"))
+        assertTrue((find(root,"robot-trial-total") as TextView).text.toString().contains("共 27 輪"))
         a.applyRequired(must,"0")
         val deadline=System.nanoTime()+5_000_000_000L
         while(store.active()==old&&System.nanoTime()<deadline){Thread.sleep(10);Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()}
         Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
         assertNotEquals(old,store.active());assertTrue(BtRobotSingleOption.active(store.session()))
-        assertEquals(BigInteger.valueOf(26),store.remaining(store.active()))
+        assertEquals(BigInteger.valueOf(27),store.remaining(store.active()))
         val enabled=BtSettingsCodec.decode(store.session()!!.getJSONObject("settings")).enabledRadars
         assertEquals(setOf(e),enabled)
         var cursor=BigInteger.ZERO;val seen=mutableSetOf<String>()

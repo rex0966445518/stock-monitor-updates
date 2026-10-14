@@ -49,7 +49,7 @@ object BtSettingsCodec {
         .put("stockPolicy",s.stockPolicy.json()).put("stockScope",s.stockScope.name)
         .put("marketGuardVersion",s.marketGuardVersion).put("marketGuardSummary",if(s.marketGuardVersion>0)com.rex.twboardingscanner.domain.MarketCrashGuard.SUMMARY else "此舊策略未啟用大盤保護")
         .put("targetNetPct",s.targetNetPct).put("maxHoldingStocks",s.maxHoldingStocks?:JSONObject.NULL)
-        .put("holdProfitUntilMa5Break",s.holdProfitUntilMa5Break)
+        .put("holdProfitUntilMa5Break",s.holdProfitUntilMa5Break).put("robotBaseline",s.robotBaseline)
         .put("enabledRadars",JSONArray(s.enabledRadars.map{it.name}.sorted()))
         .put("dConfig",s.dConfig.json()).put("eConfig",s.eConfig.json()).put("fConfig",s.fConfig.json()).put("bConfig",s.bConfig.json()).put("exclusions",ExclusionConditions.json(s.exclusions))
         .put("holdingLimitBasis","不同股號計算檔數；同股不同日可加買一張；先賣後買；名額及資金競爭按股號排序")
@@ -83,7 +83,7 @@ object BtSettingsCodec {
                 val x=o.optJSONArray("enabledRadars")
                 if(x==null)defaultActiveRadars() else (0 until x.length()).map{RadarType.valueOf(x.getString(it))}.toSet()
             },
-            dConfig=DPatternConfig.read(o.optJSONObject("dConfig")),eConfig=EPatternConfig.read(o.optJSONObject("eConfig")),fConfig=FPatternConfig.read(o.optJSONObject("fConfig")),bConfig=BPatternConfig.read(o.optJSONObject("bConfig")),exclusions=ExclusionConditions.read(o.optJSONObject("exclusions"))).also{it.validateTrading()}
+            robotBaseline=o.optBoolean("robotBaseline",false),dConfig=DPatternConfig.read(o.optJSONObject("dConfig")),eConfig=EPatternConfig.read(o.optJSONObject("eConfig")),fConfig=FPatternConfig.read(o.optJSONObject("fConfig")),bConfig=BPatternConfig.read(o.optJSONObject("bConfig")),exclusions=ExclusionConditions.read(o.optJSONObject("exclusions"))).also{it.validateTrading()}
     }
 }
 

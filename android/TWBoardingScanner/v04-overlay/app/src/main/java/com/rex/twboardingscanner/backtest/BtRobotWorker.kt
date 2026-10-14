@@ -133,7 +133,7 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
                         else "參數範圍 ${sweep.total} 組全部完成；已測最佳 ${end.optString("bestKey").ifBlank{"無"}}，可於結果榜檢閱"
                     store.status(id,token,message,"DONE");cached=null;return@synchronized Result.success()
                 }
-                val settings=if(sweep==null)base.copy(rules=BtRobotSpace.rules(candidate.key)) else sweep.settings(base,candidate.key)
+                val settings=if(sweep==null)BtRobotSingleOption.settings(base,candidate.key,BtRobotSingleOption.baseline(session,candidate.key)) else sweep.settings(base,candidate.key)
                 val started=System.currentTimeMillis()
                 val seq=store.session(id)!!.optLong("tested")+1
                 store.status(id,token,if(BtRobotSingleOption.active(session))"正在逐項測試第 $seq 組 · ${BtRobotSingleOption.label(session.optString("required","0"),candidate.key,base.enabledRadars)}"

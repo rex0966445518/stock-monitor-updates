@@ -18,8 +18,9 @@ data class BtSettings(val start:LocalDate,val end:LocalDate,val capital:Double=3
     val eConfig:EPatternConfig=EPatternConfig.DEFAULT,
     val fConfig:FPatternConfig=FPatternConfig.DEFAULT,
     val exclusions:Map<RadarType,Set<String>> = ExclusionConditions.empty(),
-    val bConfig:BPatternConfig=BPatternConfig.DEFAULT){
+    val bConfig:BPatternConfig=BPatternConfig.DEFAULT,val robotBaseline:Boolean=false){
     fun validateTrading(){
+        require(!robotBaseline||(enabledRadars.isNotEmpty()&&rules.values.all{it.isEmpty()}&&exclusions.values.all{it.isEmpty()})){"空白基準不得含選股條件"}
         require(marketGuardVersion in 0..MarketCrashGuard.VERSION){"大盤保護版本不相容"}
         stockPolicy.validate()
         ExitRules.validate(exitRules)
@@ -68,7 +69,7 @@ object BacktestEngine {
         flowFor:(String,LocalDate)->TradeSideVolume?={_,_->null},
         benchmark:Map<LocalDate,Double>?=null):BtPrepared {
         val signals=mutableMapOf<LocalDate,MutableList<BtSignal>>();var pending=0
-        val options=RadarType.entries.filter{it in settings.enabledRadars&&settings.rules[it].orEmpty().isNotEmpty()}
+        val options=RadarType.entries.filter{it in settings.enabledRadars&&(settings.robotBaseline||settings.rules[it].orEmpty().isNotEmpty())}
             .associateWith{type->ScanConditions.forRadar(type).filter{it.id in settings.rules.getValue(type)}}
         val exclusions=options.keys.associateWith{type->ExclusionConditions.forRadar(type).filter{it.id in settings.exclusions.getValue(type)}}
         val active=BacktestProgress.activeLabels(settings)

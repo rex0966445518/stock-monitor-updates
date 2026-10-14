@@ -6,32 +6,40 @@ import org.json.JSONObject
 
 /** Fixed must-haves plus ONE free checkbox, never a cumulative combination. */
 object BtRobotSingleOption {
-    fun active(s:JSONObject?)=s!=null&&s.optInt("searchVersion",0)==9&&s.optJSONObject("sweep")==null
+    fun active(s:JSONObject?)=s!=null&&s.optInt("searchVersion",0) in 9..10&&s.optJSONObject("sweep")==null
+    fun baselineFirst(s:JSONObject?)=active(s)&&s!!.optInt("searchVersion")>=10
+    fun baseline(s:JSONObject?,key:String)=baselineFirst(s)&&key=="0"
+    fun current(s:JSONObject?)=baselineFirst(s)
+    fun settings(base:BtSettings,key:String,isBaseline:Boolean):BtSettings=base.copy(
+        rules=BtRobotSpace.rules(key),robotBaseline=isBaseline,
+        exclusions=if(isBaseline)ExclusionConditions.empty() else base.exclusions)
     private fun fixed(required:String,enabled:Set<RadarType>):BigInteger = BtRobotSpace.required(required).and(
         BtRobotSpace.allSlots.foldIndexed(BigInteger.ZERO){i,m,p->if(p.first in enabled)m.setBit(i)else m})
-    fun keys(required:String,forbidden:String,enabled:Set<RadarType>):List<String> {
+    fun keys(required:String,forbidden:String,enabled:Set<RadarType>,includeBaseline:Boolean=false):List<String> {
         BtRobotSpace.validateConstraints(required,forbidden)
         val must=fixed(required,enabled);val blocked=BtRobotSpace.required(forbidden)
         val free=BtRobotSpace.allSlots.withIndex().filter{it.value.first in enabled&&!must.testBit(it.index)&&!blocked.testBit(it.index)}
             .sortedWith(compareBy({it.value.first.ordinal},{it.index}))
-        return if(free.isEmpty())if(must.signum()>0)listOf(must.toString(16))else emptyList()
+        val variants=if(free.isEmpty())if(must.signum()>0)listOf(must.toString(16))else emptyList()
             else free.map{must.setBit(it.index).toString(16)}
+        return if(includeBaseline&&enabled.isNotEmpty())listOf("0")+variants else variants
     }
-    fun total(required:String,forbidden:String,enabled:Set<RadarType>)=BigInteger.valueOf(keys(required,forbidden,enabled).size.toLong())
-    fun next(required:String,forbidden:String,enabled:Set<RadarType>,cursor:BigInteger,seen:(String)->Boolean):BtRobotSpace.Candidate? {
-        val keys=keys(required,forbidden,enabled)
+    fun total(required:String,forbidden:String,enabled:Set<RadarType>,includeBaseline:Boolean=false)=BigInteger.valueOf(keys(required,forbidden,enabled,includeBaseline).size.toLong())
+    fun next(required:String,forbidden:String,enabled:Set<RadarType>,cursor:BigInteger,includeBaseline:Boolean=false,seen:(String)->Boolean):BtRobotSpace.Candidate? {
+        val keys=keys(required,forbidden,enabled,includeBaseline)
         require(cursor>=BigInteger.ZERO&&cursor<=BigInteger.valueOf(keys.size.toLong()))
         for(i in cursor.toInt() until keys.size)if(!seen(keys[i]))return BtRobotSpace.Candidate(keys[i],BigInteger.valueOf(i+1L))
         return null
     }
     fun option(required:String,key:String,enabled:Set<RadarType>):JSONObject? {
+        if(key=="0")return null
         val extra=BtRobotSpace.required(key).andNot(fixed(required,enabled))
         if(extra.bitCount()!=1)return null
         val (type,id)=BtRobotSpace.allSlots[extra.lowestSetBit]
         val label=ScanConditions.forRadar(type).first{it.id==id}.label
         return JSONObject().put("radar",type.name).put("id",id).put("label",label).put("radarLabel",type.label)
     }
-    fun label(required:String,key:String,enabled:Set<RadarType>):String = option(required,key,enabled)?.let{
+    fun label(required:String,key:String,enabled:Set<RadarType>):String = if(key=="0")"空白基準測試：不勾選任何選股條件" else option(required,key,enabled)?.let{
         "本輪新增：${it.getString("radarLabel")} · ${it.getString("label")}"
     }?:"基準測試：全部固定必選條件（無留空選項）"
 }

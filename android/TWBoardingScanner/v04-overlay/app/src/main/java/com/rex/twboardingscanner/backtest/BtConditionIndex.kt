@@ -34,7 +34,7 @@ class BtConditionIndex private constructor(
             if(index%512==0)check(!cancel()){"已暫停測試"}
             val matches=mutableListOf<Int>()
             selected.forEachIndexed{i,mask->
-                if(mask!=0L&&r.dataDates[i]!=null){
+                if((mask!=0L||(s.robotBaseline&&RadarType.entries[i] in s.enabledRadars))&&r.dataDates[i]!=null){
                     missing+=java.lang.Long.bitCount(mask and r.pending[i])
                     val veto=exclusionMasks[i]
                     missing+=java.lang.Long.bitCount(veto and r.vetoPending[i])

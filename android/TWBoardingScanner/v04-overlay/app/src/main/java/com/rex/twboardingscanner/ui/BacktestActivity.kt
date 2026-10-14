@@ -374,6 +374,7 @@ class BacktestActivity:AppCompatActivity(){
         panel.addView(label(if(hasRebate)"總損益＝已實現＋未實現＋應收股息＋估計應收折讓金。" else "總損益＝已實現＋未實現＋應收股息；本次舊策略未計折讓金。",11f))
         if(!viewingLog&&data.getString("id")!=store.active())results.addView(label("以下為上次已完成報告，本次尚無新結果。",12f,NeonUi.amber))
         results.addView(panel);results.addView(NeonUi.gap(this,8))
+        if(data.optBoolean("baseline"))results.addView(label("★ 空白基準測試 · 未勾選任何選股條件",16f,NeonUi.amber,true).apply{tag="backtest-robot-baseline"})
         data.optJSONObject("testedOption")?.let{option->
             results.addView(label("★ 本輪新增條件\n${option.getString("radarLabel")} · ${option.getString("label")}",16f,NeonUi.amber,true).apply{
                 tag="backtest-robot-tested-option";background=NeonUi.panel(this@BacktestActivity,NeonUi.amber);setPadding(dp(12),dp(10),dp(12),dp(10))

@@ -49,7 +49,7 @@ class BtRobotSingleOptionTest {
         val free=setOf(c to "volume",c to "gain")
         val forbidden=mask(BtRobotSpace.allSlots.filter{it.first==c&&it!=(c to "price")&&it !in free}.toSet())
         val settings=BtRobotSpace.settings().copy(enabledRadars=setOf(c))
-        val id=store.createSingle(settings,required,forbidden);val token=store.resume(id)
+        val id=store.createSingle(settings,required,forbidden,includeBaseline=false);val token=store.resume(id)
         assertEquals(BigInteger.valueOf(2),store.remaining(id))
         val first=store.next(id)!!
         val trial=settings.copy(rules=BtRobotSpace.rules(first.key))
