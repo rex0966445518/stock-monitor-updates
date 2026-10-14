@@ -13,21 +13,25 @@ import java.util.zip.GZIPOutputStream
 
 /** Transactions commit a completed trial, its best score and search cursor together. */
 class BtRobotStore(private val c:Context){
-    private class Db(c:Context):SQLiteOpenHelper(c,"backtest-robot.db",null,3){
+    internal class Db(c:Context,name:String="backtest-robot.db"):SQLiteOpenHelper(c,name,null,4){
         override fun onCreate(db:SQLiteDatabase){
             db.execSQL("CREATE TABLE sessions(id TEXT PRIMARY KEY, created INTEGER NOT NULL, json TEXT NOT NULL)")
-            db.execSQL("CREATE TABLE trials(n INTEGER PRIMARY KEY AUTOINCREMENT, session TEXT NOT NULL, key TEXT NOT NULL, summary TEXT NOT NULL, report BLOB NOT NULL, cleared INTEGER NOT NULL DEFAULT 0, radars INTEGER NOT NULL DEFAULT 0, net_profit REAL NOT NULL DEFAULT 0, UNIQUE(session,key))")
+            db.execSQL("CREATE TABLE trials(n INTEGER PRIMARY KEY AUTOINCREMENT, session TEXT NOT NULL, key TEXT NOT NULL, summary TEXT NOT NULL, report BLOB NOT NULL, cleared INTEGER NOT NULL DEFAULT 0, radars INTEGER NOT NULL DEFAULT 0, net_profit REAL NOT NULL DEFAULT 0, summary_valid INTEGER NOT NULL DEFAULT 1, UNIQUE(session,key))")
             db.execSQL("CREATE INDEX trial_session ON trials(session,n)")
             db.execSQL("CREATE INDEX trial_rank ON trials(cleared,net_profit DESC,n DESC)")
+            db.execSQL("CREATE TABLE robot_meta(name TEXT PRIMARY KEY,value INTEGER NOT NULL)")
+            db.execSQL("INSERT INTO robot_meta(name,value) VALUES('history_index',1)")
         }
         override fun onUpgrade(db:SQLiteDatabase,old:Int,new:Int){
             if(old<2)db.execSQL("ALTER TABLE trials ADD COLUMN cleared INTEGER NOT NULL DEFAULT 0")
             if(old<3){
                 db.execSQL("ALTER TABLE trials ADD COLUMN radars INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE trials ADD COLUMN net_profit REAL NOT NULL DEFAULT 0")
-                RobotHistoryCategory.backfill(db)
                 db.execSQL("CREATE INDEX trial_rank ON trials(cleared,net_profit DESC,n DESC)")
             }
+            if(old<4)db.execSQL("ALTER TABLE trials ADD COLUMN summary_valid INTEGER NOT NULL DEFAULT 1")
+            db.execSQL("CREATE TABLE IF NOT EXISTS robot_meta(name TEXT PRIMARY KEY,value INTEGER NOT NULL)")
+            db.execSQL("INSERT OR REPLACE INTO robot_meta(name,value) VALUES('history_index',?)",arrayOf(0))
         }
     }
     companion object { private val lock=Any();private var helper:Db?=null
@@ -199,7 +203,7 @@ class BtRobotStore(private val c:Context){
     fun acknowledge(id:String,seq:Long)=synchronized(lock){session(id)?.let{putSession(it.put("ack",maxOf(it.optLong("ack"),seq)))}}
     fun trials(id:String,limit:Int=20,offset:Int=0):List<JSONObject> = synchronized(lock){
         require(limit in 1..1000&&offset>=0);val out=mutableListOf<JSONObject>()
-        db.rawQuery("SELECT summary FROM trials WHERE session=? AND cleared=0 ORDER BY n DESC LIMIT ? OFFSET ?",arrayOf(id,limit.toString(),offset.toString())).use{while(it.moveToNext())out+=JSONObject(it.getString(0))};out
+        db.rawQuery("SELECT summary FROM trials WHERE session=? AND cleared=0 ORDER BY n DESC LIMIT ? OFFSET ?",arrayOf(id,limit.toString(),offset.toString())).use{while(it.moveToNext())BtTrialSummary.read(it.getString(0))?.let{row->out+=row}};out
     }
     /** Return real top-profit parameter combinations; an empty/cleared report never becomes best. */
     fun topTrials(id:String,limit:Int=10):List<JSONObject> = synchronized(lock){
@@ -207,7 +211,7 @@ class BtRobotStore(private val c:Context){
         val top=mutableListOf<JSONObject>()
         db.rawQuery("SELECT summary FROM trials WHERE session=? AND cleared=0",arrayOf(id)).use{cursor->
             while(cursor.moveToNext()){
-                val item=JSONObject(cursor.getString(0))
+                val item=BtTrialSummary.read(cursor.getString(0))?:continue
                 top.add(item)
                 top.sortWith(compareByDescending<JSONObject>{it.getDouble("profit")}.thenBy{it.getLong("seq")})
                 if(top.size>limit)top.removeAt(top.lastIndex)
@@ -223,32 +227,47 @@ class BtRobotStore(private val c:Context){
     /** All batches, newest first. Page summaries only; never decompress every trade report. */
     fun historyPage(before:Long=Long.MAX_VALUE,limit:Int=20):List<JSONObject> = synchronized(lock){
         require(limit in 1..100)
+        ensureHistoryIndex()
         val rows=mutableListOf<JSONObject>()
-        db.rawQuery("SELECT t.n,t.session,t.key,t.summary,s.json FROM trials t LEFT JOIN sessions s ON s.id=t.session WHERE t.cleared=0 AND t.n<? ORDER BY t.n DESC LIMIT ?",
+        db.rawQuery("SELECT t.n,t.session,t.key,t.summary,s.json FROM trials t LEFT JOIN sessions s ON s.id=t.session WHERE t.cleared=0 AND t.summary_valid=1 AND t.n<? ORDER BY t.n DESC LIMIT ?",
             arrayOf(before.toString(),limit.toString())).use{cursor->while(cursor.moveToNext()){
             rows+=JSONObject().put("n",cursor.getLong(0)).put("session",cursor.getString(1)).put("key",cursor.getString(2))
-                .put("summary",JSONObject(cursor.getString(3))).put("batch",if(cursor.isNull(4))JSONObject.NULL else JSONObject(cursor.getString(4)))
+                .put("summary",JSONObject(cursor.getString(3))).put("batch",if(cursor.isNull(4))JSONObject.NULL else runCatching{JSONObject(cursor.getString(4))}.getOrNull()?:JSONObject.NULL)
         }}
         rows
     }
+    /** Called by archive reads on their background thread, never while opening the robot screen. */
+    private fun ensureHistoryIndex(){
+        val database=db
+        val ready=database.rawQuery("SELECT value FROM robot_meta WHERE name='history_index'",null).use{it.moveToFirst()&&it.getInt(0)==1}
+        if(ready)return
+        database.beginTransaction()
+        try{
+            RobotHistoryCategory.backfill(database)
+            database.execSQL("INSERT OR REPLACE INTO robot_meta(name,value) VALUES('history_index',1)")
+            database.setTransactionSuccessful()
+        }finally{database.endTransaction()}
+    }
     fun historyCount(category:com.rex.twboardingscanner.domain.RadarType?=null):Long=synchronized(lock){
+        ensureHistoryIndex()
         val filter=if(category==null)"" else " AND (radars & ${RobotHistoryCategory.bit(category)})!=0"
-        db.rawQuery("SELECT COUNT(*) FROM trials WHERE cleared=0$filter",null).use{it.moveToFirst();it.getLong(0)}
+        db.rawQuery("SELECT COUNT(*) FROM trials WHERE cleared=0 AND summary_valid=1$filter",null).use{it.moveToFirst();it.getLong(0)}
     }
     /** Global profit order with a stable tie-breaker; filtering happens before paging and ranking. */
     fun rankedHistory(category:com.rex.twboardingscanner.domain.RadarType?=null,beforeProfit:Double?=null,beforeN:Long=Long.MAX_VALUE,limit:Int=20):List<JSONObject> = synchronized(lock){
         require(limit in 1..100&& (beforeProfit==null||beforeProfit.isFinite()))
+        ensureHistoryIndex()
         val categoryFilter=if(category==null)"" else " AND (t.radars & ${RobotHistoryCategory.bit(category)})!=0"
         val cursorFilter=if(beforeProfit==null)"" else " AND (t.net_profit<? OR (t.net_profit=? AND t.n<?))"
         val args=if(beforeProfit==null)arrayOf(limit.toString()) else arrayOf(beforeProfit.toString(),beforeProfit.toString(),beforeN.toString(),limit.toString())
         val rows=mutableListOf<JSONObject>()
-        db.rawQuery("SELECT t.n,t.session,t.key,t.summary,s.json,t.radars FROM trials t LEFT JOIN sessions s ON s.id=t.session WHERE t.cleared=0$categoryFilter$cursorFilter ORDER BY t.net_profit DESC,t.n DESC LIMIT ?",args).use{cursor->while(cursor.moveToNext()){
+        db.rawQuery("SELECT t.n,t.session,t.key,t.summary,s.json,t.radars FROM trials t LEFT JOIN sessions s ON s.id=t.session WHERE t.cleared=0 AND t.summary_valid=1$categoryFilter$cursorFilter ORDER BY t.net_profit DESC,t.n DESC LIMIT ?",args).use{cursor->while(cursor.moveToNext()){
             rows+=JSONObject().put("n",cursor.getLong(0)).put("session",cursor.getString(1)).put("key",cursor.getString(2)).put("summary",JSONObject(cursor.getString(3)))
-                .put("batch",if(cursor.isNull(4))JSONObject.NULL else JSONObject(cursor.getString(4))).put("categories",cursor.getInt(5))
+                .put("batch",if(cursor.isNull(4))JSONObject.NULL else runCatching{JSONObject(cursor.getString(4))}.getOrNull()?:JSONObject.NULL).put("categories",cursor.getInt(5))
         }}
         rows.firstOrNull()?.let{first->
             val profit=first.getJSONObject("summary").getDouble("profit").toString()
-            val ahead=db.rawQuery("SELECT COUNT(*) FROM trials t WHERE t.cleared=0$categoryFilter AND (t.net_profit>? OR (t.net_profit=? AND t.n>?))",arrayOf(profit,profit,first.getLong("n").toString())).use{it.moveToFirst();it.getLong(0)}
+            val ahead=db.rawQuery("SELECT COUNT(*) FROM trials t WHERE t.cleared=0 AND t.summary_valid=1$categoryFilter AND (t.net_profit>? OR (t.net_profit=? AND t.n>?))",arrayOf(profit,profit,first.getLong("n").toString())).use{it.moveToFirst();it.getLong(0)}
             rows.forEachIndexed{i,row->row.put("rank",ahead+i+1)}
         }
         rows

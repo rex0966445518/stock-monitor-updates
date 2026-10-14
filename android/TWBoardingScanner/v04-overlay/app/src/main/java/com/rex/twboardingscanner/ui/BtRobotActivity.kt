@@ -64,10 +64,15 @@ class BtRobotActivity:AppCompatActivity(){
     private var fieldsSession=""
     private var busy=false;private var recovering=false;private var exportId=""
     private var stamp="";private var lastId="";private var page=0
+    private var screenFailed=false
     private var visible=false
     private var alert:androidx.appcompat.app.AlertDialog?=null
     private val handler=Handler(Looper.getMainLooper())
-    private val poll=object:Runnable{override fun run(){render();recover();handler.postDelayed(this,2000)}}
+    private val poll=object:Runnable{override fun run(){
+        if(screenFailed||isFinishing||isDestroyed)return
+        try{render();if(!screenFailed)recover()}catch(e:Exception){showRobotFailure(e)}
+        if(!screenFailed)handler.postDelayed(this,2000)
+    }}
     private fun label(s:String,size:Float=13f,color:Int=NeonUi.muted,bold:Boolean=false)=NeonUi.label(this,s,size,color,bold)
     private fun signed(v:Double)=String.format(Locale.TAIWAN,"%+,.0f",v)
     private fun num(v:Any)=java.text.DecimalFormat("#,###").format(v)
@@ -242,7 +247,11 @@ class BtRobotActivity:AppCompatActivity(){
         paramNotice.setTextColor(if(parsed==null||invalidGrid||dateError!=null)NeonUi.amber else NeonUi.muted)
     }
     override fun onCreate(savedInstanceState:Bundle?){
-        super.onCreate(savedInstanceState);store=BtRobotStore(this);exportId=savedInstanceState?.getString("exportId").orEmpty()
+        super.onCreate(savedInstanceState)
+        try{buildScreen(savedInstanceState)}catch(e:Exception){showRobotFailure(e)}
+    }
+    private fun buildScreen(savedInstanceState:Bundle?){
+        screenFailed=false;store=BtRobotStore(this);exportId=savedInstanceState?.getString("exportId").orEmpty()
         val root=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(context,16),NeonUi.dp(context,16),NeonUi.dp(context,16),NeonUi.dp(context,28))}
         val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);addView(root)};setContentView(scroll)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
@@ -406,10 +415,10 @@ class BtRobotActivity:AppCompatActivity(){
         NeonUi.group(root,manageFirst,manageLast,"批次管理","測試紀錄、匯入匯出與續跑","robot-management")
         render()
     }
-    override fun onResume(){super.onResume();visible=true;handler.post(poll)}
+    override fun onResume(){super.onResume();visible=true;if(!screenFailed)handler.post(poll)}
     override fun onPause(){
         visible=false;handler.removeCallbacks(poll)
-        if(::robotCapital.isInitialized)getSharedPreferences("robot-params-draft",0).edit()
+        if(!screenFailed&&::robotCapital.isInitialized)getSharedPreferences("robot-params-draft",0).edit()
             .putString("session",store.active()).putString("capital",robotCapital.text.toString())
             .putString("dateStart",dates().start.toString()).putString("dateEnd",dates().end.toString())
             .putString("holdings",robotHoldings.text.toString()).putString("profit",robotProfit.text.toString())
@@ -475,6 +484,27 @@ class BtRobotActivity:AppCompatActivity(){
         }.start()
     }
     internal fun render(){
+        if(screenFailed)return
+        try{renderContent()}catch(e:Exception){showRobotFailure(e)}
+    }
+    private fun showRobotFailure(error:Exception){
+        screenFailed=true;handler.removeCallbacks(poll)
+        val details="機器人頁面錯誤\n"+error.stackTraceToString().take(16000)
+        android.util.Log.e("RobotScreen","Robot startup/render failed",error)
+        runCatching{java.io.File(filesDir,"robot-last-error.txt").writeText(details)}
+        val body=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(context,16),NeonUi.dp(context,16),NeonUi.dp(context,16),NeonUi.dp(context,24))}
+        body.addView(NeonUi.header(this,"機器人資料讀取未完成","ROBOT RECOVERY"){finish()})
+        body.addView(label("原測試紀錄仍保留。請先重試，或檢閱已完成的回測紀錄。",14f,NeonUi.ink,true))
+        body.addView(label("${error.javaClass.simpleName}：${error.message.orEmpty().take(180)}",12f,NeonUi.amber).apply{tag="robot-load-error"})
+        body.addView(NeonUi.button(this,"重試開啟機器人"){startActivity(Intent(this,BtRobotActivity::class.java));finish()})
+        body.addView(NeonUi.button(this,"檢閱機器人回測紀錄"){startActivity(Intent(this,BtRobotHistoryActivity::class.java))})
+        body.addView(NeonUi.button(this,"複製錯誤資訊"){
+            (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("機器人錯誤",details))
+            Toast.makeText(this,"錯誤資訊已複製",Toast.LENGTH_SHORT).show()
+        }.apply{tag="robot-copy-error"})
+        setContentView(ScrollView(this).apply{background=NeonUi.backdrop(context);addView(body)})
+    }
+    private fun renderContent(){
         if(busy)return
         val s=store.session();val id=s?.optString("id").orEmpty()
         if(lastId!=id){lastId=id;page=0;stamp=""}

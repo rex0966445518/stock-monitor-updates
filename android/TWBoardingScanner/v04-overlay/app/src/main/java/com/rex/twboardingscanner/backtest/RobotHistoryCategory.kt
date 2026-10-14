@@ -21,15 +21,18 @@ internal object RobotHistoryCategory {
     fun backfill(db:SQLiteDatabase){
         var after=0L
         while(true){
-            val rows=mutableListOf<Triple<Long,Int,Double>>()
+            val rows=mutableListOf<Pair<Long,ContentValues>>()
             db.rawQuery("SELECT t.n,t.key,t.summary,s.json FROM trials t LEFT JOIN sessions s ON s.id=t.session WHERE t.n>? ORDER BY t.n LIMIT 200",arrayOf(after.toString())).use{cursor->while(cursor.moveToNext()){
-                val summary=JSONObject(cursor.getString(2))
-                val settings=if(cursor.isNull(3))JSONObject() else JSONObject(cursor.getString(3)).optJSONObject("settings")?:JSONObject()
+                val parsed=BtTrialSummary.read(cursor.getString(2))
+                val summary=parsed?:JSONObject()
+                val settings=if(cursor.isNull(3))JSONObject() else runCatching{JSONObject(cursor.getString(3)).optJSONObject("settings")}.getOrNull()?:JSONObject()
                 val profit=summary.optDouble("profit",0.0).takeIf{it.isFinite()}?:0.0
-                rows+=Triple(cursor.getLong(0),mask(settings,cursor.getString(1),summary),profit)
+                rows+=cursor.getLong(0) to ContentValues().apply{
+                    put("radars",mask(settings,cursor.getString(1),summary));put("net_profit",profit);put("summary_valid",if(parsed==null)0 else 1)
+                }
             }}
             if(rows.isEmpty())return
-            rows.forEach{(n,mask,profit)->db.update("trials",ContentValues().apply{put("radars",mask);put("net_profit",profit)},"n=?",arrayOf(n.toString()))}
+            rows.forEach{(n,values)->db.update("trials",values,"n=?",arrayOf(n.toString()))}
             after=rows.last().first
         }
     }
