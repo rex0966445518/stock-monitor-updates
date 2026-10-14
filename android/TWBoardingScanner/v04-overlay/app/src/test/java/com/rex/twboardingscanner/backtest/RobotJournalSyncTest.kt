@@ -72,7 +72,10 @@ class RobotJournalSyncTest {
         assertEquals("0",saved.getString("forbidden"))
         assertEquals("7e67cf98",saved.getString("sourceJournalId"))
         assertEquals(settings,BtSettingsCodec.decode(saved.getJSONObject("settings")))
-        assertEquals(BtRobotSpace.key(settings.rules),store.next(id)!!.key)
+        assertTrue(BtRobotSingleOption.active(saved))
+        val first=store.next(id)!!
+        assertEquals(BtRobotSingleOption.keys(saved.getString("required"),"0",settings.enabledRadars).first(),first.key)
+        assertNotNull(BtRobotSingleOption.option(saved.getString("required"),first.key,settings.enabledRadars))
         assertEquals(0L,saved.getLong("tested"))
     }
     @Test fun archivedAbcdChecksAppearInMenusAndStayRequiredDuringExploration(){
