@@ -75,6 +75,18 @@ class FinancialDataProvider(context: Context) {
             if("fin_cash" in ids)add("現金流量表")
             if("fin_margin" in ids)add("利潤比率")
         }
+        /** Every selected non-financial gate must pass, including optional technical filters. */
+        fun neededTopics(result:SignalResult,ids:Set<String>,excluded:Set<String> = emptySet()):Set<String> {
+            val topics=topicsForRuleIds(ids)
+            if(topics.isEmpty())return emptySet()
+            val technical=ids.filter{topicsForRuleIds(listOf(it)).isEmpty()}
+            if(technical.any{id->result.checks.none{it.id==id&&it.state==CheckState.PASS}})return emptySet()
+            val metrics=RuleMetrics(result.snapshot)
+            if(ExclusionConditions.forRadar(result.radarType).any{it.id in excluded&&it.test(metrics)!=false})return emptySet()
+            // An EPS download cannot repair an absent/negative revenue gate.
+            if("extra_eps" in ids&&result.snapshot.sourceStock?.revenueYoY?.let{it.isFinite()&&it>=0}!=true)return emptySet()
+            return topics
+        }
         fun url(code: String, topic: String) = "https://histock.tw/stock/$code/" + URLEncoder.encode(topic,"UTF-8")
     }
 }
