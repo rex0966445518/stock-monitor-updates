@@ -178,7 +178,8 @@ class WindowsController:
 
 
 class RankingSwitcher:
-    def __init__(self,controller,ocr,combo_roi,menu_roi,ocr_retry=None,status=None):
+    def __init__(self,controller,ocr,combo_roi,menu_roi,ocr_retry=None,status=None,experience=None):
+        self.experience=experience
         self.c=controller;self.ocr=ocr;self.ocr_retry=ocr_retry;self.status=status or (lambda text:None)
         self.combo=validate_roi(combo_roi);self.menu=validate_roi(menu_roi)
 
@@ -189,6 +190,13 @@ class RankingSwitcher:
             tokens=reader(im)
             text=''.join(str(item[1]) for item in sorted(tokens or [],key=lambda item:min(p[0] for p in item[0])) if item[2]>=.65)
             if normalized(text)==normalized(name):return True
+        return False
+
+    def verify_label(self,name):
+        # Fast first check, bounded backoff for a slow application. F8 remains active.
+        for delay in (.15,.25,.4,.6,.8):
+            self.c.pause(delay)
+            if self.label_matches(name):return True
         return False
 
     def switch(self,name,menu_open=False):
@@ -204,6 +212,22 @@ class RankingSwitcher:
         menu=absolute_roi(self.menu,self.c.rect())
         center=(menu['left']+menu['width']//2,menu['top']+menu['height']//2)
         self.c.scroll(center,120*60);self.c.pause(.35)
+        # Reproduce a learned scroll path, but OCR the target again before clicking.
+        hint=self.experience.hint(name) if self.experience else None
+        if hint is not None:
+            self.status(f'經驗加速：正在驗證「{name}」的已學習位置')
+            for _ in range(hint):
+                self.c.scroll(center,-120);self.c.pause(.12)
+            im,region=self.c.image(self.menu)
+            point=find_menu_item(self.ocr(im),name)
+            if point is not None:
+                self.c.click((region['left']+point[0],region['top']+point[1]))
+                if self.verify_label(name):return
+                self.experience.forget(name)
+                raise AutomationStopped('經驗位置選取後標題不符，已停止並清除該經驗')
+            self.experience.forget(name)
+            self.status('選單內容有變，恢復完整搜尋')
+            self.c.scroll(center,120*60);self.c.pause(.35)
         previous=None;unchanged=0
         for page in range(60):
             self.c.check();im,region=self.c.image(self.menu);tokens=self.ocr(im)
@@ -214,10 +238,11 @@ class RankingSwitcher:
                 point=find_menu_item(alternative,name)
                 if point:tokens=alternative
             if point:
-                self.c.click((region['left']+point[0],region['top']+point[1]));self.c.pause(.5)
-                for _ in range(3):
-                    if self.label_matches(name):return
-                    self.c.pause(.4)
+                self.c.click((region['left']+point[0],region['top']+point[1]))
+                if self.verify_label(name):
+                    if self.experience:self.experience.record(name,page)
+                    return
+                if self.experience:self.experience.forget(name)
                 raise AutomationStopped('切換後標題不符，已停止，沒有記入該排行資料')
             fingerprint=tuple(normalized(str(t[1])) for t in tokens or [])
             unchanged=unchanged+1 if fingerprint and fingerprint==previous else 0

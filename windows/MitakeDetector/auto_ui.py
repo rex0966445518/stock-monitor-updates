@@ -138,7 +138,7 @@ class AutoUI:
         if not self.idle():return
         if __import__('os').name!='nt':
             messagebox.showinfo('Windows功能','自動輪切需要在Windows安裝版使用。');return
-        top=self.tk.Toplevel(self.root);top.title('三竹自動輪切設定');top.geometry('860x700')
+        top=self.tk.Toplevel(self.root);top.title('三竹自動輪切設定');top.geometry('860x780')
         cfg=json.loads(json.dumps(self.config.get('auto_config') or {}))
         windows=[w for w in WindowsController.windows() if '三竹盤中轉強偵測器' not in w[1] and '三竹自動輪切設定' not in w[1]]
         choices=[f'{title}  [視窗 {hwnd}]' for hwnd,title in windows]
@@ -218,10 +218,19 @@ class AutoUI:
         pages=self.tk.StringVar(value=str(cfg.get('pages',1)))
         self.ttk.Label(fields,text='每個排行讀取後停留秒數 ≥3').pack(side='left');self.ttk.Entry(fields,textvariable=delay,width=6).pack(side='left',padx=5)
         self.ttk.Label(fields,text='每個排行讀取頁數 1～20').pack(side='left',padx=10);self.ttk.Entry(fields,textvariable=pages,width=6).pack(side='left')
-        self.ttk.Label(top,text='每次先回到選單頂部找文字，再確認切換後標題；找不到或視窗縮放時停止。\n多頁使用滑鼠滾輪向下讀取並依股號合併；不是官方全市場資料。\n首次先按「測試輪切一次」，確認切換正確後再開始持續輪切。',wraplength=810).pack(anchor='w',padx=15,pady=7)
+        adaptive=self.tk.BooleanVar(value=cfg.get('adaptive',True))
+        self.ttk.Checkbutton(top,text='自適應加速：記住已驗證搜尋路徑，成功讀取後縮短停留（最低1秒）',variable=adaptive).pack(anchor='w',padx=15)
+        def clear_experience():
+            from MitakeDetector import BASE
+            try:(BASE/'automation-experience.json').unlink(missing_ok=True)
+            except OSError as exc:messagebox.showerror('清除失敗',str(exc));return
+            self.say('操作經驗已清除，下次重新學習')
+        self.ttk.Button(top,text='清除操作經驗',command=clear_experience).pack(anchor='w',padx=15)
+        self.ttk.Label(top,text='優先重用已驗證搜尋路徑，失敗時回頂端找文字，再確認切換後標題；找不到或視窗縮放時停止。\n多頁使用滑鼠滾輪向下讀取並依股號合併；不是官方全市場資料。\n首次先按「測試輪切一次」，確認切換正確後再開始持續輪切。',wraplength=810).pack(anchor='w',padx=15,pady=7)
         def save(close=True):
             try:
                 hwnd();validate_roi(cfg.get('combo'));validate_roi(cfg.get('menu'))
+                cfg['adaptive']=bool(adaptive.get())
                 cfg['seconds']=float(delay.get());cfg['pages']=int(pages.get())
                 if not 3<=cfg['seconds']<=3600 or not 1<=cfg['pages']<=20:raise ValueError('秒數需3～3600，頁數需1～20')
                 cfg['rankings']=[n for n,v in rank_vars.items() if v.get()]
@@ -249,6 +258,16 @@ class AutoUI:
     def read_auto_ocr(self,image):
         from rapidocr_onnxruntime import RapidOCR
         import numpy as np
+        import hashlib
+        from collections import OrderedDict
+        raw=image.convert('RGB')
+        key=(raw.size,hashlib.sha256(raw.tobytes()).digest())
+        cache=getattr(self,'ocr_image_cache',None)
+        if cache is None:self.ocr_image_cache=cache=OrderedDict()
+        if key in cache:
+            cache.move_to_end(key)
+            self.ocr_cache_hits=getattr(self,'ocr_cache_hits',0)+1
+            return cache[key]
         if self.ocr is None:self.ocr=RapidOCR()
         # Preserve pixel coordinates for clicking; upscale OCR output is scaled back.
         from PIL import ImageOps
@@ -259,7 +278,11 @@ class AutoUI:
         if sum(background)/3<128:padded=ImageOps.invert(padded)
         scale=2
         result,_=self.ocr(np.asarray(padded.resize((padded.width*scale,padded.height*scale)))[:,:,::-1].copy(),unclip_ratio=2.0)
-        return [([[(x/scale)-margin,(y/scale)-margin] for x,y in box],text,score) for box,text,score in result or []]
+        tokens=[([[(x/scale)-margin,(y/scale)-margin] for x,y in box],text,score) for box,text,score in result or []]
+        if tokens:
+            cache[key]=tokens
+            while len(cache)>24:cache.popitem(last=False)
+        return tokens
 
     def start_auto(self,test_only=False,announce=True):
         from tkinter import messagebox
@@ -290,7 +313,11 @@ class AutoUI:
                     raise ValueError('三竹視窗尺寸與框選時不同，請重新設定位置')
                 c.activate()
                 threading.Thread(target=c.monitor_hotkey,daemon=True).start()
-                switcher=RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu'],ocr_retry=self.read_menu_ocr_retry,status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None))))
+                from adaptive import Experience
+                from MitakeDetector import BASE
+                experience=Experience(BASE/'automation-experience.json',
+                    {k:auto.get(k) for k in ('title','window_size','combo','menu','table')},auto.get('adaptive',True))
+                switcher=RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu'],experience=experience,ocr_retry=self.read_menu_ocr_retry,status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None))))
                 cycle=0
                 while not stop.is_set():
                     cycle+=1
@@ -299,7 +326,6 @@ class AutoUI:
                         switcher.switch(name)
                         self.events.put((token,'auto_status','已確認排行：'+name))
                         if test_only:continue
-                        c.pause(1.2)
                         collected={};rejected=0;begin=time.monotonic()
                         table=absolute_roi(auto['table'],c.rect());center=(table['left']+table['width']//2,table['top']+table['height']//2)
                         c.scroll(center,120*60);c.pause(.6)
@@ -314,10 +340,13 @@ class AutoUI:
                         c.check()
                         current=dict(cfg,source_rank=name)
                         self.events.put((token,'auto_quotes',(name,list(collected.values()),rejected,time.monotonic()-begin,current)))
-                        wait_until=time.monotonic()+auto['seconds']
+                        experience.observed(name,bool(collected) and rejected==0)
+                        dwell=experience.wait(name,auto['seconds'])
+                        mode='自適應加速' if experience.enabled else '固定間隔'
+                        wait_until=time.monotonic()+dwell
                         while time.monotonic()<wait_until:
                             remaining=max(1,int(wait_until-time.monotonic()+.999))
-                            self.events.put((token,'auto_progress',(f'{name}｜已讀{len(collected)}檔｜略過{rejected}列｜{remaining}秒後繼續',(rank_index+1)*auto['pages'],len(auto['rankings'])*auto['pages'])))
+                            self.events.put((token,'auto_progress',(f'{name}｜已讀{len(collected)}檔｜略過{rejected}列｜{mode}｜{remaining}秒後繼續｜OCR重用{getattr(self,"ocr_cache_hits",0)}次',(rank_index+1)*auto['pages'],len(auto['rankings'])*auto['pages'])))
                             c.pause(min(1,max(0,wait_until-time.monotonic())))
                     if test_only:break
                 self.events.put((token,'auto_end','輪切測試完成' if test_only else '自動輪切已停止'))
