@@ -76,7 +76,7 @@ class AutoUI:
                 RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu'],ocr_retry=self.read_menu_ocr_retry,status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None)))).switch('漲幅排行',menu_open=True)
                 self.events.put((token,'auto_status','正在讀取股票資料並驗證欄位…'))
                 table,_=c.image(auto['table'])
-                quotes,bad=self.scan_mapped_table(table,discovered['column_bounds'])
+                quotes,bad=self.scan_recovering_table(table,discovered['column_bounds'])
                 c.check()
                 if not quotes:raise ValueError('自動定位完成，但尚未讀到完整股票資料，未儲存；請保持資料列可見。')
                 cfg.update(auto_config=auto,column_bounds=discovered['column_bounds'],region=absolute_roi(auto['table'],c.rect()))
@@ -105,6 +105,39 @@ class AutoUI:
                 x=50+i*100
                 tokens.append(([[x-10,y-height/2],[x+10,y-height/2],[x+10,y+height/2],[x-10,y+height/2]],text,confidence))
         return parse_ocr(tokens,600,[100*(50+i*100)/600 for i in range(6)],time.time())
+
+    def scan_recovering_table(self,image,bounds):
+        """Retry whole-table OCR when narrow strips yield no complete rows."""
+        from MitakeDetector import FIELDS,parse_ocr
+        import re,unicodedata
+        quotes,bad=self.scan_mapped_table(image,bounds)
+        self.last_scan_diagnostic=f'欄位辨識：有效{len(quotes)}列，略過{bad}列'
+        if quotes:return quotes,bad
+        counts={field:0 for field in FIELDS}
+        def parse(tokens):
+            mapped=[]
+            for box,text,confidence in tokens:
+                cx=sum(p[0] for p in box)/4/image.width
+                fields=[field for field in FIELDS if bounds[field][0]<=cx<bounds[field][1]]
+                if len(fields)!=1:continue
+                field=fields[0];i=FIELDS.index(field)
+                text=unicodedata.normalize('NFKC',str(text)).strip()
+                if field=='code':
+                    text=re.sub(r'^[^0-9]+','',text)
+                    if re.fullmatch(r'[0-9 ]{4,9}',text):text=text.replace(' ','')
+                if confidence>=.70:counts[field]+=1
+                y=sum(p[1] for p in box)/4
+                height=max(p[1] for p in box)-min(p[1] for p in box)
+                x=50+i*100
+                mapped.append(([[x-10,y-height/2],[x+10,y-height/2],[x+10,y+height/2],[x-10,y+height/2]],text,confidence))
+            return parse_ocr(mapped,600,[100*(50+i*100)/600 for i in range(6)],time.time())
+        quotes,rejected=parse(self.read_auto_ocr(image))
+        if not quotes:
+            from PIL import ImageOps
+            high=ImageOps.autocontrast(ImageOps.grayscale(image)).convert('RGB')
+            quotes,rejected=parse(self.read_auto_ocr(high))
+        self.last_scan_diagnostic=(f'整表複查：有效{len(quotes)}列｜股號文字{counts["code"]}、成交價{counts["price"]}、漲幅{counts["gain"]}、總量{counts["volume"]}；請核對欄位是否完整可見')
+        return quotes,max(bad,rejected) if not quotes else rejected
 
     def init_f8(self):
         self.f8_toggle=F8Toggle()
@@ -320,6 +353,12 @@ class AutoUI:
                 experience=Experience(BASE/'automation-experience.json',
                     {k:auto.get(k) for k in ('title','window_size','combo','menu','table')},auto.get('adaptive',True))
                 switcher=RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu'],experience=experience,ocr_retry=self.read_menu_ocr_retry,status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None))))
+                if auto.get('discovered'):
+                    from auto_detect import detect_layout
+                    self.events.put((token,'auto_status','正在重新核對股票表頭與欄位位置…'))
+                    full,_=c.image([0,0,1,1])
+                    layout=detect_layout(full,self.read_auto_ocr);c.check()
+                    cfg['column_bounds']=layout['column_bounds'];auto['table']=layout['table']
                 cycle=0
                 while not stop.is_set():
                     cycle+=1
@@ -335,22 +374,30 @@ class AutoUI:
                             def progress(segment,count,stage):
                                 detail=f'第{cycle}輪｜類目{rank_index+1}/{len(auto["rankings"])} {name}｜第{segment}段｜已讀{count}檔｜{stage}'
                                 self.events.put((token,'auto_progress',(detail,rank_index,len(auto['rankings']))))
-                            read=lambda image:self.scan_mapped_table(image,cfg['column_bounds']) if auto.get('discovered') else self.scan(image,cfg['centers'])
-                            quotes,rejected=scan_table(c,auto['table'],read,progress)
+                            read=lambda image:self.scan_recovering_table(image,cfg['column_bounds']) if auto.get('discovered') else self.scan(image,cfg['centers'])
+                            first_batch=[True]
+                            def observed(quotes,bad):
+                                if not switcher.label_matches(name):raise RuntimeError('本段股票類目改變，未接收本段資料')
+                                c.check()
+                                current=dict(cfg,source_rank=name,source_partial=True,source_reset=first_batch[0])
+                                first_batch[0]=False
+                                self.events.put((token,'auto_quotes',(name,quotes,bad,time.monotonic()-begin,current)))
+                            quotes,rejected=scan_table(c,auto['table'],read,progress,observed=observed)
                             collected={q.code:q for q in quotes}
                         else:
                             c.scroll(center,120*60);c.pause(.6)
                             for page in range(auto['pages']):
                                 self.events.put((token,'auto_progress',(f'第{cycle}輪｜{name}｜第{page+1}/{auto["pages"]}頁辨識中',rank_index*auto['pages']+page,len(auto['rankings'])*auto['pages'])))
                                 c.check();im,_=c.image(auto['table'])
-                                quotes,bad=self.scan_mapped_table(im,cfg['column_bounds']) if auto.get('discovered') else self.scan(im,cfg['centers']);rejected+=bad
+                                quotes,bad=self.scan_recovering_table(im,cfg['column_bounds']) if auto.get('discovered') else self.scan(im,cfg['centers']);rejected+=bad
                                 for q in quotes:collected[q.code]=q
                                 if page+1<auto['pages']:c.scroll(center,-120*6);c.pause(.6)
                         # Verify label again after scanning, before any observations are accepted.
                         if not switcher.label_matches(name):raise RuntimeError('讀取後排行標題改變，已停止且捨棄本次資料')
                         c.check()
                         current=dict(cfg,source_rank=name)
-                        self.events.put((token,'auto_quotes',(name,list(collected.values()),rejected,time.monotonic()-begin,current)))
+                        if not auto.get('full_table',True):
+                            self.events.put((token,'auto_quotes',(name,list(collected.values()),rejected,time.monotonic()-begin,current)))
                         experience.observed(name,bool(collected) and rejected==0)
                         dwell=experience.wait(name,auto['seconds'])
                         mode='自適應加速' if experience.enabled else '固定間隔'
@@ -361,7 +408,7 @@ class AutoUI:
                             c.pause(min(1,max(0,wait_until-time.monotonic())))
                     if test_only:break
                 self.events.put((token,'auto_end','輪切測試完成' if test_only else '自動輪切已停止'))
-            except Exception as exc:self.events.put((token,'auto_end','自動輪切已停止：'+str(exc)))
+            except Exception as exc:self.events.put((token,'auto_end','自動輪切已停止：'+str(exc)+('｜'+getattr(self,'last_scan_diagnostic','') if '辨識' in str(exc) else '')))
             finally:stop.set()
         def launch():
             if token!=self.generation:return

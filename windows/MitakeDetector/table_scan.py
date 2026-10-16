@@ -1,5 +1,5 @@
 """Read overlapping viewports; stop only after repeated stable stock-code rows."""
-def scan_table(controller, roi, read, progress, max_segments=2000):
+def scan_table(controller, roi, read, progress, max_segments=2000, observed=None):
     from autoswitch import absolute_roi
     table=absolute_roi(roi,controller.rect())
     center=(table['left']+table['width']//2,table['top']+table['height']//2)
@@ -21,6 +21,8 @@ def scan_table(controller, roi, read, progress, max_segments=2000):
         if previous is not None and not set(codes).intersection(previous):
             raise RuntimeError('捲動後股票列沒有重疊，可能跳過資料；請降低Windows滾輪捲動行數後重試')
         for q in quotes:collected[q.code]=q
+        if observed:observed(quotes,bad)
+        progress(segment+1,len(collected),'本段已讀取，繼續複查')
         stable=stable+1 if codes==previous else 0
         if stable>=3:
             progress(segment+1,len(collected),'複查三次未移動，推定清單末端')

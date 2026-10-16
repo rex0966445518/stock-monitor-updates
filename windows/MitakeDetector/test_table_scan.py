@@ -18,6 +18,14 @@ class TableController:
 
 
 class TableScanTests(unittest.TestCase):
+    def test_stock_batches_arrive_before_whole_ranking_finishes(self):
+        controller=TableController();batches=[]
+        def observed(rows,bad):batches.append((controller.position,[q.code for q in rows]))
+        scan_table(controller,[0,0,1,1],self.read,lambda *s:None,observed=observed)
+        self.assertEqual(batches[0][0],0)
+        self.assertEqual(len(batches[0][1]),6)
+        self.assertGreater(len(batches),1)
+        self.assertGreater(batches[-1][0],batches[0][0])
     def read(self,position):
         return [SimpleNamespace(code=str(1000+i),price=position) for i in range(position,position+6)],0
 

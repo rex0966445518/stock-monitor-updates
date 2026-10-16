@@ -41,6 +41,15 @@ def run_smoke_test(report):
         app.render([Quote('9001','SMOKE',100,2,1502,1,now+4)],0,0,dict(cfg,source_rank='預估量增'),persist=False)
         assert len(app.tree.get_children())==1  # This source's previous row has left the ranking.
         assert app.tree.item(app.tree.get_children()[0],'values')[0]=='9001'
+        # Incremental OCR batches are visible immediately and retain earlier rows.
+        partial=dict(cfg,source_rank='分時買力',source_partial=True,source_reset=True)
+        app.render([Quote('9010','FIRST',100,2,1500,1,now+5)],0,0,partial,persist=False)
+        partial['source_reset']=False
+        app.render([Quote('9011','SECOND',101,3,1600,1,now+6)],0,0,partial,persist=False)
+        app.render([Quote('9011','SECOND',101,3,1600,1,now+6)],0,0,partial,persist=False)
+        codes=[app.tree.item(item,'values')[0] for item in app.tree.get_children()]
+        assert set(codes)=={'9001','9010','9011'},codes
+        assert '已辨識股票 3 檔' in app.observation_summary.get()
         from automation_smoke import run_automation_smoke
         automation=run_automation_smoke(root,app)
         app.demo();root.geometry('1180x900');root.deiconify()
