@@ -122,7 +122,8 @@ class AutoUI:
         margin=24
         background=raw.getpixel((min(5,raw.width-1),raw.height//2))
         padded=ImageOps.expand(raw,border=margin,fill=background)
-        scale=3
+        if sum(background)/3<128:padded=ImageOps.invert(padded)
+        scale=2
         result,_=self.ocr(np.asarray(padded.resize((padded.width*scale,padded.height*scale)))[:,:,::-1].copy(),unclip_ratio=2.0)
         return [([[(x/scale)-margin,(y/scale)-margin] for x,y in box],text,score) for box,text,score in result or []]
 
@@ -151,7 +152,9 @@ class AutoUI:
                 c=WindowsController(target,stop)
                 if list((c.initial_rect[2]-c.initial_rect[0],c.initial_rect[3]-c.initial_rect[1]))!=auto.get('window_size'):
                     raise ValueError('三竹視窗尺寸與框選時不同，請重新設定位置')
-                c.activate();switcher=RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu'])
+                c.activate()
+                threading.Thread(target=c.monitor_hotkey,daemon=True).start()
+                switcher=RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu'])
                 while not stop.is_set():
                     for name in auto['rankings']:
                         c.check();self.events.put((token,'auto_status','正在切換：'+name))

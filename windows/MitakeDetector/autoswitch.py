@@ -102,6 +102,10 @@ class WindowsController:
     def activate(self):
         self.rect();self.u.SetForegroundWindow(self.hwnd);self.pause(.4,check=False);self.check()
 
+    def monitor_hotkey(self):
+        while not self.stop.wait(.02):
+            if self.u.GetAsyncKeyState(0x77)&0x8000:self.stop.set()
+
     def pause(self,seconds,check=True):
         end=time.monotonic()+seconds
         while time.monotonic()<end:

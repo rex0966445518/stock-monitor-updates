@@ -407,7 +407,7 @@ class App(AutoUI):
         if self.ocr is None: self.ocr = RapidOCR()
         # OCR模型接受BGR；保留彩色，避免紅綠文字轉灰後消失。
         image = image.convert('RGB').resize((image.width*2, image.height*2))
-        result, _ = self.ocr(np.asarray(image)[:, :, ::-1].copy())
+        result, _ = self.ocr(np.asarray(image)[:, :, ::-1].copy(),unclip_ratio=1.6)
         return parse_ocr(result, image.width, centers, time.time())
 
     def image_test(self):
