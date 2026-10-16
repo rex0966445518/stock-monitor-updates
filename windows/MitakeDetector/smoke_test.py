@@ -16,6 +16,28 @@ def run_smoke_test(report):
         from MitakeDetector import App,Quote,DEFAULT,VERSION,BASE
         from updater import validate_manifest
         root=tk.Tk();root.withdraw();app=App(root)
+        # Verify real Tk widgets with simulated bytes; never install in this test.
+        root.deiconify()
+        app.set_update_progress(dict(stage='checking',message='CI check'))
+        root.update()
+        assert app.update_panel.window.winfo_ismapped()
+        app.set_update_progress(dict(stage='downloading',version='99.0.0',percent=42,downloaded=42*1048576,total=100*1048576,elapsed=4,message='CI download'))
+        root.update()
+        assert float(app.update_panel.bar['value'])==42
+        assert float(app.update_bar['value'])==42
+        assert '42%' in app.update_panel.amount.get() and '42.0 / 100.0' in app.update_panel.amount.get()
+        app.update_panel.window.withdraw();app.update_panel.show();root.update()
+        assert app.update_panel.window.winfo_ismapped()
+        from PIL import ImageGrab
+        win=app.update_panel.window
+        ImageGrab.grab(bbox=(win.winfo_rootx(),win.winfo_rooty(),win.winfo_rootx()+win.winfo_width(),win.winfo_rooty()+win.winfo_height())).save(report.with_name('update-progress.png'))
+        app.set_update_progress(dict(stage='verifying',message='CI verify'))
+        assert str(app.update_panel.bar['mode'])=='indeterminate'
+        app.set_update_progress(dict(stage='error',message='CI failure'))
+        assert '未完成' in app.update_panel.stage.get()
+        app.update_panel.close();app.update_panel=None
+        app.update_bar.stop();app.update_bar.pack_forget();app.update_status.set('')
+        root.withdraw()
         font=ImageFont.truetype('C:/Windows/Fonts/arial.ttf',24)
         im=Image.new('RGB',(1200,260),'#101820');draw=ImageDraw.Draw(im)
         for row,values in enumerate([['2330','TESTA','100.50','2.30%','1500','1.20%'],['2317','TESTB','205.00','3.10%','2800','2.40%']]):

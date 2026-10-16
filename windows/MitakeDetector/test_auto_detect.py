@@ -8,6 +8,13 @@ def token(text,x,y,width=70):return ([[x,y],[x+width,y],[x+width,y+18],[x,y+18]]
 
 
 class DetectionTests(unittest.TestCase):
+    def test_neon_borders_never_cover_captured_pixels(self):
+        from scan_outline import border_rects
+        region=dict(left=100,top=200,width=400,height=300)
+        for x,y,w,h in border_rects(region):
+            self.assertTrue(x+w<=100 or x>=500 or y+h<=200 or y>=500)
+        self.assertEqual(len(border_rects(region)),4)
+        self.assertEqual(border_rects(dict(left=-200,top=-50,width=100,height=80))[0],(-203,-53,106,3))
     def test_zero_strip_read_recovers_from_whole_table_without_guessing(self):
         from MitakeDetector import FIELDS
         class App(AutoUI):

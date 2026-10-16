@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.11'
+VERSION = '0.3.12'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -157,7 +157,7 @@ class Engine:
         return rows, alerts
 
 
-HELP = '''三竹盤中轉強偵測器 v0.3.11
+HELP = '''三竹盤中轉強偵測器 v0.3.12
 
 【開始觀察】
 開啟三竹「熱門排行」，保持視窗完整可見，按F8或「開始掃描」。
@@ -273,7 +273,8 @@ class App(AutoUI):
         self.log.pack(fill='x', padx=18, pady=8)
         foot = ttk.Frame(root); foot.pack(fill='x', padx=18, pady=(0,12))
         ttk.Button(foot, text='匯出本輪 CSV', command=self.export).pack(side='left')
-        ttk.Label(foot, textvariable=self.update_status).pack(side='left')
+        self.update_bar=ttk.Progressbar(foot,mode='determinate',maximum=100,length=150)
+        ttk.Label(foot, textvariable=self.update_status).pack(side='left',padx=8)
         ttk.Label(foot, text='依畫面逐段觀察 · 保持三竹可見 · 不會自動下單').pack(side='right')
         root.protocol('WM_DELETE_WINDOW', self.close)
         self.init_f8()
@@ -519,6 +520,13 @@ class App(AutoUI):
         try:
             while True:
                 token, kind, payload = self.events.get_nowait()
+                if kind=='scan_region':
+                    region,ready=payload
+                    try:
+                        if token==self.generation:
+                            self.show_scan_outline(region);self.root.update_idletasks()
+                    finally:ready.set()
+                    continue
                 if token is None:
                     if kind=='voice_error':self.say('語音提醒無法播放：'+str(payload))
                     else:self.handle_update(kind, payload)
@@ -570,10 +578,31 @@ class App(AutoUI):
             self.say('已匯出：'+path)
         except OSError as exc: self.say('匯出失敗：'+str(exc))
 
+    def set_update_progress(self,state):
+        from update_progress import UpdateProgress
+        panel=getattr(self,'update_panel',None)
+        if panel is None:
+            self.update_panel=panel=UpdateProgress(self.root,self.tk,self.ttk)
+        panel.update(state)
+        self.update_bar.pack(side='left',padx=5)
+        if state['stage'] in ('checking','connecting','verifying'):
+            if str(self.update_bar.cget('mode'))!='indeterminate':
+                self.update_bar.stop();self.update_bar.configure(mode='indeterminate');self.update_bar.start(70)
+        else:
+            self.update_bar.stop();self.update_bar.configure(mode='determinate')
+            if state['stage']=='downloading':self.update_bar['value']=state['percent']
+            elif state['stage'] in ('ready','latest'):self.update_bar['value']=100
+        self.update_status.set(panel.stage.get()+(' '+panel.amount.get() if state['stage']=='downloading' else ''))
+
     def check_update(self):
-        if self.update_busy or not self.idle(): return
+        if self.update_busy:
+            panel=getattr(self,'update_panel',None)
+            if panel:panel.show()
+            return
+        if not self.idle(): return
         self.update_busy = True
-        self.update_status.set('檢查更新中…')
+        self.set_update_progress(dict(stage='checking',message='正在連線檢查可用版本'))
+        self.update_panel.show()
         def job():
             try:
                 from updater import check_update
@@ -586,21 +615,23 @@ class App(AutoUI):
         from tkinter import messagebox
         if kind == 'update_error':
             self.update_busy = False
-            self.update_status.set('更新失敗，可重試')
+            self.set_update_progress(dict(stage='error',message=str(payload)+'；可按一鍵更新重試'))
             self.say('更新失敗：' + payload)
             messagebox.showerror('更新未完成', payload)
         elif kind == 'update_progress':
-            self.update_status.set(f'下載新版 {payload}%')
+            self.set_update_progress(payload)
         elif kind == 'update_checked':
             self.update_busy = False
             if payload is None:
-                self.update_status.set('目前已是最新版')
+                self.set_update_progress(dict(stage='latest',message=f'目前版本 v{VERSION}'))
                 messagebox.showinfo('檢查更新', f'目前版本 v{VERSION}，已是最新穩定版。')
                 return
             self.say(f"發現新版 v{payload['version']}，開始下載；驗證成功後自動安裝並重新啟動。")
             self.download_update(payload)
         elif kind == 'update_downloaded':
             self.update_busy = False
+            self.set_update_progress(dict(stage='ready',message='大小與SHA-256驗證通過，即將安裝並重新開啟'))
+            self.root.update_idletasks()
             if sys.platform != 'win32' or not getattr(sys, 'frozen', False):
                 self.update_status.set('安裝檔已下載並驗證')
                 messagebox.showinfo('下載完成', '已下載並驗證：'+str(payload)+'\n請在 Windows 上開啟安裝。')
@@ -610,22 +641,27 @@ class App(AutoUI):
                 launch_installer(payload)
                 self.close()
             except OSError as exc:
-                self.update_status.set('安裝啟動失敗')
+                self.set_update_progress(dict(stage='error',message='安裝啟動失敗：'+str(exc)))
                 messagebox.showerror('安裝啟動失敗', str(exc))
 
     def download_update(self, manifest):
         if self.update_busy: return
         self.update_busy = True
-        self.update_status.set('開始下載新版…')
+        version=manifest['version']
+        self.set_update_progress(dict(stage='connecting',version=version,message='正在建立下載連線'))
+        self.update_panel.show()
         def job():
             try:
                 from updater import download_installer
-                previous = [-1]
-                def progress(value):
-                    if value // 10 != previous[0] // 10:
-                        previous[0] = value
-                        self.events.put((None, 'update_progress', value))
-                path = download_installer(manifest, BASE / 'updates', progress)
+                previous=[-1,0.0]
+                def transfer(downloaded,total,elapsed):
+                    percent=min(100,int(downloaded*100/total))
+                    if percent!=previous[0] or elapsed-previous[1]>=.2:
+                        previous[:]=[percent,elapsed]
+                        self.events.put((None,'update_progress',dict(stage='downloading',version=version,percent=percent,downloaded=downloaded,total=total,elapsed=elapsed,message='下載完成後會自動驗證並安裝')))
+                def stage(value):
+                    self.events.put((None,'update_progress',dict(stage=value,version=version,message={'connecting':'正在連線至下載伺服器','verifying':'正在核對檔案大小與SHA-256','ready':'驗證成功，準備啟動安裝程式'}[value])))
+                path = download_installer(manifest, BASE / 'updates', transfer=transfer,stage=stage)
                 self.events.put((None, 'update_downloaded', path))
             except Exception as exc:
                 self.events.put((None, 'update_error', str(exc)))
@@ -644,6 +680,9 @@ class App(AutoUI):
         voice=getattr(self,'task_voice',None)
         if voice:voice.close()
         self.close_task_progress()
+        panel=getattr(self,'update_panel',None)
+        if panel:panel.close()
+        self.update_bar.stop()
         self.stop_event.set(); self.generation += 1; self.root.destroy()
 
 

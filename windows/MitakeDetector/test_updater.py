@@ -7,6 +7,23 @@ from pathlib import Path
 from updater import check_update, download_installer, validate_manifest, version_tuple, REPO
 
 class UpdateTests(unittest.TestCase):
+    def test_download_reports_actual_bytes_and_verified_stages(self):
+        with tempfile.TemporaryDirectory() as folder:
+            samples=[];stages=[]
+            download_installer(self.manifest,folder,opener=lambda *a,**k:io.BytesIO(self.payload),
+                               transfer=lambda *values:samples.append(values),stage=stages.append)
+            self.assertEqual(samples[0],(0,len(self.payload),0))
+            self.assertEqual(samples[-1][:2],(len(self.payload),len(self.payload)))
+            self.assertGreaterEqual(samples[-1][2],0)
+            self.assertEqual(stages,['connecting','verifying','ready'])
+
+    def test_failed_hash_never_reports_ready(self):
+        with tempfile.TemporaryDirectory() as folder:
+            stages=[];progress=[]
+            with self.assertRaises(ValueError):
+                download_installer(self.manifest,folder,progress.append,lambda *a,**k:io.BytesIO(b'XX'+self.payload[2:]),stage=stages.append)
+            self.assertNotIn('ready',stages);self.assertNotIn(100,progress)
+
     def test_restart_environment_removes_stale_parent_state(self):
         from updater import installer_environment
         original={'_PYI_APPLICATION_HOME_DIR':'missing-MEI','_PYI_ARCHIVE_FILE':'old.exe','_PYI_PARENT_PROCESS_LEVEL':'1','_MEIPASS2':'old','TEMP':'user-temp','CUSTOM':'keep'}

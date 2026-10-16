@@ -79,6 +79,7 @@ class WindowsController:
         if os.name!='nt':raise RuntimeError('自動操作僅支援Windows')
         self.u=ctypes.WinDLL('user32',use_last_error=True)
         self.hwnd=int(hwnd);self.stop=stop
+        self.highlight=None
         self.u.GetForegroundWindow.restype=W.HWND
         self.u.GetAncestor.argtypes=[W.HWND,W.UINT];self.u.GetAncestor.restype=W.HWND
         self.u.WindowFromPoint.argtypes=[W.POINT];self.u.WindowFromPoint.restype=W.HWND
@@ -169,6 +170,11 @@ class WindowsController:
         from PIL import Image
         import mss
         region=absolute_roi(roi,self.rect())
+        if self.highlight:
+            self.highlight(dict(region))
+            # Finish moving the old borders before taking the next screenshot.
+            ctypes.windll.dwmapi.DwmFlush()
+        self.check()
         # Center check catches overlays, including the detector itself.
         owner=self.u.WindowFromPoint(W.POINT(region['left']+region['width']//2,region['top']+region['height']//2))
         if not self.belongs(owner):raise AutomationStopped('讀取區域被遮住，已停止')

@@ -29,6 +29,20 @@ def run_automation_smoke(root,app):
     combo_roi=[x/width,y/height,260/width,40/height]
     menu_roi=[x/width,(y+40)/height,260/width,170/height]
     foreground=u.GetForegroundWindow()
+    region=dict(left=combo.winfo_rootx(),top=combo.winfo_rooty(),width=260,height=40)
+    app.show_scan_outline(region);root.update()
+    assert app.scan_outline.visible and app.scan_outline.region==region
+    assert all(win.winfo_ismapped() for win in app.scan_outline.windows)
+    assert u.GetForegroundWindow()==foreground,'Scan outline stole focus'
+    from PIL import ImageGrab
+    baseline=ImageGrab.grab(bbox=(region['left'],region['top'],region['left']+260,region['top']+40))
+    app.scan_outline.hide();root.update()
+    clean=ImageGrab.grab(bbox=(region['left'],region['top'],region['left']+260,region['top']+40))
+    assert baseline.tobytes()==clean.tobytes(),'Scan border changed pixels inside the OCR area'
+    app.show_scan_outline(dict(region,left=region['left']+20))
+    root.update()
+    assert app.scan_outline.region['left']==region['left']+20
+    app.scan_outline.hide()
     app.show_task_progress(hwnd,'正在測試進度窗｜第1/3頁')
     root.update()
     assert u.GetForegroundWindow()==foreground,'Progress panel stole keyboard focus'

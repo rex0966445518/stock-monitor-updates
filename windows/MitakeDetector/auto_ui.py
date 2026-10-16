@@ -6,6 +6,22 @@ from autoswitch import WindowsController, RankingSwitcher, RANKINGS, absolute_ro
 
 
 class AutoUI:
+    def highlight_scan(self,token,region,stop):
+        from autoswitch import AutomationStopped
+        ready=threading.Event()
+        self.events.put((token,'scan_region',(region,ready)))
+        deadline=time.monotonic()+5
+        while not ready.wait(.02):
+            if stop.is_set():raise AutomationStopped('已停止自動操作')
+            if time.monotonic()>deadline:raise AutomationStopped('掃描區域提示未就緒，已停止')
+        if stop.is_set():raise AutomationStopped('已停止自動操作')
+
+    def show_scan_outline(self,region):
+        from scan_outline import ScanOutline
+        outline=getattr(self,'scan_outline',None)
+        if outline is None:self.scan_outline=outline=ScanOutline(self.root,self.tk)
+        outline.show(region)
+
     def announce_task(self,message):
         if __import__('os').name!='nt' or not self.config.get('voice_enabled',True):return
         from windows_voice import WindowsVoice
@@ -32,10 +48,16 @@ class AutoUI:
         self.task_panel=TaskProgress(self.root,self.tk,self.ttk,rect,message)
 
     def update_task_progress(self,message,completed=None,total=None):
+        if '後繼續' in message:
+            outline=getattr(self,'scan_outline',None)
+            if outline:outline.hide()
         panel=getattr(self,'task_panel',None)
         if panel and panel.alive:panel.update(message,completed,total)
 
     def close_task_progress(self):
+        outline=getattr(self,'scan_outline',None)
+        if outline:outline.close()
+        self.scan_outline=None
         panel=getattr(self,'task_panel',None)
         if panel:panel.close()
         self.task_panel=None
@@ -61,6 +83,7 @@ class AutoUI:
             try:
                 from auto_detect import detect_layout,detect_menu
                 c=WindowsController(target,stop);c.activate()
+                c.highlight=lambda region:self.highlight_scan(token,region,stop)
                 threading.Thread(target=c.monitor_hotkey,daemon=True).start()
                 im,_=c.image([0,0,1,1])
                 self.events.put((token,'auto_status','正在辨識排行下拉框與六個表頭…'))
@@ -344,6 +367,7 @@ class AutoUI:
         def job():
             try:
                 c=WindowsController(target,stop)
+                c.highlight=lambda region:self.highlight_scan(token,region,stop)
                 if list((c.initial_rect[2]-c.initial_rect[0],c.initial_rect[3]-c.initial_rect[1]))!=auto.get('window_size'):
                     raise ValueError('三竹視窗尺寸與框選時不同，請重新設定位置')
                 c.activate()

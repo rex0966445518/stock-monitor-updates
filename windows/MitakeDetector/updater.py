@@ -81,7 +81,8 @@ def check_update(current_version, opener=urllib.request.urlopen):
     return data if version_tuple(data['version']) > version_tuple(current_version) else None
 
 
-def download_installer(manifest, directory, progress=lambda percent: None, opener=urllib.request.urlopen):
+def download_installer(manifest, directory, progress=lambda percent: None, opener=urllib.request.urlopen,
+                       transfer=lambda downloaded,total,elapsed:None, stage=lambda value:None):
     manifest = validate_manifest(manifest)
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
@@ -89,8 +90,11 @@ def download_installer(manifest, directory, progress=lambda percent: None, opene
     partial = final.with_suffix('.exe.partial')
     digest = hashlib.sha256()
     count, header = 0, b''
+    started=time.monotonic()
     try:
+        stage('connecting')
         with opener(request(manifest['url']), timeout=40) as response, partial.open('wb') as output:
+            transfer(0,manifest['size'],0)
             while True:
                 chunk = response.read(1024 * 256)
                 if not chunk:
@@ -102,12 +106,15 @@ def download_installer(manifest, directory, progress=lambda percent: None, opene
                 output.write(chunk)
                 digest.update(chunk)
                 progress(min(99, int(count * 100 / manifest['size'])))
+                transfer(count,manifest['size'],time.monotonic()-started)
             output.flush()
             os.fsync(output.fileno())
+        stage('verifying')
         if count != manifest['size'] or digest.hexdigest() != manifest['sha256'] or header != b'MZ':
             raise ValueError('安裝檔驗證失敗，已取消安裝；請重新檢查更新')
         partial.replace(final)
         progress(100)
+        stage('ready')
         return final
     finally:
         partial.unlink(missing_ok=True)
