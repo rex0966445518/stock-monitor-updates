@@ -63,9 +63,15 @@ def run_smoke_test(report):
         app.mode='CI smoke / synthetic data'
         app.render([Quote('9001','SMOKE',100,2,1500,1,now)],0,0,dict(DEFAULT),persist=True)
         assert (BASE/'observations.sqlite3').is_file()
-        # Verify the actual GUI has only the four everyday action buttons.
+        # Verify the actual GUI has only the everyday action buttons.
         actions=[child.cget('text') for child in app.main_actions.winfo_children() if child.winfo_class()=='TButton']
-        assert actions==['開始掃描（F8）','停止（F8）','掃描設定','一鍵更新'],actions
+        assert actions==['開始／繼續（F8）','暫停（F8）','重新開始','掃描設定','一鍵更新'],actions
+        from tkinter import ttk
+        style=ttk.Style()
+        assert style.lookup('TEntry','foreground')=='#101827'
+        assert style.lookup('TEntry','fieldbackground')=='#f4f7fc'
+        assert style.lookup('TEntry','foreground',('readonly',))=='#101827'
+        history=app.show_version_history();root.update();assert history.winfo_exists();history.destroy()
         # Changing rankings must retain other observed stocks and deduplicate codes.
         cfg=dict(DEFAULT,source_rank='漲幅排行',use_breakout=False)
         app.render([Quote('9001','SMOKE',100,2,1500,1,now+1)],0,0,cfg,persist=False)
@@ -85,6 +91,10 @@ def run_smoke_test(report):
         codes=[app.tree.item(item,'values')[0] for item in app.tree.get_children()]
         assert set(codes)=={'9001','9010','9011'},codes
         assert '已辨識股票 3 檔' in app.observation_summary.get()
+        from resume_state import snapshot
+        saved=snapshot(app);app.restore_scan_snapshot(saved)
+        assert len(app.tree.get_children())==3
+        assert '已還原 3 檔' in app.observation_summary.get()
         from automation_smoke import run_automation_smoke
         automation=run_automation_smoke(root,app)
         app.demo();root.geometry('1180x900');root.deiconify()

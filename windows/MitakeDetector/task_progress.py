@@ -11,6 +11,7 @@ def task_stage(text):
     if '定位展開選單' in text:return '設定2/4：定位類目選單'
     if '驗證欄位' in text:return '設定3/4：驗證股票資料'
     if '自動設定完成' in text or '準備開始自動輪切' in text:return '設定4/4：啟動輪切掃描'
+    if '接續' in text or '前次' in text:return '接續斷點，核對已讀位置'
     if '核對股票表頭' in text:return '複查股票欄位位置'
     if '正在尋找' in text:return '搜尋選單類目'
     if '正在切換' in text:return '正在切換排行榜'

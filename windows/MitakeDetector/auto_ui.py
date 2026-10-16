@@ -63,6 +63,7 @@ class AutoUI:
         self.task_panel=None
 
     def auto_setup(self,start_after=False):
+        self.scan_resume_active=False
         from tkinter import messagebox
         if not self.idle() or not self.dependencies():return
         if __import__('os').name!='nt':
@@ -374,12 +375,28 @@ class AutoUI:
             if not auto.get('rankings') or any(n not in RANKINGS for n in auto['rankings']):raise ValueError('請設定要輪切的排行')
             if not 3<=float(auto.get('seconds',0))<=3600 or not 1<=int(auto.get('pages',0))<=20:raise ValueError('輪切間隔或頁數無效')
         except Exception as exc:messagebox.showerror('需要設定',str(exc));return
-        token=self.reset('自動輪切測試' if test_only else '自動輪切')
-        self.auto_active=True;self.auto_engines={}
+        from resume_scan import ScanCheckpoint,scan_context
+        from MitakeDetector import BASE
+        context=scan_context(cfg);saved=None;store=None
+        self.scan_resume_active=not test_only
+        if not test_only:
+            try:
+                store=ScanCheckpoint(BASE/'scan-checkpoint.json');saved=store.resume(context)
+                self.scan_checkpoint=store
+            except (ValueError,OSError) as exc:messagebox.showerror('保留前次進度',str(exc));return
+        if saved:
+            self.generation+=1;token=self.generation;self.stop_event=threading.Event()
+            self.mode='接續自動掃描'
+            self.restore_scan_snapshot(store.data.get('ui'))
+            self.say(f'接續第{saved["cycle"]}輪、排行{saved["rank"]+1}；保留已讀資料')
+        else:
+            token=self.reset('自動輪切測試' if test_only else '自動輪切')
+            self.auto_engines={}
+        self.auto_active=True
         stop=self.stop_event;target=self.auto_hwnd
         self.root.iconify()
-        self.show_task_progress(target,'準備開始自動輪切…')
-        if announce:self.announce_task('開始測試輪切' if test_only else '開始執行掃描')
+        self.show_task_progress(target,'接續前次斷點，正在核對畫面…' if saved else '準備開始自動輪切…')
+        if announce:self.announce_task('開始測試輪切' if test_only else ('接續前次掃描' if saved else '開始執行掃描'))
         def job():
             try:
                 c=WindowsController(target,stop)
@@ -399,47 +416,46 @@ class AutoUI:
                     full,_=c.image([0,0,1,1])
                     layout=detect_layout(full,self.read_auto_ocr);c.check()
                     cfg['column_bounds']=layout['column_bounds'];auto['table']=layout['table']
-                cycle=0
+                cycle=saved['cycle'] if saved else 1
+                start_index=saved['rank'] if saved else 0
                 while not stop.is_set():
-                    cycle+=1
-                    for rank_index,name in enumerate(auto['rankings']):
+                    for rank_index in range(start_index,len(auto['rankings'])):
+                        name=auto['rankings'][rank_index]
+                        table_resume=saved.get('table') if saved and rank_index==saved['rank'] else None
+                        if store:store.update(context,dict(cycle=cycle,rank=rank_index,table=table_resume))
                         c.check();self.events.put((token,'auto_status',f'第{cycle}輪｜排行{rank_index+1}/{len(auto["rankings"])}：正在切換{name}'))
                         switcher.switch(name)
                         self.events.put((token,'auto_status','已確認排行：'+name))
                         if test_only:continue
                         collected={};rejected=0;begin=time.monotonic()
                         table=absolute_roi(auto['table'],c.rect());center=(table['left']+table['width']//2,table['top']+table['height']//2)
-                        if auto.get('full_table',True):
-                            from table_scan import scan_table
-                            def progress(segment,count,stage):
-                                reused=getattr(getattr(self,'stock_names',None),'reused',0)
-                                seconds=getattr(self,'last_table_seconds',0)
-                                detail=f'第{cycle}輪｜類目{rank_index+1}/{len(auto["rankings"])} {name}｜第{segment}段｜已讀{count}檔｜股名重用{reused}次｜{stage}｜{seconds:.1f}秒/段'
-                                self.events.put((token,'auto_progress',(detail,rank_index,len(auto['rankings']))))
-                            read=lambda image:self.scan_recovering_table(image,cfg['column_bounds']) if auto.get('discovered') else self.scan(image,cfg['centers'])
-                            first_batch=[True]
-                            def observed(quotes,bad):
-                                if not switcher.label_matches(name):raise RuntimeError('本段股票類目改變，未接收本段資料')
-                                c.check()
-                                current=dict(cfg,source_rank=name,source_partial=True,source_reset=first_batch[0])
-                                first_batch[0]=False
-                                self.events.put((token,'auto_quotes',(name,quotes,bad,time.monotonic()-begin,current)))
-                            quotes,rejected=scan_table(c,auto['table'],read,progress,observed=observed)
-                            collected={q.code:q for q in quotes}
-                        else:
-                            c.scroll(center,120*60);c.pause(.6)
-                            for page in range(auto['pages']):
-                                self.events.put((token,'auto_progress',(f'第{cycle}輪｜{name}｜第{page+1}/{auto["pages"]}頁辨識中',rank_index*auto['pages']+page,len(auto['rankings'])*auto['pages'])))
-                                c.check();im,_=c.image(auto['table'])
-                                quotes,bad=self.scan_recovering_table(im,cfg['column_bounds']) if auto.get('discovered') else self.scan(im,cfg['centers']);rejected+=bad
-                                for q in quotes:collected[q.code]=q
-                                if page+1<auto['pages']:c.scroll(center,-120*6);c.pause(.6)
+                        from table_scan import scan_table
+                        def progress(segment,count,stage):
+                            reused=getattr(getattr(self,'stock_names',None),'reused',0)
+                            seconds=getattr(self,'last_table_seconds',0)
+                            detail=f'第{cycle}輪｜類目{rank_index+1}/{len(auto["rankings"])} {name}｜第{segment}段｜已讀{count}檔｜股名重用{reused}次｜{stage}｜{seconds:.1f}秒/段'
+                            self.events.put((token,'auto_progress',(detail,rank_index,len(auto['rankings']))))
+                        read=lambda image:self.scan_recovering_table(image,cfg['column_bounds']) if auto.get('discovered') else self.scan(image,cfg['centers'])
+                        first_batch=[not bool(table_resume)]
+                        def observed(quotes,bad):
+                            if not switcher.label_matches(name):raise RuntimeError('本段股票類目改變，未接收本段資料')
+                            c.check()
+                            current=dict(cfg,source_rank=name,source_partial=True,source_reset=first_batch[0])
+                            first_batch[0]=False
+                            self.events.put((token,'auto_quotes',(name,quotes,bad,time.monotonic()-begin,current)))
+                        def checkpoint(state):
+                            if store:store.update(context,dict(cycle=cycle,rank=rank_index,table=state))
+                        quotes,rejected=scan_table(c,auto['table'],read,progress,observed=observed,resume=table_resume,checkpoint=checkpoint,
+                                                   limit_pages=None if auto.get('full_table',True) else auto['pages'])
+                        saved=None
+                        collected={q.code:q for q in quotes}
                         # Verify label again after scanning, before any observations are accepted.
                         if not switcher.label_matches(name):raise RuntimeError('讀取後排行標題改變，已停止且捨棄本次資料')
                         c.check()
                         current=dict(cfg,source_rank=name)
-                        if not auto.get('full_table',True):
-                            self.events.put((token,'auto_quotes',(name,list(collected.values()),rejected,time.monotonic()-begin,current)))
+                        if store:
+                            next_rank=(rank_index+1)%len(auto['rankings'])
+                            store.update(context,dict(cycle=cycle+(1 if next_rank==0 else 0),rank=next_rank,table=None))
                         experience.observed(name,bool(collected) and rejected==0)
                         dwell=experience.wait(name,auto['seconds'])
                         mode='自適應加速' if experience.enabled else '固定間隔'
@@ -449,8 +465,9 @@ class AutoUI:
                             self.events.put((token,'auto_progress',(f'{name}｜已讀{len(collected)}檔｜略過{rejected}列｜{mode}｜{remaining}秒後繼續｜OCR重用{getattr(self,"ocr_cache_hits",0)}次',rank_index+1,len(auto['rankings']))))
                             c.pause(min(1,max(0,wait_until-time.monotonic())))
                     if test_only:break
+                    cycle+=1;start_index=0
                 self.events.put((token,'auto_end','輪切測試完成' if test_only else '自動輪切已停止'))
-            except Exception as exc:self.events.put((token,'auto_end','自動輪切已停止：'+str(exc)+('｜'+getattr(self,'last_scan_diagnostic','') if '辨識' in str(exc) else '')))
+            except Exception as exc:self.events.put((token,'auto_end','掃描已暫停，進度保留：'+str(exc)+('｜'+getattr(self,'last_scan_diagnostic','') if '辨識' in str(exc) else '')))
             finally:stop.set()
         def launch():
             if token!=self.generation:return

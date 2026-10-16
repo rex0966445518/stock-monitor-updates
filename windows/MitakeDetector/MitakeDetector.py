@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.13'
+VERSION = '0.3.14'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -157,7 +157,7 @@ class Engine:
         return rows, alerts
 
 
-HELP = '''三竹盤中轉強偵測器 v0.3.13
+HELP = '''三竹盤中轉強偵測器 v0.3.14
 
 【開始觀察】
 開啟三竹「熱門排行」，保持視窗完整可見，按F8或「開始掃描」。
@@ -226,16 +226,20 @@ class App(AutoUI):
         style.theme_use('clam')
         style.configure('.', background='#111a2e', foreground='#e8eefb', font=('Microsoft JhengHei', 10))
         style.configure('TButton', padding=8)
+        style.configure('TEntry',fieldbackground='#f4f7fc',foreground='#101827',insertcolor='#101827',selectbackground='#245cbb',selectforeground='#ffffff',padding=5)
+        style.map('TEntry',fieldbackground=[('disabled','#d9e1ed'),('readonly','#e6edf7')],foreground=[('disabled','#53637a'),('readonly','#101827')])
+        style.configure('TCombobox',fieldbackground='#f4f7fc',foreground='#101827',selectbackground='#245cbb',selectforeground='#ffffff')
+        style.map('TCombobox',fieldbackground=[('readonly','#e6edf7')],foreground=[('readonly','#101827')])
         style.configure('Treeview', background='#101a2c', fieldbackground='#101a2c', foreground='#e4eaf5', rowheight=30)
         style.map('Treeview', background=[('selected', '#7b253c')])
         tk.Label(root, text='盤中轉強  /  M I T A K E', fg='#ff5879', bg='#0b1020', font=('Microsoft JhengHei', 22, 'bold')).pack(anchor='w', padx=20, pady=(15, 3))
         tk.Label(root, text='觀察轉強候選股 · 持續複查量價與突破守穩 · 訊號不代表一定漲停', fg='#9caeca', bg='#0b1020').pack(anchor='w', padx=20)
         bar = ttk.Frame(root); bar.pack(fill='x', padx=15, pady=12)
-        for label, action in [('開始掃描（F8）', self.begin_observation), ('停止（F8）', self.stop), ('掃描設定', self.configure_auto), ('一鍵更新', self.check_update)]:
+        for label, action in [('開始／繼續（F8）', self.begin_observation), ('暫停（F8）', self.stop), ('重新開始', self.restart_observation), ('掃描設定', self.configure_auto), ('一鍵更新', self.check_update)]:
             ttk.Button(bar, text=label, command=action).pack(side='left', padx=4)
         advanced = ttk.Menubutton(bar, text='進階工具 ▾')
         menu = tk.Menu(advanced, tearoff=False)
-        for label, action in [('重新自動定位', self.auto_setup), ('清除股名記憶', self.clear_stock_names), ('手動框選排行榜', self.select_region), ('手動校正欄位', self.calibrate), ('圖片辨識測試', self.image_test), ('合成資料示範', self.demo), ('辨識元件檢查', self.install), ('資料資料夾', self.open_folder), ('使用說明', self.help)]:
+        for label, action in [('重新自動定位', self.auto_setup), ('清除股名記憶', self.clear_stock_names), ('手動框選排行榜', self.select_region), ('手動校正欄位', self.calibrate), ('圖片辨識測試', self.image_test), ('合成資料示範', self.demo), ('辨識元件檢查', self.install), ('資料資料夾', self.open_folder), ('版本日誌', self.show_version_history), ('使用說明', self.help)]:
             menu.add_command(label=label, command=action)
         advanced.configure(menu=menu); advanced.pack(side='left', padx=4)
         self.main_actions=bar
@@ -276,9 +280,35 @@ class App(AutoUI):
         self.update_bar=ttk.Progressbar(foot,mode='determinate',maximum=100,length=150)
         ttk.Label(foot, textvariable=self.update_status).pack(side='left',padx=8)
         ttk.Label(foot, text='依畫面逐段觀察 · 保持三竹可見 · 不會自動下單').pack(side='right')
+        from version_history import record_launch
+        try:record_launch(BASE,VERSION)
+        except sqlite3.Error as exc:self.say('版本啟用紀錄寫入失敗：'+str(exc))
         root.protocol('WM_DELETE_WINDOW', self.close)
         self.init_f8()
         root.after(150, self.poll)
+
+    def restart_observation(self):
+        if not self.idle():return
+        try:
+            from resume_scan import ScanCheckpoint
+            (BASE/'scan-checkpoint.json').unlink(missing_ok=True)
+            self.scan_checkpoint=None
+        except OSError as exc:self.say('無法清除進度：'+str(exc));return
+        self.auto_engines={};self.rank_rows={};self.records=[]
+        self.begin_observation()
+
+    def save_scan_snapshot(self):
+        store=getattr(self,'scan_checkpoint',None)
+        if not store or not getattr(self,'scan_resume_active',False):return
+        from resume_state import snapshot
+        try:store.snapshot(snapshot(self))
+        except (ValueError,OSError) as exc:self.say('進度資料保存失敗：'+str(exc))
+
+    def restore_scan_snapshot(self,data):
+        if not data:return
+        from resume_state import restore
+        try:restore(self,data)
+        except (ValueError,TypeError,KeyError) as exc:self.say('觀察歷史還原失敗，保留斷點：'+str(exc))
 
     def begin_observation(self):
         if (self.config.get('auto_config') or {}).get('discovered'):
@@ -465,10 +495,11 @@ class App(AutoUI):
         tick()
 
     def stop(self):
-        if self.auto_active:self.announce_task('已停止掃描')
+        if self.auto_active:
+            self.save_scan_snapshot();self.announce_task('掃描已暫停，進度已保留')
         self.close_task_progress()
         self.stop_event.set(); self.generation += 1
-        self.status.set(self.mode + '｜已停止；保留本輪紀錄，可匯出。'); self.say('停止請求已送出。')
+        self.status.set(self.mode + '｜已暫停，進度保留；按F8接續，或按重新開始清空本輪。'); self.say('停止請求已送出。')
         if self.auto_active:
             self.auto_active=False; self.root.deiconify()
 
@@ -547,6 +578,7 @@ class App(AutoUI):
                         self.root.after(300,lambda:self.start_auto(announce=False))
                     else:self.announce_task('自動設定完成');self.close_task_progress();self.root.deiconify()
                 elif kind == 'auto_end':
+                    self.save_scan_snapshot()
                     self.announce_task('任務執行失敗，請查看訊息' if '未完成' in payload or '：' in payload else '任務已停止')
                     self.close_task_progress()
                     self.auto_active=False; self.status.set(payload); self.say(payload); self.root.deiconify()
@@ -671,12 +703,23 @@ class App(AutoUI):
         if sys.platform == 'win32': os.startfile(str(BASE))
         else: self.say(str(BASE))
 
+    def show_version_history(self):
+        from version_history import history_text
+        top=self.tk.Toplevel(self.root);top.title('版本迭代日誌');top.geometry('900x700')
+        frame=self.ttk.Frame(top);frame.pack(fill='both',expand=True,padx=15,pady=15)
+        text=self.tk.Text(frame,wrap='word',font=('Microsoft JhengHei',11),bg='#101a2c',fg='#edf2ff',padx=16,pady=12)
+        scroll=self.ttk.Scrollbar(frame,command=text.yview);text.configure(yscrollcommand=scroll.set)
+        scroll.pack(side='right',fill='y');text.pack(fill='both',expand=True)
+        text.insert('1.0',history_text(BASE));text.configure(state='disabled')
+        return top
+
     def help(self):
         top = self.tk.Toplevel(self.root); top.title('使用說明與限制'); top.geometry('850x650')
         text = self.tk.Text(top, wrap='word', font=('Microsoft JhengHei', 11)); text.pack(fill='both', expand=True)
         text.insert('1.0', HELP); text.configure(state='disabled')
 
     def close(self):
+        if self.auto_active:self.save_scan_snapshot()
         voice=getattr(self,'task_voice',None)
         if voice:voice.close()
         self.close_task_progress()
