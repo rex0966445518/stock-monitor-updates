@@ -2,10 +2,32 @@
 import json
 import threading
 import time
-from autoswitch import WindowsController, RankingSwitcher, RANKINGS, absolute_roi, validate_roi
+from autoswitch import WindowsController, RankingSwitcher, RANKINGS, absolute_roi, validate_roi, F8Toggle
 
 
 class AutoUI:
+    def init_f8(self):
+        self.f8_toggle=F8Toggle()
+        if __import__('os').name=='nt':self.root.after(20,self.poll_f8)
+
+    def poll_f8(self):
+        import ctypes
+        busy=self.auto_active or bool(self.worker_thread and self.worker_thread.is_alive())
+        action=self.f8_toggle.update(bool(ctypes.windll.user32.GetAsyncKeyState(0x77)&0x8000),busy)
+        if action=='stop':self.stop()
+        elif action=='start':
+            auto=self.config.get('auto_config') or {}
+            matches=[w for w in WindowsController.windows() if w[1]==auto.get('title')]
+            u=ctypes.windll.user32
+            from ctypes import wintypes
+            u.GetForegroundWindow.restype=wintypes.HWND
+            fg=u.GetForegroundWindow()
+            if len(matches)==1 and matches[0][0]==fg:
+                self.auto_hwnd=matches[0][0]
+                self.start_auto()
+            else:self.say('F8未啟動：請先完成自動輪切設定，並將已設定的三竹視窗放在最前方。')
+        self.root.after(20,self.poll_f8)
+
     def configure_auto(self):
         from tkinter import messagebox
         if not self.idle():return
@@ -15,7 +37,7 @@ class AutoUI:
         cfg=json.loads(json.dumps(self.config.get('auto_config') or {}))
         windows=[w for w in WindowsController.windows() if '三竹盤中轉強偵測器' not in w[1] and '三竹自動輪切設定' not in w[1]]
         choices=[f'{title}  [視窗 {hwnd}]' for hwnd,title in windows]
-        self.ttk.Label(top,text='1. 選擇三竹視窗（啟動後會使用滑鼠；F8停止，離開目標視窗會停止）').pack(anchor='w',padx=15,pady=10)
+        self.ttk.Label(top,text='1. 選擇三竹視窗（啟動後會使用滑鼠；F8開始／停止，離開目標視窗會停止）').pack(anchor='w',padx=15,pady=10)
         choice=self.tk.StringVar()
         combo=self.ttk.Combobox(top,textvariable=choice,values=choices,state='readonly',width=90);combo.pack(padx=15,fill='x')
         selected=next((i for i,w in enumerate(windows) if w[1]==cfg.get('title')),None)

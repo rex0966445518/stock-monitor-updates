@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.0'
+VERSION = '0.3.1'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -181,7 +181,7 @@ HELP = '''三竹盤中轉強偵測器 v0.3.0
 3. 勾選要輪切的排行，設定停留秒數與頁數；先測試輪切一次。
 4. 表格沿用主畫面「校正欄位」的六欄位置，所有排行需使用相同欄位排列。
 5. 按「開始自動輪切」後偵測器縮到工作列，由滑鼠操作三竹。
-6. F8緊急停止；切到其他程式、遮住操作區、關閉/最小化或縮放三竹時自動停止。
+6. 完成設定後，三竹在前景時按下並放開F8開始，再按F8停止；切到其他程式、遮住操作區、關閉/最小化或縮放三竹時自動停止。
 7. 可移動三竹視窗；縮放後需重新框選。標題辨識不符時不會記入該排行資料。
 輪切只使用選單點擊及滑鼠滾輪；僅收集設定頁數，不保證涵蓋完整排行榜。
 尚未在使用者的實際三竹版本驗證，需先執行「測試輪切一次」。
@@ -254,7 +254,7 @@ class App(AutoUI):
         auto_bar = ttk.Frame(root); auto_bar.pack(fill='x', padx=18, pady=(0, 8))
         ttk.Button(auto_bar, text='自動輪切設定', command=self.configure_auto).pack(side='left')
         ttk.Button(auto_bar, text='開始自動輪切', command=self.start_auto).pack(side='left', padx=8)
-        ttk.Label(auto_bar, text='F8 停止 · 輪切會使用滑鼠 · 離開三竹視窗自動停止').pack(side='left', padx=8)
+        ttk.Label(auto_bar, text='F8 開始／停止 · 輪切會使用滑鼠 · 離開三竹視窗自動停止').pack(side='left', padx=8)
         opts = ttk.LabelFrame(root, text='篩選條件（變更後，停止並重新開始以套用）'); opts.pack(fill='x', padx=18)
         self.vars = {}
         fields = [('min_price', '股價 ≥'), ('min_volume', '總量張 ≥'), ('min_gain', '漲幅 ≥%'), ('max_gain', '漲幅 ≤%'), ('interval', '間隔秒'), ('cooldown', '提醒間隔秒')]
@@ -288,6 +288,7 @@ class App(AutoUI):
         ttk.Label(foot, textvariable=self.update_status).pack(side='left')
         ttk.Label(foot, text='僅偵測可見列 · 請保持排行榜可見 · 不會自動下單').pack(side='right')
         root.protocol('WM_DELETE_WINDOW', self.close)
+        self.init_f8()
         root.after(150, self.poll)
 
     def say(self, text):
@@ -499,9 +500,6 @@ class App(AutoUI):
         if alerts: self.root.bell()
 
     def poll(self):
-        if self.auto_active and sys.platform=='win32':
-            import ctypes
-            if ctypes.windll.user32.GetAsyncKeyState(0x77)&0x8000:self.stop()
         try:
             while True:
                 token, kind, payload = self.events.get_nowait()

@@ -13,6 +13,25 @@ TRANSLATE = str.maketrans('漲預單匯買賣盤轉強連續鎖處暫開壓氣�
 class AutomationStopped(RuntimeError): pass
 
 
+class F8Toggle:
+    """Start on release; stop on press; holding never toggles repeatedly."""
+    def __init__(self):
+        self.down=False
+        self.pending_start=False
+
+    def update(self, down, busy):
+        if down and not self.down:
+            self.down=True
+            self.pending_start=not busy
+            return 'stop' if busy else None
+        if not down and self.down:
+            self.down=False
+            start=self.pending_start
+            self.pending_start=False
+            return 'start' if start and not busy else None
+        return None
+
+
 def normalized(text):
     return ''.join(re.findall(r'[\u3400-\u9fff0-9]+',unicodedata.normalize('NFKC',text))).translate(TRANSLATE)
 
