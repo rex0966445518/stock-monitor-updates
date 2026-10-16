@@ -32,18 +32,18 @@ def run_automation_smoke(root,app):
     app.show_task_progress(hwnd,'正在測試進度窗｜第1/3頁')
     root.update()
     assert u.GetForegroundWindow()==foreground,'Progress panel stole keyboard focus'
-    panel=app.task_panel
-    assert panel.alive and panel.window.winfo_ismapped(),'Progress panel is not visible'
-    panel.update('排行1/5｜已讀26檔｜等待3秒',1,5)
+    progress_panel=app.task_panel
+    assert progress_panel.alive and progress_panel.window.winfo_ismapped(),'Progress panel is not visible'
+    progress_panel.update('排行1/5｜已讀26檔｜等待3秒',1,5)
     root.update()
-    assert '26檔' in panel.detail.get()
+    assert '26檔' in progress_panel.detail.get()
     from PIL import ImageGrab
     from pathlib import Path
     root.update_idletasks()
-    ImageGrab.grab(bbox=(panel.window.winfo_rootx(),panel.window.winfo_rooty(),panel.window.winfo_rootx()+390,panel.window.winfo_rooty()+48)).save(Path('release-output')/'progress-panel.png')
+    ImageGrab.grab(bbox=(progress_panel.window.winfo_rootx(),progress_panel.window.winfo_rooty(),progress_panel.window.winfo_rootx()+390,progress_panel.window.winfo_rooty()+48)).save(Path('release-output')/'progress-panel.png')
     get_style=u.GetWindowLongPtrW if ctypes.sizeof(ctypes.c_void_p)==8 else u.GetWindowLongW
     get_style.argtypes=[W.HWND,ctypes.c_int];get_style.restype=ctypes.c_ssize_t
-    style=get_style(panel.native_hwnd,-20)
+    style=get_style(progress_panel.native_hwnd,-20)
     assert style&0x08000000 and style&0x20,'Panel must be passive and click-through'
     done=queue.Queue();ocr_log=[]
     def read(image):
