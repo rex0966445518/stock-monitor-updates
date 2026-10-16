@@ -53,7 +53,7 @@ def run_smoke_test(report):
         names=StockNames();names.names={'2330':'TESTA','2317':'TESTB'}
         import time
         started=time.perf_counter()
-        fast,bad=scan_numeric_batch(im,bounds,app.read_auto_ocr,names)
+        fast,bad=scan_numeric_batch(im,bounds,app.read_auto_ocr,names,memory=app.get_ocr_learning())
         fast_seconds=time.perf_counter()-started
         assert len(fast)==2 and bad==0,repr(fast)
         assert fast[0].price==100.5 and fast[1].volume==2800
@@ -72,6 +72,7 @@ def run_smoke_test(report):
         assert style.lookup('TEntry','fieldbackground')=='#f4f7fc'
         assert style.lookup('TEntry','foreground',('readonly',))=='#101827'
         history=app.show_version_history();root.update();assert history.winfo_exists();history.destroy()
+        learning_window=app.show_ocr_learning();root.update();assert learning_window.winfo_exists();learning_window.destroy()
         # Changing rankings must retain other observed stocks and deduplicate codes.
         cfg=dict(DEFAULT,source_rank='漲幅排行',use_breakout=False)
         app.render([Quote('9001','SMOKE',100,2,1500,1,now+1)],0,0,cfg,persist=False)

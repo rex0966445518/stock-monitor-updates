@@ -21,7 +21,7 @@ class DetectionTests(unittest.TestCase):
             def scan_mapped_table(self,image,bounds):return [],1
             def read_auto_ocr(self,image):
                 return [token(text,10+i*100,20,width=30) for i,text in enumerate(self.values)]
-        app=App();app.values=['2 330','台積電','100.50','+3.00%','1500','1.20%']
+        app=App();app.ocr_learning=False;app.values=['2 330','台積電','100.50','+3.00%','1500','1.20%']
         image=Image.new('RGB',(600,80));bounds={n:[i/6,(i+1)/6] for i,n in enumerate(FIELDS)}
         rows,bad=app.scan_recovering_table(image,bounds)
         self.assertEqual((len(rows),bad),(1,0));self.assertEqual(rows[0].code,'2330')

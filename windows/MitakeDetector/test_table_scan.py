@@ -18,6 +18,24 @@ class TableController:
 
 
 class TableScanTests(unittest.TestCase):
+    def test_overshoot_scrolls_back_finds_overlap_and_finishes_all_rows(self):
+        class Controller(TableController):
+            jumped=False
+            def scroll(self,point,delta):
+                self.check();self.scrolls.append(delta)
+                if delta>=120*4000:self.position=0
+                elif delta>0:self.position=max(0,self.position-3)
+                else:
+                    movement=3*abs(delta)//120
+                    if abs(delta)>120 and not self.jumped:movement=60;self.jumped=True
+                    self.position=min(70,self.position+movement)
+        c=Controller();learned=[];messages=[]
+        read=lambda n:([SimpleNamespace(code=str(1000+i)) for i in range(n,n+30)],0)
+        rows,_=scan_table(c,[0,0,1,1],read,lambda *s:messages.append(s[2]),learn_scroll=lambda *s:learned.append(s))
+        self.assertEqual({q.code for q in rows},{str(1000+i) for i in range(100)})
+        self.assertTrue(any('已找回重疊' in message for message in messages))
+        self.assertTrue(any(recovered and cap<=3 for cap,recovered in learned))
+        self.assertGreater(sum(0<d<480000 for d in c.scrolls),0)
     def test_learned_wheel_stride_reads_92_stocks_with_overlap(self):
         class Large(TableController):
             def scroll(self,point,delta):
@@ -69,7 +87,7 @@ class TableScanTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'保護上限'):
             scan_table(TableController(),[0,0,1,1],self.read,lambda *s:None,max_segments=2)
         controller=TableController()
-        with self.assertRaisesRegex(RuntimeError,'沒有重疊'):
+        with self.assertRaisesRegex(RuntimeError,'反覆找回|自動回找'):
             scan_table(controller,[0,0,1,1],lambda n:self.read(n*10),lambda *s:None)
 
 

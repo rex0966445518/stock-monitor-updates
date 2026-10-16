@@ -8,6 +8,12 @@ from test_autoswitch import FakeController, token
 
 
 class AdaptiveTests(unittest.TestCase):
+    def test_recovered_scroll_cap_is_retained_across_restarts(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'experience.json';p=Experience(path,[1])
+            p.record_scroll('漲幅排行',2,True)
+            self.assertEqual(Experience(path,[1]).scroll_cap('漲幅排行'),2)
+            self.assertEqual(Experience(path,[2]).scroll_cap('漲幅排行'),6)
     def test_only_valid_reads_reduce_wait_and_failure_resets(self):
         p=Experience(layout=[1]);p.record('大單流入',2)
         self.assertEqual(p.wait('大單流入',15),15)
@@ -81,7 +87,7 @@ class OCRCacheTests(unittest.TestCase):
             def __call__(self,image,**kwargs):
                 calls.append(image.shape)
                 return [([[48,48],[68,48],[68,68],[48,68]],'1234',.99)],None
-        ui=AutoUI();ui.ocr=Engine()
+        ui=AutoUI();ui.ocr=Engine();ui.ocr_learning=False
         with patch.dict(sys.modules,{'rapidocr_onnxruntime':types.SimpleNamespace(RapidOCR=Engine)}):
             image=Image.new('RGB',(20,20),'white')
             first=ui.read_auto_ocr(image)

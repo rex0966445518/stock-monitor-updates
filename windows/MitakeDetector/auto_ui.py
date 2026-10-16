@@ -139,7 +139,7 @@ class AutoUI:
         from MitakeDetector import BASE
         names=getattr(self,'stock_names',None)
         if names is None:self.stock_names=names=StockNames(BASE/'stock-names.json')
-        quotes,bad=scan_numeric_batch(image,bounds,self.read_auto_ocr,names)
+        quotes,bad=scan_numeric_batch(image,bounds,self.read_auto_ocr,names,memory=self.get_ocr_learning())
         if not quotes:quotes,bad=self.scan_mapped_table(image,bounds)
         self.last_table_seconds=time.perf_counter()-started
         self.last_scan_diagnostic=f'欄位辨識：有效{len(quotes)}列，略過{bad}列'
@@ -330,19 +330,73 @@ class AutoUI:
         high=gray.point(lambda value:255 if value>140 else 0).convert('RGB')
         return self.read_auto_ocr(high)
 
+    def get_ocr_learning(self):
+        value=getattr(self,'ocr_learning',None)
+        if value is False:return None
+        if value is None:
+            from ocr_learning import OCRLearning
+            from sqlite3 import Error
+            from MitakeDetector import BASE
+            try:self.ocr_learning=value=OCRLearning(BASE/'ocr-learning.sqlite3')
+            except (OSError,Error):self.ocr_learning=False;return None
+        return value
+
+    def show_ocr_learning(self):
+        from tkinter import messagebox
+        learning=self.get_ocr_learning()
+        if not learning:messagebox.showinfo('OCR學習紀錄','本機學習紀錄暫時無法開啟');return
+        top=self.tk.Toplevel(self.root);top.title('OCR持續學習紀錄');top.geometry('950x680')
+        cached,rows=learning.recent()
+        self.ttk.Label(top,text=f'保存最近2000次OCR讀取，以下顯示最近200次｜可重用畫面 {cached} 筆｜完全相同像素才重用').pack(anchor='w',padx=15,pady=10)
+        tree=self.ttk.Treeview(top,columns=('time','source','cost','count'),show='headings',height=12)
+        for key,title,width in [('time','讀取時間',260),('source','處理方式',180),('cost','耗時秒',100),('count','文字數',100)]:tree.heading(key,text=title);tree.column(key,width=width)
+        tree.pack(fill='both',expand=True,padx=15)
+        text=self.tk.Text(top,height=9,bg='#101a2c',fg='#edf2ff',wrap='word');text.pack(fill='both',expand=True,padx=15,pady=10)
+        contents={}
+        import datetime as dt
+        for timestamp,source,elapsed,count,payload in rows:
+            when=dt.datetime.fromisoformat(timestamp).astimezone().strftime('%Y-%m-%d %H:%M:%S')
+            item=tree.insert('','end',values=(when,source,f'{elapsed:.3f}',count));contents[item]=payload
+        def select(event=None):
+            chosen=tree.selection()
+            if chosen:
+                tokens=json.loads(contents[chosen[0]])
+                text.delete('1.0','end');text.insert('1.0','\n'.join(f'{word}  信心 {score:.1%}' for _,word,score in tokens))
+        tree.bind('<<TreeviewSelect>>',select)
+        def clear():
+            if not self.idle():return
+            learning.clear_cache()
+            cache=getattr(self,'ocr_image_cache',None)
+            if cache is not None:cache.clear()
+            self.say('OCR辨識快取已清除，讀取紀錄保留。');top.destroy()
+        self.ttk.Button(top,text='清除辨識快取（保留日誌）',command=clear).pack(anchor='w',padx=15,pady=(0,10))
+        return top
+
     def read_auto_ocr(self,image):
         from rapidocr_onnxruntime import RapidOCR
         import numpy as np
         import hashlib
         from collections import OrderedDict
+        started=time.perf_counter()
         raw=image.convert('RGB')
         key=(raw.size,hashlib.sha256(raw.tobytes()).digest())
+        persistent_key=f'{raw.width}x{raw.height}:'+key[1].hex()
+        learning=self.get_ocr_learning()
         cache=getattr(self,'ocr_image_cache',None)
         if cache is None:self.ocr_image_cache=cache=OrderedDict()
         if key in cache:
             cache.move_to_end(key)
             self.ocr_cache_hits=getattr(self,'ocr_cache_hits',0)+1
+            if learning:learning.record(persistent_key,cache[key],time.perf_counter()-started,'記憶體重用')
             return cache[key]
+        if learning:
+            remembered=learning.lookup(persistent_key)
+            if remembered is not None:
+                cache[key]=remembered
+                while len(cache)>24:cache.popitem(last=False)
+                self.ocr_cache_hits=getattr(self,'ocr_cache_hits',0)+1
+                learning.record(persistent_key,remembered,time.perf_counter()-started,'跨次重用')
+                return remembered
         if self.ocr is None:self.ocr=RapidOCR()
         # Preserve pixel coordinates for clicking; upscale OCR output is scaled back.
         from PIL import ImageOps
@@ -354,6 +408,7 @@ class AutoUI:
         scale=2
         result,_=self.ocr(np.asarray(padded.resize((padded.width*scale,padded.height*scale)))[:,:,::-1].copy(),unclip_ratio=2.0)
         tokens=[([[(x/scale)-margin,(y/scale)-margin] for x,y in box],text,score) for box,text,score in result or []]
+        if learning:learning.record(persistent_key,tokens,time.perf_counter()-started,'重新辨識')
         if tokens:
             cache[key]=tokens
             while len(cache)>24:cache.popitem(last=False)
@@ -446,7 +501,8 @@ class AutoUI:
                         def checkpoint(state):
                             if store:store.update(context,dict(cycle=cycle,rank=rank_index,table=state))
                         quotes,rejected=scan_table(c,auto['table'],read,progress,observed=observed,resume=table_resume,checkpoint=checkpoint,
-                                                   limit_pages=None if auto.get('full_table',True) else auto['pages'])
+                                                   limit_pages=None if auto.get('full_table',True) else auto['pages'],scroll_cap=experience.scroll_cap(name),
+                                                   learn_scroll=lambda cap,recovered:experience.record_scroll(name,cap,recovered))
                         saved=None
                         collected={q.code:q for q in quotes}
                         # Verify label again after scanning, before any observations are accepted.

@@ -31,18 +31,23 @@ class StockNames:
         except OSError:pass
 
 
-def scan_numeric_batch(image,bounds,read,names):
+def scan_numeric_batch(image,bounds,read,names,memory=None):
     from PIL import Image
     from MitakeDetector import FIELDS,parse_ocr
-    fields=['code','price','gain','volume','turnover'];pieces=[];cursor=32
+    import hashlib
+    fields=['code','price','gain','volume','turnover'];pieces=[];cached=[];cursor=32
     for field in fields:
         left,right=bounds[field]
         if not 0<=left<right<=1:raise ValueError('自動欄位範圍無效')
         crop=image.crop((round(left*image.width),0,round(right*image.width),image.height)).convert('RGB')
-        pieces.append((field,cursor,cursor+crop.width,crop));cursor+=crop.width+64
+        key=f'numeric-column:{field}:{crop.width}x{crop.height}:'+hashlib.sha256(crop.tobytes()).hexdigest()
+        remembered=memory.lookup(key) if memory else None
+        if remembered is not None:
+            cached.append((field,remembered));memory.record(key,remembered,0,'數字欄位重用')
+        else:pieces.append((field,cursor,cursor+crop.width,crop,key));cursor+=crop.width+64
     background=image.convert('RGB').getpixel((0,0))
     sheet=Image.new('RGB',(cursor,image.height),background)
-    for field,left,right,crop in pieces:sheet.paste(crop,(left,0))
+    for field,left,right,crop,key in pieces:sheet.paste(crop,(left,0))
     logical=[];anchors=[]
     def append(field,box,text,confidence):
         text=unicodedata.normalize('NFKC',str(text)).strip()
@@ -53,10 +58,18 @@ def scan_numeric_batch(image,bounds,read,names):
         x=50+FIELDS.index(field)*100
         logical.append(([[x-10,y-h/2],[x+10,y-h/2],[x+10,y+h/2],[x-10,y+h/2]],text,confidence))
         if field=='code' and confidence>=.70 and re.fullmatch(r'\d{4,6}',text):anchors.append((text,y,max(h,8)))
-    for box,text,confidence in read(sheet):
+    for field,tokens in cached:
+        for box,text,confidence in tokens:append(field,box,text,confidence)
+    learned={field:[] for field,_,_,_,_ in pieces}
+    for box,text,confidence in (read(sheet) if pieces else []):
         l=min(p[0] for p in box);r=max(p[0] for p in box)
-        matches=[field for field,left,right,_ in pieces if left<=l and r<=right]
-        if len(matches)==1:append(matches[0],box,text,confidence)
+        matches=[field for field,left,right,_,_ in pieces if left<=l and r<=right]
+        if len(matches)==1:
+            field=matches[0];append(field,box,text,confidence)
+            left=next(left for f,left,_,_,_ in pieces if f==field)
+            learned[field].append(([[x-left,y] for x,y in box],text,confidence))
+    if memory:
+        for field,left,right,crop,key in pieces:memory.record(key,learned[field],0,'數字欄位學習')
     unknown=[a for a in anchors if a[0] not in names.names]
     changed=False
     if unknown:

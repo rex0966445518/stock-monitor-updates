@@ -8,7 +8,7 @@ class Experience:
         self.path=Path(path) if path else None
         self.key=json.dumps(layout,sort_keys=True,separators=(',',':'))
         self.enabled=enabled
-        self.data={'version':1,'layout':self.key,'ranks':{}}
+        self.data={'version':1,'layout':self.key,'ranks':{},'scrolls':{}}
         if self.path and enabled:
             try:
                 value=json.loads(self.path.read_text(encoding='utf-8'))
@@ -19,7 +19,19 @@ class Experience:
                         page=entry.get('page');wins=entry.get('wins',0)
                         if type(page) is int and 0<=page<60 and type(wins) is int and wins>=0:
                             self.data['ranks'][name]={'page':page,'wins':min(wins,20)}
+                    for name,entry in value.get('scrolls',{}).items():
+                        if isinstance(entry,dict) and type(entry.get('cap')) is int and 1<=entry['cap']<=6:
+                            self.data['scrolls'][name]={'cap':entry['cap'],'recoveries':max(0,min(100000,int(entry.get('recoveries',0))))}
             except (OSError,ValueError,TypeError,AttributeError):pass
+
+    def scroll_cap(self,name):
+        return self.data['scrolls'].get(name,{}).get('cap',6) if self.enabled else 6
+
+    def record_scroll(self,name,cap,recovered):
+        if not self.enabled:return
+        entry=self.data['scrolls'].get(name,{'cap':6,'recoveries':0})
+        value={'cap':max(1,min(6,int(cap))),'recoveries':entry['recoveries']+int(recovered)}
+        if value!=entry:self.data['scrolls'][name]=value;self.save()
 
     def hint(self,name):
         return self.data['ranks'].get(name,{}).get('page') if self.enabled else None
