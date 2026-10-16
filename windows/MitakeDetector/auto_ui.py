@@ -71,7 +71,7 @@ class AutoUI:
                 opened,_=c.image([0,0,1,1])
                 menu=detect_menu(opened,discovered['combo'],self.read_auto_ocr);c.check()
                 auto=dict(title=title,window_size=[im.width,im.height],combo=discovered['combo'],menu=menu,table=discovered['table'],
-                          rankings=['漲幅排行','預估量增','分時買力','大單流入','連續買單'],seconds=15,pages=1,discovered=1)
+                          rankings=['漲幅排行','預估量增','分時買力','大單流入','連續買單'],seconds=15,pages=1,full_table=True,discovered=1)
                 # The popup is known to be open after detect_menu: select directly.
                 RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu'],ocr_retry=self.read_menu_ocr_retry,status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None)))).switch('漲幅排行',menu_open=True)
                 self.events.put((token,'auto_status','正在讀取股票資料並驗證欄位…'))
@@ -218,6 +218,8 @@ class AutoUI:
         pages=self.tk.StringVar(value=str(cfg.get('pages',1)))
         self.ttk.Label(fields,text='每個排行讀取後停留秒數 ≥3').pack(side='left');self.ttk.Entry(fields,textvariable=delay,width=6).pack(side='left',padx=5)
         self.ttk.Label(fields,text='每個排行讀取頁數 1～20').pack(side='left',padx=10);self.ttk.Entry(fields,textvariable=pages,width=6).pack(side='left')
+        full_table=self.tk.BooleanVar(value=cfg.get('full_table',True))
+        self.ttk.Checkbutton(top,text='自動逐段讀取清單（建議）：重疊捲動，連續三次未移動才結束；關閉則使用指定頁數',variable=full_table).pack(anchor='w',padx=15)
         adaptive=self.tk.BooleanVar(value=cfg.get('adaptive',True))
         self.ttk.Checkbutton(top,text='自適應加速：記住已驗證搜尋路徑，成功讀取後縮短停留（最低1秒）',variable=adaptive).pack(anchor='w',padx=15)
         def clear_experience():
@@ -230,7 +232,7 @@ class AutoUI:
         def save(close=True):
             try:
                 hwnd();validate_roi(cfg.get('combo'));validate_roi(cfg.get('menu'))
-                cfg['adaptive']=bool(adaptive.get())
+                cfg['adaptive']=bool(adaptive.get());cfg['full_table']=bool(full_table.get())
                 cfg['seconds']=float(delay.get());cfg['pages']=int(pages.get())
                 if not 3<=cfg['seconds']<=3600 or not 1<=cfg['pages']<=20:raise ValueError('秒數需3～3600，頁數需1～20')
                 cfg['rankings']=[n for n,v in rank_vars.items() if v.get()]
@@ -328,13 +330,22 @@ class AutoUI:
                         if test_only:continue
                         collected={};rejected=0;begin=time.monotonic()
                         table=absolute_roi(auto['table'],c.rect());center=(table['left']+table['width']//2,table['top']+table['height']//2)
-                        c.scroll(center,120*60);c.pause(.6)
-                        for page in range(auto['pages']):
-                            self.events.put((token,'auto_progress',(f'第{cycle}輪｜{name}｜第{page+1}/{auto["pages"]}頁辨識中',rank_index*auto['pages']+page,len(auto['rankings'])*auto['pages'])))
-                            c.check();im,_=c.image(auto['table'])
-                            quotes,bad=self.scan_mapped_table(im,cfg['column_bounds']) if auto.get('discovered') else self.scan(im,cfg['centers']);rejected+=bad
-                            for q in quotes:collected[q.code]=q
-                            if page+1<auto['pages']:c.scroll(center,-120*6);c.pause(.6)
+                        if auto.get('full_table',True):
+                            from table_scan import scan_table
+                            def progress(segment,count,stage):
+                                detail=f'第{cycle}輪｜類目{rank_index+1}/{len(auto["rankings"])} {name}｜第{segment}段｜已讀{count}檔｜{stage}'
+                                self.events.put((token,'auto_progress',(detail,rank_index,len(auto['rankings']))))
+                            read=lambda image:self.scan_mapped_table(image,cfg['column_bounds']) if auto.get('discovered') else self.scan(image,cfg['centers'])
+                            quotes,rejected=scan_table(c,auto['table'],read,progress)
+                            collected={q.code:q for q in quotes}
+                        else:
+                            c.scroll(center,120*60);c.pause(.6)
+                            for page in range(auto['pages']):
+                                self.events.put((token,'auto_progress',(f'第{cycle}輪｜{name}｜第{page+1}/{auto["pages"]}頁辨識中',rank_index*auto['pages']+page,len(auto['rankings'])*auto['pages'])))
+                                c.check();im,_=c.image(auto['table'])
+                                quotes,bad=self.scan_mapped_table(im,cfg['column_bounds']) if auto.get('discovered') else self.scan(im,cfg['centers']);rejected+=bad
+                                for q in quotes:collected[q.code]=q
+                                if page+1<auto['pages']:c.scroll(center,-120*6);c.pause(.6)
                         # Verify label again after scanning, before any observations are accepted.
                         if not switcher.label_matches(name):raise RuntimeError('讀取後排行標題改變，已停止且捨棄本次資料')
                         c.check()
@@ -346,7 +357,7 @@ class AutoUI:
                         wait_until=time.monotonic()+dwell
                         while time.monotonic()<wait_until:
                             remaining=max(1,int(wait_until-time.monotonic()+.999))
-                            self.events.put((token,'auto_progress',(f'{name}｜已讀{len(collected)}檔｜略過{rejected}列｜{mode}｜{remaining}秒後繼續｜OCR重用{getattr(self,"ocr_cache_hits",0)}次',(rank_index+1)*auto['pages'],len(auto['rankings'])*auto['pages'])))
+                            self.events.put((token,'auto_progress',(f'{name}｜已讀{len(collected)}檔｜略過{rejected}列｜{mode}｜{remaining}秒後繼續｜OCR重用{getattr(self,"ocr_cache_hits",0)}次',rank_index+1,len(auto['rankings']))))
                             c.pause(min(1,max(0,wait_until-time.monotonic())))
                     if test_only:break
                 self.events.put((token,'auto_end','輪切測試完成' if test_only else '自動輪切已停止'))

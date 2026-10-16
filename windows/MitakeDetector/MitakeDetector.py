@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""三竹盤中轉強偵測器 0.2.0 — Python 3.11/3.12 Windows 桌面原型。
+"""三竹盤中轉強偵測器 — Windows 桌面觀察工具。
 啟動：python MitakeDetector.py；核心驗證：python MitakeDetector.py --self-test
-首次按「安裝辨識元件」，再「框選排行榜」「校正欄位」「開始實盤」。
+開啟三竹熱門排行後按F8自動設定並開始掃描。
 本程式採可見畫面 OCR，沒有三竹 SDK 登入或官方行情串接。
 """
 import csv, dataclasses, datetime as dt, importlib.util, json, math, os
@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.8'
+VERSION = '0.3.9'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -149,7 +149,7 @@ class Engine:
             if not previous: reasons.append('等待第二次讀值')
             if stale: reasons.append('60秒讀值未變，請檢查畫面')
             hit = not reasons
-            reason = '符合設定的轉強條件' if hit else '；'.join(reasons)
+            reason = ('轉強候選｜漲幅'+f'{q.gain:+.2f}%'+('｜觀測突破兩次守穩' if config['use_breakout'] else '')+('｜量速'+f'{ratio:.2f}倍' if config['use_accel'] and ratio is not None else '')) if hit else '；'.join(reasons)
             if hit and q.ts - self.last_alert.get(q.code, -1e20) >= config['cooldown']:
                 self.last_alert[q.code] = q.ts
                 alerts.append((q, reason))
@@ -157,60 +157,41 @@ class Engine:
         return rows, alerts
 
 
-HELP = '''三竹盤中轉強偵測器 v0.3.0
+HELP = '''三竹盤中轉強偵測器 v0.3.9
 
-【Windows 安裝版】
-開啟 MitakeDetector-Setup-v0.3.0.exe 安裝。支援 Windows 10/11 x64；不需Python。
-安裝於目前使用者的應用程式目錄，建立開始功能表與可選的桌面捷徑。
-辨識元件與OCR模型已內建，不需另外下載。
+【開始觀察】
+開啟三竹「熱門排行」，保持視窗完整可見，按F8或「開始掃描」。
+首次會自動定位左上類目選單、表格及六個欄位，再開始持續輪切。
+再次按F8停止。切離目標視窗、遮住操作區或縮放視窗會停止。
+左上類目選單與股票表格分別操作捲動，不需手動切換類目。
 
-【接上三竹】
-1. 先登入並開啟三竹漲跌幅排行榜。表格必須保持可見，不可遮住或最小化。
-2. 三竹欄位須依序為：股號、股名、成交價、漲幅%、總量（張）、換手率%。
-   股號須獨立一欄；總量以張顯示，不支援萬張縮寫。缺少換手率可不勾選該條件。
-3. 按「框選排行榜」，拖曳表格範圍，Esc取消。
-4. 按「校正欄位」，依序點每欄中心。欄位位置由左至右。
-5. 按「開始實盤」。將偵測器視窗移到不遮住排行榜的位置。
-6. 若移動或縮放三竹畫面，先停止，再重新框選校正。
-圖片測試請用已裁切至相同表格範圍的截圖；圖片模式不提醒、不寫實盤資料。
+【掃描進度】
+三竹上緣橫幅持續顯示目前任務、輪次、類目、讀取段數、股數與經過時間。
+清單總長未知時不顯示虛構完成百分比，進度條表示當輪類目進度。
+預設逐段重疊捲動；連續三次相同股號列推定末端，不等於官方完整市場資料。
+辨識空白額外複查兩次；無重疊或超過2000段保護上限會中止。
+清單可能持續重新排序，會依股號去重；無法保證捕捉每一筆瞬時變動。
+「掃描設定」可關閉逐段讀取，改為指定頁數以縮短每輪觀察時間。
 
-【自動輪切（新增）】
-1. 開啟三竹，按「自動輪切設定」，選擇正確視窗。
-2. 依序框選：排行名稱下拉框、展開後的選單清單、排行榜資料表格。
-   框選展開選單時，程式會使用已設定的下拉框位置展開選單供框選。
-3. 勾選要輪切的排行，設定停留秒數與頁數；先測試輪切一次。
-4. 表格沿用主畫面「校正欄位」的六欄位置，所有排行需使用相同欄位排列。
-5. 按「開始自動輪切」後偵測器縮到工作列，由滑鼠操作三竹。
-6. 可先按「一鍵自動設定」自動定位熱門排行與欄位。完成設定後，三竹在前景時按下並放開F8開始，再按F8停止；切到其他程式、遮住操作區、關閉/最小化或縮放三竹時自動停止。
-7. 可移動三竹視窗；縮放後需重新框選。標題辨識不符時不會記入該排行資料。
-輪切只使用選單點擊及滑鼠滾輪；僅收集設定頁數，不保證涵蓋完整排行榜。
-尚未在使用者的實際三竹版本驗證，需先執行「測試輪切一次」。
+【觀察重點】
+目的是持續觀察轉強候選，不是保證預測漲停。
+六個讀取欄位：股號、股名、成交價、漲幅%、總量（張）、換手率%。
+預設股價>=50、總量>=1000張、漲幅1~8.5%，觀測突破後兩次讀值守穩。
+「觀測突破」僅依啟動後看到的最高價，不是完整當日高點。
+可選換手率門檻及5分鐘量速比；量速比需觀察10分鐘。
+量速比為近5分鐘每秒增量除以前5分鐘增量，不是預估量增或歷史同時段量比。
+各排行分開累積觀測基準，排行名稱本身不當作買力或大單數值。
+候選股置頂並顯示來源、時間及原因。跨類目結果保留最新讀值；相差60秒的舊結果改標等待複查。
+OCR讀值跳動>3%、量倒退、缺欄及連續60秒未變不提醒。
+尚未驗證實盤漲停命中率，不自動下單。
 
-【內建更新】
-按下方「檢查更新／下載安裝」，查看版本說明後按「下載並安裝新版」。
-下載自 GitHub 的此產品專用管道；會核對產品、版本、大小、SHA-256及EXE檔頭。
-驗證通過後關閉程式、執行更新安裝並重開。失敗可重試，設定與紀錄保留。
-更新需網路；偵測與OCR在本機執行，不傳送三竹畫面、帳號或密碼。
-
-【規則定義】
-預設：股價>=50、總量>=1000張、漲幅1~8.5%、觀測突破後兩次讀值守住突破價。
-「觀測新高」僅指本輪開始後看到的最高價，不是完整當日高點。
-「近5分量速比」為最近5分鐘每秒增量除以前5分鐘每秒增量，需觀察滿10分鐘。
-這不是估量比，也不是過去20日相同時段量比。沒有接歷史K線及VWAP/MACD/RSI。
-換手率讀取自三竹畫面；成交量及換手率不當作兩個獨立加分訊號。
-連續60秒讀值不變會暫停該股提醒，可能因無成交或畫面停止更新。
-讀取時間為本機掃描時間，不是交易所行情時間；OCR與畫面更新都有延遲。
-
-【範圍與限制】
-手動模式僅讀取可見列；自動模式讀取設定頁數，沒有三竹SDK/API官方串接。
-離開畫面的股票可能缺少量速資料。重新開始會重新累積觀測基準。
-模糊、合併或格式不明的欄位保守略過；量倒退或單次股價跳動>3%也會略過。
-這是候選訊號原型，未經三竹實盤全面驗證、尚未驗證漲停命中率、不會自動下單。
-
-【紀錄】
-實盤觀測與提醒寫入本機SQLite；按「資料資料夾」查看。設定自動儲存。
-「匯出本輪CSV」可用Excel開啟。示範為合成資料，不寫實盤資料庫。
-不儲存螢幕截圖。更新與解除安裝均不主動刪除使用者的設定與歷史紀錄。
+【操作與更新】
+主頁保留開始、停止、掃描設定與一鍵更新；校正、圖片測試、示範與資料資料夾在進階工具。
+辨識元件及模型已內建，不需要另外下載。
+更新從本產品GitHub管道下載，核對版本、大小、SHA-256及EXE檔頭後自動安裝重開。
+保留本機設定與SQLite觀測紀錄。「匯出本輪CSV」可匯出觀測紀錄。
+OCR在本機執行，不傳送三竹畫面或帳密。
+實際三竹版本與顯示縮放需現場核對；可先在掃描設定測試輪切。
 '''
 
 
@@ -233,6 +214,7 @@ class App(AutoUI):
         self.mode = '待機'
         self.auto_active = False
         self.auto_engines = {}
+        self.rank_rows = {}
         self.ocr = None
         self.update_busy = False
         self.update_status = tk.StringVar(value='')
@@ -247,14 +229,17 @@ class App(AutoUI):
         style.configure('Treeview', background='#101a2c', fieldbackground='#101a2c', foreground='#e4eaf5', rowheight=30)
         style.map('Treeview', background=[('selected', '#7b253c')])
         tk.Label(root, text='盤中轉強  /  M I T A K E', fg='#ff5879', bg='#0b1020', font=('Microsoft JhengHei', 22, 'bold')).pack(anchor='w', padx=20, pady=(15, 3))
-        tk.Label(root, text='畫面辨識版 · 候選訊號提醒 · 尚未驗證漲停命中率', fg='#9caeca', bg='#0b1020').pack(anchor='w', padx=20)
+        tk.Label(root, text='觀察轉強候選股 · 持續複查量價與突破守穩 · 訊號不代表一定漲停', fg='#9caeca', bg='#0b1020').pack(anchor='w', padx=20)
         bar = ttk.Frame(root); bar.pack(fill='x', padx=15, pady=12)
-        for label, action in [('辨識元件檢查', self.install), ('框選排行榜', self.select_region), ('校正欄位', self.calibrate), ('圖片測試', self.image_test), ('示範', self.demo), ('開始實盤', self.start), ('停止', self.stop), ('使用說明', self.help)]:
-            ttk.Button(bar, text=label, command=action).pack(side='left', padx=3)
+        for label, action in [('開始掃描（F8）', self.begin_observation), ('停止（F8）', self.stop), ('掃描設定', self.configure_auto), ('一鍵更新', self.check_update)]:
+            ttk.Button(bar, text=label, command=action).pack(side='left', padx=4)
+        advanced = ttk.Menubutton(bar, text='進階工具 ▾')
+        menu = tk.Menu(advanced, tearoff=False)
+        for label, action in [('重新自動定位', self.auto_setup), ('手動框選排行榜', self.select_region), ('手動校正欄位', self.calibrate), ('圖片辨識測試', self.image_test), ('合成資料示範', self.demo), ('辨識元件檢查', self.install), ('資料資料夾', self.open_folder), ('使用說明', self.help)]:
+            menu.add_command(label=label, command=action)
+        advanced.configure(menu=menu); advanced.pack(side='left', padx=4)
+        self.main_actions=bar
         auto_bar = ttk.Frame(root); auto_bar.pack(fill='x', padx=18, pady=(0, 8))
-        ttk.Button(auto_bar, text='一鍵自動設定', command=self.auto_setup).pack(side='left', padx=8)
-        ttk.Button(auto_bar, text='自動輪切設定', command=self.configure_auto).pack(side='left')
-        ttk.Button(auto_bar, text='開始自動輪切', command=self.start_auto).pack(side='left', padx=8)
         self.voice_var=tk.BooleanVar(value=self.config.get('voice_enabled',True))
         ttk.Checkbutton(auto_bar,text='語音提醒',variable=self.voice_var,command=self.toggle_task_voice).pack(side='left',padx=5)
         ttk.Label(auto_bar, text='F8 開始／停止 · 輪切會使用滑鼠 · 離開三竹視窗自動停止').pack(side='left', padx=8)
@@ -271,12 +256,14 @@ class App(AutoUI):
             if valkey:
                 self.vars[valkey] = tk.StringVar(value=str(self.config[valkey]))
                 ttk.Entry(opts, textvariable=self.vars[valkey], width=7).grid(row=1, column=idx*4+3)
-        self.status = tk.StringVar(value='尚未連接畫面。可先按「示範」；實盤請先框選與校正。')
+        self.status = tk.StringVar(value='開啟三竹「熱門排行」，按 F8 或「開始掃描」。首次會自動定位；再次按 F8 停止。')
         tk.Label(root, textvariable=self.status, bg='#0b1020', fg='#58ddd0', anchor='w', wraplength=1120).pack(fill='x', padx=20, pady=10)
+        self.observation_summary=tk.StringVar(value='轉強候選 0 檔｜等待持續觀察；候選股會置頂並顯示原因')
+        ttk.Label(root,textvariable=self.observation_summary).pack(anchor='w',padx=20,pady=(0,6))
         table_frame = ttk.Frame(root); table_frame.pack(fill='both', expand=True, padx=18)
         cols = ['code','name','price','gain','volume','turnover','ratio','state']
         self.tree = ttk.Treeview(table_frame, columns=cols, show='headings')
-        for key, label, width in zip(cols, LABELS + ['5分量速比', '判斷／缺少條件'], [75,100,90,75,100,85,100,380]):
+        for key, label, width in zip(cols, LABELS + ['5分量速比', '觀察原因／尚缺條件'], [75,100,90,75,100,85,100,380]):
             self.tree.heading(key, text=label); self.tree.column(key, width=width, stretch=key == 'state')
         self.tree.tag_configure('hit', foreground='#ff738d')
         sb = ttk.Scrollbar(table_frame, orient='vertical', command=self.tree.yview)
@@ -286,13 +273,16 @@ class App(AutoUI):
         self.log.pack(fill='x', padx=18, pady=8)
         foot = ttk.Frame(root); foot.pack(fill='x', padx=18, pady=(0,12))
         ttk.Button(foot, text='匯出本輪 CSV', command=self.export).pack(side='left')
-        ttk.Button(foot, text='資料資料夾', command=self.open_folder).pack(side='left', padx=8)
-        ttk.Button(foot, text='一鍵更新', command=self.check_update).pack(side='left', padx=8)
         ttk.Label(foot, textvariable=self.update_status).pack(side='left')
-        ttk.Label(foot, text='僅偵測可見列 · 請保持排行榜可見 · 不會自動下單').pack(side='right')
+        ttk.Label(foot, text='依畫面逐段觀察 · 保持三竹可見 · 不會自動下單').pack(side='right')
         root.protocol('WM_DELETE_WINDOW', self.close)
         self.init_f8()
         root.after(150, self.poll)
+
+    def begin_observation(self):
+        if (self.config.get('auto_config') or {}).get('discovered'):
+            self.start_auto()
+        else:self.auto_setup(start_after=True)
 
     def say(self, text):
         self.log.configure(state='normal'); self.log.insert('end', dt.datetime.now().strftime('%H:%M:%S ') + text + '\n')
@@ -430,10 +420,11 @@ class App(AutoUI):
         self.worker_thread = threading.Thread(target=job, daemon=True); self.worker_thread.start()
 
     def reset(self, mode):
-        self.generation += 1; self.mode = mode; self.engine = Engine(); self.records = []
+        self.generation += 1; self.mode = mode; self.engine = Engine(); self.records = []; self.rank_rows = {}
         self.stop_event = threading.Event()
         for item in self.tree.get_children(): self.tree.delete(item)
         self.status.set(mode + '｜準備中…'); self.say(mode)
+        self.observation_summary.set('轉強候選 0 檔｜重新累積觀察資料')
         return self.generation
 
     def start(self):
@@ -486,9 +477,22 @@ class App(AutoUI):
         rows, alerts = engine.process(quotes, cfg)
         for item in self.tree.get_children(): self.tree.delete(item)
         batch = []
-        for q, ratio, reason, hit in sorted(rows, key=lambda item: (not item[3], -item[0].gain)):
+        display=rows
+        if cfg.get('source_rank'):
+            self.rank_rows[cfg['source_rank']]=rows
+            latest={}
+            for rank,items in self.rank_rows.items():
+                for q,ratio,reason,hit in items:
+                    if q.code not in latest or q.ts>=latest[q.code][0].ts:
+                        latest[q.code]=(q,ratio,f'{rank}｜{dt.datetime.fromtimestamp(q.ts):%H:%M:%S}｜'+reason,hit)
+            display=list(latest.values())
+            newest=max((q.ts for q,_,_,_ in display),default=0)
+            display=[(q,ratio,reason if newest-q.ts<60 else '等待重新複查｜'+reason,hit and newest-q.ts<60) for q,ratio,reason,hit in display]
+        self.observation_summary.set(f'轉強候選 {sum(bool(item[3]) for item in display)} 檔｜觀察總覽 {len(display)} 檔｜候選股置頂；請核對來源與讀取時間')
+        for q, ratio, reason, hit in sorted(display, key=lambda item: (not item[3], -item[0].gain)):
             values = [q.code, q.name, f'{q.price:.2f}', f'{q.gain:+.2f}', f'{q.volume:,.0f}', '—' if q.turnover is None else f'{q.turnover:.2f}', '待累積' if ratio is None else f'{ratio:.2f}', reason]
             self.tree.insert('', 'end', values=values, tags=('hit',) if hit else ())
+        for q, ratio, reason, hit in rows:
             record = [self.mode, dt.datetime.fromtimestamp(q.ts).isoformat(timespec='seconds'), q.code, q.name, q.price, q.gain, q.volume, q.turnover, ratio, reason, json.dumps(cfg, ensure_ascii=False)]
             self.records.append(record); batch.append(record)
         self.status.set(f'{self.mode}｜本輪讀取 {len(quotes)} 檔｜略過 {rejected} 列｜辨識耗時 {elapsed:.1f} 秒｜本機掃描時間 {dt.datetime.now():%H:%M:%S}')
@@ -517,12 +521,12 @@ class App(AutoUI):
                     self.status.set(payload); self.say(payload); self.update_task_progress(payload)
                 elif kind == 'auto_progress':
                     detail,completed,total=payload
-                    self.update_task_progress(detail,completed,total)
+                    self.status.set(detail); self.update_task_progress(detail,completed,total)
                 elif kind == 'auto_setup_done':
                     cfg,target,count,start_after=payload
                     self.auto_active=False;self.auto_hwnd=target;self.config=cfg
                     self.save();self.status.set(f'自動設定完成｜已驗證 {count} 檔資料｜F8 開始／停止')
-                    self.say('已自動定位選單、表格與六欄；預設輪切五個排行，每頁讀取後停留15秒。')
+                    self.say('已自動定位選單、表格與六欄；預設輪切五個排行，逐段捲動並複查末端；持續重複觀察轉強條件。')
                     if start_after:
                         self.update_task_progress('自動設定完成，準備啟動輪切掃描…')
                         self.root.after(300,lambda:self.start_auto(announce=False))

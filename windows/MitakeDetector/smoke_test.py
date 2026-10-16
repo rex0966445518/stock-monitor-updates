@@ -28,6 +28,19 @@ def run_smoke_test(report):
         app.mode='CI smoke / synthetic data'
         app.render([Quote('9001','SMOKE',100,2,1500,1,now)],0,0,dict(DEFAULT),persist=True)
         assert (BASE/'observations.sqlite3').is_file()
+        # Verify the actual GUI has only the four everyday action buttons.
+        actions=[child.cget('text') for child in app.main_actions.winfo_children() if child.winfo_class()=='TButton']
+        assert actions==['開始掃描（F8）','停止（F8）','掃描設定','一鍵更新'],actions
+        # Changing rankings must retain other observed stocks and deduplicate codes.
+        cfg=dict(DEFAULT,source_rank='漲幅排行',use_breakout=False)
+        app.render([Quote('9001','SMOKE',100,2,1500,1,now+1)],0,0,cfg,persist=False)
+        app.render([Quote('9001','SMOKE',100,2,1501,1,now+2)],0,0,cfg,persist=False)
+        app.render([Quote('9002','SMOKE2',101,3,1600,1,now+3)],0,0,dict(cfg,source_rank='預估量增'),persist=False)
+        assert len(app.tree.get_children())==2
+        assert '轉強候選 1 檔' in app.observation_summary.get(),app.observation_summary.get()
+        app.render([Quote('9001','SMOKE',100,2,1502,1,now+4)],0,0,dict(cfg,source_rank='預估量增'),persist=False)
+        assert len(app.tree.get_children())==1  # This source's previous row has left the ranking.
+        assert app.tree.item(app.tree.get_children()[0],'values')[0]=='9001'
         from automation_smoke import run_automation_smoke
         automation=run_automation_smoke(root,app)
         app.demo();root.geometry('1180x900');root.deiconify()

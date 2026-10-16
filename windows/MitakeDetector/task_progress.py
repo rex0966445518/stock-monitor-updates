@@ -14,6 +14,8 @@ def task_stage(text):
     if '正在尋找' in text:return '搜尋選單類目'
     if '正在切換' in text:return '正在切換排行榜'
     if '已確認排行' in text:return '確認類目，準備擷取'
+    if '複查' in text:return '複查股票資料'
+    if '擷取股票' in text or '段｜' in text:return '逐段捲動與讀取股票'
     if '辨識中' in text:return '正在讀取股票資料'
     if '後繼續' in text:return '本次擷取完成，等待繼續'
     return '正在執行任務'
