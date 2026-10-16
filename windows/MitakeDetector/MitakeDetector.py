@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.12'
+VERSION = '0.3.13'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -157,7 +157,7 @@ class Engine:
         return rows, alerts
 
 
-HELP = '''三竹盤中轉強偵測器 v0.3.12
+HELP = '''三竹盤中轉強偵測器 v0.3.13
 
 【開始觀察】
 開啟三竹「熱門排行」，保持視窗完整可見，按F8或「開始掃描」。
@@ -235,7 +235,7 @@ class App(AutoUI):
             ttk.Button(bar, text=label, command=action).pack(side='left', padx=4)
         advanced = ttk.Menubutton(bar, text='進階工具 ▾')
         menu = tk.Menu(advanced, tearoff=False)
-        for label, action in [('重新自動定位', self.auto_setup), ('手動框選排行榜', self.select_region), ('手動校正欄位', self.calibrate), ('圖片辨識測試', self.image_test), ('合成資料示範', self.demo), ('辨識元件檢查', self.install), ('資料資料夾', self.open_folder), ('使用說明', self.help)]:
+        for label, action in [('重新自動定位', self.auto_setup), ('清除股名記憶', self.clear_stock_names), ('手動框選排行榜', self.select_region), ('手動校正欄位', self.calibrate), ('圖片辨識測試', self.image_test), ('合成資料示範', self.demo), ('辨識元件檢查', self.install), ('資料資料夾', self.open_folder), ('使用說明', self.help)]:
             menu.add_command(label=label, command=action)
         advanced.configure(menu=menu); advanced.pack(side='left', padx=4)
         self.main_actions=bar

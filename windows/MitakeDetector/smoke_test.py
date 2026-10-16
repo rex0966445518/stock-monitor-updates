@@ -46,6 +46,19 @@ def run_smoke_test(report):
         quotes,rejected=app.scan(im,DEFAULT['centers'])
         assert len(quotes)==2 and rejected==0, f'OCR result: {quotes}, rejected {rejected}'
         assert quotes[0].code=='2330' and quotes[0].volume==1500 and quotes[1].price==205
+        from fast_quotes import StockNames,scan_numeric_batch
+        from MitakeDetector import FIELDS
+        edges=[0]+[(a+b)/200 for a,b in zip(DEFAULT['centers'],DEFAULT['centers'][1:])]+[1]
+        bounds={field:[edges[i],edges[i+1]] for i,field in enumerate(FIELDS)}
+        names=StockNames();names.names={'2330':'TESTA','2317':'TESTB'}
+        import time
+        started=time.perf_counter()
+        fast,bad=scan_numeric_batch(im,bounds,app.read_auto_ocr,names)
+        fast_seconds=time.perf_counter()-started
+        assert len(fast)==2 and bad==0,repr(fast)
+        assert fast[0].price==100.5 and fast[1].volume==2800
+        assert fast[0].name=='TESTA' and names.reused==2
+        info.update(numeric_batch_rows=len(fast),numeric_batch_seconds=fast_seconds,remembered_names_reused=names.reused)
         now=dt.datetime.now().timestamp()
         app.mode='CI smoke / synthetic data'
         app.render([Quote('9001','SMOKE',100,2,1500,1,now)],0,0,dict(DEFAULT),persist=True)

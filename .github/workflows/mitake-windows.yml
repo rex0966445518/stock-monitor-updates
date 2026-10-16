@@ -51,7 +51,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Syntax check failed' }
           python MitakeDetector.py --self-test
           if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
-          python -m unittest -v test_updater test_autoswitch test_auto_detect test_adaptive test_table_scan
+          python -m unittest -v test_updater test_autoswitch test_auto_detect test_adaptive test_table_scan test_fast_quotes
           if ($LASTEXITCODE -ne 0) { throw 'Update validation tests failed' }
           python -c "from build_release import version; print('MITAKE_VERSION='+version())" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           python MitakeDetector.py --smoke-test release-output/source-smoke.json

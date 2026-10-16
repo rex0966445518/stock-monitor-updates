@@ -4,7 +4,7 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
     table=absolute_roi(roi,controller.rect())
     center=(table['left']+table['width']//2,table['top']+table['height']//2)
     controller.scroll(center,120*4000);controller.pause(.6)
-    collected={};previous=None;stable=0;rejected=0
+    collected={};previous=None;stable=0;rejected=0;notches=1
     for segment in range(max_segments):
         controller.check()
         progress(segment+1,len(collected),'擷取股票資料')
@@ -27,7 +27,12 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
         if stable>=3:
             progress(segment+1,len(collected),'複查三次未移動，推定清單末端')
             return list(collected.values()),rejected
+        if previous and codes!=previous:
+            shared=len(set(codes).intersection(previous))
+            moved=max(1,len(previous)-shared)
+            rows_per_notch=max(1,moved/notches)
+            notches=max(1,min(6,int(max(1,len(codes)-6)/rows_per_notch)))
         previous=codes
-        # One notch normally moves three rows, retaining substantial overlap.
-        controller.scroll(center,-120);controller.pause(.4)
+        # Learn the actual wheel distance before increasing overlapping strides.
+        controller.scroll(center,-120*notches);controller.pause(.35)
     raise RuntimeError(f'已達{max_segments}段保護上限，尚未確認清單底部；請檢查捲動區域')

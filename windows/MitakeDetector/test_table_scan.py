@@ -18,6 +18,17 @@ class TableController:
 
 
 class TableScanTests(unittest.TestCase):
+    def test_learned_wheel_stride_reads_92_stocks_with_overlap(self):
+        class Large(TableController):
+            def scroll(self,point,delta):
+                self.check();self.scrolls.append(delta)
+                self.position=0 if delta>0 else min(92-30,self.position+3*abs(delta)//120)
+        def read(position):return [SimpleNamespace(code=str(1000+i)) for i in range(position,position+30)],0
+        c=Large();calls=[]
+        rows,_=scan_table(c,[0,0,1,1],lambda n:(calls.append(n) or read(n)),lambda *s:None)
+        self.assertEqual(len(rows),92)
+        self.assertLessEqual(len(calls),10)
+        self.assertTrue(any(delta < -120 for delta in c.scrolls))
     def test_stock_batches_arrive_before_whole_ranking_finishes(self):
         controller=TableController();batches=[]
         def observed(rows,bad):batches.append((controller.position,[q.code for q in rows]))

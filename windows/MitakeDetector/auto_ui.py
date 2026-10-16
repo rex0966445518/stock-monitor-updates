@@ -133,7 +133,14 @@ class AutoUI:
         """Retry whole-table OCR when narrow strips yield no complete rows."""
         from MitakeDetector import FIELDS,parse_ocr
         import re,unicodedata
-        quotes,bad=self.scan_mapped_table(image,bounds)
+        started=time.perf_counter()
+        from fast_quotes import StockNames,scan_numeric_batch
+        from MitakeDetector import BASE
+        names=getattr(self,'stock_names',None)
+        if names is None:self.stock_names=names=StockNames(BASE/'stock-names.json')
+        quotes,bad=scan_numeric_batch(image,bounds,self.read_auto_ocr,names)
+        if not quotes:quotes,bad=self.scan_mapped_table(image,bounds)
+        self.last_table_seconds=time.perf_counter()-started
         self.last_scan_diagnostic=f'欄位辨識：有效{len(quotes)}列，略過{bad}列'
         if quotes:return quotes,bad
         counts={field:0 for field in FIELDS}
@@ -161,6 +168,15 @@ class AutoUI:
             quotes,rejected=parse(self.read_auto_ocr(high))
         self.last_scan_diagnostic=(f'整表複查：有效{len(quotes)}列｜股號文字{counts["code"]}、成交價{counts["price"]}、漲幅{counts["gain"]}、總量{counts["volume"]}；請核對欄位是否完整可見')
         return quotes,max(bad,rejected) if not quotes else rejected
+
+    def clear_stock_names(self):
+        if not self.idle():return
+        from MitakeDetector import BASE
+        try:
+            (BASE/'stock-names.json').unlink(missing_ok=True)
+            self.stock_names=None
+            self.say('股名記憶已清除，下次讀取時重新學習。')
+        except OSError as exc:self.say('無法清除股名記憶：'+str(exc))
 
     def init_f8(self):
         self.f8_toggle=F8Toggle()
@@ -396,7 +412,9 @@ class AutoUI:
                         if auto.get('full_table',True):
                             from table_scan import scan_table
                             def progress(segment,count,stage):
-                                detail=f'第{cycle}輪｜類目{rank_index+1}/{len(auto["rankings"])} {name}｜第{segment}段｜已讀{count}檔｜{stage}'
+                                reused=getattr(getattr(self,'stock_names',None),'reused',0)
+                                seconds=getattr(self,'last_table_seconds',0)
+                                detail=f'第{cycle}輪｜類目{rank_index+1}/{len(auto["rankings"])} {name}｜第{segment}段｜已讀{count}檔｜股名重用{reused}次｜{stage}｜{seconds:.1f}秒/段'
                                 self.events.put((token,'auto_progress',(detail,rank_index,len(auto['rankings']))))
                             read=lambda image:self.scan_recovering_table(image,cfg['column_bounds']) if auto.get('discovered') else self.scan(image,cfg['centers'])
                             first_batch=[True]
