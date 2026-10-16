@@ -8,6 +8,16 @@ def token(text,x,y,width=70):return ([[x,y],[x+width,y],[x+width,y+18],[x,y+18]]
 
 
 class DetectionTests(unittest.TestCase):
+    def test_update_button_starts_download_without_second_dialog(self):
+        from MitakeDetector import App
+        class Fake:
+            update_busy=True
+            def say(self,text):pass
+            def download_update(self,payload):self.downloaded=payload
+        app=Fake();manifest={'version':'99.0.0','size':100,'notes':'test'}
+        App.handle_update(app,'update_checked',manifest)
+        self.assertEqual(app.downloaded,manifest)
+        self.assertFalse(app.update_busy)
     def test_combo_requires_visible_frame(self):
         im=Image.new('RGB',(1000,500),'#102c40')
         draw=ImageDraw.Draw(im);draw.rectangle((5,25,155,51),outline=(100,105,110),width=1)

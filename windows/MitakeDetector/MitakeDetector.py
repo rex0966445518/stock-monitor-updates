@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.2'
+VERSION = '0.3.3'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -285,7 +285,7 @@ class App(AutoUI):
         foot = ttk.Frame(root); foot.pack(fill='x', padx=18, pady=(0,12))
         ttk.Button(foot, text='匯出本輪 CSV', command=self.export).pack(side='left')
         ttk.Button(foot, text='資料資料夾', command=self.open_folder).pack(side='left', padx=8)
-        ttk.Button(foot, text='檢查更新／下載安裝', command=self.check_update).pack(side='left', padx=8)
+        ttk.Button(foot, text='一鍵更新', command=self.check_update).pack(side='left', padx=8)
         ttk.Label(foot, textvariable=self.update_status).pack(side='left')
         ttk.Label(foot, text='僅偵測可見列 · 請保持排行榜可見 · 不會自動下單').pack(side='right')
         root.protocol('WM_DELETE_WINDOW', self.close)
@@ -548,7 +548,7 @@ class App(AutoUI):
         except OSError as exc: self.say('匯出失敗：'+str(exc))
 
     def check_update(self):
-        if self.update_busy: return
+        if self.update_busy or not self.idle(): return
         self.update_busy = True
         self.update_status.set('檢查更新中…')
         def job():
@@ -574,17 +574,8 @@ class App(AutoUI):
                 self.update_status.set('目前已是最新版')
                 messagebox.showinfo('檢查更新', f'目前版本 v{VERSION}，已是最新穩定版。')
                 return
-            top = self.tk.Toplevel(self.root)
-            top.title('發現新版本')
-            top.geometry('580x360')
-            self.ttk.Label(top, text=f"目前 v{VERSION} → 新版 v{payload['version']}", font=('Microsoft JhengHei', 14, 'bold')).pack(pady=15)
-            self.ttk.Label(top, text=f"安裝檔 {payload['size']/1024/1024:.1f} MB；下載完成後驗證並啟動安裝。", wraplength=540).pack(padx=15)
-            text = self.tk.Text(top, height=8, wrap='word')
-            text.pack(fill='both', expand=True, padx=15, pady=10)
-            text.insert('1.0', str(payload.get('notes', ''))[:12000]);text.configure(state='disabled')
-            def install_now():
-                top.destroy(); self.download_update(payload)
-            self.ttk.Button(top, text='下載並安裝新版', command=install_now).pack(pady=10)
+            self.say(f"發現新版 v{payload['version']}，開始下載；驗證成功後自動安裝並重新啟動。")
+            self.download_update(payload)
         elif kind == 'update_downloaded':
             self.update_busy = False
             if sys.platform != 'win32' or not getattr(sys, 'frozen', False):
