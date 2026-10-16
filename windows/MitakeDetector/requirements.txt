@@ -1,0 +1,7 @@
+Pillow>=11.1,<13
+mss>=9,<11
+numpy==1.26.4
+opencv-python==4.11.0.86
+onnxruntime>=1.20,<2
+rapidocr_onnxruntime==1.4.4
+pyinstaller>=6.11,<7
