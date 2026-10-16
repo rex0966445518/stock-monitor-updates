@@ -25,4 +25,4 @@ if __name__=='__main__':
     validate_manifest(manifest)
     (out/'mitake-update.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),'utf-8')
     (out/'SHA256SUMS.txt').write_text(f"{manifest['sha256']}  {installer.name}\n",'utf-8')
-    print(json.dumps(manifest,ensure_ascii=False,indent=2))
+    print(f'Manifest verified for v{v}: {len(data)} bytes')
