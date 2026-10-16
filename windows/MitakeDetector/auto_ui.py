@@ -213,7 +213,7 @@ class AutoUI:
             messagebox.showinfo('Windows功能','自動輪切需要在Windows安裝版使用。');return
         top=self.tk.Toplevel(self.root);top.title('三竹自動輪切設定');top.geometry('860x780')
         cfg=json.loads(json.dumps(self.config.get('auto_config') or {}))
-        windows=[w for w in WindowsController.windows() if '三竹盤中轉強偵測器' not in w[1] and '三竹自動輪切設定' not in w[1]]
+        windows=[w for w in WindowsController.windows() if '漲停板探測器-雷允澤製' not in w[1] and '三竹盤中轉強偵測器' not in w[1] and '三竹自動輪切設定' not in w[1]]
         choices=[f'{title}  [視窗 {hwnd}]' for hwnd,title in windows]
         self.ttk.Button(top,text='一鍵自動設定（免框選）',command=lambda:(top.destroy(),self.auto_setup())).pack(anchor='w',padx=15,pady=5)
         self.ttk.Label(top,text='1. 選擇三竹視窗（啟動後會使用滑鼠；F8開始／停止，離開目標視窗會停止）').pack(anchor='w',padx=15,pady=10)
@@ -453,6 +453,7 @@ class AutoUI:
         self.show_task_progress(target,'接續前次斷點，正在核對畫面…' if saved else '準備開始自動輪切…')
         if announce:self.announce_task('開始測試輪切' if test_only else ('接續前次掃描' if saved else '開始執行掃描'))
         def job():
+            nonlocal saved
             try:
                 c=WindowsController(target,stop)
                 c.highlight=lambda region:self.highlight_scan(token,region,stop)

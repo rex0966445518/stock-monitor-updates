@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""三竹盤中轉強偵測器 — Windows 桌面觀察工具。
+"""漲停板探測器-雷允澤製 — Windows 桌面觀察工具。
 啟動：python MitakeDetector.py；核心驗證：python MitakeDetector.py --self-test
 開啟三竹熱門排行後按F8自動設定並開始掃描。
 本程式採可見畫面 OCR，沒有三竹 SDK 登入或官方行情串接。
@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.15'
+VERSION = '0.3.16'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -157,7 +157,7 @@ class Engine:
         return rows, alerts
 
 
-HELP = '''三竹盤中轉強偵測器 v0.3.15
+HELP = '''漲停板探測器-雷允澤製 v0.3.16
 
 【開始觀察】
 開啟三竹「熱門排行」，保持視窗完整可見，按F8或「開始掃描」。
@@ -218,7 +218,7 @@ class App(AutoUI):
         self.ocr = None
         self.update_busy = False
         self.update_status = tk.StringVar(value='')
-        root.title('三竹盤中轉強偵測器 v' + VERSION)
+        root.title('漲停板探測器-雷允澤製 v' + VERSION)
         root.geometry('1180x860')
         root.minsize(1100, 760)
         root.configure(bg='#0b1020')
@@ -232,7 +232,7 @@ class App(AutoUI):
         style.map('TCombobox',fieldbackground=[('readonly','#e6edf7')],foreground=[('readonly','#101827')])
         style.configure('Treeview', background='#101a2c', fieldbackground='#101a2c', foreground='#e4eaf5', rowheight=30)
         style.map('Treeview', background=[('selected', '#7b253c')])
-        tk.Label(root, text='盤中轉強  /  M I T A K E', fg='#ff5879', bg='#0b1020', font=('Microsoft JhengHei', 22, 'bold')).pack(anchor='w', padx=20, pady=(15, 3))
+        tk.Label(root, text='漲停板探測器-雷允澤製', fg='#ff5879', bg='#0b1020', font=('Microsoft JhengHei', 22, 'bold')).pack(anchor='w', padx=20, pady=(15, 3))
         tk.Label(root, text='觀察轉強候選股 · 持續複查量價與突破守穩 · 訊號不代表一定漲停', fg='#9caeca', bg='#0b1020').pack(anchor='w', padx=20)
         bar = ttk.Frame(root); bar.pack(fill='x', padx=15, pady=12)
         for label, action in [('開始／繼續（F8）', self.begin_observation), ('暫停（F8）', self.stop), ('重新開始', self.restart_observation), ('掃描設定', self.configure_auto), ('一鍵更新', self.check_update)]:
@@ -802,7 +802,7 @@ if __name__ == '__main__':
             import ctypes
             _app_mutex = ctypes.windll.kernel32.CreateMutexW(None, False, 'Local\\RexMitakeDetector')
             if ctypes.windll.kernel32.GetLastError() == 183:
-                ctypes.windll.user32.MessageBoxW(None, '偵測器已在執行，請從工作列開啟。', '三竹盤中轉強偵測器', 64)
+                ctypes.windll.user32.MessageBoxW(None, '偵測器已在執行，請從工作列開啟。', '漲停板探測器-雷允澤製', 64)
                 sys.exit(0)
         import tkinter as tk
         root = tk.Tk(); App(root); root.mainloop()

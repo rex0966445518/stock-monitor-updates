@@ -17,7 +17,7 @@ permissions:
 
 concurrency:
   group: mitake-windows-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -51,7 +51,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Syntax check failed' }
           python MitakeDetector.py --self-test
           if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
-          python -m unittest -v test_updater test_autoswitch test_auto_detect test_adaptive test_table_scan test_fast_quotes test_resume_scan test_version_history test_ocr_learning
+          python -m unittest -v test_updater test_autoswitch test_auto_detect test_adaptive test_table_scan test_fast_quotes test_resume_scan test_version_history test_ocr_learning test_start_auto
           if ($LASTEXITCODE -ne 0) { throw 'Update validation tests failed' }
           python -c "from build_release import version; print('MITAKE_VERSION='+version())" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           python build_history.py
@@ -153,7 +153,7 @@ jobs:
           $tag = "mitake-v$env:MITAKE_VERSION"
           gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
           if ($LASTEXITCODE -eq 0) { throw 'This version already exists; increment VERSION before publishing.' }
-          gh release create $tag "release-output/MitakeDetector-Setup-v$env:MITAKE_VERSION.exe" release-output/mitake-update.json release-output/SHA256SUMS.txt --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "三竹盤中轉強偵測器 v$env:MITAKE_VERSION" --notes-file RELEASE_NOTES.md --latest=false
+          gh release create $tag "release-output/MitakeDetector-Setup-v$env:MITAKE_VERSION.exe" release-output/mitake-update.json release-output/SHA256SUMS.txt --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "漲停板探測器-雷允澤製 v$env:MITAKE_VERSION" --notes-file RELEASE_NOTES.md --latest=false
           if ($LASTEXITCODE -ne 0) { throw 'Version release failed' }
           python verify_public.py version
           if ($LASTEXITCODE -ne 0) { throw 'Published installer verification failed; stable feed not updated' }
@@ -161,10 +161,10 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             gh release upload mitake-latest "release-output/MitakeDetector-Setup-v$env:MITAKE_VERSION.exe" release-output/mitake-update.json release-output/SHA256SUMS.txt --repo $env:GITHUB_REPOSITORY --clobber
           } else {
-            gh release create mitake-latest "release-output/MitakeDetector-Setup-v$env:MITAKE_VERSION.exe" release-output/mitake-update.json release-output/SHA256SUMS.txt --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title '三竹盤中轉強偵測器 Windows 最新版' --notes-file RELEASE_NOTES.md --latest=false
+            gh release create mitake-latest "release-output/MitakeDetector-Setup-v$env:MITAKE_VERSION.exe" release-output/mitake-update.json release-output/SHA256SUMS.txt --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title '漲停板探測器-雷允澤製 Windows 最新版' --notes-file RELEASE_NOTES.md --latest=false
           }
           if ($LASTEXITCODE -ne 0) { throw 'Stable feed publishing failed' }
-          gh release edit mitake-latest --repo $env:GITHUB_REPOSITORY --title "三竹盤中轉強偵測器 Windows v$env:MITAKE_VERSION" --notes-file RELEASE_NOTES.md --latest=false
+          gh release edit mitake-latest --repo $env:GITHUB_REPOSITORY --title "漲停板探測器-雷允澤製 Windows v$env:MITAKE_VERSION" --notes-file RELEASE_NOTES.md --latest=false
           if ($LASTEXITCODE -ne 0) { throw 'Stable release metadata update failed' }
           python verify_public.py stable
           if ($LASTEXITCODE -ne 0) { throw 'Stable update feed verification failed' }

@@ -1,7 +1,7 @@
 """Visible update stages and measured download progress, driven by the UI thread."""
 class UpdateProgress:
     def __init__(self,root,tk,ttk):
-        self.window=tk.Toplevel(root);self.window.title('三竹偵測器｜更新進度')
+        self.window=tk.Toplevel(root);self.window.title('漲停板探測器-雷允澤製｜更新進度')
         self.window.geometry('540x230');self.window.resizable(False,False)
         self.window.transient(root)
         self.window.protocol('WM_DELETE_WINDOW',self.window.withdraw)

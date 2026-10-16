@@ -16,6 +16,7 @@ def run_smoke_test(report):
         from MitakeDetector import App,Quote,DEFAULT,VERSION,BASE
         from updater import validate_manifest
         root=tk.Tk();root.withdraw();app=App(root)
+        assert root.title()=='漲停板探測器-雷允澤製 v'+VERSION
         # Verify real Tk widgets with simulated bytes; never install in this test.
         root.deiconify()
         app.set_update_progress(dict(stage='checking',message='CI check'))
