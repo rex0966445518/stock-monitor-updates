@@ -49,4 +49,6 @@ def run_smoke_test(report):
             try:root.destroy()
             except Exception:pass
     report.write_text(json.dumps(info,ensure_ascii=False,indent=2),'utf-8')
-    if not info.get('ok'):raise SystemExit(1)
+    if not info.get('ok'):
+        if sys.stdout is not None:print(json.dumps(info,ensure_ascii=True))
+        raise SystemExit(1)
