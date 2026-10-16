@@ -8,6 +8,14 @@ def token(text,x,y,width=70):return ([[x,y],[x+width,y],[x+width,y+18],[x,y+18]]
 
 
 class DetectionTests(unittest.TestCase):
+    def test_voice_command_encodes_chinese_and_escapes_quotes(self):
+        import base64
+        from windows_voice import speech_command
+        cmd=speech_command("開始執行掃描 '測試'")
+        self.assertEqual(cmd[0],'powershell.exe')
+        script=base64.b64decode(cmd[-1]).decode('utf-16-le')
+        self.assertIn("開始執行掃描 ''測試''",script)
+        self.assertIn('404',script)
     def test_update_button_starts_download_without_second_dialog(self):
         from MitakeDetector import App
         class Fake:

@@ -10,14 +10,14 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.4'
+VERSION = '0.3.5'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
 DEFAULT = dict(interval=5, min_price=50, min_volume=1000, min_gain=1,
                max_gain=8.5, min_turnover=0, use_turnover=False,
                use_accel=False, accel=1.5, use_breakout=True, cooldown=300,
-               centers=[6, 22, 40, 57, 75, 92], region=None, auto_config=None, column_bounds=None)
+               centers=[6, 22, 40, 57, 75, 92], region=None, auto_config=None, column_bounds=None, voice_enabled=True)
 
 @dataclasses.dataclass
 class Quote:
@@ -255,6 +255,8 @@ class App(AutoUI):
         ttk.Button(auto_bar, text='一鍵自動設定', command=self.auto_setup).pack(side='left', padx=8)
         ttk.Button(auto_bar, text='自動輪切設定', command=self.configure_auto).pack(side='left')
         ttk.Button(auto_bar, text='開始自動輪切', command=self.start_auto).pack(side='left', padx=8)
+        self.voice_var=tk.BooleanVar(value=self.config.get('voice_enabled',True))
+        ttk.Checkbutton(auto_bar,text='語音提醒',variable=self.voice_var,command=self.toggle_task_voice).pack(side='left',padx=5)
         ttk.Label(auto_bar, text='F8 開始／停止 · 輪切會使用滑鼠 · 離開三竹視窗自動停止').pack(side='left', padx=8)
         opts = ttk.LabelFrame(root, text='篩選條件（變更後，停止並重新開始以套用）'); opts.pack(fill='x', padx=18)
         self.vars = {}
@@ -471,6 +473,8 @@ class App(AutoUI):
         tick()
 
     def stop(self):
+        if self.auto_active:self.announce_task('已停止掃描')
+        self.close_task_progress()
         self.stop_event.set(); self.generation += 1
         self.status.set(self.mode + '｜已停止；保留本輪紀錄，可匯出。'); self.say('停止請求已送出。')
         if self.auto_active:
@@ -505,19 +509,25 @@ class App(AutoUI):
             while True:
                 token, kind, payload = self.events.get_nowait()
                 if token is None:
-                    self.handle_update(kind, payload)
+                    if kind=='voice_error':self.say('語音提醒無法播放：'+str(payload))
+                    else:self.handle_update(kind, payload)
                     continue
                 if token != self.generation: continue
                 if kind == 'auto_status':
-                    self.status.set(payload); self.say(payload)
+                    self.status.set(payload); self.say(payload); self.update_task_progress(payload)
+                elif kind == 'auto_progress':
+                    detail,completed,total=payload
+                    self.update_task_progress(detail,completed,total)
                 elif kind == 'auto_setup_done':
                     cfg,target,count,start_after=payload
                     self.auto_active=False;self.auto_hwnd=target;self.config=cfg
                     self.save();self.status.set(f'自動設定完成｜已驗證 {count} 檔資料｜F8 開始／停止')
                     self.say('已自動定位選單、表格與六欄；預設輪切五個排行，每頁讀取後停留15秒。')
-                    if start_after:self.root.after(300,self.start_auto)
-                    else:self.root.deiconify()
+                    if start_after:self.root.after(300,lambda:self.start_auto(announce=False))
+                    else:self.announce_task('自動設定完成');self.close_task_progress();self.root.deiconify()
                 elif kind == 'auto_end':
+                    self.announce_task('任務執行失敗，請查看訊息' if '未完成' in payload or '：' in payload else '任務已停止')
+                    self.close_task_progress()
                     self.auto_active=False; self.status.set(payload); self.say(payload); self.root.deiconify()
                 elif kind == 'auto_quotes':
                     name, quotes, rejected, elapsed, cfg = payload
@@ -617,6 +627,9 @@ class App(AutoUI):
         text.insert('1.0', HELP); text.configure(state='disabled')
 
     def close(self):
+        voice=getattr(self,'task_voice',None)
+        if voice:voice.close()
+        self.close_task_progress()
         self.stop_event.set(); self.generation += 1; self.root.destroy()
 
 

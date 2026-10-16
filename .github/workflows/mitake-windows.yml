@@ -47,7 +47,7 @@ jobs:
           python -m pip freeze | Out-File -Encoding utf8 build-dependencies.txt
       - name: Verify source and updater
         run: |
-          python -m py_compile MitakeDetector.py updater.py smoke_test.py build_release.py autoswitch.py auto_ui.py auto_detect.py automation_smoke.py
+          python -m py_compile MitakeDetector.py updater.py smoke_test.py build_release.py autoswitch.py auto_ui.py auto_detect.py task_progress.py windows_voice.py automation_smoke.py
           if ($LASTEXITCODE -ne 0) { throw 'Syntax check failed' }
           python MitakeDetector.py --self-test
           if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }

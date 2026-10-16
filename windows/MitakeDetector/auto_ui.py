@@ -6,6 +6,40 @@ from autoswitch import WindowsController, RankingSwitcher, RANKINGS, absolute_ro
 
 
 class AutoUI:
+    def announce_task(self,message):
+        if __import__('os').name!='nt' or not self.config.get('voice_enabled',True):return
+        from windows_voice import WindowsVoice
+        voice=getattr(self,'task_voice',None)
+        if voice is None:
+            voice=WindowsVoice(lambda error:self.events.put((None,'voice_error',error)))
+            self.task_voice=voice
+        voice.say(message)
+
+    def toggle_task_voice(self):
+        self.config['voice_enabled']=bool(self.voice_var.get());self.save()
+        if not self.config['voice_enabled']:
+            voice=getattr(self,'task_voice',None)
+            if voice:voice.close()
+            self.task_voice=None
+        else:self.announce_task('語音提醒已開啟')
+
+    def show_task_progress(self,target,message):
+        from task_progress import TaskProgress
+        panel=getattr(self,'task_panel',None)
+        if panel and panel.alive:
+            panel.update(message);return
+        rect=WindowsController(target,threading.Event()).rect()
+        self.task_panel=TaskProgress(self.root,self.tk,self.ttk,rect,message)
+
+    def update_task_progress(self,message,completed=None,total=None):
+        panel=getattr(self,'task_panel',None)
+        if panel and panel.alive:panel.update(message,completed,total)
+
+    def close_task_progress(self):
+        panel=getattr(self,'task_panel',None)
+        if panel:panel.close()
+        self.task_panel=None
+
     def auto_setup(self,start_after=False):
         from tkinter import messagebox
         if not self.idle() or not self.dependencies():return
@@ -21,6 +55,8 @@ class AutoUI:
         self.auto_active=True
         stop=self.stop_event
         self.root.iconify()
+        self.show_task_progress(target,'準備自動定位選單與欄位…')
+        self.announce_task('開始執行掃描' if start_after else '開始自動設定')
         def job():
             try:
                 from auto_detect import detect_layout,detect_menu
@@ -31,12 +67,14 @@ class AutoUI:
                 discovered=detect_layout(im,self.read_auto_ocr);c.check()
                 combo=absolute_roi(discovered['combo'],c.rect())
                 c.click((combo['left']+combo['width']//2,combo['top']+combo['height']//2));c.pause(.6)
+                self.events.put((token,'auto_status','正在定位展開選單…'))
                 opened,_=c.image([0,0,1,1])
                 menu=detect_menu(opened,discovered['combo'],self.read_auto_ocr);c.check()
                 auto=dict(title=title,window_size=[im.width,im.height],combo=discovered['combo'],menu=menu,table=discovered['table'],
                           rankings=['漲幅排行','預估量增','分時買力','大單流入','連續買單'],seconds=15,pages=1,discovered=1)
                 # The popup is known to be open after detect_menu: select directly.
                 RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu']).switch('漲幅排行',menu_open=True)
+                self.events.put((token,'auto_status','正在讀取股票資料並驗證欄位…'))
                 table,_=c.image(auto['table'])
                 quotes,bad=self.scan_mapped_table(table,discovered['column_bounds'])
                 c.check()
@@ -217,7 +255,7 @@ class AutoUI:
         result,_=self.ocr(np.asarray(padded.resize((padded.width*scale,padded.height*scale)))[:,:,::-1].copy(),unclip_ratio=2.0)
         return [([[(x/scale)-margin,(y/scale)-margin] for x,y in box],text,score) for box,text,score in result or []]
 
-    def start_auto(self,test_only=False):
+    def start_auto(self,test_only=False,announce=True):
         from tkinter import messagebox
         if not self.idle() or not self.dependencies():return
         cfg=self.settings()
@@ -237,6 +275,8 @@ class AutoUI:
         self.auto_active=True;self.auto_engines={}
         stop=self.stop_event;target=self.auto_hwnd
         self.root.iconify()
+        self.show_task_progress(target,'準備開始自動輪切…')
+        if announce:self.announce_task('開始測試輪切' if test_only else '開始執行掃描')
         def job():
             try:
                 c=WindowsController(target,stop)
@@ -245,9 +285,11 @@ class AutoUI:
                 c.activate()
                 threading.Thread(target=c.monitor_hotkey,daemon=True).start()
                 switcher=RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu'])
+                cycle=0
                 while not stop.is_set():
-                    for name in auto['rankings']:
-                        c.check();self.events.put((token,'auto_status','正在切換：'+name))
+                    cycle+=1
+                    for rank_index,name in enumerate(auto['rankings']):
+                        c.check();self.events.put((token,'auto_status',f'第{cycle}輪｜排行{rank_index+1}/{len(auto["rankings"])}：正在切換{name}'))
                         switcher.switch(name)
                         self.events.put((token,'auto_status','已確認排行：'+name))
                         if test_only:continue
@@ -256,6 +298,7 @@ class AutoUI:
                         table=absolute_roi(auto['table'],c.rect());center=(table['left']+table['width']//2,table['top']+table['height']//2)
                         c.scroll(center,120*60);c.pause(.6)
                         for page in range(auto['pages']):
+                            self.events.put((token,'auto_progress',(f'第{cycle}輪｜{name}｜第{page+1}/{auto["pages"]}頁辨識中',rank_index*auto['pages']+page,len(auto['rankings'])*auto['pages'])))
                             c.check();im,_=c.image(auto['table'])
                             quotes,bad=self.scan_mapped_table(im,cfg['column_bounds']) if auto.get('discovered') else self.scan(im,cfg['centers']);rejected+=bad
                             for q in quotes:collected[q.code]=q
@@ -265,7 +308,11 @@ class AutoUI:
                         c.check()
                         current=dict(cfg,source_rank=name)
                         self.events.put((token,'auto_quotes',(name,list(collected.values()),rejected,time.monotonic()-begin,current)))
-                        c.pause(auto['seconds'])
+                        wait_until=time.monotonic()+auto['seconds']
+                        while time.monotonic()<wait_until:
+                            remaining=max(1,int(wait_until-time.monotonic()+.999))
+                            self.events.put((token,'auto_progress',(f'{name}｜已讀{len(collected)}檔｜略過{rejected}列｜{remaining}秒後繼續',(rank_index+1)*auto['pages'],len(auto['rankings'])*auto['pages'])))
+                            c.pause(min(1,max(0,wait_until-time.monotonic())))
                     if test_only:break
                 self.events.put((token,'auto_end','輪切測試完成' if test_only else '自動輪切已停止'))
             except Exception as exc:self.events.put((token,'auto_end','自動輪切已停止：'+str(exc)))

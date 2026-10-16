@@ -28,6 +28,23 @@ def run_automation_smoke(root,app):
     x,y=combo.winfo_rootx()-rect[0],combo.winfo_rooty()-rect[1]
     combo_roi=[x/width,y/height,260/width,40/height]
     menu_roi=[x/width,(y+40)/height,260/width,170/height]
+    foreground=u.GetForegroundWindow()
+    app.show_task_progress(hwnd,'正在測試進度窗｜第1/3頁')
+    root.update()
+    assert u.GetForegroundWindow()==foreground,'Progress panel stole keyboard focus'
+    panel=app.task_panel
+    assert panel.alive and panel.window.winfo_ismapped(),'Progress panel is not visible'
+    panel.update('排行1/5｜已讀26檔｜等待3秒',1,5)
+    root.update()
+    assert '26檔' in panel.detail.get()
+    from PIL import ImageGrab
+    from pathlib import Path
+    root.update_idletasks()
+    ImageGrab.grab(bbox=(panel.window.winfo_rootx(),panel.window.winfo_rooty(),panel.window.winfo_rootx()+390,panel.window.winfo_rooty()+48)).save(Path('release-output')/'progress-panel.png')
+    get_style=u.GetWindowLongPtrW if ctypes.sizeof(ctypes.c_void_p)==8 else u.GetWindowLongW
+    get_style.argtypes=[W.HWND,ctypes.c_int];get_style.restype=ctypes.c_ssize_t
+    style=get_style(panel.native_hwnd,-20)
+    assert style&0x08000000 and style&0x20,'Panel must be passive and click-through'
     done=queue.Queue();ocr_log=[]
     def read(image):
         from pathlib import Path
@@ -71,6 +88,6 @@ def run_automation_smoke(root,app):
         else:stop.set();raise RuntimeError('Automation fixture timed out')
         if not ok:raise RuntimeError('Automation fixture: '+error)
         assert label.get()=='漲幅排行'
-        return {'menu_switches':3,'selected_label':label.get(),'stop_blocks_input':True,'menu_auto_detected':True,'current_rank_no_click':True,'open_popup_one_click':True}
+        return {'menu_switches':3,'selected_label':label.get(),'stop_blocks_input':True,'menu_auto_detected':True,'current_rank_no_click':True,'open_popup_one_click':True,'progress_visible':True,'progress_no_focus':True}
     finally:
-        stop.set();thread.join(timeout=1);win.destroy();root.update()
+        stop.set();thread.join(timeout=1);app.close_task_progress();win.destroy();root.update()
