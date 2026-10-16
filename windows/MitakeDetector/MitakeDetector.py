@@ -10,14 +10,14 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.1'
+VERSION = '0.3.2'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
 DEFAULT = dict(interval=5, min_price=50, min_volume=1000, min_gain=1,
                max_gain=8.5, min_turnover=0, use_turnover=False,
                use_accel=False, accel=1.5, use_breakout=True, cooldown=300,
-               centers=[6, 22, 40, 57, 75, 92], region=None, auto_config=None)
+               centers=[6, 22, 40, 57, 75, 92], region=None, auto_config=None, column_bounds=None)
 
 @dataclasses.dataclass
 class Quote:
@@ -181,7 +181,7 @@ HELP = '''三竹盤中轉強偵測器 v0.3.0
 3. 勾選要輪切的排行，設定停留秒數與頁數；先測試輪切一次。
 4. 表格沿用主畫面「校正欄位」的六欄位置，所有排行需使用相同欄位排列。
 5. 按「開始自動輪切」後偵測器縮到工作列，由滑鼠操作三竹。
-6. 完成設定後，三竹在前景時按下並放開F8開始，再按F8停止；切到其他程式、遮住操作區、關閉/最小化或縮放三竹時自動停止。
+6. 可先按「一鍵自動設定」自動定位熱門排行與欄位。完成設定後，三竹在前景時按下並放開F8開始，再按F8停止；切到其他程式、遮住操作區、關閉/最小化或縮放三竹時自動停止。
 7. 可移動三竹視窗；縮放後需重新框選。標題辨識不符時不會記入該排行資料。
 輪切只使用選單點擊及滑鼠滾輪；僅收集設定頁數，不保證涵蓋完整排行榜。
 尚未在使用者的實際三竹版本驗證，需先執行「測試輪切一次」。
@@ -252,6 +252,7 @@ class App(AutoUI):
         for label, action in [('辨識元件檢查', self.install), ('框選排行榜', self.select_region), ('校正欄位', self.calibrate), ('圖片測試', self.image_test), ('示範', self.demo), ('開始實盤', self.start), ('停止', self.stop), ('使用說明', self.help)]:
             ttk.Button(bar, text=label, command=action).pack(side='left', padx=3)
         auto_bar = ttk.Frame(root); auto_bar.pack(fill='x', padx=18, pady=(0, 8))
+        ttk.Button(auto_bar, text='一鍵自動設定', command=self.auto_setup).pack(side='left', padx=8)
         ttk.Button(auto_bar, text='自動輪切設定', command=self.configure_auto).pack(side='left')
         ttk.Button(auto_bar, text='開始自動輪切', command=self.start_auto).pack(side='left', padx=8)
         ttk.Label(auto_bar, text='F8 開始／停止 · 輪切會使用滑鼠 · 離開三竹視窗自動停止').pack(side='left', padx=8)
@@ -509,6 +510,13 @@ class App(AutoUI):
                 if token != self.generation: continue
                 if kind == 'auto_status':
                     self.status.set(payload); self.say(payload)
+                elif kind == 'auto_setup_done':
+                    cfg,target,count,start_after=payload
+                    self.auto_active=False;self.auto_hwnd=target;self.config=cfg
+                    self.save();self.status.set(f'自動設定完成｜已驗證 {count} 檔資料｜F8 開始／停止')
+                    self.say('已自動定位選單、表格與六欄；預設輪切五個排行，每頁讀取後停留15秒。')
+                    if start_after:self.root.after(300,self.start_auto)
+                    else:self.root.deiconify()
                 elif kind == 'auto_end':
                     self.auto_active=False; self.status.set(payload); self.say(payload); self.root.deiconify()
                 elif kind == 'auto_quotes':

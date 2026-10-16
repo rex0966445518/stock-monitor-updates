@@ -38,7 +38,14 @@ def run_automation_smoke(root,app):
     def worker():
         try:
             controller.activate()
-            switcher=RankingSwitcher(controller,read,combo_roi,menu_roi)
+            from auto_detect import detect_menu
+            controller.click((rect[0]+x+100,rect[1]+y+20));controller.pause(.4)
+            opened,_=controller.image([0,0,1,1])
+            discovered_menu=detect_menu(opened,combo_roi,read)
+            controller.click((rect[0]+x+100,rect[1]+y+20));controller.pause(.4)
+            # Fixture button opens rather than toggles; selection closes its popup.
+            controller.click((rect[0]+x+100,rect[1]+y+55));controller.pause(.3)
+            switcher=RankingSwitcher(controller,read,combo_roi,discovered_menu)
             switcher.switch('大單流入')
             switcher.switch('漲幅排行')
             stop.set()
@@ -57,6 +64,6 @@ def run_automation_smoke(root,app):
         else:stop.set();raise RuntimeError('Automation fixture timed out')
         if not ok:raise RuntimeError('Automation fixture: '+error)
         assert label.get()=='漲幅排行'
-        return {'menu_switches':2,'selected_label':label.get(),'stop_blocks_input':True}
+        return {'menu_switches':2,'selected_label':label.get(),'stop_blocks_input':True,'menu_auto_detected':True}
     finally:
         stop.set();thread.join(timeout=1);win.destroy();root.update()

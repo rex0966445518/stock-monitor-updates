@@ -6,6 +6,69 @@ from autoswitch import WindowsController, RankingSwitcher, RANKINGS, absolute_ro
 
 
 class AutoUI:
+    def auto_setup(self,start_after=False):
+        from tkinter import messagebox
+        if not self.idle() or not self.dependencies():return
+        if __import__('os').name!='nt':
+            messagebox.showinfo('Windows功能','自動設定需要Windows。');return
+        candidates=[w for w in WindowsController.windows() if '熱門排行' in w[1] or '热门排行' in w[1]]
+        if len(candidates)!=1:
+            messagebox.showerror('自動設定','請只開啟一個「熱門排行」視窗並保持完整顯示，再按一鍵自動設定。');return
+        cfg=self.settings()
+        if cfg is None:return
+        target,title=candidates[0]
+        token=self.reset('自動定位與欄位校正')
+        self.auto_active=True
+        stop=self.stop_event
+        self.root.iconify()
+        def job():
+            try:
+                from auto_detect import detect_layout,detect_menu
+                c=WindowsController(target,stop);c.activate()
+                threading.Thread(target=c.monitor_hotkey,daemon=True).start()
+                im,_=c.image([0,0,1,1])
+                self.events.put((token,'auto_status','正在辨識排行下拉框與六個表頭…'))
+                discovered=detect_layout(im,self.read_auto_ocr);c.check()
+                combo=absolute_roi(discovered['combo'],c.rect())
+                c.click((combo['left']+combo['width']//2,combo['top']+combo['height']//2));c.pause(.6)
+                opened,_=c.image([0,0,1,1])
+                menu=detect_menu(opened,discovered['combo'],self.read_auto_ocr);c.check()
+                auto=dict(title=title,window_size=[im.width,im.height],combo=discovered['combo'],menu=menu,table=discovered['table'],
+                          rankings=['漲幅排行','預估量增','分時買力','大單流入','連續買單'],seconds=15,pages=1,discovered=1)
+                # Close the observed popup, then verify a real switch with exact title matching.
+                c.click((combo['left']+combo['width']//2,combo['top']+combo['height']//2));c.pause(.4)
+                RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu']).switch('漲幅排行')
+                table,_=c.image(auto['table'])
+                quotes,bad=self.scan_mapped_table(table,discovered['column_bounds'])
+                c.check()
+                if not quotes:raise ValueError('自動定位完成，但尚未讀到完整股票資料，未儲存；請保持資料列可見。')
+                cfg.update(auto_config=auto,column_bounds=discovered['column_bounds'],region=absolute_roi(auto['table'],c.rect()))
+                self.events.put((token,'auto_setup_done',(cfg,target,len(quotes),start_after)))
+            except Exception as exc:self.events.put((token,'auto_end','自動設定未完成：'+str(exc)+'；可使用手動設定。'))
+            finally:stop.set()
+        def launch():
+            if token!=self.generation:return
+            self.worker_thread=threading.Thread(target=job,daemon=True);self.worker_thread.start()
+        self.root.after(700,launch)
+
+    def scan_mapped_table(self,image,bounds):
+        from MitakeDetector import FIELDS,parse_ocr
+        import re,unicodedata
+        tokens=[]
+        for i,field in enumerate(FIELDS):
+            left,right=bounds[field]
+            if not 0<=left<right<=1:raise ValueError('自動欄位範圍無效')
+            crop=image.crop((round(left*image.width),0,round(right*image.width),image.height))
+            for box,text,confidence in self.read_auto_ocr(crop):
+                if field=='code':
+                    text=unicodedata.normalize('NFKC',text).strip()
+                    text=re.sub(r'^[^0-9]+','',text)
+                y=sum(p[1] for p in box)/4
+                height=max(p[1] for p in box)-min(p[1] for p in box)
+                x=50+i*100
+                tokens.append(([[x-10,y-height/2],[x+10,y-height/2],[x+10,y+height/2],[x-10,y+height/2]],text,confidence))
+        return parse_ocr(tokens,600,[100*(50+i*100)/600 for i in range(6)],time.time())
+
     def init_f8(self):
         self.f8_toggle=F8Toggle()
         if __import__('os').name=='nt':self.root.after(20,self.poll_f8)
@@ -24,8 +87,13 @@ class AutoUI:
             fg=u.GetForegroundWindow()
             if len(matches)==1 and matches[0][0]==fg:
                 self.auto_hwnd=matches[0][0]
-                self.start_auto()
-            else:self.say('F8未啟動：請先完成自動輪切設定，並將已設定的三竹視窗放在最前方。')
+                if auto.get('discovered'):self.start_auto()
+                elif '熱門排行' in matches[0][1] or '热门排行' in matches[0][1]:self.auto_setup(start_after=True)
+                else:self.start_auto()
+            else:
+                candidates=[w for w in WindowsController.windows() if ('熱門排行' in w[1] or '热门排行' in w[1]) and w[0]==fg]
+                if len(candidates)==1:self.auto_setup(start_after=True)
+                else:self.say('F8未啟動：請將熱門排行視窗放在最前方。')
         self.root.after(20,self.poll_f8)
 
     def configure_auto(self):
@@ -37,6 +105,7 @@ class AutoUI:
         cfg=json.loads(json.dumps(self.config.get('auto_config') or {}))
         windows=[w for w in WindowsController.windows() if '三竹盤中轉強偵測器' not in w[1] and '三竹自動輪切設定' not in w[1]]
         choices=[f'{title}  [視窗 {hwnd}]' for hwnd,title in windows]
+        self.ttk.Button(top,text='一鍵自動設定（免框選）',command=lambda:(top.destroy(),self.auto_setup())).pack(anchor='w',padx=15,pady=5)
         self.ttk.Label(top,text='1. 選擇三竹視窗（啟動後會使用滑鼠；F8開始／停止，離開目標視窗會停止）').pack(anchor='w',padx=15,pady=10)
         choice=self.tk.StringVar()
         combo=self.ttk.Combobox(top,textvariable=choice,values=choices,state='readonly',width=90);combo.pack(padx=15,fill='x')
@@ -189,7 +258,7 @@ class AutoUI:
                         c.scroll(center,120*60);c.pause(.6)
                         for page in range(auto['pages']):
                             c.check();im,_=c.image(auto['table'])
-                            quotes,bad=self.scan(im,cfg['centers']);rejected+=bad
+                            quotes,bad=self.scan_mapped_table(im,cfg['column_bounds']) if auto.get('discovered') else self.scan(im,cfg['centers']);rejected+=bad
                             for q in quotes:collected[q.code]=q
                             if page+1<auto['pages']:c.scroll(center,-120*6);c.pause(.6)
                         # Verify label again after scanning, before any observations are accepted.
