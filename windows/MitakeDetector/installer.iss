@@ -33,7 +33,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "建立桌面捷徑"; GroupDescription: "捷徑："
 [Files]
-Source: "dist\MitakeDetector.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\MitakeDetector\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]
 Name: "{group}\三竹盤中轉強偵測器"; Filename: "{app}\MitakeDetector.exe"
 Name: "{autodesktop}\三竹盤中轉強偵測器"; Filename: "{app}\MitakeDetector.exe"; Tasks: desktopicon

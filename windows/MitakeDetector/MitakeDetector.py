@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.9'
+VERSION = '0.3.10'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -157,7 +157,7 @@ class Engine:
         return rows, alerts
 
 
-HELP = '''三竹盤中轉強偵測器 v0.3.9
+HELP = '''三竹盤中轉強偵測器 v0.3.10
 
 【開始觀察】
 開啟三竹「熱門排行」，保持視窗完整可見，按F8或「開始掃描」。
@@ -599,7 +599,8 @@ class App(AutoUI):
                 messagebox.showinfo('下載完成', '已下載並驗證：'+str(payload)+'\n請在 Windows 上開啟安裝。')
                 return
             try:
-                subprocess.Popen([str(payload), '/SP-', '/SILENT', '/NORESTART', '/CLOSEAPPLICATIONS', '/RESTARTAPPLICATIONS', '/LAUNCHAPP=1'], close_fds=True)
+                from updater import launch_installer
+                launch_installer(payload)
                 self.close()
             except OSError as exc:
                 self.update_status.set('安裝啟動失敗')
@@ -688,7 +689,16 @@ def self_test():
 
 
 if __name__ == '__main__':
-    if '--smoke-test' in sys.argv:
+    if '--runtime-smoke' in sys.argv:
+        directory=Path(getattr(sys,'_MEIPASS',Path(__file__).parent))
+        report=Path(sys.argv[sys.argv.index('--runtime-smoke')+1])
+        report.write_text(json.dumps(dict(frozen=bool(getattr(sys,'frozen',False)),runtime=str(directory),python_dll=(directory/'python311.dll').is_file())),encoding='utf-8')
+    elif '--restart-smoke' in sys.argv:
+        from updater import spawn_independent
+        report=sys.argv[sys.argv.index('--restart-smoke')+1]
+        os.environ['_PYI_APPLICATION_HOME_DIR']=str(Path(report).parent/'missing-old-MEI')
+        spawn_independent([sys.executable,'--runtime-smoke',report])
+    elif '--smoke-test' in sys.argv:
         from smoke_test import run_smoke_test
         run_smoke_test(Path(sys.argv[sys.argv.index('--smoke-test') + 1]))
     elif '--self-test' in sys.argv:

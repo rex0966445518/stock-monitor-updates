@@ -7,6 +7,23 @@ from pathlib import Path
 from updater import check_update, download_installer, validate_manifest, version_tuple, REPO
 
 class UpdateTests(unittest.TestCase):
+    def test_restart_environment_removes_stale_parent_state(self):
+        from updater import installer_environment
+        original={'_PYI_APPLICATION_HOME_DIR':'missing-MEI','_PYI_ARCHIVE_FILE':'old.exe','_PYI_PARENT_PROCESS_LEVEL':'1','_MEIPASS2':'old','TEMP':'user-temp','CUSTOM':'keep'}
+        clean=installer_environment(original)
+        self.assertEqual(clean,{'TEMP':'user-temp','CUSTOM':'keep','PYINSTALLER_RESET_ENVIRONMENT':'1'})
+        self.assertIn('_PYI_APPLICATION_HOME_DIR',original)
+
+    def test_installer_launch_uses_independent_environment(self):
+        from unittest.mock import patch
+        from updater import launch_installer
+        with patch('updater.subprocess.Popen') as popen:
+            launch_installer(Path('verified-setup.exe'))
+            args,kwargs=popen.call_args
+            self.assertEqual(args[0][0],'verified-setup.exe')
+            self.assertIn('/LAUNCHAPP=1',args[0])
+            self.assertEqual(kwargs['env']['PYINSTALLER_RESET_ENVIRONMENT'],'1')
+            self.assertTrue(kwargs['close_fds'])
     def setUp(self):
         self.payload=b'MZ'+b'installer-test'*200
         self.manifest=dict(product='MitakeDetector',platform='windows-x64',channel='stable',version='0.2.0',size=len(self.payload),sha256=hashlib.sha256(self.payload).hexdigest(),url=f'https://github.com/{REPO}/releases/download/mitake-v0.2.0/MitakeDetector-Setup-v0.2.0.exe')

@@ -58,12 +58,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Source OCR/GUI smoke test failed' }
       - name: Build Windows EXE
         run: |
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --noupx --collect-all rapidocr_onnxruntime --collect-all onnxruntime --name MitakeDetector MitakeDetector.py
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --noupx --collect-all rapidocr_onnxruntime --collect-all onnxruntime --name MitakeDetector MitakeDetector.py
           if ($LASTEXITCODE -ne 0) { throw 'PyInstaller build failed' }
+          python bundle_runtime.py
+          if ($LASTEXITCODE -ne 0) { throw 'Fixed runtime verification failed' }
       - name: Verify actual EXE and bundled OCR
         run: |
           $report = Join-Path (Get-Location) 'release-output/frozen-smoke.json'
-          $exe = Join-Path (Get-Location) 'dist/MitakeDetector.exe'
+          $exe = Join-Path (Get-Location) 'dist/MitakeDetector/MitakeDetector.exe'
           $proc = Start-Process -FilePath $exe -ArgumentList @('--smoke-test', "`"$report`"") -PassThru
           if (-not $proc.WaitForExit(240000)) { $proc.Kill(); throw 'Frozen EXE smoke test timed out' }
           $proc.Refresh()
@@ -92,7 +94,7 @@ jobs:
           if ($proc.ExitCode -ne 0) { throw "Installer failed: $($proc.ExitCode)" }
           $installedExe = Join-Path $installDir 'MitakeDetector.exe'
           if (-not (Test-Path $installedExe)) { throw 'Installed EXE missing' }
-          if ((Get-FileHash $installedExe).Hash -ne (Get-FileHash 'dist/MitakeDetector.exe').Hash) { throw 'Installed EXE hash mismatch' }
+          if ((Get-FileHash $installedExe).Hash -ne (Get-FileHash 'dist/MitakeDetector/MitakeDetector.exe').Hash) { throw 'Installed EXE hash mismatch' }
           $settings = Join-Path $env:LOCALAPPDATA 'MitakeDetector/settings.json'
           $db = Join-Path $env:LOCALAPPDATA 'MitakeDetector/observations.sqlite3'
           $settingsHash = (Get-FileHash $settings).Hash
@@ -100,6 +102,8 @@ jobs:
           $proc = Start-Process -FilePath $installer -ArgumentList $args -Wait -PassThru
           if ($proc.ExitCode -ne 0) { throw 'Reinstall/update simulation failed' }
           if ((Get-FileHash $settings).Hash -ne $settingsHash -or (Get-FileHash $db).Hash -ne $dbHash) { throw 'Update changed user data' }
+          if (-not (Test-Path (Join-Path $installDir '_internal/python311.dll'))) { throw 'Installed Python DLL missing' }
+          if (-not (Test-Path (Join-Path $installDir '_internal/vcruntime140_1.dll'))) { throw 'Installed VC runtime missing' }
           $report = Join-Path (Get-Location) 'release-output/installed-smoke.json'
           $proc = Start-Process -FilePath $installedExe -ArgumentList @('--smoke-test',"`"$report`"") -PassThru
           if (-not $proc.WaitForExit(240000)) { $proc.Kill(); throw 'Installed EXE timed out' }
@@ -117,6 +121,17 @@ jobs:
           if (-not $gui) { throw 'Normal installed EXE did not open its main window' }
           if (-not $gui.CloseMainWindow()) { throw 'Normal EXE did not accept close request' }
           if (-not $normal.WaitForExit(30000)) { $normal.Kill(); throw 'Normal EXE did not exit cleanly' }
+          $restartReport = Join-Path (Get-Location) 'release-output/restart-smoke.json'
+          $restart = Start-Process -FilePath $installedExe -ArgumentList @('--restart-smoke',"`"$restartReport`"") -PassThru
+          if (-not $restart.WaitForExit(30000)) { $restart.Kill(); throw 'Restart parent failed to exit' }
+          for ($attempt=0; $attempt -lt 60; $attempt++) {
+            if (Test-Path $restartReport) { break }
+            Start-Sleep -Milliseconds 500
+          }
+          if (-not (Test-Path $restartReport)) { throw 'Independent restarted EXE failed to load Python' }
+          $runtime = Get-Content $restartReport -Raw | ConvertFrom-Json
+          if (-not $runtime.frozen -or -not $runtime.python_dll -or $runtime.runtime -ne (Join-Path $installDir '_internal')) { throw 'Restart reused stale runtime directory' }
+          'Independent restart with stale parent environment verified.'
           'Installation, reinstallation, data preservation, installed OCR/GUI and normal launch verified.'
       - name: Preserve installer and diagnostics
         if: always()

@@ -3,6 +3,8 @@ import hashlib
 import json
 import os
 import re
+import subprocess
+import sys
 import time
 import urllib.parse
 import urllib.request
@@ -12,6 +14,35 @@ REPO = 'rex0966445518/stock-monitor-updates'
 PRODUCT = 'MitakeDetector'
 FEED_URL = f'https://github.com/{REPO}/releases/download/mitake-latest/mitake-update.json'
 MAX_INSTALLER_SIZE = 500 * 1024 * 1024
+
+
+def installer_environment(environ=None):
+    """The installer and restarted app must outlive the old frozen process."""
+    source=os.environ if environ is None else environ
+    env={k:v for k,v in source.items() if not k.upper().startswith('_PYI_') and k.upper()!='_MEIPASS2'}
+    env['PYINSTALLER_RESET_ENVIRONMENT']='1'
+    return env
+
+
+def spawn_independent(args):
+    restore=None
+    if sys.platform=='win32':
+        import ctypes
+        kernel=ctypes.windll.kernel32
+        buffer=ctypes.create_unicode_buffer(32768)
+        kernel.GetDllDirectoryW(len(buffer),buffer)
+        previous=buffer.value
+        kernel.SetDllDirectoryW.argtypes=[ctypes.c_wchar_p]
+        if not kernel.SetDllDirectoryW(None):raise OSError('無法重設更新程序DLL搜尋路徑')
+        restore=lambda:kernel.SetDllDirectoryW(previous or None)
+    try:
+        return subprocess.Popen(args,close_fds=True,env=installer_environment())
+    finally:
+        if restore:restore()
+
+
+def launch_installer(path):
+    return spawn_independent([str(path),'/SP-','/SILENT','/NORESTART','/CLOSEAPPLICATIONS','/RESTARTAPPLICATIONS','/LAUNCHAPP=1'])
 
 
 def version_tuple(value):
