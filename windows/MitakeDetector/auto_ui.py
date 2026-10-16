@@ -117,8 +117,14 @@ class AutoUI:
         import numpy as np
         if self.ocr is None:self.ocr=RapidOCR()
         # Preserve pixel coordinates for clicking; upscale OCR output is scaled back.
-        result,_=self.ocr(np.asarray(image.convert('RGB').resize((image.width*2,image.height*2)))[:,:,::-1].copy())
-        return [([[x/2,y/2] for x,y in box],text,score) for box,text,score in result or []]
+        from PIL import ImageOps
+        raw=image.convert('RGB')
+        margin=24
+        background=raw.getpixel((min(5,raw.width-1),raw.height//2))
+        padded=ImageOps.expand(raw,border=margin,fill=background)
+        scale=3
+        result,_=self.ocr(np.asarray(padded.resize((padded.width*scale,padded.height*scale)))[:,:,::-1].copy(),unclip_ratio=2.0)
+        return [([[(x/scale)-margin,(y/scale)-margin] for x,y in box],text,score) for box,text,score in result or []]
 
     def start_auto(self,test_only=False):
         from tkinter import messagebox

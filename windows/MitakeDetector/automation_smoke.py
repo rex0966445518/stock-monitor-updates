@@ -30,6 +30,8 @@ def run_automation_smoke(root,app):
     menu_roi=[x/width,(y+40)/height,260/width,170/height]
     done=queue.Queue();ocr_log=[]
     def read(image):
+        from pathlib import Path
+        image.save(Path('release-output')/('auto-fixture-'+str(len(ocr_log))+'.png'))
         tokens=app.read_auto_ocr(image)
         ocr_log.append([str(t[1]) for t in tokens])
         return tokens
