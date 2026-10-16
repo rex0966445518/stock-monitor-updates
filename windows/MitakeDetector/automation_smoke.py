@@ -40,7 +40,7 @@ def run_automation_smoke(root,app):
     from PIL import ImageGrab
     from pathlib import Path
     root.update_idletasks()
-    ImageGrab.grab(bbox=(progress_panel.window.winfo_rootx(),progress_panel.window.winfo_rooty(),progress_panel.window.winfo_rootx()+390,progress_panel.window.winfo_rooty()+48)).save(Path('release-output')/'progress-panel.png')
+    ImageGrab.grab(bbox=(progress_panel.window.winfo_rootx(),progress_panel.window.winfo_rooty(),progress_panel.window.winfo_rootx()+progress_panel.window.winfo_width(),progress_panel.window.winfo_rooty()+48)).save(Path('release-output')/'progress-panel.png')
     get_style=u.GetWindowLongPtrW if ctypes.sizeof(ctypes.c_void_p)==8 else u.GetWindowLongW
     get_style.argtypes=[W.HWND,ctypes.c_int];get_style.restype=ctypes.c_ssize_t
     style=get_style(progress_panel.native_hwnd,-20)

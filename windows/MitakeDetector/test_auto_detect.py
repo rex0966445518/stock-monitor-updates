@@ -8,6 +8,15 @@ def token(text,x,y,width=70):return ([[x,y],[x+width,y],[x+width,y+18],[x,y+18]]
 
 
 class DetectionTests(unittest.TestCase):
+    def test_task_steps_describe_real_work(self):
+        from task_progress import task_stage
+        self.assertIn('1/4',task_stage('正在辨識排行下拉框與六個表頭…'))
+        self.assertIn('2/4',task_stage('正在定位展開選單…'))
+        self.assertIn('3/4',task_stage('正在讀取股票資料並驗證欄位…'))
+        self.assertIn('4/4',task_stage('自動設定完成，準備啟動輪切掃描…'))
+        self.assertIn('切換',task_stage('第1輪｜排行1/5：正在切換漲幅排行'))
+        self.assertIn('讀取',task_stage('第1輪｜漲幅排行｜第1/1頁辨識中'))
+        self.assertIn('等待',task_stage('漲幅排行｜已讀26檔｜15秒後繼續'))
     def test_voice_command_encodes_chinese_and_escapes_quotes(self):
         import base64
         from windows_voice import speech_command

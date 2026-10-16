@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.5'
+VERSION = '0.3.6'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -523,7 +523,9 @@ class App(AutoUI):
                     self.auto_active=False;self.auto_hwnd=target;self.config=cfg
                     self.save();self.status.set(f'自動設定完成｜已驗證 {count} 檔資料｜F8 開始／停止')
                     self.say('已自動定位選單、表格與六欄；預設輪切五個排行，每頁讀取後停留15秒。')
-                    if start_after:self.root.after(300,lambda:self.start_auto(announce=False))
+                    if start_after:
+                        self.update_task_progress('自動設定完成，準備啟動輪切掃描…')
+                        self.root.after(300,lambda:self.start_auto(announce=False))
                     else:self.announce_task('自動設定完成');self.close_task_progress();self.root.deiconify()
                 elif kind == 'auto_end':
                     self.announce_task('任務執行失敗，請查看訊息' if '未完成' in payload or '：' in payload else '任務已停止')

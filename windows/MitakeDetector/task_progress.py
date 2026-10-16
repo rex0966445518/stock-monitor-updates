@@ -4,16 +4,32 @@ import sys
 import time
 
 
+def task_stage(text):
+    text=str(text)
+    if '準備自動定位' in text:return '設定1/4：尋找視窗與欄位'
+    if '辨識排行下拉框' in text:return '設定1/4：辨識表頭'
+    if '定位展開選單' in text:return '設定2/4：定位類目選單'
+    if '驗證欄位' in text:return '設定3/4：驗證股票資料'
+    if '自動設定完成' in text or '準備開始自動輪切' in text:return '設定4/4：啟動輪切掃描'
+    if '正在切換' in text:return '正在切換排行榜'
+    if '已確認排行' in text:return '確認類目，準備擷取'
+    if '辨識中' in text:return '正在讀取股票資料'
+    if '後繼續' in text:return '本次擷取完成，等待繼續'
+    return '正在執行任務'
+
+
 class TaskProgress:
     def __init__(self,root,tk,ttk,rect,message):
         self.root=root;self.tk=tk;self.started=time.monotonic();self.alive=True;self.after_id=None
         self.window=tk.Toplevel(root);self.window.withdraw();self.window.overrideredirect(True)
         self.window.configure(bg='#101a2b');self.window.attributes('-topmost',True)
-        self.window.geometry(f'390x48{max(rect[0],rect[2]-398):+d}{rect[1]+2:+d}')
-        self.title=tk.StringVar();self.detail=tk.StringVar(value=message)
-        tk.Label(self.window,textvariable=self.title,bg='#101a2b',fg='#68f5d1',font=('Microsoft JhengHei',9,'bold'),anchor='w').place(x=8,y=0,width=374,height=20)
-        tk.Label(self.window,textvariable=self.detail,bg='#101a2b',fg='#edf2ff',font=('Microsoft JhengHei',8),anchor='w').place(x=8,y=20,width=374,height=20)
-        self.bar=ttk.Progressbar(self.window,mode='indeterminate',length=370);self.bar.place(x=8,y=42,width=374,height=4)
+        width=min(900,max(280,rect[2]-rect[0]-240))
+        left=max(rect[0]+8,min(rect[2]-width-8,rect[0]+(rect[2]-rect[0]-width)//2))
+        self.window.geometry(f'{width}x48{left:+d}{rect[1]+2:+d}')
+        self.title=tk.StringVar();self.detail=tk.StringVar(value=message);self.stage=task_stage(message)
+        tk.Label(self.window,textvariable=self.title,bg='#101a2b',fg='#68f5d1',font=('Microsoft JhengHei',10,'bold'),anchor='w').place(x=8,y=0,width=width-16,height=20)
+        tk.Label(self.window,textvariable=self.detail,bg='#101a2b',fg='#edf2ff',font=('Microsoft JhengHei',8),anchor='w').place(x=8,y=20,width=width-16,height=20)
+        self.bar=ttk.Progressbar(self.window,mode='indeterminate',length=370);self.bar.place(x=8,y=42,width=width-16,height=4)
         self.bar.start(90)
         self.window.update_idletasks()
         self.native_hwnd=None
@@ -41,12 +57,15 @@ class TaskProgress:
         if not self.alive:return
         seconds=int(time.monotonic()-self.started)
         pulse=['●','◉','●','○'][seconds%4]
-        self.title.set(f'{pulse} 機器人運作中  {seconds//60:02d}:{seconds%60:02d}   F8 停止')
+        self.title.set(f'{pulse} 機器人工作中｜{self.stage}｜{seconds//60:02d}:{seconds%60:02d}｜F8 停止')
         self.after_id=self.root.after(500,self.tick)
 
     def update(self,text,completed=None,total=None):
         if not self.alive:return
-        self.detail.set(str(text)[:75])
+        self.stage=task_stage(text)
+        self.detail.set(str(text)[:120])
+        seconds=int(time.monotonic()-self.started)
+        self.title.set(f'● 機器人工作中｜{self.stage}｜{seconds//60:02d}:{seconds%60:02d}｜F8 停止')
         if total is not None and total>0:
             self.bar.stop();self.bar.configure(mode='determinate',maximum=total,value=max(0,min(total,completed or 0)))
         else:
