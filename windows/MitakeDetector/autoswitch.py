@@ -1,5 +1,6 @@
 """Local Windows ranking-menu automation. All input is bounded to calibrated ROIs."""
 import ctypes
+import difflib
 import os
 import re
 import threading
@@ -177,15 +178,18 @@ class WindowsController:
 
 
 class RankingSwitcher:
-    def __init__(self,controller,ocr,combo_roi,menu_roi):
-        self.c=controller;self.ocr=ocr
+    def __init__(self,controller,ocr,combo_roi,menu_roi,ocr_retry=None,status=None):
+        self.c=controller;self.ocr=ocr;self.ocr_retry=ocr_retry;self.status=status or (lambda text:None)
         self.combo=validate_roi(combo_roi);self.menu=validate_roi(menu_roi)
 
     def label_matches(self,name):
         im,_=self.c.image(self.combo)
-        tokens=self.ocr(im)
-        text=''.join(str(item[1]) for item in sorted(tokens or [],key=lambda item:min(p[0] for p in item[0])) if item[2]>=.65)
-        return normalized(text)==normalized(name)
+        for reader in [self.ocr,self.ocr_retry]:
+            if reader is None:continue
+            tokens=reader(im)
+            text=''.join(str(item[1]) for item in sorted(tokens or [],key=lambda item:min(p[0] for p in item[0])) if item[2]>=.65)
+            if normalized(text)==normalized(name):return True
+        return False
 
     def switch(self,name,menu_open=False):
         if name not in RANKINGS:raise ValueError('未知排行名稱')
@@ -200,10 +204,15 @@ class RankingSwitcher:
         menu=absolute_roi(self.menu,self.c.rect())
         center=(menu['left']+menu['width']//2,menu['top']+menu['height']//2)
         self.c.scroll(center,120*60);self.c.pause(.35)
-        previous=None
-        for page in range(15):
+        previous=None;unchanged=0
+        for page in range(60):
             self.c.check();im,region=self.c.image(self.menu);tokens=self.ocr(im)
+            self.status(f'正在尋找「{name}」｜選單第{page+1}段')
             point=find_menu_item(tokens,name)
+            if point is None and self.ocr_retry and any(difflib.SequenceMatcher(None,normalized(t[1]),normalized(name)).ratio()>=.55 for t in tokens or []):
+                alternative=self.ocr_retry(im)
+                point=find_menu_item(alternative,name)
+                if point:tokens=alternative
             if point:
                 self.c.click((region['left']+point[0],region['top']+point[1]));self.c.pause(.5)
                 for _ in range(3):
@@ -211,8 +220,10 @@ class RankingSwitcher:
                     self.c.pause(.4)
                 raise AutomationStopped('切換後標題不符，已停止，沒有記入該排行資料')
             fingerprint=tuple(normalized(str(t[1])) for t in tokens or [])
-            if fingerprint and fingerprint==previous:break
+            unchanged=unchanged+1 if fingerprint and fingerprint==previous else 0
+            if unchanged>=2:break
             previous=fingerprint
-            self.c.scroll(center,-120*4);self.c.pause(.35)
+            # One wheel notch preserves overlapping rows on narrow native lists.
+            self.c.scroll(center,-120);self.c.pause(.45)
         observed='、'.join(str(t[1]) for t in tokens or [])[:100]
         raise AutomationStopped('選單中找不到「'+name+'」；本次讀到：'+(observed or '無文字')+'；已停止')

@@ -31,6 +31,25 @@ class AutoTests(unittest.TestCase):
     def test_f8_busy_during_release(self):
         key=F8Toggle();key.update(True,False)
         self.assertIsNone(key.update(False,True))
+    def test_small_wheel_steps_do_not_skip_target(self):
+        class WheelController(FakeController):
+            def scroll(self,point,delta):
+                self.check();self.actions.append(('scroll',delta))
+                self.page=0 if delta>0 else self.page+(abs(delta)//120)*3
+        c=WheelController();combo=[.1,.1,.2,.04];menu=[.1,.15,.2,.5]
+        names=['漲停鎖住','跌停鎖住','即將漲停','即將跌停','瞬間拉抬','瞬間殺盤','漲幅排行','跌幅排行','成量排行','成值排行','估量排行','預估量增','大單流入','大單流出','大單匯集','大單渙散']
+        def ocr(im):
+            if im==tuple(combo):return [token('預估量增' if sum(a[0]=='click' for a in c.actions)>=2 else '漲停鎖住')]
+            return [token(n,20+i*30) for i,n in enumerate(names[c.page:c.page+10])]
+        RankingSwitcher(c,ocr,combo,menu).switch('預估量增')
+        self.assertTrue(any(a==('scroll',-120) for a in c.actions))
+        self.assertFalse(any(a[0]=='scroll' and a[1]<-120 for a in c.actions))
+    def test_retry_accepts_only_exact_label(self):
+        c=FakeController();combo=[.1,.1,.2,.04];menu=[.1,.15,.2,.5]
+        calls=[]
+        def retry(im):calls.append(im);return [token('漲幅排行')]
+        RankingSwitcher(c,lambda im:[token('旅幅排行')],combo,menu,ocr_retry=retry).switch('漲幅排行')
+        self.assertTrue(calls);self.assertEqual(c.actions,[])
     def test_current_ranking_needs_no_input(self):
         c=FakeController()
         RankingSwitcher(c,lambda im:[token('漲幅排行')],[.1,.1,.2,.04],[.1,.15,.2,.5]).switch('漲幅排行')

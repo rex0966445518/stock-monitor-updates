@@ -73,7 +73,7 @@ class AutoUI:
                 auto=dict(title=title,window_size=[im.width,im.height],combo=discovered['combo'],menu=menu,table=discovered['table'],
                           rankings=['漲幅排行','預估量增','分時買力','大單流入','連續買單'],seconds=15,pages=1,discovered=1)
                 # The popup is known to be open after detect_menu: select directly.
-                RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu']).switch('漲幅排行',menu_open=True)
+                RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu'],ocr_retry=self.read_menu_ocr_retry,status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None)))).switch('漲幅排行',menu_open=True)
                 self.events.put((token,'auto_status','正在讀取股票資料並驗證欄位…'))
                 table,_=c.image(auto['table'])
                 quotes,bad=self.scan_mapped_table(table,discovered['column_bounds'])
@@ -240,6 +240,12 @@ class AutoUI:
         self.ttk.Button(buttons,text='儲存設定',command=save).pack(side='left')
         self.ttk.Button(buttons,text='測試輪切一次（不讀取行情）',command=test).pack(side='left',padx=10)
 
+    def read_menu_ocr_retry(self,image):
+        from PIL import ImageOps
+        gray=ImageOps.autocontrast(ImageOps.grayscale(image))
+        high=gray.point(lambda value:255 if value>140 else 0).convert('RGB')
+        return self.read_auto_ocr(high)
+
     def read_auto_ocr(self,image):
         from rapidocr_onnxruntime import RapidOCR
         import numpy as np
@@ -284,7 +290,7 @@ class AutoUI:
                     raise ValueError('三竹視窗尺寸與框選時不同，請重新設定位置')
                 c.activate()
                 threading.Thread(target=c.monitor_hotkey,daemon=True).start()
-                switcher=RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu'])
+                switcher=RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu'],ocr_retry=self.read_menu_ocr_retry,status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None))))
                 cycle=0
                 while not stop.is_set():
                     cycle+=1
