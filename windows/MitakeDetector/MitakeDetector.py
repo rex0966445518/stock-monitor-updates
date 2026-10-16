@@ -7,16 +7,17 @@
 import csv, dataclasses, datetime as dt, importlib.util, json, math, os
 import queue, random, re, sqlite3, subprocess, sys, threading, time, unicodedata
 from collections import deque
+from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.2.0'
+VERSION = '0.3.0'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
 DEFAULT = dict(interval=5, min_price=50, min_volume=1000, min_gain=1,
                max_gain=8.5, min_turnover=0, use_turnover=False,
                use_accel=False, accel=1.5, use_breakout=True, cooldown=300,
-               centers=[6, 22, 40, 57, 75, 92], region=None)
+               centers=[6, 22, 40, 57, 75, 92], region=None, auto_config=None)
 
 @dataclasses.dataclass
 class Quote:
@@ -156,10 +157,10 @@ class Engine:
         return rows, alerts
 
 
-HELP = '''三竹盤中轉強偵測器 v0.2.0
+HELP = '''三竹盤中轉強偵測器 v0.3.0
 
 【Windows 安裝版】
-開啟 MitakeDetector-Setup-v0.2.0.exe 安裝。支援 Windows 10/11 x64；不需Python。
+開啟 MitakeDetector-Setup-v0.3.0.exe 安裝。支援 Windows 10/11 x64；不需Python。
 安裝於目前使用者的應用程式目錄，建立開始功能表與可選的桌面捷徑。
 辨識元件與OCR模型已內建，不需另外下載。
 
@@ -172,6 +173,18 @@ HELP = '''三竹盤中轉強偵測器 v0.2.0
 5. 按「開始實盤」。將偵測器視窗移到不遮住排行榜的位置。
 6. 若移動或縮放三竹畫面，先停止，再重新框選校正。
 圖片測試請用已裁切至相同表格範圍的截圖；圖片模式不提醒、不寫實盤資料。
+
+【自動輪切（新增）】
+1. 開啟三竹，按「自動輪切設定」，選擇正確視窗。
+2. 依序框選：排行名稱下拉框、展開後的選單清單、排行榜資料表格。
+   框選展開選單時，程式會使用已設定的下拉框位置展開選單供框選。
+3. 勾選要輪切的排行，設定停留秒數與頁數；先測試輪切一次。
+4. 表格沿用主畫面「校正欄位」的六欄位置，所有排行需使用相同欄位排列。
+5. 按「開始自動輪切」後偵測器縮到工作列，由滑鼠操作三竹。
+6. F8緊急停止；切到其他程式、遮住操作區、關閉/最小化或縮放三竹時自動停止。
+7. 可移動三竹視窗；縮放後需重新框選。標題辨識不符時不會記入該排行資料。
+輪切只使用選單點擊及滑鼠滾輪；僅收集設定頁數，不保證涵蓋完整排行榜。
+尚未在使用者的實際三竹版本驗證，需先執行「測試輪切一次」。
 
 【內建更新】
 按下方「檢查更新／下載安裝」，查看版本說明後按「下載並安裝新版」。
@@ -189,7 +202,7 @@ HELP = '''三竹盤中轉強偵測器 v0.2.0
 讀取時間為本機掃描時間，不是交易所行情時間；OCR與畫面更新都有延遲。
 
 【範圍與限制】
-僅讀取可見列，不自動翻頁或掃描全市場，沒有三竹SDK/API官方串接。
+手動模式僅讀取可見列；自動模式讀取設定頁數，沒有三竹SDK/API官方串接。
 離開畫面的股票可能缺少量速資料。重新開始會重新累積觀測基準。
 模糊、合併或格式不明的欄位保守略過；量倒退或單次股價跳動>3%也會略過。
 這是候選訊號原型，未經三竹實盤全面驗證、尚未驗證漲停命中率、不會自動下單。
@@ -201,7 +214,7 @@ HELP = '''三竹盤中轉強偵測器 v0.2.0
 '''
 
 
-class App:
+class App(AutoUI):
     def __init__(self, root):
         import tkinter as tk
         from tkinter import ttk
@@ -218,11 +231,13 @@ class App:
         self.engine = Engine()
         self.records = []
         self.mode = '待機'
+        self.auto_active = False
+        self.auto_engines = {}
         self.ocr = None
         self.update_busy = False
         self.update_status = tk.StringVar(value='')
         root.title('三竹盤中轉強偵測器 v' + VERSION)
-        root.geometry('1180x820')
+        root.geometry('1180x860')
         root.minsize(1100, 760)
         root.configure(bg='#0b1020')
         style = ttk.Style()
@@ -236,6 +251,10 @@ class App:
         bar = ttk.Frame(root); bar.pack(fill='x', padx=15, pady=12)
         for label, action in [('辨識元件檢查', self.install), ('框選排行榜', self.select_region), ('校正欄位', self.calibrate), ('圖片測試', self.image_test), ('示範', self.demo), ('開始實盤', self.start), ('停止', self.stop), ('使用說明', self.help)]:
             ttk.Button(bar, text=label, command=action).pack(side='left', padx=3)
+        auto_bar = ttk.Frame(root); auto_bar.pack(fill='x', padx=18, pady=(0, 8))
+        ttk.Button(auto_bar, text='自動輪切設定', command=self.configure_auto).pack(side='left')
+        ttk.Button(auto_bar, text='開始自動輪切', command=self.start_auto).pack(side='left', padx=8)
+        ttk.Label(auto_bar, text='F8 停止 · 輪切會使用滑鼠 · 離開三竹視窗自動停止').pack(side='left', padx=8)
         opts = ttk.LabelFrame(root, text='篩選條件（變更後，停止並重新開始以套用）'); opts.pack(fill='x', padx=18)
         self.vars = {}
         fields = [('min_price', '股價 ≥'), ('min_volume', '總量張 ≥'), ('min_gain', '漲幅 ≥%'), ('max_gain', '漲幅 ≤%'), ('interval', '間隔秒'), ('cooldown', '提醒間隔秒')]
@@ -295,7 +314,7 @@ class App:
 
     def idle(self):
         from tkinter import messagebox
-        if self.worker_thread and self.worker_thread.is_alive():
+        if self.auto_active or (self.worker_thread and self.worker_thread.is_alive()):
             messagebox.showinfo('正在執行', '請先停止，等待本次辨識完成再操作。'); return False
         return True
 
@@ -452,10 +471,13 @@ class App:
     def stop(self):
         self.stop_event.set(); self.generation += 1
         self.status.set(self.mode + '｜已停止；保留本輪紀錄，可匯出。'); self.say('停止請求已送出。')
+        if self.auto_active:
+            self.auto_active=False; self.root.deiconify()
 
     def render(self, quotes, rejected, elapsed, cfg, persist):
         from tkinter import messagebox
-        rows, alerts = self.engine.process(quotes, cfg)
+        engine = self.auto_engines.setdefault(cfg['source_rank'], Engine()) if cfg.get('source_rank') else self.engine
+        rows, alerts = engine.process(quotes, cfg)
         for item in self.tree.get_children(): self.tree.delete(item)
         batch = []
         for q, ratio, reason, hit in sorted(rows, key=lambda item: (not item[3], -item[0].gain)):
@@ -477,6 +499,9 @@ class App:
         if alerts: self.root.bell()
 
     def poll(self):
+        if self.auto_active and sys.platform=='win32':
+            import ctypes
+            if ctypes.windll.user32.GetAsyncKeyState(0x77)&0x8000:self.stop()
         try:
             while True:
                 token, kind, payload = self.events.get_nowait()
@@ -484,7 +509,16 @@ class App:
                     self.handle_update(kind, payload)
                     continue
                 if token != self.generation: continue
-                if kind == 'quotes': self.render(*payload, persist=True)
+                if kind == 'auto_status':
+                    self.status.set(payload); self.say(payload)
+                elif kind == 'auto_end':
+                    self.auto_active=False; self.status.set(payload); self.say(payload); self.root.deiconify()
+                elif kind == 'auto_quotes':
+                    name, quotes, rejected, elapsed, cfg = payload
+                    self.mode='自動輪切／'+name
+                    self.render(quotes, rejected, elapsed, cfg, persist=True)
+                    if not quotes:self.say('此排行未讀到完整六欄，請核對表格及欄位校正。')
+                elif kind == 'quotes': self.render(*payload, persist=True)
                 elif kind == 'message': self.status.set(payload); self.say(payload)
                 elif kind == 'test':
                     quotes, rejected = payload

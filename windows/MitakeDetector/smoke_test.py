@@ -28,14 +28,16 @@ def run_smoke_test(report):
         app.mode='CI smoke / synthetic data'
         app.render([Quote('9001','SMOKE',100,2,1500,1,now)],0,0,dict(DEFAULT),persist=True)
         assert (BASE/'observations.sqlite3').is_file()
-        app.demo();root.geometry('1180x860');root.deiconify()
+        from automation_smoke import run_automation_smoke
+        automation=run_automation_smoke(root,app)
+        app.demo();root.geometry('1180x900');root.deiconify()
         def finish():
             try:
                 root.update_idletasks()
                 assert len(app.tree.get_children())==2
                 screenshot=report.with_suffix('.png')
                 ImageGrab.grab(bbox=(root.winfo_rootx(),root.winfo_rooty(),root.winfo_rootx()+root.winfo_width(),root.winfo_rooty()+root.winfo_height())).save(screenshot)
-                info.update(ok=True,version=VERSION,frozen=bool(getattr(sys,'frozen',False)),ocr_rows=len(quotes),gui_rows=len(app.tree.get_children()),database=True,screenshot=str(screenshot))
+                info.update(automation=automation,ok=True,version=VERSION,frozen=bool(getattr(sys,'frozen',False)),ocr_rows=len(quotes),gui_rows=len(app.tree.get_children()),database=True,screenshot=str(screenshot))
             except Exception:
                 info.update(ok=False,error=traceback.format_exc())
             finally:
