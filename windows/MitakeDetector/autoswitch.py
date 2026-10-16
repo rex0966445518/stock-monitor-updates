@@ -52,9 +52,24 @@ def absolute_roi(roi,rect):
 
 def find_menu_item(ocr, name):
     target=normalized(name)
-    for box,text,score in ocr or []:
-        if score>=.65 and normalized(text)==target:
+    tokens=[t for t in ocr or [] if t[2]>=.65]
+    for box,text,score in tokens:
+        if normalized(text)==target:
             return (sum(p[0] for p in box)/4,sum(p[1] for p in box)/4)
+    # OCR may split one menu label into adjacent words; never join different rows.
+    for first in tokens:
+        box=first[0];y=sum(p[1] for p in box)/4
+        height=max(p[1] for p in box)-min(p[1] for p in box)
+        row=sorted([t for t in tokens if abs(sum(p[1] for p in t[0])/4-y)<max(4,height*.45)],key=lambda t:min(p[0] for p in t[0]))
+        for start in range(len(row)):
+            text='';pieces=[];right=None
+            for token in row[start:]:
+                left=min(p[0] for p in token[0])
+                if right is not None and left-right>height*2:break
+                right=max(p[0] for p in token[0]);pieces.append(token);text+=normalized(token[1])
+                if len(pieces)>1 and text==target:
+                    return ((min(p[0] for t in pieces for p in t[0])+max(p[0] for t in pieces for p in t[0]))/2,y)
+                if len(text)>=len(target):break
     return None
 
 
@@ -172,13 +187,16 @@ class RankingSwitcher:
         text=''.join(str(item[1]) for item in sorted(tokens or [],key=lambda item:min(p[0] for p in item[0])) if item[2]>=.65)
         return normalized(text)==normalized(name)
 
-    def switch(self,name):
+    def switch(self,name,menu_open=False):
         if name not in RANKINGS:raise ValueError('未知排行名稱')
         self.c.check()
-        # Re-open and select even if label matches, to test the actual click path consistently.
-        _,combo=self.c.image(self.combo)
-        self.c.click((combo['left']+combo['width']//2,combo['top']+combo['height']//2))
-        self.c.pause(.4)
+        # A verified current label needs no mouse input. An already-open popup must
+        # instead be selected directly so setup never guesses its toggle state.
+        if not menu_open and self.label_matches(name):return
+        if not menu_open:
+            _,combo=self.c.image(self.combo)
+            self.c.click((combo['left']+combo['width']//2,combo['top']+combo['height']//2))
+            self.c.pause(.4)
         menu=absolute_roi(self.menu,self.c.rect())
         center=(menu['left']+menu['width']//2,menu['top']+menu['height']//2)
         self.c.scroll(center,120*60);self.c.pause(.35)
@@ -196,4 +214,5 @@ class RankingSwitcher:
             if fingerprint and fingerprint==previous:break
             previous=fingerprint
             self.c.scroll(center,-120*4);self.c.pause(.35)
-        raise AutomationStopped('選單中找不到「'+name+'」，請檢查框選範圍與字體；已停止')
+        observed='、'.join(str(t[1]) for t in tokens or [])[:100]
+        raise AutomationStopped('選單中找不到「'+name+'」；本次讀到：'+(observed or '無文字')+'；已停止')

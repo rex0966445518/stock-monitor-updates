@@ -31,6 +31,20 @@ class AutoTests(unittest.TestCase):
     def test_f8_busy_during_release(self):
         key=F8Toggle();key.update(True,False)
         self.assertIsNone(key.update(False,True))
+    def test_current_ranking_needs_no_input(self):
+        c=FakeController()
+        RankingSwitcher(c,lambda im:[token('漲幅排行')],[.1,.1,.2,.04],[.1,.15,.2,.5]).switch('漲幅排行')
+        self.assertEqual(c.actions,[])
+    def test_setup_selects_already_open_popup_without_toggle(self):
+        c=FakeController()
+        RankingSwitcher(c,lambda im:[token('漲幅排行')],[.1,.1,.2,.04],[.1,.15,.2,.5]).switch('漲幅排行',menu_open=True)
+        self.assertEqual(sum(a[0]=='click' for a in c.actions),1)
+    def test_split_label_same_row_only(self):
+        a=([[10,10],[50,10],[50,30],[10,30]],'漲幅',.99)
+        b=([[55,10],[95,10],[95,30],[55,30]],'排行',.99)
+        self.assertIsNotNone(find_menu_item([a,b],'漲幅排行'))
+        b=([[55,40],[95,40],[95,60],[55,60]],'排行',.99)
+        self.assertIsNone(find_menu_item([a,b],'漲幅排行'))
     def test_translation(self):self.assertEqual(normalized('漲幅排行 ▼'),normalized('涨幅排行'))
     def test_exact_match(self):
         self.assertIsNone(find_menu_item([token('大單流入量')],'大單流入'))
@@ -42,7 +56,7 @@ class AutoTests(unittest.TestCase):
             with self.assertRaises(ValueError):validate_roi(bad)
     def test_switch_and_label_verification(self):
         c=FakeController();combo=[.1,.1,.2,.04];menu=[.1,.15,.2,.5]
-        def ocr(im):return [token('大單流入')] if im==tuple(menu) or im==tuple(combo) else []
+        def ocr(im):return [token('大單流入')] if im==tuple(menu) or sum(a[0]=='click' for a in c.actions)>=2 else [token('跌幅排行')]
         RankingSwitcher(c,ocr,combo,menu).switch('大單流入')
         self.assertEqual(sum(a[0]=='click' for a in c.actions),2)
     def test_wrong_label_stops(self):
@@ -59,7 +73,7 @@ class AutoTests(unittest.TestCase):
         self.assertEqual(c.actions,[])
     def test_scroll_finds_later_page(self):
         c=FakeController();combo=[.1,.1,.2,.04];menu=[.1,.15,.2,.5]
-        def ocr(im):return [token('大單流入')] if c.page or im==tuple(combo) else [token('漲幅排行')]
+        def ocr(im):return [token('大單流入')] if (im==tuple(menu) and c.page) or sum(a[0]=='click' for a in c.actions)>=2 else [token('漲幅排行')]
         RankingSwitcher(c,ocr,combo,menu).switch('大單流入')
         self.assertTrue(any(a[0]=='scroll' and a[1]<0 for a in c.actions))
 if __name__=='__main__':unittest.main()

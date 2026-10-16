@@ -35,9 +35,8 @@ class AutoUI:
                 menu=detect_menu(opened,discovered['combo'],self.read_auto_ocr);c.check()
                 auto=dict(title=title,window_size=[im.width,im.height],combo=discovered['combo'],menu=menu,table=discovered['table'],
                           rankings=['漲幅排行','預估量增','分時買力','大單流入','連續買單'],seconds=15,pages=1,discovered=1)
-                # Close the observed popup, then verify a real switch with exact title matching.
-                c.click((combo['left']+combo['width']//2,combo['top']+combo['height']//2));c.pause(.4)
-                RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu']).switch('漲幅排行')
+                # The popup is known to be open after detect_menu: select directly.
+                RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu']).switch('漲幅排行',menu_open=True)
                 table,_=c.image(auto['table'])
                 quotes,bad=self.scan_mapped_table(table,discovered['column_bounds'])
                 c.check()
