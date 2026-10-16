@@ -28,7 +28,7 @@ AppMutex=Local\RexMitakeDetector
 SetupLogging=yes
 VersionInfoVersion={#AppVersion}.0
 [Languages]
-Name: "chinesetraditional"; MessagesFile: "compiler:Languages\ChineseTraditional.isl"
+Name: "chinesetraditional"; MessagesFile: "ChineseTraditional.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "建立桌面捷徑"; GroupDescription: "捷徑："

@@ -105,7 +105,17 @@ jobs:
           if ($proc.ExitCode -ne 0 -or -not (Test-Path $report)) { throw 'Installed EXE failed' }
           $data = Get-Content $report -Raw | ConvertFrom-Json
           if (-not $data.ok -or -not $data.frozen) { throw 'Installed OCR/GUI test failed' }
-          'Installation, reinstallation, data preservation and installed EXE verified.'
+          $normal = Start-Process -FilePath $installedExe -PassThru
+          $gui = $null
+          for ($attempt=0; $attempt -lt 60; $attempt++) {
+            Start-Sleep -Milliseconds 500
+            $gui = Get-Process -Name MitakeDetector -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -like "*v$env:MITAKE_VERSION*" } | Select-Object -First 1
+            if ($gui) { break }
+          }
+          if (-not $gui) { throw 'Normal installed EXE did not open its main window' }
+          if (-not $gui.CloseMainWindow()) { throw 'Normal EXE did not accept close request' }
+          if (-not $normal.WaitForExit(30000)) { $normal.Kill(); throw 'Normal EXE did not exit cleanly' }
+          'Installation, reinstallation, data preservation, installed OCR/GUI and normal launch verified.'
       - name: Preserve installer and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
