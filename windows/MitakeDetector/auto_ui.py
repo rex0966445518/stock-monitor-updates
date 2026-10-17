@@ -467,10 +467,11 @@ class AutoUI:
                     {k:auto.get(k) for k in ('title','window_size','combo','menu','table')},auto.get('adaptive',True))
                 switcher=RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu'],experience=experience,ocr_retry=self.read_menu_ocr_retry,status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None))))
                 if auto.get('discovered'):
-                    from auto_detect import detect_layout
-                    self.events.put((token,'auto_status','正在重新核對股票表頭與欄位位置…'))
+                    from auto_detect import cached_layout
+                    self.events.put((token,'auto_status','快速核對表頭頭尾位置，沿用已確認欄位…'))
                     full,_=c.image([0,0,1,1])
-                    layout=detect_layout(full,self.read_auto_ocr);c.check()
+                    layout,reused=cached_layout(full,self.read_auto_ocr,BASE/'header-layout.json',cfg.get('column_bounds'),auto.get('table'));c.check()
+                    self.events.put((token,'auto_status','表頭頭尾一致，已略過逐欄辨識' if reused else '表頭配置已重新確認並記住'))
                     cfg['column_bounds']=layout['column_bounds'];auto['table']=layout['table']
                 cycle=saved['cycle'] if saved else 1
                 start_index=saved['rank'] if saved else 0

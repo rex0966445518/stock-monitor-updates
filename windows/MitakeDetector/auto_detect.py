@@ -106,3 +106,36 @@ def detect_menu(image,combo,ocr):
     t=max(top,top+min(bbox(t)[1] for t in items)-6)
     b=min(h-8,top+max(bbox(t)[3] for t in items)+8)
     return [l/w,t/h,(r-l)/w,(b-t)/h]
+
+
+def cached_layout(image,ocr,path,configured_bounds,configured_table):
+    """Reuse verified geometry after checking only the two end header patches."""
+    import hashlib
+    import json
+    from pathlib import Path
+    path=Path(path)
+    def signature(box):
+        return hashlib.sha256(image.crop(tuple(box)).convert('RGB').tobytes()).hexdigest()
+    try:
+        saved=json.loads(path.read_text(encoding='utf-8'))
+        layout=saved['layout'];ends=saved['ends']
+        if (saved['version']==1 and saved['size']==list(image.size)
+                and layout['column_bounds']==configured_bounds and layout['table']==configured_table
+                and len(ends)==2 and all(signature(e['box'])==e['hash'] for e in ends)):
+            return layout,True
+    except (OSError,ValueError,KeyError,TypeError):pass
+    layout=detect_layout(image,ocr)
+    headers=sorted(layout['headers'],key=lambda x:x[0])
+    w,h=image.size;y=int(layout['table'][1]*h)
+    # Include the full header height and its surrounding position, never live quote rows.
+    top=max(0,y-max(32,int(h*.06)))
+    ends=[]
+    for left,right,_ in (headers[0],headers[-1]):
+        box=[max(0,int(left)-3),top,min(w,int(right)+3),y]
+        ends.append(dict(box=box,hash=signature(box)))
+    value=dict(version=1,size=list(image.size),layout=layout,ends=ends)
+    try:
+        path.parent.mkdir(parents=True,exist_ok=True)
+        temporary=path.with_suffix('.tmp');temporary.write_text(json.dumps(value,ensure_ascii=False),encoding='utf-8');temporary.replace(path)
+    except OSError:pass
+    return layout,False

@@ -8,6 +8,22 @@ def token(text,x,y,width=70):return ([[x,y],[x+width,y],[x+width,y+18],[x,y+18]]
 
 
 class DetectionTests(unittest.TestCase):
+    def test_header_end_cache_skips_ocr_and_invalidates_changed_edge(self):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from auto_detect import cached_layout
+        im=Image.new('RGB',(1000,500),'black')
+        layout=dict(table=[0,.16,1,.8],column_bounds={'code':[0,.1]},headers=[(5,70,'股號'),(800,880,'週轉率')])
+        with tempfile.TemporaryDirectory() as folder,patch('auto_detect.detect_layout',return_value=layout) as detect:
+            path=Path(folder)/'headers.json'
+            args=(lambda im:[],path,layout['column_bounds'],layout['table'])
+            self.assertFalse(cached_layout(im,*args)[1])
+            self.assertTrue(cached_layout(im,*args)[1]);self.assertEqual(detect.call_count,1)
+            im.putpixel((10,60),(255,255,255))
+            self.assertFalse(cached_layout(im,*args)[1]);self.assertEqual(detect.call_count,2)
+            self.assertFalse(cached_layout(im,lambda im:[],path,{},layout['table'])[1])
+
     def test_neon_borders_never_cover_captured_pixels(self):
         from scan_outline import border_rects
         region=dict(left=100,top=200,width=400,height=300)
