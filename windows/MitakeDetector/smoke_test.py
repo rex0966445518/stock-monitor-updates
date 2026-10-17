@@ -108,6 +108,25 @@ def run_smoke_test(report):
         saved=snapshot(app);app.restore_scan_snapshot(saved)
         assert len(app.tree.get_children())==3
         assert '已還原 3 檔' in app.observation_summary.get()
+        # Verify ranking, highlight and stock-specific speech using real widgets.
+        app.rank_rows={};app.auto_engines={}
+        spoken=[];original_announce=app.announce_task;app.announce_task=spoken.append
+        candidate_cfg=dict(DEFAULT,source_rank='候選排序測試',use_breakout=False)
+        try:
+            for offset,volume in [(20,1500),(21,1501)]:
+                app.render([Quote('9021','NEAR',100,3,950,1,now+offset),
+                            Quote('9020','FULL',100,2,volume,1,now+offset)],0,0,candidate_cfg,persist=False)
+            items=app.tree.get_children()
+            assert app.tree.item(items[0],'values')[0]=='9020','Fully matched stock must rank first'
+            assert '完全符合' in app.tree.item(items[0],'values')[2]
+            assert 'hit' in app.tree.item(items[0],'tags'),'Fully matched stock must be highlighted'
+            assert '接近候選' in app.tree.item(items[1],'values')[2]
+            assert len(spoken)==1 and '9020 FULL' in spoken[0],'Voice must name the matching stock'
+        finally:
+            app.announce_task=original_announce
+            notice=getattr(app,'candidate_notice',None)
+            if notice:notice.close()
+            app.restore_scan_snapshot(saved)
         from automation_smoke import run_automation_smoke
         automation=run_automation_smoke(root,app)
         app.demo();root.geometry('1180x900');root.deiconify()

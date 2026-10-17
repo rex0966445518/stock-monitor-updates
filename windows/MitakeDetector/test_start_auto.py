@@ -168,3 +168,27 @@ class ScanGoalTests(unittest.TestCase):
         cfg.update(use_turnover=True,min_turnover=3,use_accel=True,accel=1.8,use_breakout=True)
         text=goal_conditions(cfg)
         self.assertIn('換手率≥3%',text);self.assertIn('量速比≥1.8倍',text);self.assertIn('兩次守穩',text)
+
+class CandidateRankingTests(unittest.TestCase):
+    def test_full_then_more_conditions_then_closeness(self):
+        from candidate_ranking import ordered_candidates
+        cfg=dict(DEFAULT,use_breakout=False)
+        def row(code,volume,price=100,hit=False):return (Quote(code,'TEST',price,3,volume,1,100),None,'轉強候選' if hit else '總量不足',hit)
+        rows=[row('9001',500),row('9002',950),row('9003',2000,hit=True),row('9004',500,40)]
+        ordered=ordered_candidates(rows,cfg)
+        self.assertEqual([r[0].code for r,m in ordered],['9003','9002','9001','9004'])
+        self.assertEqual(ordered[0][1]['text'],'★ 完全符合 3/3')
+    def test_unverified_and_stale_never_become_hits(self):
+        from candidate_ranking import assess
+        cfg=dict(DEFAULT,use_breakout=False)
+        q=Quote('2330','TEST',100,3,2000,1,100)
+        m=assess((q,None,'等待第二次讀值',False),cfg)
+        self.assertFalse(m['hit']);self.assertIn('有效複查',m['missing'])
+        self.assertEqual(assess((q,None,'等待重新複查',False),cfg)['label'],'待複查')
+    def test_disabled_conditions_are_not_counted(self):
+        from candidate_ranking import assess
+        q=Quote('2330','TEST',100,3,2000,None,100)
+        cfg=dict(DEFAULT,use_turnover=True,min_turnover=3,use_accel=True,use_breakout=True)
+        m=assess((q,None,'等待觀測突破守穩',False),cfg)
+        self.assertEqual((m['count'],m['total']),(3,6))
+        self.assertEqual(m['missing'],['換手率','量速','突破守穩'])

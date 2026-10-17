@@ -30,5 +30,5 @@ def restore(app,data):
             if item[0].code not in latest or item[0].ts>=latest[item[0].code][0].ts:latest[item[0].code]=item
     for item in app.tree.get_children():app.tree.delete(item)
     for q,ratio,reason,hit in latest.values():
-        app.tree.insert('','end',values=[q.code,q.name,f'{q.price:.2f}',f'{q.gain:+.2f}',f'{q.volume:,.0f}','—' if q.turnover is None else f'{q.turnover:.2f}','待累積' if ratio is None else f'{ratio:.2f}',reason])
+        app.tree.insert('','end',values=[q.code,q.name,'待複查',f'{q.price:.2f}',f'{q.gain:+.2f}',f'{q.volume:,.0f}','—' if q.turnover is None else f'{q.turnover:.2f}','待累積' if ratio is None else f'{ratio:.2f}',reason])
     app.observation_summary.set(f'已還原 {len(latest)} 檔觀察資料｜等待接續複查，不將舊讀值當成新訊號')

@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.38'
+VERSION = '0.3.39'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -283,11 +283,12 @@ class App(AutoUI):
         self.summary_label.pack(fill='x',padx=20,pady=(0,6))
         self.summary_label.bind('<Configure>',lambda event:self.summary_label.configure(wraplength=max(80,event.width-8)))
         table_frame = ttk.Frame(root); table_frame.pack(fill='both', expand=True, padx=18)
-        cols = ['code','name','price','gain','volume','turnover','ratio','state']
+        cols = ['code','name','match','price','gain','volume','turnover','ratio','state']
         self.tree = ttk.Treeview(table_frame, columns=cols, show='headings')
-        for key, label, width in zip(cols, LABELS + ['5分量速比', '觀察原因／尚缺條件'], [75,100,90,75,100,85,100,380]):
+        for key, label, width in zip(cols, LABELS[:2] + ['符合條件'] + LABELS[2:] + ['5分量速比', '觀察原因／尚缺條件'], [75,100,125,90,75,100,85,100,380]):
             self.tree.heading(key, text=label); self.tree.column(key, width=width, stretch=key == 'state')
-        self.tree.tag_configure('hit', foreground='#ff738d')
+        self.tree.tag_configure('hit', foreground='#fff1a8',background='#703026',font=('Microsoft JhengHei',10,'bold'))
+        self.tree.tag_configure('near',foreground='#ffd36a',background='#222b3d')
         sb = ttk.Scrollbar(table_frame, orient='vertical', command=self.tree.yview)
         self.tree.configure(yscrollcommand=sb.set)
         self.tree.pack(side='left', fill='both', expand=True); sb.pack(side='right', fill='y')
@@ -561,9 +562,10 @@ class App(AutoUI):
         self.observation_summary.set(f'已辨識股票 {len(display)} 檔｜轉強候選 {sum(bool(item[3]) for item in display)} 檔'+('｜'+explanation if explanation else '｜候選股置頂'))
         pending_names=sum(not q.name for q,_,_,_ in display)
         self.observation_summary.set(self.observation_summary.get()+f'｜股名記憶 {len(names)} 檔、待補 {pending_names} 檔')
-        for q, ratio, reason, hit in sorted(display, key=lambda item: (not item[3], -item[0].gain)):
-            values = [q.code, q.name or '股名待補', f'{q.price:.2f}', f'{q.gain:+.2f}', f'{q.volume:,.0f}', '—' if q.turnover is None else f'{q.turnover:.2f}', '待累積' if ratio is None else f'{ratio:.2f}', reason]
-            self.tree.insert('', 'end', values=values, tags=('hit',) if hit else ())
+        from candidate_ranking import ordered_candidates
+        for (q,ratio,reason,hit),match in ordered_candidates(display,cfg):
+            values = [q.code, q.name or '股名待補',match['text'], f'{q.price:.2f}', f'{q.gain:+.2f}', f'{q.volume:,.0f}', '—' if q.turnover is None else f'{q.turnover:.2f}', '待累積' if ratio is None else f'{ratio:.2f}', reason]
+            self.tree.insert('', 'end', values=values, tags=('hit',) if match['hit'] else ('near',) if match['label']=='接近候選' else ())
         for q, ratio, reason, hit in rows:
             record = [self.mode, dt.datetime.fromtimestamp(q.ts).isoformat(timespec='seconds'), q.code, q.name, q.price, q.gain, q.volume, q.turnover, ratio, reason, json.dumps(cfg, ensure_ascii=False)]
             self.records.append(record); batch.append(record)
@@ -590,7 +592,9 @@ class App(AutoUI):
                 if len(fresh)>3:text+=f'\n另有{len(fresh)-3}檔，請查看候選清單。'
                 text+='\n符合目前設定的觀察條件，不代表一定漲停。'
                 self.candidate_notice=CandidateNotice(self.root,self.tk,self.ttk,text)
-                self.announce_task('發現符合條件的轉強候選，請查看公告')
+                spoken='；'.join(f'{q.code} {q.name or "股名待補"}，全部條件符合' for q,_ in fresh[:3])
+                if len(fresh)>3:spoken+=f'；另有{len(fresh)-3}檔符合，請查看清單'
+                self.announce_task(spoken)
 
     def poll(self):
         try:
