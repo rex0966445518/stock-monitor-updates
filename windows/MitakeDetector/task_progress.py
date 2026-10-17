@@ -76,9 +76,10 @@ class TaskProgress:
             cell.grid(row=0,column=i,sticky='nsew')
             self.metrics.columnconfigure(i,weight=1,uniform='metric')
             self.metrics.rowconfigure(0,weight=1)
-            tk.Label(cell,text=label,bg='#15243a',fg='#9baecb',font=('Microsoft JhengHei',-label_pixels),pady=0).pack()
+            if height>=34:
+                tk.Label(cell,text=label,bg='#15243a',fg='#9baecb',font=('Microsoft JhengHei',-label_pixels),pady=0,bd=0).pack()
             var=tk.StringVar(value=value);self.values[key]=var
-            tk.Label(cell,textvariable=var,bg='#15243a',fg='#ffd36a',font=('Microsoft JhengHei',-pixels,'bold'),pady=0).pack()
+            tk.Label(cell,textvariable=var,bg='#15243a',fg='#ffd36a',font=('Microsoft JhengHei',-pixels,'bold'),pady=0,bd=0).pack()
         self.last_success=None
         self.counts.trace_add('write',self.refresh_counts)
         self.rate.trace_add('write',self.refresh_rate)
