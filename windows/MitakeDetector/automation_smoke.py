@@ -52,7 +52,10 @@ def run_automation_smoke(root,app):
     root.update()
     assert app.scan_outline.region['left']==region['left']+20
     app.scan_outline.hide()
+    saved_config=app.config
+    app.config=dict(saved_config,auto_config=dict(combo=combo_roi,menu=menu_roi))
     app.show_task_progress(hwnd,'正在測試進度窗｜第1/3頁')
+    app.config=saved_config
     root.update()
     assert u.GetForegroundWindow()==foreground,'Progress panel stole keyboard focus'
     from task_progress import CandidateNotice
