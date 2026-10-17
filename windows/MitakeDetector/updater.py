@@ -88,33 +88,50 @@ def download_installer(manifest, directory, progress=lambda percent: None, opene
     directory.mkdir(parents=True, exist_ok=True)
     final = directory / f"MitakeDetector-Setup-v{manifest['version']}.exe"
     partial = final.with_suffix('.exe.partial')
-    digest = hashlib.sha256()
-    count, header = 0, b''
+    from download_transfer import parallel_download,clear_segments,valid_range
     started=time.monotonic()
+    def report(count,total,elapsed,resumed=0):
+        progress(min(99,int(count*100/total)))
+        transfer(count,total,elapsed)
     try:
         stage('connecting')
-        with opener(request(manifest['url']), timeout=40) as response, partial.open('wb') as output:
-            transfer(0,manifest['size'],0)
-            while True:
-                chunk = response.read(1024 * 256)
-                if not chunk:
-                    break
-                if not header: header = chunk[:2]
-                count += len(chunk)
-                if count > manifest['size']:
-                    raise ValueError('下載內容大於公布大小')
-                output.write(chunk)
-                digest.update(chunk)
-                progress(min(99, int(count * 100 / manifest['size'])))
-                transfer(count,manifest['size'],time.monotonic()-started)
-            output.flush()
-            os.fsync(output.fileno())
+        # Verified local installers are immediately reusable.
+        if final.exists() and final.stat().st_size==manifest['size']:
+            if hashlib.sha256(final.read_bytes()).hexdigest()==manifest['sha256'] and final.read_bytes()[:2]==b'MZ':
+                stage('verifying');progress(100);stage('ready');return final
+        parallel=False
+        if manifest['size']>=2*1024*1024:
+            parallel=parallel_download(manifest,partial,opener,request,report)
+        if not parallel:
+            count=partial.stat().st_size if partial.exists() else 0
+            if count>=manifest['size']:count=0;partial.unlink(missing_ok=True)
+            req=request(manifest['url'])
+            if count:req.add_header('Range',f"bytes={count}-{manifest['size']-1}")
+            with opener(req,timeout=40) as response:
+                if count and not valid_range(response,count,manifest['size']-1,manifest['size']):
+                    if getattr(response,'status',200)==200:count=0
+                    else:raise ValueError('續傳來源區段無效')
+                transfer(count,manifest['size'],0)
+                with partial.open('ab' if count else 'wb') as output:
+                    while True:
+                        chunk=response.read(32768)
+                        if not chunk:break
+                        count+=len(chunk)
+                        if count>manifest['size']:raise ValueError('下載內容大於公布大小')
+                        output.write(chunk);report(count,manifest['size'],time.monotonic()-started)
+                    output.flush();os.fsync(output.fileno())
         stage('verifying')
-        if count != manifest['size'] or digest.hexdigest() != manifest['sha256'] or header != b'MZ':
+        digest=hashlib.sha256();count=0;header=b''
+        with partial.open('rb') as source:
+            while True:
+                chunk=source.read(256*1024)
+                if not chunk:break
+                if not header:header=chunk[:2]
+                digest.update(chunk);count+=len(chunk)
+        if count!=manifest['size'] or digest.hexdigest()!=manifest['sha256'] or header!=b'MZ':
             raise ValueError('安裝檔驗證失敗，已取消安裝；請重新檢查更新')
-        partial.replace(final)
-        progress(100)
-        stage('ready')
-        return final
-    finally:
-        partial.unlink(missing_ok=True)
+        partial.replace(final);clear_segments(partial)
+        progress(100);stage('ready');return final
+    except ValueError:
+        partial.unlink(missing_ok=True);clear_segments(partial);raise
+    # Network failures intentionally retain partial files for the next attempt.

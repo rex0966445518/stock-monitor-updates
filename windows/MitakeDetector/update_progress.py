@@ -12,7 +12,7 @@ class UpdateProgress:
         ttk.Label(frame,textvariable=self.stage,font=('Microsoft JhengHei',14,'bold')).pack(anchor='w',pady=(0,12))
         self.bar=ttk.Progressbar(frame,mode='indeterminate',maximum=100)
         self.bar.pack(fill='x',pady=(0,10));self.bar.start(70)
-        ttk.Label(frame,textvariable=self.amount).pack(anchor='w')
+        ttk.Label(frame,textvariable=self.amount,wraplength=490).pack(anchor='w')
         ttk.Label(frame,textvariable=self.detail,wraplength=490).pack(anchor='w',pady=(10,0))
         self.window.update_idletasks()
 
@@ -35,9 +35,14 @@ class UpdateProgress:
             elif stage=='downloading':self.bar['value']=state['percent']
         if stage=='downloading':
             done=state['downloaded']/1048576;total=state['total']/1048576
-            speed=state['downloaded']/max(.01,state.get('elapsed',0))/1048576
+            if state.get('elapsed',0)==0:self.resume_bytes=state['downloaded']
+            speed=max(0,state['downloaded']-getattr(self,'resume_bytes',0))/max(.01,state.get('elapsed',0))/1048576
             rate=f'｜{speed:.1f} MiB/s' if state['downloaded'] else ''
-            self.amount.set(f'{state["percent"]}%｜{done:.1f} / {total:.1f} MiB {rate}')
+            eta=''
+            if speed>0:
+                remaining=max(0,int((total-done)/speed))
+                eta=f'｜預估剩餘 {remaining//60:02d}:{remaining%60:02d}'
+            self.amount.set(f'{state["percent"]}%｜{done:.1f} / {total:.1f} MiB {rate}{eta}')
         elif stage in ('checking','connecting','latest'):self.amount.set('')
 
     def close(self):

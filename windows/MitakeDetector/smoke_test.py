@@ -33,6 +33,10 @@ def run_smoke_test(report):
         assert float(app.update_panel.bar['value'])==42
         assert float(app.update_bar['value'])==42
         assert '42%' in app.update_panel.amount.get() and '42.0 / 100.0' in app.update_panel.amount.get()
+        app.update_panel.update(dict(stage='downloading',version=VERSION,percent=40,downloaded=40*1048576,total=100*1048576,elapsed=0))
+        app.update_panel.update(dict(stage='downloading',version=VERSION,percent=42,downloaded=42*1048576,total=100*1048576,elapsed=2))
+        assert '1.0 MiB/s' in app.update_panel.amount.get(),'Resume bytes must not inflate speed'
+        assert '預估剩餘' in app.update_panel.amount.get()
         app.update_panel.window.withdraw();app.update_panel.show();root.update()
         assert app.update_panel.window.winfo_ismapped()
         from PIL import ImageGrab
