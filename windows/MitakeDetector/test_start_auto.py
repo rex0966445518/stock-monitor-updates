@@ -49,6 +49,13 @@ class UI(AutoUI):
 
 
 class StartAutoTests(unittest.TestCase):
+    def test_cursor_reveals_only_on_hardware_motion(self):
+        from cursor_visibility import physical_motion
+        self.assertTrue(physical_motion(123,1,0))
+        self.assertTrue(physical_motion(123,0,-1))
+        self.assertFalse(physical_motion(None,100,100))
+        self.assertFalse(physical_motion(123,0,0))
+
     def test_error_feedback_splits_details_without_losing_text(self):
         from MitakeDetector import format_feedback
         source='掃描已暫停：失敗｜第17段｜已讀33檔｜table_scan.py:56'

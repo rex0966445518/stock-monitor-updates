@@ -6,6 +6,16 @@ from autoswitch import WindowsController, RankingSwitcher, RANKINGS, absolute_ro
 
 
 class AutoUI:
+    def hide_scan_cursor(self,token):
+        from cursor_visibility import CursorVisibility
+        self.restore_scan_cursor()
+        guard=CursorVisibility();self.cursor_visibility=guard
+        if not guard.start() and guard.error:self.events.put((token,'cursor_note','游標隱藏未啟用：'+guard.error))
+
+    def restore_scan_cursor(self):
+        guard=getattr(self,'cursor_visibility',None)
+        if guard:guard.close()
+
     def highlight_scan(self,token,region,stop):
         from autoswitch import AutomationStopped
         ready=threading.Event()
@@ -114,6 +124,7 @@ class AutoUI:
             try:
                 from auto_detect import detect_layout,detect_menu
                 c=WindowsController(target,stop);c.activate()
+                self.hide_scan_cursor(token)
                 c.highlight=lambda region:self.prepare_scan_capture(token,region,stop)
                 threading.Thread(target=c.monitor_hotkey,daemon=True).start()
                 im,_=c.image([0,0,1,1])
@@ -136,7 +147,8 @@ class AutoUI:
                 cfg.update(auto_config=auto,column_bounds=discovered['column_bounds'],region=absolute_roi(auto['table'],c.rect()))
                 self.events.put((token,'auto_setup_done',(cfg,target,len(quotes),start_after)))
             except Exception as exc:self.events.put((token,'auto_end','自動設定未完成：'+str(exc)+'；可使用手動設定。'))
-            finally:stop.set()
+            finally:
+                self.restore_scan_cursor();stop.set()
         def launch():
             if token!=self.generation:return
             self.worker_thread=threading.Thread(target=job,daemon=True);self.worker_thread.start()
@@ -531,6 +543,7 @@ class AutoUI:
                 if list((c.initial_rect[2]-c.initial_rect[0],c.initial_rect[3]-c.initial_rect[1]))!=auto.get('window_size'):
                     raise ValueError('三竹視窗尺寸與框選時不同，請重新設定位置')
                 c.activate()
+                self.hide_scan_cursor(token)
                 threading.Thread(target=c.monitor_hotkey,daemon=True).start()
                 from adaptive import Experience
                 from MitakeDetector import BASE
@@ -616,7 +629,8 @@ class AutoUI:
                 from MitakeDetector import BASE,VERSION
                 location=record_interruption(BASE/'scan-interruptions.jsonl',VERSION,diagnostic,exc)
                 self.events.put((token,'auto_end','掃描已暫停，進度保留：'+str(exc)+'｜'+location))
-            finally:stop.set()
+            finally:
+                self.restore_scan_cursor();stop.set()
         def launch():
             if token!=self.generation:return
             self.worker_thread=threading.Thread(target=job,daemon=True);self.worker_thread.start()

@@ -28,6 +28,8 @@ def run_automation_smoke(root,app):
     x,y=combo.winfo_rootx()-rect[0],combo.winfo_rooty()-rect[1]
     combo_roi=[x/width,y/height,260/width,40/height]
     menu_roi=[x/width,(y+40)/height,260/width,170/height]
+    from cursor_visibility import native_smoke
+    assert native_smoke(controller,(combo.winfo_rootx()+10,combo.winfo_rooty()+10))
     foreground=u.GetForegroundWindow()
     region=dict(left=combo.winfo_rootx(),top=combo.winfo_rooty(),width=260,height=40)
     app.show_scan_outline(region);root.update()

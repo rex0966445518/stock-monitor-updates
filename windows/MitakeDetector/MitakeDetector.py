@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.24'
+VERSION = '0.3.25'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -157,7 +157,7 @@ class Engine:
         return rows, alerts
 
 
-HELP = '''漲停板探測器-雷允澤製 v0.3.24
+HELP = '''漲停板探測器-雷允澤製 v0.3.25
 
 【開始觀察】
 開啟三竹「熱門排行」，保持視窗完整可見，按F8或「開始掃描」。
@@ -518,6 +518,7 @@ class App(AutoUI):
         tick()
 
     def stop(self):
+        self.restore_scan_cursor()
         self.scan_phase.set('已暫停｜停止請求已送出，進度保留')
         self.phase_label.configure(fg='#ffb45e');self.scan_rate.stop()
         if self.auto_active:
@@ -588,7 +589,9 @@ class App(AutoUI):
                     else:self.handle_update(kind, payload)
                     continue
                 if token != self.generation: continue
-                if kind == 'auto_phase':
+                if kind == 'cursor_note':
+                    self.say(payload)
+                elif kind == 'auto_phase':
                     self.scan_phase.set(payload);self.phase_label.configure(fg='#68f5d1')
                     self.say(payload)
                 elif kind == 'auto_rate':
@@ -756,6 +759,7 @@ class App(AutoUI):
         text.insert('1.0', HELP); text.configure(state='disabled')
 
     def close(self):
+        self.restore_scan_cursor()
         if self.auto_active:self.save_scan_snapshot()
         voice=getattr(self,'task_voice',None)
         if voice:voice.close()
@@ -815,7 +819,13 @@ def self_test():
 
 
 if __name__ == '__main__':
-    if '--runtime-smoke' in sys.argv:
+    if '--cursor-guard' in sys.argv:
+        from cursor_visibility import run_guard
+        try:
+            index=sys.argv.index('--cursor-guard')
+            run_guard(int(sys.argv[index+1]),sys.argv[index+2])
+        except Exception:sys.exit(1)
+    elif '--runtime-smoke' in sys.argv:
         directory=Path(getattr(sys,'_MEIPASS',Path(__file__).parent))
         report=Path(sys.argv[sys.argv.index('--runtime-smoke')+1])
         report.write_text(json.dumps(dict(frozen=bool(getattr(sys,'frozen',False)),runtime=str(directory),python_dll=(directory/'python311.dll').is_file())),encoding='utf-8')
