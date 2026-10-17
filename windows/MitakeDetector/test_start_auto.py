@@ -38,6 +38,8 @@ class UI(AutoUI):
     def __init__(self,cfg):
         self.config=cfg;self.root=Root();self.events=queue.Queue();self.generation=0
         self.stop_event=threading.Event();self.auto_hwnd=1;self.auto_engines={}
+    def hide_scan_cursor(self,token):pass
+    def restore_scan_cursor(self):pass
     def idle(self):return True
     def dependencies(self):return True
     def settings(self):return copy.deepcopy(self.config)
