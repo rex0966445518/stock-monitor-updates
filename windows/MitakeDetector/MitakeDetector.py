@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.21'
+VERSION = '0.3.22'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -157,7 +157,7 @@ class Engine:
         return rows, alerts
 
 
-HELP = '''漲停板探測器-雷允澤製 v0.3.21
+HELP = '''漲停板探測器-雷允澤製 v0.3.22
 
 【開始觀察】
 開啟三竹「熱門排行」，保持視窗完整可見，按F8或「開始掃描」。
@@ -262,6 +262,9 @@ class App(AutoUI):
                 ttk.Entry(opts, textvariable=self.vars[valkey], width=7).grid(row=1, column=idx*4+3)
         self.status = tk.StringVar(value='開啟三竹「熱門排行」，按 F8 或「開始掃描」。首次會自動定位；再次按 F8 停止。')
         tk.Label(root, textvariable=self.status, bg='#0b1020', fg='#58ddd0', anchor='w', wraplength=1120).pack(fill='x', padx=20, pady=10)
+        from scan_rate import ScanRate
+        self.scan_rate=ScanRate();self.scan_rate_var=tk.StringVar(value=self.scan_rate.text())
+        tk.Label(root,textvariable=self.scan_rate_var,bg='#0b1020',fg='#68f5d1',anchor='w').pack(fill='x',padx=20)
         self.observation_summary=tk.StringVar(value='尚未讀取股票資料｜轉強候選待判斷')
         ttk.Label(root,textvariable=self.observation_summary).pack(anchor='w',padx=20,pady=(0,6))
         table_frame = ttk.Frame(root); table_frame.pack(fill='both', expand=True, padx=18)
@@ -563,7 +566,9 @@ class App(AutoUI):
                     else:self.handle_update(kind, payload)
                     continue
                 if token != self.generation: continue
-                if kind == 'auto_status':
+                if kind == 'auto_rate':
+                    self.scan_rate.update(payload)
+                elif kind == 'auto_status':
                     self.status.set(payload); self.say(payload); self.update_task_progress(payload)
                 elif kind == 'auto_progress':
                     detail,completed,total=payload
@@ -578,6 +583,7 @@ class App(AutoUI):
                         self.root.after(300,lambda:self.start_auto(announce=False))
                     else:self.announce_task('自動設定完成');self.close_task_progress();self.root.deiconify()
                 elif kind == 'auto_end':
+                    self.scan_rate.stop()
                     self.save_scan_snapshot()
                     self.announce_task('任務執行失敗，請查看訊息' if '未完成' in payload or '：' in payload else '任務已停止')
                     self.close_task_progress()
@@ -595,6 +601,9 @@ class App(AutoUI):
                         self.tree.insert('', 'end', values=[q.code,q.name,q.price,q.gain,q.volume,q.turnover if q.turnover is not None else '—','—','圖片測試；請對照原圖'])
                     self.status.set(f'圖片測試｜讀取{len(quotes)}檔，略過{rejected}列；不寫實盤歷史、不提醒。')
         except queue.Empty: pass
+        self.scan_rate_var.set(self.scan_rate.text())
+        panel=getattr(self,'task_panel',None)
+        if panel and panel.alive:panel.rate.set(self.scan_rate.text())
         self.root.after(150, self.poll)
 
     def export(self):

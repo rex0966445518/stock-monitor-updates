@@ -49,6 +49,14 @@ class UI(AutoUI):
 
 
 class StartAutoTests(unittest.TestCase):
+    def test_rate_is_measured_and_stays_after_task_text_changes(self):
+        from scan_rate import ScanRate
+        rate=ScanRate();rate.update(dict(start=10))
+        self.assertIn('5 秒',rate.text(now=15))
+        rate.update(dict(elapsed=2,count=30))
+        self.assertIn('2.0 秒／段',rate.text());self.assertIn('15.00 檔／秒',rate.text())
+        rate.update(dict(start=20));rate.stop();self.assertIn('15.00 檔／秒',rate.text())
+
     def test_real_worker_enters_scan_for_new_and_resumed_sessions(self):
         for resumed in (False,True):
             with self.subTest(resumed=resumed),tempfile.TemporaryDirectory() as folder:

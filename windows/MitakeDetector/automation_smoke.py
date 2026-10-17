@@ -55,7 +55,9 @@ def run_automation_smoke(root,app):
     assert u.GetForegroundWindow()==foreground,'Progress panel stole keyboard focus'
     progress_panel=app.task_panel
     assert progress_panel.alive and progress_panel.window.winfo_ismapped(),'Progress panel is not visible'
+    progress_panel.rate.set('2.0 秒／段｜15.00 檔／秒')
     progress_panel.update('排行1/5｜已讀26檔｜等待3秒',1,5)
+    assert '15.00 檔／秒' in progress_panel.rate.get()
     root.update()
     assert '26檔' in progress_panel.detail.get()
     from PIL import ImageGrab

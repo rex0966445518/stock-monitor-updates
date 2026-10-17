@@ -562,7 +562,15 @@ class AutoUI:
                             seconds=getattr(self,'last_table_seconds',0)
                             detail=f'第{cycle}輪｜類目{rank_index+1}/{len(auto["rankings"])} {name}｜第{segment}段｜已讀{count}檔｜股名重用{reused}次｜{stage}｜{seconds:.1f}秒/段'
                             self.events.put((token,'auto_progress',(detail,rank_index,len(auto['rankings']))))
-                        read=lambda image:self.scan_recovering_table(image,cfg['column_bounds']) if auto.get('discovered') else self.scan(image,cfg['centers'])
+                        def read(image):
+                            started=time.monotonic();self.events.put((token,'auto_rate',dict(start=started)))
+                            try:
+                                result=self.scan_recovering_table(image,cfg['column_bounds']) if auto.get('discovered') else self.scan(image,cfg['centers'])
+                                self.events.put((token,'auto_rate',dict(elapsed=time.monotonic()-started,count=len(result[0]))))
+                                return result
+                            except Exception:
+                                self.events.put((token,'auto_rate',dict(elapsed=time.monotonic()-started,count=0)))
+                                raise
                         first_batch=[not bool(table_resume)]
                         def observed(quotes,bad):
                             if not switcher.label_matches(name):raise RuntimeError('本段股票類目改變，未接收本段資料')

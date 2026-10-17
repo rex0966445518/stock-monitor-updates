@@ -10,6 +10,7 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
     previous=tuple(saved['codes']) if saved.get('codes') else None
     stable=0;rejected=saved.get('rejected',0);notches=saved.get('notches',1)
     cap=max(1,min(6,scroll_cap,int(saved.get('cap',scroll_cap))));recovery_stalls=0
+    rebuilds=0
     offset=saved.get('offset',0);first=saved.get('segment',0)
     if not saved:
         controller.scroll(center,120*4000);controller.pause(.6)
@@ -43,17 +44,36 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
         recovered=False
         if previous is not None and not set(codes).intersection(previous):
             attempts=max(12,notches*3)
-            for attempt in range(attempts):
-                controller.check()
-                progress(segment+1,len(collected),f'捲動過頭，自動回找重疊 {attempt+1}/{attempts}｜目前股號 '+','.join(codes[:4]))
-                controller.scroll(center,120);offset=max(0,offset-1);controller.pause(.3)
-                image,_=controller.image(roi);quotes,bad=read(image);codes=anchor_codes(image,quotes)
-                if set(codes).intersection(previous):
-                    recovered=True;cap=max(1,min(cap,notches//2));notches=1
-                    if learn_scroll:learn_scroll(cap,True)
-                    progress(segment+1,len(collected),'已找回重疊股票，縮小步幅接續')
-                    break
-            if not recovered:raise RuntimeError('已自動回找多次仍無法核對股票列，斷點已保留，請檢查排行是否重新排序')
+            reference=set(previous)
+            for direction,steps,label in [(120,attempts,'向上'),(-120,attempts*2+notches,'反向向下')]:
+                last_probe=None;unchanged=0
+                for attempt in range(steps):
+                    controller.check()
+                    progress(segment+1,len(collected),f'自動回找重疊 {label} {attempt+1}/{steps}｜目前股號 '+','.join(codes[:4]))
+                    controller.scroll(center,direction);offset=max(0,offset+(-1 if direction>0 else 1));controller.pause(.3)
+                    image,_=controller.image(roi)
+                    if read_anchors:
+                        codes=tuple(dict.fromkeys(read_anchors(image)))
+                    else:
+                        quotes,bad=read(image);codes=anchor_codes(image,quotes)
+                    if reference.intersection(codes):
+                        if read_anchors:quotes,bad=read(image)
+                        recovered=True;cap=1;notches=1
+                        if learn_scroll:learn_scroll(cap,True)
+                        progress(segment+1,len(collected),'已找回重疊股票，縮小步幅接續')
+                        break
+                    unchanged=unchanged+1 if codes and codes==last_probe else 0
+                    last_probe=codes
+                    if unchanged>=2:break
+                if recovered:break
+            if not recovered:
+                if rebuilds>=2:raise RuntimeError('雙向回找及重新定位後仍反覆失去重疊，已保留斷點與診斷，請檢查清單是否持續重新排序')
+                rebuilds+=1;cap=1;notches=1;offset=0;stable=0;previous=None;recovery_stalls=0
+                progress(segment+1,len(collected),f'定位點已失效，保留已讀資料，自動重建目前排行位置 {rebuilds}/2')
+                controller.scroll(center,120*4000);controller.pause(.5)
+                if learn_scroll:learn_scroll(1,True)
+                save(segment+1,())
+                continue
         rejected+=bad
         recovery_stalls=recovery_stalls+1 if recovered and codes==previous else 0
         if recovery_stalls>=3:raise RuntimeError('已反覆找回原位置，但單格滾輪仍跳過整頁，進度已保留；請降低系統滾輪行數')

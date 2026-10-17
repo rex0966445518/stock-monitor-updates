@@ -47,6 +47,38 @@ class TableScanTests(unittest.TestCase):
         self.assertIn('推定清單末端',messages[-1])
         self.assertFalse(any('回找' in m for m in messages))
 
+    def test_recovery_searches_down_when_upward_search_cannot_find_anchor(self):
+        class C(TableController):
+            jumped=False
+            def scroll(self,point,delta):
+                self.scrolls.append(delta)
+                if delta>=120*4000:self.position=0
+                elif delta>0:self.position=max(0,self.position-3)
+                elif self.position==3 and not self.jumped:self.position=0;self.jumped=True
+                else:self.position=min(24,self.position+3)
+        c=C();messages=[]
+        # A transient wrong code set at the unexpected position forces recovery.
+        n=[0]
+        def read(pos):
+            n[0]+=1
+            if c.jumped and pos==0:return [SimpleNamespace(code='9999')],0
+            return [SimpleNamespace(code=str(1000+i)) for i in range(pos,pos+6)],0
+        rows,_=scan_table(c,[0,0,1,1],read,lambda *s:messages.append(s[2]))
+        self.assertTrue(any('反向向下' in m for m in messages))
+        self.assertTrue(any('已找回' in m for m in messages));self.assertTrue(rows)
+
+    def test_invalid_resume_anchor_rebuilds_without_discarding_read_quotes(self):
+        from MitakeDetector import Quote
+        from dataclasses import asdict
+        old=Quote('9999','OLD',100,2,1000,1,1)
+        saved=dict(segment=16,codes=['9999'],quotes=[asdict(old)],offset=0,notches=1)
+        c=TableController(rows=17);messages=[];checkpoints=[]
+        def read(pos):return [Quote(str(1000+i),'TEST',100,2,1000,1,1) for i in range(pos,pos+6)],0
+        rows,_=scan_table(c,[0,0,1,1],read,lambda *s:messages.append(s[2]),resume=saved,checkpoint=checkpoints.append)
+        self.assertEqual({q.code for q in rows},{'9999'}|{str(1000+i) for i in range(17)})
+        self.assertTrue(any('自動重建' in m for m in messages))
+        self.assertTrue(any(s['codes']==[] and s['quotes'] for s in checkpoints))
+
     def test_learned_wheel_stride_reads_92_stocks_with_overlap(self):
         class Large(TableController):
             def scroll(self,point,delta):
@@ -98,7 +130,7 @@ class TableScanTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'保護上限'):
             scan_table(TableController(),[0,0,1,1],self.read,lambda *s:None,max_segments=2)
         controller=TableController()
-        with self.assertRaisesRegex(RuntimeError,'反覆找回|自動回找'):
+        with self.assertRaisesRegex(RuntimeError,'反覆找回|自動回找|反覆失去重疊'):
             scan_table(controller,[0,0,1,1],lambda n:self.read(n*10),lambda *s:None)
 
 
