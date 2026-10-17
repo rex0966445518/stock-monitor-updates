@@ -12,7 +12,7 @@ import java.util.concurrent.*
 
 class BacktestData(private val context:Context) {
     data class Loaded(val series:List<BtSeries>,val requested:Int,val excluded:List<String>,val market:List<MarketIndexBar> = emptyList())
-    fun load(settings:BtSettings,progress:(String)->Unit,cancel:()->Boolean):Loaded {
+    fun load(settings:BtSettings,progress:(String)->Unit,cancel:()->Boolean,barDirectory:File?=null):Loaded {
         val market=if(settings.marketGuardVersion>0)com.rex.twboardingscanner.data.MarketIndexData(context).load(settings.start.minusDays(100),settings.end,progress,cancel) else emptyList()
         progress("取得現存上市櫃股票名單…")
         val universe=MarketDataProvider(context).loadBacktestUniverse()
@@ -30,7 +30,7 @@ class BacktestData(private val context:Context) {
             val completion=ExecutorCompletionService<Pair<BtSeries?,String?>>(pool)
             selected.forEach{s->completion.submit(Callable{
                 if(cancel())return@Callable null to "${s.code}：已取消"
-                try{ loadOne(s,settings) to null }catch(e:Exception){null to "${s.code} ${s.name}：${e.message?.take(100)?:"歷史資料失敗"}"}
+                try{ val one=loadOne(s,settings);(if(barDirectory==null)one else one.copy(bars=DiskDailyBars.write(File(barDirectory,"${s.code}.bars"),one.bars))) to null }catch(e:Exception){null to "${s.code} ${s.name}：${e.message?.take(100)?:"歷史資料失敗"}"}
             })}
             repeat(selected.size){i->
                 check(!cancel()){ "已取消回測" }

@@ -47,7 +47,9 @@ data class BtRebateMonth(val month:String,var buyAmount:Double=0.0,var sellAmoun
 }
 data class BtLimited(val date:LocalDate,val code:String,val name:String,val price:Double,val radar:String)
 data class BtSkipped(val date:LocalDate,val code:String,val reason:String)
-data class BtRun(val capital:Double,var cash:Double=capital,var dividendAccrued:Double=0.0,val trades:MutableList<BtTrade> = mutableListOf(),val holdings:MutableList<BtHolding> = mutableListOf(),val curve:MutableList<BtDay> = mutableListOf(),val skipped:MutableList<BtSkipped> = mutableListOf(),val strategyVersion:Int=3,val rebateMonths:MutableMap<String,BtRebateMonth> = sortedMapOf(),val limited:MutableList<BtLimited> = mutableListOf()){
+data class BtRun(val capital:Double,var cash:Double=capital,var dividendAccrued:Double=0.0,val trades:MutableList<BtTrade> = mutableListOf(),val holdings:MutableList<BtHolding> = mutableListOf(),val curve:MutableList<BtDay> = mutableListOf(),val skipped:MutableList<BtSkipped> = mutableListOf(),val strategyVersion:Int=3,val rebateMonths:MutableMap<String,BtRebateMonth> = sortedMapOf(),val limited:MutableList<BtLimited> = mutableListOf(),val skippedDetailLimit:Int=Int.MAX_VALUE,var omittedSkipped:Int=0){
+    val skippedCount:Int get()=skipped.size+omittedSkipped
+    fun addSkipped(value:BtSkipped){if(skipped.size<skippedDetailLimit)skipped.add(value) else omittedSkipped++}
     val rebateAccrued:Double get()=rebateMonths.values.sumOf{it.amount}
     val equity:Double get()=cash+dividendAccrued+rebateAccrued+holdings.sumOf{PaperEngine.netSell(it.mark)}
     val profit:Double get()=equity-capital
@@ -130,12 +132,13 @@ object BacktestEngine {
         return quote
     }
     fun executionIndex(series:List<BtSeries>)=BtExecutionIndex(
-        series.associate{it.code to it.bars.associateBy(::date)},series.associateBy{it.code},
-        series.associate{s->s.code to s.bars.sortedBy{it.time}.distinctBy(::date).zipWithNext().associate{(prior,current)->date(current) to prior.close}})
+        series.associate{it.code to if(it.bars is DiskDailyBars)DiskBarDateMap(it.bars,LocalDate.MIN,LocalDate.MAX.minusDays(1)){i->it.bars[i]} else it.bars.associateBy(::date)},series.associateBy{it.code},
+        series.associate{s->s.code to if(s.bars is DiskDailyBars)DiskBarDateMap(s.bars,LocalDate.MIN,LocalDate.MAX.minusDays(1),previous=true){i->s.bars[i-1].close} else s.bars.sortedBy{it.time}.distinctBy(::date).zipWithNext().associate{(prior,current)->date(current) to prior.close}})
     /** Keep the full source in meta for exit indicators; execution lookups need only the tested dates. */
     fun executionIndex(series:List<BtSeries>,start:LocalDate,end:LocalDate):BtExecutionIndex {
-        val bars=series.associate { s->s.code to s.bars.filter{date(it) in start..end}.associateBy(::date) }
+        val bars=series.associate { s->s.code to if(s.bars is DiskDailyBars)DiskBarDateMap(s.bars,start,end){i->s.bars[i]} else s.bars.filter{date(it) in start..end}.associateBy(::date) }
         val previous=series.associate { s->
+            if(s.bars is DiskDailyBars)return@associate s.code to DiskBarDateMap(s.bars,start,end,previous=true){i->s.bars[i-1].close}
             val values=mutableMapOf<LocalDate,Double>();var prior:DailyBar?=null
             s.bars.sortedBy{it.time}.distinctBy(::date).forEach { bar->
                 val day=date(bar)
@@ -146,14 +149,15 @@ object BacktestEngine {
         }
         return BtExecutionIndex(bars,series.associateBy{it.code},previous)
     }
-    fun run(prepared:BtPrepared,settings:BtSettings,progress:(String)->Unit={},cancel:()->Boolean={false},execution:BtExecutionIndex?=null):BtRun {
+    fun run(prepared:BtPrepared,settings:BtSettings,progress:(String)->Unit={},cancel:()->Boolean={false},execution:BtExecutionIndex?=null,skippedDetailLimit:Int=Int.MAX_VALUE):BtRun {
         require(settings.capital.isFinite()&&settings.capital>0)
         settings.validateTrading()
         val dates=prepared.days.filter{it>=settings.start&&it<=settings.end};require(dates.isNotEmpty()){ "所選區間沒有有效交易日" }
         if(settings.marketGuardVersion>0)require(dates.all{it in prepared.marketGuards}){"大盤歷史資料尚未備妥，不能進行受保護回測"}
         val ex=execution?:executionIndex(prepared.series)
         val indexed=ex.bars;val meta=ex.meta;val previous=ex.previous
-        val result=BtRun(settings.capital,strategyVersion=settings.strategyVersion)
+        require(skippedDetailLimit>=0)
+        val result=BtRun(settings.capital,strategyVersion=settings.strategyVersion,skippedDetailLimit=skippedDetailLimit)
         progress("尾盤買入／淨利 ${btPercent(settings.targetNetPct)}% 賣出 0/${dates.size}")
         dates.forEachIndexed{index,day->check(!cancel()){ "已取消回測" };advance(result,day,prepared.signals[day].orEmpty(),indexed,meta,previous,settings,prepared.marketGuards[day]);progress("尾盤買入／淨利 ${btPercent(settings.targetNetPct)}% 賣出 ${index+1}/${dates.size} · $day")}
         return result
@@ -162,7 +166,7 @@ object BacktestEngine {
         val guard=if(settings.marketGuardVersion>0)marketGuard?:MarketCrashGuard.unknown("缺少大盤判斷，暫停買入") else null
         val targetFraction=settings.targetNetPct/100.0
         val previousEquity=b.equity;val previousRebate=b.rebateAccrued
-        val tradesBefore=b.trades.size;val skippedBefore=b.skipped.size
+        val tradesBefore=b.trades.size;val skippedBefore=b.skippedCount
         val usedShares=mutableMapOf<String,Long>()
         // Only holdings brought into this day earn the ex-dividend accrual.
         b.holdings.filter{it.entryDate<day}.forEach{p->b.dividendAccrued+=(meta[p.code]?.dividends?.get(day)?:0.0)*1000}
@@ -231,13 +235,13 @@ object BacktestEngine {
         signals.groupBy{it.code}.toSortedMap().forEach{(code,matched)->
             val lotId="$day-$code"
             if(lotId in boughtLots)return@forEach
-            if(guard!=null&&!guard.canBuy){b.skipped.add(BtSkipped(day,code,"${guard.title}：${guard.reason}"));return@forEach}
+            if(guard!=null&&!guard.canBuy){b.addSkipped(BtSkipped(day,code,"${guard.title}：${guard.reason}"));return@forEach}
             val bar=bars[code]?.get(day)
             val decision=settings.stockPolicy.decision(code,bar?.close?:Double.NaN,settings.stockScope)
-            if(decision==StockDecision.BANNED){b.skipped.add(BtSkipped(day,code,"禁股名單，不買入"));return@forEach}
+            if(decision==StockDecision.BANNED){b.addSkipped(BtSkipped(day,code,"禁股名單，不買入"));return@forEach}
             if(bar!=null&&decision==StockDecision.LIMITED){
                 b.limited.add(BtLimited(day,code,meta[code]?.name?:code,bar.close,matched.flatMap{it.radar.split('/')}.distinct().sorted().joinToString("/")))
-                b.skipped.add(BtSkipped(day,code,"超過限價 ${settings.stockPolicy.ceiling} 元，列入當日限價名單"));return@forEach
+                b.addSkipped(BtSkipped(day,code,"超過限價 ${settings.stockPolicy.ceiling} 元，列入當日限價名單"));return@forEach
             }
             val reason=when{
                 settings.maxHoldingStocks!=null&&b.holdings.none{it.code==code}&&b.holdings.map{it.code}.distinct().size>=settings.maxHoldingStocks->"已達最高持倉 ${settings.maxHoldingStocks} 檔，未買入新股"
@@ -245,9 +249,9 @@ object BacktestEngine {
                 bar.volumeShares-(usedShares[code]?:0)<1000->"日成交量不足模擬一張"
                 else->null
             }
-            if(reason!=null){b.skipped.add(BtSkipped(day,code,reason));return@forEach}
+            if(reason!=null){b.addSkipped(BtSkipped(day,code,reason));return@forEach}
             val px=PaperEngine.execution(bar!!.close,true);val fee=PaperEngine.fee(px*1000);val cost=px*1000+fee
-            if(cost>b.cash){b.skipped.add(BtSkipped(day,code,"可用資金不足一張含手續費"));return@forEach}
+            if(cost>b.cash){b.addSkipped(BtSkipped(day,code,"可用資金不足一張含手續費"));return@forEach}
             val radar=matched.flatMap{it.radar.split('/')}.distinct().sorted().joinToString("/")
             val dataDate=matched.mapNotNull{it.dataDate}.maxOrNull()?:day
             val name=meta[code]?.name?:code;val target=targetPrice(cost,targetFraction);b.cash-=cost;usedShares[code]=(usedShares[code]?:0)+1000
@@ -265,7 +269,7 @@ object BacktestEngine {
             else{bucket.sellAmount+=trade.price*trade.shares;bucket.sellTrades++}
         }
         val admitted=signals.map{it.code}.distinct().count{code->settings.stockPolicy.decision(code,bars[code]?.get(day)?.close?:Double.NaN,settings.stockScope)==StockDecision.ALLOW}
-        b.curve.add(BtDay(day,b.equity,admitted,today.count{it.side=="BUY"},today.count{it.side=="SELL"},b.skipped.size-skippedBefore,
+        b.curve.add(BtDay(day,b.equity,admitted,today.count{it.side=="BUY"},today.count{it.side=="SELL"},b.skippedCount-skippedBefore,
             realized=today.filter{it.side=="SELL"}.sumOf{it.pnl},holdingCost=b.holdings.sumOf{it.cost},
             holdingValue=b.holdings.sumOf{PaperEngine.netSell(it.mark)},holdingLots=b.holdings.size,cash=b.cash,
             dividendAccrued=b.dividendAccrued,dayProfit=b.equity-previousEquity,staleLots=b.holdings.count{it.markDate<day},rebateAccrued=b.rebateAccrued,rebateChange=b.rebateAccrued-previousRebate,marketGuard=guard))

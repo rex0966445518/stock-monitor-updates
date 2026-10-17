@@ -125,7 +125,7 @@ object BtRobotCheckpoint {
             val history=File(dir,"history.bin.gz");val conditions=File(dir,"conditions.bin.gz")
             if(history.exists()){
                 require(digest(history)==s.getString("datasetSha256")){"固定行情校驗失敗"}
-                val loaded=BtRobotDataset.read(history)
+                val loaded=BtRobotDataset.read(history,diskBacked=true)
                 require(settings.marketGuardVersion==0||loaded.market.isNotEmpty()){"此備份缺少加權指數快照"}
                 if(conditions.exists()&&settings.let{s.getJSONObject("settings").optString("rulesVersion")==com.rex.twboardingscanner.domain.ScanConditions.VERSION}
                     &&s.has("flowRevision"))
