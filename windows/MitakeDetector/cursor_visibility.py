@@ -18,6 +18,16 @@ def physical_motion(device,dx,dy):
     return bool(device) and bool(dx or dy)
 
 
+class CursorIdleState:
+    def __init__(self):self.hidden=True;self.last_motion=None
+    def motion(self,now):
+        self.last_motion=now
+        if self.hidden:self.hidden=False;return 'show'
+    def tick(self,now):
+        if not self.hidden and self.last_motion is not None and now-self.last_motion>=2:
+            self.hidden=True;return 'hide'
+
+
 class CursorVisibility:
     def __init__(self):self.process=None;self.error='';self.handles=None
     def start(self):
@@ -51,6 +61,10 @@ class CursorVisibility:
             k,stop,ready=handles
             if stop:k.SetEvent(stop);k.CloseHandle(stop)
             if ready:k.CloseHandle(ready)
+        # Finish restoring before another guard can copy the cursor images.
+        if self.process:
+            try:self.process.wait(timeout=1)
+            except subprocess.TimeoutExpired:pass
         # Never terminate a guard holding original cursor handles.
 
 
@@ -77,6 +91,7 @@ def run_guard(parent_pid,event_name):
         if ready_handle:k.CloseHandle(ready_handle)
         k.CloseHandle(parent);raise OSError('游標保護事件已關閉')
     stop=threading.Event();backups={};changed=set();hwnd=None;registered=False
+    idle=CursorIdleState()
     proc_type=ctypes.WINFUNCTYPE(ctypes.c_ssize_t,W.HWND,W.UINT,W.WPARAM,W.LPARAM)
     class Header(ctypes.Structure):
         _fields_=[('kind',W.DWORD),('size',W.DWORD),('device',W.HANDLE),('wparam',W.WPARAM)]
@@ -97,7 +112,8 @@ def run_guard(parent_pid,event_name):
                 data=ctypes.create_string_buffer(size.value)
                 if u.GetRawInputData(W.HANDLE(lparam),0x10000003,data,ctypes.byref(size),ctypes.sizeof(Header))!=0xFFFFFFFF:
                     head=Header.from_buffer_copy(data);mouse=Mouse.from_buffer_copy(data,ctypes.sizeof(Header))
-                    if head.kind==0 and physical_motion(head.device,mouse.dx,mouse.dy):stop.set()
+                    if head.kind==0 and physical_motion(head.device,mouse.dx,mouse.dy):
+                        if idle.motion(time.monotonic())=='show':restore_visible()
         return u.DefWindowProcW(window,message,wparam,lparam)
     instance=k.GetModuleHandleW(None);name='MitakeCursorRestoreGuard'+str(os.getpid())
     wc=WindowClass();wc.proc=handler;wc.instance=instance;wc.name=name
@@ -107,6 +123,29 @@ def run_guard(parent_pid,event_name):
     u.PeekMessageW.argtypes=[ctypes.POINTER(W.MSG),W.HWND,W.UINT,W.UINT,W.UINT]
     u.DispatchMessageW.argtypes=[ctypes.POINTER(W.MSG)];u.DispatchMessageW.restype=ctypes.c_ssize_t
     u.DestroyWindow.argtypes=[W.HWND];u.UnregisterClassW.argtypes=[W.LPCWSTR,W.HINSTANCE]
+    def restore_visible():
+        failed=False
+        for cursor_id in tuple(changed):
+            # Retain the master originals for subsequent hide/show cycles.
+            copied=u.CopyImage(backups[cursor_id],2,0,0,0)
+            if copied and u.SetSystemCursor(copied,cursor_id):changed.discard(cursor_id)
+            else:
+                if copied:u.DestroyCursor(copied)
+                failed=True
+        if failed:
+            u.SystemParametersInfoW(0x0057,0,None,0)
+            stop.set()
+    def hide_all():
+        for cursor_id in CURSOR_IDS:
+            blank=u.CreateCursor(instance,0,0,32,32,and_mask,xor_mask)
+            if not blank:raise OSError('無法建立透明游標')
+            if not u.SetSystemCursor(blank,cursor_id):
+                u.DestroyCursor(blank);raise OSError('無法暫時隱藏游標')
+            changed.add(cursor_id)
+        # A target application may retain the active handle until the next
+        # WM_SETCURSOR. Force a normal cursor refresh without changing position.
+        position=W.POINT()
+        if u.GetCursorPos(ctypes.byref(position)):u.SetCursorPos(position.x,position.y)
     try:
         if not u.RegisterClassW(ctypes.byref(wc)):raise OSError('游標保護視窗無法建立')
         registered=True
@@ -122,25 +161,17 @@ def run_guard(parent_pid,event_name):
             if not copied:raise OSError('無法備份原游標')
             backups[cursor_id]=copied
         if stop.is_set() or k.WaitForSingleObject(stop_handle,0)==0:return
-        for cursor_id in CURSOR_IDS:
-            blank=u.CreateCursor(instance,0,0,32,32,and_mask,xor_mask)
-            if not blank:raise OSError('無法建立透明游標')
-            if not u.SetSystemCursor(blank,cursor_id):
-                u.DestroyCursor(blank);raise OSError('無法暫時隱藏游標')
-            changed.add(cursor_id)
+        hide_all()
         k.SetEvent(ready_handle)
         message=W.MSG()
         while not stop.is_set() and k.WaitForSingleObject(stop_handle,0)==0x102 and k.WaitForSingleObject(parent,0)==0x102:
             while u.PeekMessageW(ctypes.byref(message),None,0,0,1):
                 u.TranslateMessage(ctypes.byref(message));u.DispatchMessageW(ctypes.byref(message))
+            if idle.tick(time.monotonic())=='hide':hide_all()
             stop.wait(.01)
     finally:
-        failed=False
-        for cursor_id,original in backups.items():
-            if cursor_id in changed:
-                if not u.SetSystemCursor(original,cursor_id):failed=True;u.DestroyCursor(original)
-            else:u.DestroyCursor(original)
-        if failed:u.SystemParametersInfoW(0x0057,0,None,0)
+        restore_visible()
+        for original in backups.values():u.DestroyCursor(original)
         if hwnd:
             device=Device(1,2,1,None);u.RegisterRawInputDevices(ctypes.byref(device),1,ctypes.sizeof(Device));u.DestroyWindow(hwnd)
         if registered:u.UnregisterClassW(name,instance)

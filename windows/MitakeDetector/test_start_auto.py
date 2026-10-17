@@ -124,3 +124,15 @@ class CandidateAlertTests(unittest.TestCase):
     def test_no_hits_no_popup(self):
         from task_progress import fresh_candidate_alerts
         self.assertEqual(fresh_candidate_alerts([],{},60),[])
+
+class CursorIdleTests(unittest.TestCase):
+    def test_motion_reveals_then_idle_rehides_repeatedly(self):
+        from cursor_visibility import CursorIdleState
+        state=CursorIdleState()
+        self.assertIsNone(state.tick(0))
+        self.assertEqual(state.motion(10),'show')
+        self.assertIsNone(state.motion(11))
+        self.assertIsNone(state.tick(12.9))
+        self.assertEqual(state.tick(13),'hide')
+        self.assertEqual(state.motion(14),'show')
+        self.assertEqual(state.tick(16),'hide')

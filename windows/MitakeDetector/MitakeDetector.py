@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.30'
+VERSION = '0.3.31'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -157,7 +157,7 @@ class Engine:
         return rows, alerts
 
 
-HELP = '''漲停板探測器-雷允澤製 v0.3.30
+HELP = '''漲停板探測器-雷允澤製 v0.3.31
 
 【開始觀察】
 開啟三竹「熱門排行」，保持視窗完整可見，按F8或「開始掃描」。
