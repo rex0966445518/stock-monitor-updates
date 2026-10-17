@@ -508,7 +508,7 @@ class MainActivity: AppCompatActivity() {
                                             val evaluated=if(report==null)initial else evaluate(enriched)
                                             val positive=participation.mainResults(evaluated).any{it.light!=SignalLight.NONE}
                                             val finalResults=if(positive&&java.time.LocalTime.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI)>=java.time.LocalTime.of(13,33))
-                                                evaluate(enriched.copy(closingAuction=auctionProvider.load(stock.code,stock.market))) else evaluated
+                                                evaluate(enriched.copy(closingAuction=scanInput?.auction(stock)?:auctionProvider.load(stock.code,stock.market))) else evaluated
                                             if(!current())return@followUp
                                             synchronized(results){results.removeAll{it.code==stock.code};results.addAll(finalResults)}
                                         }catch(_:Exception){failed.incrementAndGet()}

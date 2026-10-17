@@ -29,7 +29,9 @@ class MainScanStressTest {
         val today=LocalDate.now(RuleMetrics.TAIPEI)
         val stocks=(1000 until 3000).map{code->MarketStock(code.toString(),"測試$code",Market.TWSE,StockSector.SEMICONDUCTOR,100.0,105.0,99.0,104.0,4.0,1000,null,null)}
         val bars=(0 until 320).map{i->DailyBar(today.minusDays((320-i).toLong()).atStartOfDay(RuleMetrics.TAIPEI).toInstant().toEpochMilli(),100.0,105.0,99.0,104.0,1000000)}
+        val auctionCalls=java.util.concurrent.atomic.AtomicInteger(0)
         host.scanInput=object:MainScanInput {
+            override fun auction(stock:MarketStock):ClosingAuction { auctionCalls.incrementAndGet();return ClosingAuction(note="離線fixture") }
             override fun universe(progress:(String)->Unit)=stocks
             override fun history(stock:MarketStock)=bars
             override fun guard()=MarketCrashGuard.unknown("離線測試")
@@ -47,6 +49,7 @@ class MainScanStressTest {
         @Suppress("UNCHECKED_CAST")
         val results=field("latest").get(host) as List<SignalResult>
         assertEquals(12000,results.size)
+        if(java.time.LocalTime.now(RuleMetrics.TAIPEI)>=java.time.LocalTime.of(13,33))assertEquals(2000,auctionCalls.get())
         ScanArchiveStore(app).use{db->assertEquals(results,db.latestSaved()!!.main)}
         val content=host.findViewById<android.view.View>(android.R.id.content)
         content.measure(android.view.View.MeasureSpec.makeMeasureSpec(720,android.view.View.MeasureSpec.EXACTLY),android.view.View.MeasureSpec.makeMeasureSpec(1600,android.view.View.MeasureSpec.EXACTLY))
