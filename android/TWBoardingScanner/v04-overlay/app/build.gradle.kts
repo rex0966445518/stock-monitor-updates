@@ -9,8 +9,8 @@ android {
         applicationId = "com.rex.twboardingscanner"
         minSdk = 26
         targetSdk = 35
-        versionCode = 97
-        versionName = "0.4.93"
+        versionCode = 98
+        versionName = "0.4.94"
     }
     signingConfigs.getByName("debug") {
         storeFile = rootProject.file("signing/debug.keystore")

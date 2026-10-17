@@ -8,7 +8,7 @@ import java.util.zip.GZIPOutputStream
 import kotlin.math.max
 
 /**
- * Frozen facts for ABCDEF. BTINDEX5 stores five distinct indicator vectors and
+ * Frozen facts for ABCDEF. BTINDEX6 stores five distinct indicator vectors and
  * the D/E audit trails; older BTINDEX1/2 files are rejected and rebuilt from the
  * same original price/index snapshots. Never interpret an ABC cache as D signals.
  */
@@ -19,7 +19,7 @@ class BtConditionIndex private constructor(
 ){
     private data class Record(
         val code:String,val day:LocalDate,val dataDates:Array<LocalDate?>,
-        val passed:LongArray,val pending:LongArray,val dEvidence:String,val eEvidence:String,val fEvidence:String,val vetoHit:LongArray,val vetoPending:LongArray
+        val passed:LongArray,val pending:LongArray,val aEvidence:String,val dEvidence:String,val eEvidence:String,val fEvidence:String,val vetoHit:LongArray,val vetoPending:LongArray
     )
     fun prepare(s:BtSettings,cancel:()->Boolean={false}):BtPrepared {
         val selected=RadarType.entries.map{type->
@@ -44,7 +44,7 @@ class BtConditionIndex private constructor(
             if(matches.isNotEmpty())signals.getOrPut(r.day){mutableListOf()}.add(
                 BtSignal(r.code,matches.joinToString("/"){RadarType.entries[it].name.take(1)},
                     matches.maxOf{r.dataDates[it]!!},
-                    listOfNotNull(r.dEvidence.takeIf{RadarType.D_MAIN_FORCE.ordinal in matches},r.eEvidence.takeIf{RadarType.E_DIF_TOUCH.ordinal in matches},r.fEvidence.takeIf{RadarType.F_VOLUME_CONTRACTION.ordinal in matches}).joinToString("\n"))
+                    listOfNotNull(r.aEvidence.takeIf{RadarType.A_EARLY_BREAKOUT.ordinal in matches&&s.rules[RadarType.A_EARLY_BREAKOUT].orEmpty().any{it in APattern.IDS}},r.dEvidence.takeIf{RadarType.D_MAIN_FORCE.ordinal in matches},r.eEvidence.takeIf{RadarType.E_DIF_TOUCH.ordinal in matches},r.fEvidence.takeIf{RadarType.F_VOLUME_CONTRACTION.ordinal in matches}).joinToString("\n"))
             )
         }
         return BtPrepared(series,signals,days,missing)
@@ -52,14 +52,14 @@ class BtConditionIndex private constructor(
     fun save(file:File,fingerprint:String){
         file.parentFile?.mkdirs();val tmp=File(file.path+".tmp")
         DataOutputStream(BufferedOutputStream(GZIPOutputStream(tmp.outputStream()))).use{out->
-            out.writeUTF("BTINDEX5");out.writeUTF(fingerprint);out.writeInt(records.size)
+            out.writeUTF("BTINDEX6");out.writeUTF(fingerprint);out.writeInt(records.size)
             records.forEach{r->
                 out.writeUTF(r.code);out.writeLong(r.day.toEpochDay())
                 repeat(RadarType.entries.size){i->
                     out.writeLong(r.dataDates[i]?.toEpochDay()?:Long.MIN_VALUE)
                     out.writeLong(r.passed[i]);out.writeLong(r.pending[i]);out.writeLong(r.vetoHit[i]);out.writeLong(r.vetoPending[i])
                 }
-                out.writeUTF(r.dEvidence.take(8000));out.writeUTF(r.eEvidence.take(8000));out.writeUTF(r.fEvidence.take(8000))
+                out.writeUTF(r.aEvidence.take(8000));out.writeUTF(r.dEvidence.take(8000));out.writeUTF(r.eEvidence.take(8000));out.writeUTF(r.fEvidence.take(8000))
             }
             out.writeInt(days.size);days.forEach{out.writeLong(it.toEpochDay())}
         }
@@ -68,12 +68,12 @@ class BtConditionIndex private constructor(
     }
     companion object {
         fun fingerprint(digest:String,settings:BtSettings,flowRevision:String="none")=
-            "$digest:${settings.start}:${settings.end}:${ScanConditions.VERSION}:$flowRevision:"+
+            "$digest:${settings.start}:${settings.end}:${ScanConditions.VERSION}:${APattern.VERSION}:$flowRevision:"+
             settings.enabledRadars.sortedBy{it.ordinal}.joinToString(","){it.name}+":"+
             settings.dConfig.json().toString()+":"+settings.eConfig.json().toString()+":"+settings.fConfig.json().toString()+":"+settings.bConfig.json().toString()+":"+BtRobotSpace.allSlots.joinToString(","){"${it.first.name}/${it.second}"}
         fun read(file:File,series:List<BtSeries>,fingerprint:String):BtConditionIndex=
             DataInputStream(BufferedInputStream(GZIPInputStream(file.inputStream()))).use{input->
-                require(input.readUTF()=="BTINDEX5"&&input.readUTF()==fingerprint){"歷史 ABCDEF 條件快取或版本不一致"}
+                require(input.readUTF()=="BTINDEX6"&&input.readUTF()==fingerprint){"歷史 ABCDEF 條件快取或版本不一致"}
                 val count=input.readInt();require(count in 0..1000000)
                 val codes=series.map{it.code}.toSet()
                 val options=RadarType.entries.map{ScanConditions.forRadar(it)}
@@ -91,7 +91,7 @@ class BtConditionIndex private constructor(
                         require((passed[i] and allowed)==passed[i]&&(pending[i] and allowed)==pending[i]&&
                             (passed[i] and pending[i])==0L)
                     }
-                    Record(code,day,dates,passed,pending,input.readUTF(),input.readUTF(),input.readUTF(),vetoHit,vetoPending)
+                    Record(code,day,dates,passed,pending,input.readUTF(),input.readUTF(),input.readUTF(),input.readUTF(),vetoHit,vetoPending)
                 }
                 val n=input.readInt();require(n in 0..5000)
                 val days=List(n){LocalDate.ofEpochDay(input.readLong())}
@@ -134,7 +134,7 @@ class BtConditionIndex private constructor(
                     if(day<settings.start||day>settings.end)return@dayLoop
                     check(!cancel()){"已暫停測試"}
                     val pass=LongArray(RadarType.entries.size);val pending=LongArray(RadarType.entries.size);val vetoHit=LongArray(RadarType.entries.size);val vetoPending=LongArray(RadarType.entries.size);val dates=arrayOfNulls<LocalDate>(RadarType.entries.size)
-                    val metrics=mutableMapOf<Int,RuleMetrics>();var details="";var eDetails="";var fDetails=""
+                    val metrics=mutableMapOf<Int,RuleMetrics>();var aDetails="";var details="";var eDetails="";var fDetails=""
                     RadarType.entries.forEachIndexed radar@{i,type->
                         if(type !in settings.enabledRadars)return@radar
                         val end=if(type==RadarType.C_LONG_RED_VOLUME||type==RadarType.D_MAIN_FORCE)j+1 else j
@@ -158,11 +158,12 @@ class BtConditionIndex private constructor(
                             }
                         }
                         ExclusionConditions.forRadar(type).forEachIndexed{bit,condition->when(condition.test(m)){true->vetoHit[i]=vetoHit[i] or (1L shl bit);null->vetoPending[i]=vetoPending[i] or (1L shl bit);false->Unit}}
+                        if(type==RadarType.A_EARLY_BREAKOUT)aDetails=m.aPattern.format()
                         if(type==RadarType.D_MAIN_FORCE)details=m.dPattern.format()
                         if(type==RadarType.F_VOLUME_CONTRACTION)fDetails=m.fPattern.format()
                         if(type==RadarType.E_DIF_TOUCH)eDetails=m.ePattern?.format().orEmpty()
                     }
-                    records+=Record(s.code,day,dates,pass,pending,details,eDetails,fDetails,vetoHit,vetoPending)
+                    records+=Record(s.code,day,dates,pass,pending,aDetails,details,eDetails,fDetails,vetoHit,vetoPending)
                 }
                 if(index%10==0||index==series.lastIndex)progress("預算歷史 ABCDEF 條件 ${index+1}/${series.size} 檔；完成後重複使用")
             }

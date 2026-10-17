@@ -508,7 +508,7 @@ class MainActivity: AppCompatActivity() {
                                             val evaluated=if(report==null)initial else evaluate(enriched)
                                             val positive=participation.mainResults(evaluated).any{it.light!=SignalLight.NONE}
                                             val finalResults=if(positive&&java.time.LocalTime.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI)>=java.time.LocalTime.of(13,33))
-                                                evaluate(enriched.copy(closingAuction=auctionProvider.load(stock.code,stock.market))) else evaluated
+                                                evaluate(enriched.copy(closingAuction=scanInput?.auction(stock)?:auctionProvider.load(stock.code,stock.market))) else evaluated
                                             if(!current())return@followUp
                                             synchronized(results){results.removeAll{it.code==stock.code};results.addAll(finalResults)}
                                         }catch(_:Exception){failed.incrementAndGet()}
@@ -904,6 +904,7 @@ class MainActivity: AppCompatActivity() {
             ScanConditions.A_RULE_IDS.forEach{id->checks[id]?.isChecked=id in currentA}
             Toast.makeText(this,"已將 A 的勾選帶到 D 編輯畫面；按儲存才套用",Toast.LENGTH_SHORT).show()
         }.apply{tag="scanner-d-copy-a"})
+        if(type==RadarType.A_EARLY_BREAKOUT){val presets=NeonUi.vertical(this);AVideoPresets.add(this,presets){ids->checks.forEach{(id,check)->check.isChecked=id in ids}};box.addView(presets,0)}
         if(type==RadarType.B_DEEP_REVERSAL){val presets=NeonUi.vertical(this);BReversalPresets.add(this,presets){ids->checks.forEach{(id,check)->check.isChecked=id in ids}};box.addView(presets,0)}
         val scroll = ScrollView(this).apply { addView(box) }
         val selectionView=if(type==RadarType.B_DEEP_REVERSAL)NeonUi.vertical(this).apply{

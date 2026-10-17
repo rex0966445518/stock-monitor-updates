@@ -52,7 +52,7 @@ class BPatternTest{
     @Test fun robotBitsAppendWithoutChangingAnyHistoricalSlot(){
         assertEquals(65,BtRobotSpace.legacySlots.size)
         assertEquals(BtRobotSpace.v7Slots,BtRobotSpace.allSlots.take(BtRobotSpace.v7Slots.size))
-        assertEquals(BPattern.IDS.map{RadarType.B_DEEP_REVERSAL to it},BtRobotSpace.allSlots.takeLast(BPattern.IDS.size))
+        assertEquals(BPattern.IDS.map{RadarType.B_DEEP_REVERSAL to it},BtRobotSpace.v8Slots.takeLast(BPattern.IDS.size))
         val oldKey=java.math.BigInteger.ONE.shiftLeft(BtRobotSpace.v7Slots.size).subtract(java.math.BigInteger.ONE).toString(16)
         assertTrue(BtRobotSpace.rules(oldKey).getValue(RadarType.B_DEEP_REVERSAL).none{it in BPattern.IDS})
         assertEquals(java.math.BigInteger.ONE.shiftLeft(BtRobotSpace.v7Slots.size),BtRobotSpace.total("0",includeB=false))

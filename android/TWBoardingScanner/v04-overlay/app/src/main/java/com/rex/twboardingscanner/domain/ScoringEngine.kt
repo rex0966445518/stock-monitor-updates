@@ -4,7 +4,9 @@ class ScoringEngine {
     private fun evaluate(s: StockSnapshot, type: RadarType, selected: Set<String>,excluded:Set<String> = emptySet()): SignalResult {
         val metrics = RuleMetrics(s)
         val checks = ScanConditions.forRadar(type).map { rule ->
-            val state = when(rule.test(metrics)) { true -> CheckState.PASS; false -> CheckState.FAIL; null -> CheckState.PENDING }
+            // New optional historical patterns must not slow existing unselected scans.
+            val raw=if(rule.id in APattern.IDS&&rule.id !in selected)null else rule.test(metrics)
+            val state = when(raw) { true -> CheckState.PASS; false -> CheckState.FAIL; null -> CheckState.PENDING }
             ConditionCheck(rule.id, rule.label, state, rule.id in selected, rule.extra)
         }
         val active = checks.filter { it.selected }
@@ -21,6 +23,7 @@ class ScoringEngine {
         if (upgraded) reasons += "技術升級：RSI>50 且收盤站上20日線"
         val light = if (blockers.isNotEmpty()) SignalLight.NONE else if (upgraded) SignalLight.RED else SignalLight.ORANGE
         val evidence=listOfNotNull(
+            if(type==RadarType.A_EARLY_BREAKOUT&&selected.any{it in APattern.IDS})metrics.aPattern.format() else null,
             if(type==RadarType.C_LONG_RED_VOLUME)CSignalEvidence.format(metrics,selected) else null,
             if(type==RadarType.D_MAIN_FORCE)metrics.dPattern.format() else null,
             if(type==RadarType.F_VOLUME_CONTRACTION)metrics.fPattern.format() else null,

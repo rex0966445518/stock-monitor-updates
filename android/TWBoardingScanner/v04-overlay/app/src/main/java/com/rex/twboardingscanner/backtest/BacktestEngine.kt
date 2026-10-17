@@ -102,6 +102,7 @@ object BacktestEngine {
                     pending+=checks.count{it==null}+vetoes.count{it==null}
                     if(checks.size==ids.size&&checks.all{it==true}&&vetoes.all{it==false}){
                         matches.add(type to date(metrics.last!!))
+                        if(type==RadarType.A_EARLY_BREAKOUT&&ids.any{it in APattern.IDS})dDetails+=metrics.aPattern.format()+"\n"
                         if(type==RadarType.D_MAIN_FORCE)dDetails+=metrics.dPattern.format()+"\n"
                         if(type==RadarType.F_VOLUME_CONTRACTION)dDetails+=metrics.fPattern.format()+"\n"
                         if(type==RadarType.E_DIF_TOUCH)dDetails+=metrics.ePattern?.format().orEmpty()+"\n"
