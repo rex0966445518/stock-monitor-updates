@@ -26,7 +26,7 @@ class AVideoBacktestParityTest {
             }
             val file=File.createTempFile("a-video-index",".gz")
             try {
-                val fingerprint=BtConditionIndex.fingerprint("fixture",settings)
+                val fingerprint="fixture:${APattern.VERSION}"
                 index.save(file,fingerprint)
                 assertEquals(indexed.signals,BtConditionIndex.read(file,series(),fingerprint).prepare(settings).signals)
             } finally { file.delete() }

@@ -4,7 +4,9 @@ class ScoringEngine {
     private fun evaluate(s: StockSnapshot, type: RadarType, selected: Set<String>,excluded:Set<String> = emptySet()): SignalResult {
         val metrics = RuleMetrics(s)
         val checks = ScanConditions.forRadar(type).map { rule ->
-            val state = when(rule.test(metrics)) { true -> CheckState.PASS; false -> CheckState.FAIL; null -> CheckState.PENDING }
+            // New optional historical patterns must not slow existing unselected scans.
+            val raw=if(rule.id in APattern.IDS&&rule.id !in selected)null else rule.test(metrics)
+            val state = when(raw) { true -> CheckState.PASS; false -> CheckState.FAIL; null -> CheckState.PENDING }
             ConditionCheck(rule.id, rule.label, state, rule.id in selected, rule.extra)
         }
         val active = checks.filter { it.selected }
