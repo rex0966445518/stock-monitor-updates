@@ -1,5 +1,5 @@
 """Read overlapping viewports; stop only after repeated stable stock-code rows."""
-def scan_table(controller, roi, read, progress, max_segments=2000, observed=None,resume=None,checkpoint=None,limit_pages=None,scroll_cap=6,learn_scroll=None):
+def scan_table(controller, roi, read, progress, max_segments=2000, observed=None,resume=None,checkpoint=None,limit_pages=None,scroll_cap=6,learn_scroll=None,read_anchors=None):
     from autoswitch import absolute_roi
     table=absolute_roi(roi,controller.rect())
     center=(table['left']+table['width']//2,table['top']+table['height']//2)
@@ -14,6 +14,12 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
     if not saved:
         controller.scroll(center,120*4000);controller.pause(.6)
     else:progress(first+1,len(collected),'接續前次斷點，核對目前股票列')
+    def anchor_codes(image,quotes):
+        codes=tuple(q.code for q in quotes)
+        if read_anchors:
+            anchors=tuple(dict.fromkeys(read_anchors(image)))
+            if anchors:return anchors
+        return codes
     def save(next_segment,codes):
         if checkpoint:checkpoint(dict(segment=next_segment,codes=list(codes),offset=offset,notches=notches,cap=cap,rejected=rejected,quotes=[asdict(q) for q in collected.values()]))
     for segment in range(first,min(max_segments,limit_pages) if limit_pages else max_segments):
@@ -27,21 +33,21 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
             progress(segment+1,len(collected),f'複查辨識 {retry+1}/2')
             controller.pause(.5);image,_=controller.image(roi);quotes,bad=read(image)
         if not quotes:raise RuntimeError('股票資料連續三次無法辨識，未宣稱已讀完整清單')
-        codes=tuple(q.code for q in quotes)
+        codes=anchor_codes(image,quotes)
         if saved and previous and not set(codes).intersection(previous):
             progress(segment+1,len(collected),'定位前次捲動位置，保留已讀資料')
             controller.scroll(center,120*4000);controller.pause(.4)
             if offset:controller.scroll(center,-120*offset);controller.pause(.4)
-            image,_=controller.image(roi);quotes,bad=read(image);codes=tuple(q.code for q in quotes)
+            image,_=controller.image(roi);quotes,bad=read(image);codes=anchor_codes(image,quotes)
         saved={}
         recovered=False
         if previous is not None and not set(codes).intersection(previous):
             attempts=max(12,notches*3)
             for attempt in range(attempts):
                 controller.check()
-                progress(segment+1,len(collected),f'捲動過頭，自動回找重疊 {attempt+1}/{attempts}')
+                progress(segment+1,len(collected),f'捲動過頭，自動回找重疊 {attempt+1}/{attempts}｜目前股號 '+','.join(codes[:4]))
                 controller.scroll(center,120);offset=max(0,offset-1);controller.pause(.3)
-                image,_=controller.image(roi);quotes,bad=read(image);codes=tuple(q.code for q in quotes)
+                image,_=controller.image(roi);quotes,bad=read(image);codes=anchor_codes(image,quotes)
                 if set(codes).intersection(previous):
                     recovered=True;cap=max(1,min(cap,notches//2));notches=1
                     if learn_scroll:learn_scroll(cap,True)

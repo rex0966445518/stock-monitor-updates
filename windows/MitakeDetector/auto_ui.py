@@ -140,6 +140,22 @@ class AutoUI:
             self.worker_thread=threading.Thread(target=job,daemon=True);self.worker_thread.start()
         self.root.after(700,launch)
 
+    def read_stock_anchors(self,image,bounds):
+        import re,unicodedata
+        left,right=bounds['code']
+        self.focus_columns(image,bounds,['code'],'核對捲動重疊股號')
+        crop=image.crop((round(left*image.width),0,round(right*image.width),image.height))
+        import hashlib
+        memory=self.get_ocr_learning()
+        key=f'numeric-column:code:{crop.width}x{crop.height}:'+hashlib.sha256(crop.convert('RGB').tobytes()).hexdigest()
+        tokens=memory.lookup(key) if memory else None
+        if tokens is None:tokens=self.read_auto_ocr(crop)
+        codes=[]
+        for box,text,confidence in tokens:
+            text=unicodedata.normalize('NFKC',str(text)).replace(' ','').strip()
+            if confidence>=.90 and re.fullmatch(r'[0-9]{4,6}',text):codes.append(text)
+        return codes
+
     def scan_mapped_table(self,image,bounds):
         from MitakeDetector import FIELDS,parse_ocr
         import re,unicodedata
@@ -559,7 +575,8 @@ class AutoUI:
                             if store:store.update(context,dict(cycle=cycle,rank=rank_index,table=state))
                         quotes,rejected=scan_table(c,auto['table'],read,progress,observed=observed,resume=table_resume,checkpoint=checkpoint,
                                                    limit_pages=None if auto.get('full_table',True) else auto['pages'],scroll_cap=experience.scroll_cap(name),
-                                                   learn_scroll=lambda cap,recovered:experience.record_scroll(name,cap,recovered))
+                                                   learn_scroll=lambda cap,recovered:experience.record_scroll(name,cap,recovered),
+                                                   read_anchors=(lambda image:self.read_stock_anchors(image,cfg['column_bounds'])) if auto.get('discovered') else None)
                         saved=None
                         collected={q.code:q for q in quotes}
                         # Verify label again after scanning, before any observations are accepted.

@@ -36,6 +36,17 @@ class TableScanTests(unittest.TestCase):
         self.assertTrue(any('已找回重疊' in message for message in messages))
         self.assertTrue(any(recovered and cap<=3 for cap,recovered in learned))
         self.assertGreater(sum(0<d<480000 for d in c.scrolls),0)
+    def test_overlap_uses_codes_even_when_other_fields_are_incomplete(self):
+        c=TableController(rows=17)
+        # Only two complete quotes per view, but the visible code column has six.
+        read=lambda n:([SimpleNamespace(code=str(1000+i)) for i in range(n,n+2)],0)
+        anchors=lambda n:[str(1000+i) for i in range(n,n+6)]
+        messages=[]
+        rows,_=scan_table(c,[0,0,1,1],read,lambda *s:messages.append(s[2]),read_anchors=anchors)
+        self.assertTrue(rows)
+        self.assertIn('推定清單末端',messages[-1])
+        self.assertFalse(any('回找' in m for m in messages))
+
     def test_learned_wheel_stride_reads_92_stocks_with_overlap(self):
         class Large(TableController):
             def scroll(self,point,delta):
