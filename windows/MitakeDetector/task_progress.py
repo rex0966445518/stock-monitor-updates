@@ -63,11 +63,12 @@ class TaskProgress:
         self.count_label=tk.Label(self.window,textvariable=self.counts)
         self.metrics=tk.Frame(self.window,bg='#30415d')
         self.metrics.place(x=width-table_width-8,y=2,width=table_width,height=62)
-        self.values={}
+        self.values={};self.metric_cells=[]
         for i,(key,label,value) in enumerate([
             ('elapsed','掃描總時長','00:00:00'),('scanned','已掃描股數','0 股'),('total','目前排行總股數','待確認'),
             ('passes','累計完成遍數','0 遍'),('rate','讀取速率','等待首段'),('freshness','最近成功讀取','尚未讀取')]):
             cell=tk.Frame(self.metrics,bg='#15243a',highlightbackground='#30415d',highlightthickness=1)
+            self.metric_cells.append(cell)
             cell.grid(row=i//3,column=i%3,sticky='nsew')
             self.metrics.columnconfigure(i%3,weight=1,uniform='metric')
             self.metrics.rowconfigure(i//3,weight=1)
@@ -77,16 +78,32 @@ class TaskProgress:
         self.last_success=None
         self.counts.trace_add('write',self.refresh_counts)
         self.rate.trace_add('write',self.refresh_rate)
-        if width<640:
-            # Narrow target windows keep the table readable on its own second row.
-            self.window.geometry(f'{width}x136{left:+d}{rect[1]+2:+d}')
-            self.title_label.place_configure(width=width-16)
-            self.detail_label.place_configure(width=width-16)
-            self.detail_label.configure(wraplength=width-16)
-            self.metrics.place(x=8,y=66,width=width-16,height=62)
         self.bar=ttk.Progressbar(self.window,mode='indeterminate',length=370)
-        self.bar.place(x=8,y=130 if width<640 else 66,width=width-16,height=4)
         self.bar.start(90)
+        self.window.update_idletasks()
+        # Pixel heights must follow the actual font metrics and Windows DPI.
+        # Each cell contains TWO labels; 31px per row clipped the value label.
+        cell_width=max(140,max(cell.winfo_reqwidth() for cell in self.metric_cells)+24)
+        row_height=max(cell.winfo_reqheight() for cell in self.metric_cells)+8
+        table_width=3*cell_width;table_height=2*row_height
+        title_height=self.title_label.winfo_reqheight()+6
+        detail_height=2*self.detail_label.winfo_reqheight()+8
+        text_height=title_height+detail_height
+        stacked=width<table_width+360
+        if stacked:
+            table_width=width-16;text_width=width-16
+            table_top=text_height+8;panel_height=table_top+table_height+10
+        else:
+            text_width=width-table_width-24
+            table_top=4;panel_height=max(text_height,table_height)+14
+        self.title_label.configure(wraplength=text_width,justify='left',anchor='nw')
+        self.title_label.place(x=8,y=2,width=text_width,height=title_height)
+        self.detail_label.configure(wraplength=text_width)
+        self.detail_label.place(x=8,y=title_height+2,width=text_width,height=detail_height)
+        self.metrics.place(x=8 if stacked else width-table_width-8,y=table_top,width=table_width,height=table_height)
+        for row in range(2):self.metrics.rowconfigure(row,minsize=row_height)
+        self.bar.place(x=8,y=panel_height-6,width=width-16,height=4)
+        self.window.geometry(f'{width}x{panel_height}{left:+d}{rect[1]+2:+d}')
         self.window.update_idletasks()
         self.native_hwnd=None
         if sys.platform=='win32':

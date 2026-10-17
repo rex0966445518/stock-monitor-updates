@@ -75,6 +75,12 @@ def run_automation_smoke(root,app):
     root.after_cancel(progress_panel.after_id);progress_panel.tick()
     assert progress_panel.values['elapsed'].get()=='01:01:01'
     assert progress_panel.metrics.winfo_ismapped()
+    root.update_idletasks()
+    for cell in progress_panel.metric_cells:
+        assert cell.winfo_height()>=cell.winfo_reqheight(),'Metric row clips value at Windows DPI'
+        for label_widget in cell.winfo_children():
+            assert label_widget.winfo_y()+label_widget.winfo_height()<=cell.winfo_height(),'Metric value is covered'
+    assert progress_panel.metrics.winfo_x()+progress_panel.metrics.winfo_width()<=progress_panel.window.winfo_width(),'Table exceeds right edge'
     progress_panel.rate.set('2.0 秒／段｜15.00 檔／秒')
     assert progress_panel.values['rate'].get()=='15.00 股/秒'
     progress_panel.update('排行1/5｜已讀26檔｜等待3秒',1,5)
