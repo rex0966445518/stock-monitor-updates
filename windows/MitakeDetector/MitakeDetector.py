@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.22'
+VERSION = '0.3.23'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -157,7 +157,7 @@ class Engine:
         return rows, alerts
 
 
-HELP = '''漲停板探測器-雷允澤製 v0.3.22
+HELP = '''漲停板探測器-雷允澤製 v0.3.23
 
 【開始觀察】
 開啟三竹「熱門排行」，保持視窗完整可見，按F8或「開始掃描」。
@@ -193,6 +193,13 @@ OCR讀值跳動>3%、量倒退、缺欄及連續60秒未變不提醒。
 OCR在本機執行，不傳送三竹畫面或帳密。
 實際三竹版本與顯示縮放需現場核對；可先在掃描設定測試輪切。
 '''
+
+
+def format_feedback(text):
+    text=str(text)
+    if any(word in text for word in ('掃描已暫停','自動設定未完成','錯誤','Traceback')):
+        return text.replace('｜','\n').replace('；','；\n')
+    return text
 
 
 class App(AutoUI):
@@ -261,7 +268,9 @@ class App(AutoUI):
                 self.vars[valkey] = tk.StringVar(value=str(self.config[valkey]))
                 ttk.Entry(opts, textvariable=self.vars[valkey], width=7).grid(row=1, column=idx*4+3)
         self.status = tk.StringVar(value='開啟三竹「熱門排行」，按 F8 或「開始掃描」。首次會自動定位；再次按 F8 停止。')
-        tk.Label(root, textvariable=self.status, bg='#0b1020', fg='#58ddd0', anchor='w', wraplength=1120).pack(fill='x', padx=20, pady=10)
+        self.status_label=tk.Label(root,textvariable=self.status,bg='#0b1020',fg='#58ddd0',anchor='w',justify='left',wraplength=1120)
+        self.status_label.pack(fill='x',padx=20,pady=10)
+        self.status_label.bind('<Configure>',lambda event:self.status_label.configure(wraplength=max(80,event.width-8)))
         from scan_rate import ScanRate
         self.scan_rate=ScanRate();self.scan_rate_var=tk.StringVar(value=self.scan_rate.text())
         tk.Label(root,textvariable=self.scan_rate_var,bg='#0b1020',fg='#68f5d1',anchor='w').pack(fill='x',padx=20)
@@ -276,8 +285,11 @@ class App(AutoUI):
         sb = ttk.Scrollbar(table_frame, orient='vertical', command=self.tree.yview)
         self.tree.configure(yscrollcommand=sb.set)
         self.tree.pack(side='left', fill='both', expand=True); sb.pack(side='right', fill='y')
-        self.log = tk.Text(root, height=5, bg='#0a1322', fg='#a6b8d2', font=('Microsoft JhengHei', 10), state='disabled')
-        self.log.pack(fill='x', padx=18, pady=8)
+        log_frame=ttk.Frame(root);log_frame.pack(fill='x',padx=18,pady=8)
+        self.log=tk.Text(log_frame,height=9,wrap='word',bg='#0a1322',fg='#a6b8d2',font=('Microsoft JhengHei',10),state='disabled')
+        log_scroll=ttk.Scrollbar(log_frame,orient='vertical',command=self.log.yview)
+        self.log.configure(yscrollcommand=log_scroll.set)
+        self.log.pack(side='left',fill='x',expand=True);log_scroll.pack(side='right',fill='y')
         foot = ttk.Frame(root); foot.pack(fill='x', padx=18, pady=(0,12))
         ttk.Button(foot, text='匯出本輪 CSV', command=self.export).pack(side='left')
         self.update_bar=ttk.Progressbar(foot,mode='determinate',maximum=100,length=150)
@@ -319,6 +331,7 @@ class App(AutoUI):
         else:self.auto_setup(start_after=True)
 
     def say(self, text):
+        text=format_feedback(text)
         self.log.configure(state='normal'); self.log.insert('end', dt.datetime.now().strftime('%H:%M:%S ') + text + '\n')
         self.log.see('end'); self.log.configure(state='disabled')
 
@@ -587,7 +600,7 @@ class App(AutoUI):
                     self.save_scan_snapshot()
                     self.announce_task('任務執行失敗，請查看訊息' if '未完成' in payload or '：' in payload else '任務已停止')
                     self.close_task_progress()
-                    self.auto_active=False; self.status.set(payload); self.say(payload); self.root.deiconify()
+                    self.auto_active=False; self.status.set(format_feedback(payload)); self.say(payload); self.root.deiconify()
                 elif kind == 'auto_quotes':
                     name, quotes, rejected, elapsed, cfg = payload
                     self.mode='自動輪切／'+name

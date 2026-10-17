@@ -49,6 +49,13 @@ class UI(AutoUI):
 
 
 class StartAutoTests(unittest.TestCase):
+    def test_error_feedback_splits_details_without_losing_text(self):
+        from MitakeDetector import format_feedback
+        source='掃描已暫停：失敗｜第17段｜已讀33檔｜table_scan.py:56'
+        shown=format_feedback(source)
+        self.assertEqual(shown.replace('\n','｜'),source)
+        self.assertEqual(len(shown.splitlines()),4)
+
     def test_rate_is_measured_and_stays_after_task_text_changes(self):
         from scan_rate import ScanRate
         rate=ScanRate();rate.update(dict(start=10))
