@@ -1,4 +1,21 @@
 """Read overlapping viewports; stop only after repeated stable stock-code rows."""
+class RecoverableScanError(RuntimeError):
+    """Transient OCR/overlap failure; retry only from a preserved checkpoint."""
+
+
+def scan_with_recovery(run,state,check,progress,pause,on_error=lambda exc:None,attempts=3):
+    for attempt in range(attempts):
+        check()
+        try:return run(state[0])
+        except RecoverableScanError as exc:
+            on_error(exc)
+            check()
+            if attempt+1>=attempts:
+                raise RecoverableScanError('自動恢復已達上限，進度已保留；最後原因：'+str(exc)) from exc
+            progress(f'暫時讀取失敗，保留斷點自動接續 {attempt+1}/{attempts-1}｜'+str(exc))
+            pause(1)
+
+
 def scan_table(controller, roi, read, progress, max_segments=2000, observed=None,resume=None,checkpoint=None,limit_pages=None,scroll_cap=6,learn_scroll=None,read_anchors=None,recover_layout=None):
     from autoswitch import absolute_roi
     table=absolute_roi(roi,controller.rect())
@@ -44,7 +61,7 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
             if quotes:break
             progress(segment+1,len(collected),f'複查辨識 {retry+1}/2')
             controller.pause(.5);image,_=controller.image(roi);quotes,bad=read(image)
-        if not quotes:raise RuntimeError('股票資料連續三次無法辨識，未宣稱已讀完整清單')
+        if not quotes:raise RecoverableScanError('股票資料連續三次無法辨識，未宣稱已讀完整清單')
         codes=anchor_codes(image,quotes)
         if saved and previous and not set(codes).intersection(previous):
             progress(segment+1,len(collected),'定位前次捲動位置，保留已讀資料')
@@ -78,7 +95,7 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
                     if unchanged>=2:break
                 if recovered:break
             if not recovered:
-                if rebuilds>=2:raise RuntimeError('雙向回找及重新定位後仍反覆失去重疊，已保留斷點與診斷，請檢查清單是否持續重新排序')
+                if rebuilds>=2:raise RecoverableScanError('雙向回找及重新定位後仍反覆失去重疊，已保留斷點與診斷，請檢查清單是否持續重新排序')
                 rebuilds+=1;cap=1;notches=1;offset=0;stable=0;previous=None;recovery_stalls=0
                 progress(segment+1,len(collected),f'定位點已失效，保留已讀資料，自動重建目前排行位置 {rebuilds}/2')
                 controller.scroll(center,120*4000);controller.pause(.5)
@@ -87,7 +104,7 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
                 continue
         rejected+=bad
         recovery_stalls=recovery_stalls+1 if recovered and codes==previous else 0
-        if recovery_stalls>=3:raise RuntimeError('已反覆找回原位置，但單格滾輪仍跳過整頁，進度已保留；請降低系統滾輪行數')
+        if recovery_stalls>=3:raise RecoverableScanError('已反覆找回原位置，但單格滾輪仍跳過整頁，進度已保留；請降低系統滾輪行數')
         for q in quotes:collected[q.code]=q
         if observed:
             extra=observed(quotes,bad)

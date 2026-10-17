@@ -179,3 +179,36 @@ class PriorityCheckpointTests(unittest.TestCase):
         self.assertEqual({q.code for q in rows},{str(1000+i) for i in range(17)})
         self.assertEqual(next(q.ts for q in rows if q.code=='1000'),200)
         self.assertGreater(len(seen),1)
+
+class AutomaticRecoveryTests(unittest.TestCase):
+    def test_recovery_uses_latest_checkpoint_without_losing_quotes(self):
+        from table_scan import RecoverableScanError,scan_with_recovery
+        state=[None];received=[];messages=[]
+        checkpoint={'segment':5,'codes':['2330'],'quotes':[{'code':'2330'}]}
+        def run(resume):
+            received.append(resume)
+            if len(received)==1:state[0]=checkpoint;raise RecoverableScanError('temporary OCR failure')
+            return ['kept'],0
+        self.assertEqual(scan_with_recovery(run,state,lambda:None,messages.append,lambda _:None),(['kept'],0))
+        self.assertIs(received[1],checkpoint)
+        self.assertIn('保留斷點',messages[0])
+    def test_stop_and_unexpected_errors_are_not_retried(self):
+        from table_scan import scan_with_recovery
+        from autoswitch import AutomationStopped
+        for error in [AutomationStopped('F8'),ValueError('bad configuration')]:
+            calls=[]
+            def run(resume):calls.append(True);raise error
+            with self.assertRaises(type(error)):scan_with_recovery(run,[None],lambda:None,lambda _:None,lambda _:None)
+            self.assertEqual(len(calls),1)
+    def test_recovery_is_bounded_and_user_stop_during_retry_wins(self):
+        from table_scan import RecoverableScanError,scan_with_recovery
+        from autoswitch import AutomationStopped
+        calls=[]
+        def run(resume):calls.append(True);raise RecoverableScanError('missing rows')
+        with self.assertRaisesRegex(RecoverableScanError,'恢復已達上限'):
+            scan_with_recovery(run,[None],lambda:None,lambda _:None,lambda _:None)
+        self.assertEqual(len(calls),3)
+        calls.clear()
+        def pause(_):raise AutomationStopped('F8 pressed')
+        with self.assertRaises(AutomationStopped):scan_with_recovery(run,[None],lambda:None,lambda _:None,pause)
+        self.assertEqual(len(calls),1)

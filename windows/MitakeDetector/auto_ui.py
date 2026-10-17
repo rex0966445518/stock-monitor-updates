@@ -2,7 +2,7 @@
 import json
 import threading
 import time
-from autoswitch import WindowsController, RankingSwitcher, RANKINGS, absolute_roi, validate_roi, F8Toggle
+from autoswitch import WindowsController, RankingSwitcher, RANKINGS, absolute_roi, validate_roi, F8Toggle, AutomationStopped
 
 
 class AutoUI:
@@ -712,6 +712,17 @@ class AutoUI:
                             first_batch[0]=False
                             counted.update(q.code for q in quotes);counts()
                             self.events.put((token,'auto_quotes',(name,quotes,bad,time.monotonic()-begin,current)))
+                            try:return prioritized_recheck(quotes,current)
+                            except AutomationStopped:raise
+                            except Exception as error:
+                                priority_budget[0]=0
+                                diagnostic.update(stage='優先複查失敗，主掃描繼續',optional_error=str(error))
+                                from scan_diagnostics import record_interruption
+                                from MitakeDetector import VERSION
+                                location=record_interruption(BASE/'scan-interruptions.jsonl',VERSION,diagnostic,error)
+                                self.events.put((token,'auto_status','優先複查暫停，主掃描繼續：'+str(error)+'｜'+location))
+                                return []
+                        def prioritized_recheck(quotes,current):
                             # Recheck only a few near-target rows before leaving
                             # this viewport. Full-market traversal is never skipped.
                             if not auto.get('discovered') or priority_budget[0]<=0:return []
@@ -751,14 +762,25 @@ class AutoUI:
                                 self.events.put((token,'auto_quotes',(name,extra,extra_bad,time.monotonic()-begin,dict(current,source_reset=False))))
                                 return extra
                             return []
+                        table_state=[table_resume]
                         def checkpoint(state):
+                            table_state[0]=state
                             diagnostic.update(last_codes=state.get("codes",[]),wheel_offset=state.get("offset",0),scroll_notches=state.get("notches",1))
                             if store:store.update(context,dict(cycle=cycle,rank=rank_index,table=state))
-                        quotes,rejected=scan_table(c,auto['table'],read,progress,observed=observed,resume=table_resume,checkpoint=checkpoint,
+                        from table_scan import scan_with_recovery
+                        def attempt_scan(resume):
+                            return scan_table(c,auto['table'],read,progress,observed=observed,resume=resume,checkpoint=checkpoint,
                                                    limit_pages=None if auto.get('full_table',True) else auto['pages'],scroll_cap=experience.scroll_cap(name),
                                                    learn_scroll=lambda cap,recovered:experience.record_scroll(name,cap,recovered),
                                                    read_anchors=(lambda image:self.read_stock_anchors(image,cfg['column_bounds'])) if auto.get('discovered') else None,
                                                    recover_layout=recover_layout)
+                        def recovered_error(error):
+                            from scan_diagnostics import record_interruption
+                            from MitakeDetector import VERSION
+                            diagnostic.update(stage='暫時中斷，正在自動恢復')
+                            record_interruption(BASE/'scan-interruptions.jsonl',VERSION,diagnostic,error)
+                        quotes,rejected=scan_with_recovery(attempt_scan,table_state,c.check,
+                            lambda detail:self.events.put((token,'auto_status',detail)),c.pause,recovered_error)
                         saved=None
                         collected={q.code:q for q in quotes}
                         counted.update(collected);counts(done=True)
@@ -776,7 +798,14 @@ class AutoUI:
                         wait_until=time.monotonic()+dwell
                         if getattr(self,'deferred_names',None):
                             self.events.put((token,'auto_status','數字篩選已完成：利用輪切等待時間批次補讀股名（最多8檔）'))
-                            self.learn_deferred_names(c.check)
+                            try:self.learn_deferred_names(c.check)
+                            except AutomationStopped:raise
+                            except Exception as error:
+                                diagnostic.update(stage='股名補讀失敗，主掃描繼續',optional_error=str(error))
+                                from scan_diagnostics import record_interruption
+                                from MitakeDetector import VERSION
+                                location=record_interruption(BASE/'scan-interruptions.jsonl',VERSION,diagnostic,error)
+                                self.events.put((token,'auto_status','股名補讀失敗，已略過並繼續數字掃描：'+str(error)+'｜'+location))
                         while time.monotonic()<wait_until:
                             remaining=max(1,int(wait_until-time.monotonic()+.999))
                             self.events.put((token,'auto_progress',(f'{name}｜已讀{len(collected)}檔｜略過{rejected}列｜{mode}｜{remaining}秒後繼續｜OCR重用{getattr(self,"ocr_cache_hits",0)}次',rank_index+1,len(auto['rankings']))))

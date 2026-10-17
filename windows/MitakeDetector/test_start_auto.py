@@ -192,3 +192,22 @@ class CandidateRankingTests(unittest.TestCase):
         m=assess((q,None,'等待觀測突破守穩',False),cfg)
         self.assertEqual((m['count'],m['total']),(3,6))
         self.assertEqual(m['missing'],['換手率','量速','突破守穩'])
+
+class OptionalLearningRecoveryTests(unittest.TestCase):
+    def test_name_learning_failure_does_not_stop_next_scan_cycle(self):
+        cfg=dict(DEFAULT,auto_config=dict(title='TEST RANK',window_size=[800,600],combo=[0,0,.2,.1],menu=[0,.1,.3,.5],table=[0,.2,1,.8],rankings=['漲幅排行'],seconds=3,pages=1,full_table=True))
+        app=UI(cfg);calls=[];app.deferred_names={'2330':None}
+        def fail_learning(check):raise RuntimeError('simulated optional name failure')
+        app.learn_deferred_names=fail_learning
+        def scan(*args,**kwargs):
+            calls.append(True)
+            if len(calls)==2:app.stop_event.set()
+            return [Quote('2330','TEST',100,2,1500,1,1)],0
+        with tempfile.TemporaryDirectory() as folder,patch('MitakeDetector.BASE',Path(folder)),patch('auto_ui.WindowsController',Controller),patch('auto_ui.RankingSwitcher',Switcher),patch('adaptive.Experience.wait',return_value=0),patch('table_scan.scan_table',side_effect=scan):
+            app.start_auto();app.worker_thread.join(3)
+            self.assertFalse(app.worker_thread.is_alive());self.assertEqual(len(calls),2)
+            messages=[]
+            while not app.events.empty():messages.append(app.events.get())
+            self.assertTrue(any(kind=='auto_status' and '股名補讀失敗' in value for _,kind,value in messages))
+            self.assertTrue(any(kind=='auto_phase' and '第2輪' in value for _,kind,value in messages))
+            self.assertTrue((Path(folder)/'scan-interruptions.jsonl').exists())
