@@ -93,3 +93,34 @@ class FastQuoteTests(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+
+class NumericPriorityTests(unittest.TestCase):
+    def test_numeric_scan_skips_unknown_name_ocr_but_keeps_anchors(self):
+        image=Image.new('RGB',(600,80));bounds={f:[i/6,(i+1)/6] for i,f in enumerate(FIELDS)}
+        calls=[];anchors=[]
+        def read(im):
+            calls.append(im.size)
+            return [token(text,40+i*164,20,width=50) for i,text in enumerate(['2330','100','+2%','1500','1%'])]
+        names=StockNames()
+        rows,bad=scan_numeric_batch(image,bounds,read,names,defer_names=True,anchors_ready=lambda a,s:anchors.extend(a))
+        self.assertEqual(len(calls),1);self.assertEqual(rows[0].code,'2330')
+        self.assertEqual(rows[0].name,'');self.assertEqual(anchors[0][0],'2330')
+    def test_idle_name_learning_is_batched_and_anchor_cache_invalidates(self):
+        from auto_ui import AutoUI
+        app=AutoUI();app.stock_names=StockNames();app.ocr_learning=False
+        app.focus_columns=lambda *args,**kwargs:None
+        image=Image.new('RGB',(600,80));bounds={f:[i/6,(i+1)/6] for i,f in enumerate(FIELDS)}
+        app.remember_fast_rows(image,bounds,[('2330',30,18)],{'2330':.99})
+        calls=[]
+        def read(im):
+            calls.append(im.size)
+            return [token('台積電',8,8,width=50)]
+        app.read_auto_ocr=read
+        self.assertEqual(app.read_stock_anchors(image,bounds),['2330'])
+        self.assertEqual(calls,[])
+        app.learn_deferred_names()
+        self.assertEqual(app.stock_names.names['2330'],'台積電')
+        self.assertEqual(len(calls),1)
+        app.read_auto_ocr=lambda im:[]
+        changed=image.copy();changed.putpixel((0,0),(255,255,255))
+        self.assertEqual(app.read_stock_anchors(changed,bounds),[])

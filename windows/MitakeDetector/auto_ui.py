@@ -121,6 +121,7 @@ class AutoUI:
         self.events.put((token,'auto_phase','設定中｜正在辨識視窗與欄位'))
         from task_progress import SCAN_GOAL,goal_conditions
         self.say(SCAN_GOAL+'｜'+goal_conditions(cfg))
+        self.numeric_priority=True
         self.auto_active=True
         stop=self.stop_event
         self.root.iconify()
@@ -160,8 +161,69 @@ class AutoUI:
             self.worker_thread=threading.Thread(target=job,daemon=True);self.worker_thread.start()
         self.root.after(700,launch)
 
+    def remember_fast_rows(self,image,bounds,anchors,scores):
+        import hashlib
+        self.fast_row_source=(image,bounds,anchors,scores)
+        self.fast_code_cache=(hashlib.sha256(image.tobytes()).digest(),bounds,
+                              [code for code,y,h in anchors if scores.get(code,0)>=.90])
+        pending=getattr(self,'deferred_names',{})
+        tried=getattr(self,'deferred_name_tried',{})
+        names=getattr(self,'stock_names',None)
+        left,right=bounds['name']
+        for code,y,h in anchors:
+            if scores.get(code,0)<.92 or not names or code in names.names:continue
+            top=max(0,int(y-h*.7));bottom=min(image.height,int(y+h*.7)+1)
+            if bottom<=top:continue
+            crop=image.crop((round(left*image.width),top,round(right*image.width),bottom))
+            proof=hashlib.sha256(crop.tobytes()).hexdigest()
+            if tried.get(code)==proof:continue
+            pending[code]=(crop,proof)
+        while len(pending)>1000:pending.pop(next(iter(pending)))
+        self.deferred_names=pending
+
+    def learn_deferred_names(self,check=lambda:None):
+        """One bounded name sheet in the existing ranking wait, never per row."""
+        from PIL import Image
+        pending=getattr(self,'deferred_names',{})
+        names=getattr(self,'stock_names',None)
+        if not pending or not names:return 0
+        sections=[];height=8;width=1
+        for code in list(pending)[:8]:
+            crop,proof=pending.pop(code)
+            if code in names.names:continue
+            sections.append((code,height,height+crop.height,crop,proof))
+            height+=crop.height+16;width=max(width,crop.width)
+        if not sections:return 0
+        sheet=Image.new('RGB',(width+16,height),'black')
+        for code,top,bottom,crop,proof in sections:sheet.paste(crop,(8,top))
+        check();tokens=self.read_auto_ocr(sheet);check()
+        if not hasattr(self,'deferred_name_tried'):self.deferred_name_tried={}
+        count=0
+        for code,top,bottom,crop,proof in sections:
+            self.deferred_name_tried[code]=proof
+            near=[t for t in tokens if top<=sum(p[1] for p in t[0])/4<bottom]
+            if len(near)==1:
+                _,text,confidence=near[0]
+                count+=bool(names.consider(code,str(text).replace(' ',''),confidence,'idle:'+proof))
+        # One enlarged batch for uncertain names, instead of 2 OCR calls per row.
+        unresolved=[part for part in sections if part[0] not in names.names]
+        if unresolved:
+            check();enlarged=sheet.resize((sheet.width*2,sheet.height*2),Image.Resampling.LANCZOS)
+            zoomed=self.read_auto_ocr(enlarged);check()
+            for code,top,bottom,crop,proof in unresolved:
+                near=[t for t in zoomed if top*2<=sum(p[1] for p in t[0])/4<bottom*2]
+                if len(near)==1:
+                    _,text,confidence=near[0]
+                    count+=bool(names.consider(code,str(text).replace(' ',''),confidence,'idle-zoom2:'+proof))
+        while len(self.deferred_name_tried)>2000:self.deferred_name_tried.pop(next(iter(self.deferred_name_tried)))
+        if names.dirty:names.save()
+        return count
+
     def read_stock_anchors(self,image,bounds):
         import re,unicodedata
+        import hashlib
+        cached=getattr(self,'fast_code_cache',None)
+        if cached and cached[0]==hashlib.sha256(image.tobytes()).digest() and cached[1]==bounds:return list(cached[2])
         left,right=bounds['code']
         self.focus_columns(image,bounds,['code'],'核對捲動重疊股號')
         crop=image.crop((round(left*image.width),0,round(right*image.width),image.height))
@@ -214,7 +276,9 @@ class AutoUI:
         from MitakeDetector import BASE
         names=getattr(self,'stock_names',None)
         if names is None:self.stock_names=names=StockNames(BASE/'stock-names.json')
-        quotes,bad=scan_numeric_batch(image,bounds,self.read_auto_ocr,names,memory=self.get_ocr_learning(),focus=lambda fields,stage,row=None:self.focus_columns(image,bounds,fields,stage,row))
+        quotes,bad=scan_numeric_batch(image,bounds,self.read_auto_ocr,names,memory=self.get_ocr_learning(),focus=lambda fields,stage,row=None:self.focus_columns(image,bounds,fields,stage,row),
+                                      defer_names=getattr(self,'numeric_priority',False),
+                                      anchors_ready=lambda anchors,scores:self.remember_fast_rows(image,bounds,anchors,scores))
         if not quotes:quotes,bad=self.scan_mapped_table(image,bounds)
         self.last_table_seconds=time.perf_counter()-started
         self.last_scan_diagnostic=f'欄位辨識：有效{len(quotes)}列，略過{bad}列'
@@ -575,6 +639,7 @@ class AutoUI:
                     layout,reused=cached_layout(full,self.read_auto_ocr,BASE/'header-layout.json',cfg.get('column_bounds'),auto.get('table'));c.check()
                     self.events.put((token,'auto_status','表頭頭尾一致，已略過逐欄辨識' if reused else '表頭配置已重新確認並記住'))
                     cfg['column_bounds']=layout['column_bounds'];auto['table']=layout['table']
+                priority_last={}
                 cycle=saved['cycle'] if saved else 1
                 known_totals={}
                 start_index=saved['rank'] if saved else 0
@@ -638,6 +703,7 @@ class AutoUI:
                             diagnostic.update(stage='表頭已重定位，重讀當前區段',column_bounds=layout['column_bounds'])
                             self.events.put((token,'auto_status','已更新欄位位置，繼續讀取當前區段'))
                             return True
+                        priority_budget=[3]
                         first_batch=[not bool(table_resume)]
                         def observed(quotes,bad):
                             if not switcher.label_matches(name):raise RuntimeError('本段股票類目改變，未接收本段資料')
@@ -646,6 +712,45 @@ class AutoUI:
                             first_batch[0]=False
                             counted.update(q.code for q in quotes);counts()
                             self.events.put((token,'auto_quotes',(name,quotes,bad,time.monotonic()-begin,current)))
+                            # Recheck only a few near-target rows before leaving
+                            # this viewport. Full-market traversal is never skipped.
+                            if not auto.get('discovered') or priority_budget[0]<=0:return []
+                            source=getattr(self,'fast_row_source',None)
+                            if not source:return []
+                            from candidate_ranking import assess
+                            selected=[]
+                            for q in quotes:
+                                match=assess((q,None,'等待觀測突破守穩',False),cfg)
+                                if (q.price>=cfg['min_price'] and q.volume>=cfg['min_volume']
+                                        and cfg['min_gain']<=q.gain<=cfg['max_gain']
+                                        and match['count']>=3+int(bool(cfg['use_turnover']))
+                                        and time.monotonic()-priority_last.get(q.code,-1e20)>=20):selected.append(q.code)
+                            selected=set(selected[:3])
+                            if not selected:return []
+                            image,bounds,anchors,scores=source
+                            sections=[(code,max(0,int(y-h*.8)),min(image.height,int(y+h*.8)+1))
+                                      for code,y,h in anchors if code in selected and scores.get(code,0)>=.92]
+                            if not sections:return []
+                            priority_budget[0]-=1
+                            for code in selected:priority_last[code]=time.monotonic()
+                            self.events.put((token,'auto_status',f'候選優先複查：{len(sections)}檔｜數字快掃，股名稍後補讀'))
+                            c.check();fresh,_=c.image(auto['table'])
+                            from PIL import Image
+                            height=8+sum(bottom-top+16 for _,top,bottom in sections)
+                            sheet=Image.new('RGB',(fresh.width,height),'black');y=8
+                            for code,top,bottom in sections:
+                                sheet.paste(fresh.crop((0,top,fresh.width,bottom)),(0,y));y+=bottom-top+16
+                            self.focus_columns(fresh,bounds,['code','price','gain','volume','turnover'],'候選小區塊優先複查',
+                                               (min(top for _,top,bottom in sections),max(bottom for _,top,bottom in sections)))
+                            from fast_quotes import scan_numeric_batch
+                            extra,extra_bad=scan_numeric_batch(sheet,cfg['column_bounds'],self.read_auto_ocr,self.stock_names,
+                                                              memory=self.get_ocr_learning(),defer_names=True)
+                            extra=[q for q in extra if q.code in selected]
+                            c.check()
+                            if extra and switcher.label_matches(name):
+                                self.events.put((token,'auto_quotes',(name,extra,extra_bad,time.monotonic()-begin,dict(current,source_reset=False))))
+                                return extra
+                            return []
                         def checkpoint(state):
                             diagnostic.update(last_codes=state.get("codes",[]),wheel_offset=state.get("offset",0),scroll_notches=state.get("notches",1))
                             if store:store.update(context,dict(cycle=cycle,rank=rank_index,table=state))
@@ -669,6 +774,9 @@ class AutoUI:
                         mode='自適應加速' if experience.enabled else '固定間隔'
                         diagnostic.update(stage='排行讀取完成，等待下次切換',count=len(collected))
                         wait_until=time.monotonic()+dwell
+                        if getattr(self,'deferred_names',None):
+                            self.events.put((token,'auto_status','數字篩選已完成：利用輪切等待時間批次補讀股名（最多8檔）'))
+                            self.learn_deferred_names(c.check)
                         while time.monotonic()<wait_until:
                             remaining=max(1,int(wait_until-time.monotonic()+.999))
                             self.events.put((token,'auto_progress',(f'{name}｜已讀{len(collected)}檔｜略過{rejected}列｜{mode}｜{remaining}秒後繼續｜OCR重用{getattr(self,"ocr_cache_hits",0)}次',rank_index+1,len(auto['rankings']))))

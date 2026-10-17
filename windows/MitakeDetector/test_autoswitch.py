@@ -157,3 +157,16 @@ class TitleTests(unittest.TestCase):
         s.requested_title='分時買力'
         self.assertFalse(s.label_matches('分時買力'))
         self.assertIn('實際OCR：分時賣力',s.title_failure())
+
+class VerifiedPixelCacheTests(unittest.TestCase):
+    def test_only_identical_verified_title_skips_ocr(self):
+        from PIL import Image
+        c=FakeController();im=Image.new('RGB',(100,40));calls=[]
+        c.image=lambda roi:(im,{})
+        def read(image):calls.append(image.size);return [token('分時買力')]
+        switch=RankingSwitcher(c,read,[.1,.1,.2,.04],[.1,.15,.2,.5])
+        self.assertTrue(switch.label_matches('分時買力'))
+        self.assertTrue(switch.label_matches('分時買力'));self.assertEqual(len(calls),1)
+        im.putpixel((0,0),(255,255,255))
+        self.assertTrue(switch.label_matches('分時買力'));self.assertEqual(len(calls),2)
+        self.assertFalse(switch.label_matches('分時賣力'));self.assertGreater(len(calls),2)

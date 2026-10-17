@@ -89,7 +89,11 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
         recovery_stalls=recovery_stalls+1 if recovered and codes==previous else 0
         if recovery_stalls>=3:raise RuntimeError('已反覆找回原位置，但單格滾輪仍跳過整頁，進度已保留；請降低系統滾輪行數')
         for q in quotes:collected[q.code]=q
-        if observed:observed(quotes,bad)
+        if observed:
+            extra=observed(quotes,bad)
+            if isinstance(extra,(list,tuple)):
+                for q in extra:
+                    if q.code in collected and q.ts>collected[q.code].ts:collected[q.code]=q
         save(segment+1,codes)
         progress(segment+1,len(collected),'本段已讀取，繼續複查')
         stable=stable+1 if codes==previous and not recovered else 0

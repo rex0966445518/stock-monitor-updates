@@ -166,3 +166,16 @@ class LayoutRecoveryTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             scan_table(c,[0,0,1,1],read,lambda *s:None,recover_layout=repair)
         self.assertEqual(len(calls),3)
+
+class PriorityCheckpointTests(unittest.TestCase):
+    def test_priority_result_updates_collected_without_skipping_normal_rows(self):
+        from MitakeDetector import Quote
+        c=TableController(rows=17);seen=[]
+        def read(n):return [Quote(str(1000+i),'TEST',100,2,1000,1,100+n) for i in range(n,n+6)],0
+        def observed(rows,bad):
+            seen.append(rows[0].code)
+            if rows[0].code=='1000':return [Quote('1000','TEST',101,3,1100,1,200)]
+        rows,bad=scan_table(c,[0,0,1,1],read,lambda *s:None,observed=observed)
+        self.assertEqual({q.code for q in rows},{str(1000+i) for i in range(17)})
+        self.assertEqual(next(q.ts for q in rows if q.code=='1000'),200)
+        self.assertGreater(len(seen),1)

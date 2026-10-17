@@ -257,10 +257,19 @@ class RankingSwitcher:
 
     def label_matches(self,name):
         im,_=self.c.image(self.combo)
+        signature=None
+        if hasattr(im,'tobytes'):
+            import hashlib
+            signature=(name,im.size,hashlib.sha256(im.tobytes()).digest())
+            if signature==getattr(self,'verified_title_pixels',None):return True
+        def accepted(tokens):
+            if not self.title_tokens_match(tokens,name):return False
+            if signature is not None:self.verified_title_pixels=signature
+            return True
         for reader in [self.ocr,self.ocr_retry]:
             if reader is None:continue
             self.c.check()
-            if self.title_tokens_match(reader(im),name):return True
+            if accepted(reader(im)):return True
         if hasattr(im,'crop'):
             from PIL import ImageOps
             # The combo arrow and cyan frame can merge into the four-character
@@ -270,9 +279,9 @@ class RankingSwitcher:
                            max(2,round(w*.84)),max(2,round(h*.92))))
             padded=ImageOps.expand(inner,border=max(8,h//3),fill=inner.getpixel((0,0)))
             for tokens in self.enlarged_reads(padded,name):
-                if self.title_tokens_match(tokens,name):return True
+                if accepted(tokens):return True
         for tokens in self.enlarged_reads(im,name):
-            if self.title_tokens_match(tokens,name):return True
+            if accepted(tokens):return True
         return False
 
     def title_failure(self):

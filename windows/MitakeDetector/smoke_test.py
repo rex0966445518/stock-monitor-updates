@@ -67,6 +67,21 @@ def run_smoke_test(report):
         assert fast[0].price==100.5 and fast[1].volume==2800
         assert fast[0].name=='TESTA' and names.reused==2
         info.update(numeric_batch_rows=len(fast),numeric_batch_seconds=fast_seconds,remembered_names_reused=names.reused)
+        # Actual bundled OCR: unknown names must not block numeric results.
+        app.stock_names=StockNames();app.numeric_priority=True
+        started=time.perf_counter()
+        quick,quick_bad=app.scan_recovering_table(im,bounds)
+        assert len(quick)==2 and quick_bad==0 and all(not q.name for q in quick)
+        assert app.deferred_names,'Unknown names must be queued for later learning'
+        reader=app.read_auto_ocr
+        def no_extra_ocr(image):raise AssertionError('Same-view stock anchors were OCRed twice')
+        app.read_auto_ocr=no_extra_ocr
+        try:assert set(app.read_stock_anchors(im,bounds))=={'2330','2317'}
+        finally:app.read_auto_ocr=reader
+        info.update(priority_numeric_seconds=time.perf_counter()-started,priority_name_queue=len(app.deferred_names))
+        app.learn_deferred_names()
+        assert app.stock_names.names,'Deferred names were never learned'
+        app.numeric_priority=False
         now=dt.datetime.now().timestamp()
         app.mode='CI smoke / synthetic data'
         app.render([Quote('9001','SMOKE',100,2,1500,1,now)],0,0,dict(DEFAULT),persist=True)
