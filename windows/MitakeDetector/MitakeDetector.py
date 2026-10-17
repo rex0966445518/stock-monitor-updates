@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.17'
+VERSION = '0.3.18'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -157,7 +157,7 @@ class Engine:
         return rows, alerts
 
 
-HELP = '''漲停板探測器-雷允澤製 v0.3.17
+HELP = '''漲停板探測器-雷允澤製 v0.3.18
 
 【開始觀察】
 開啟三竹「熱門排行」，保持視窗完整可見，按F8或「開始掃描」。
@@ -429,7 +429,7 @@ class App(AutoUI):
         import numpy as np
         from PIL import ImageOps
         from rapidocr_onnxruntime import RapidOCR
-        if self.ocr is None: self.ocr = RapidOCR()
+        if self.ocr is None: self.ocr = RapidOCR(det_limit_type="max",det_limit_side_len=1600,intra_op_num_threads=2,inter_op_num_threads=1,use_cls=False)
         # OCR模型接受BGR；保留彩色，避免紅綠文字轉灰後消失。
         image = image.convert('RGB').resize((image.width*2, image.height*2))
         result, _ = self.ocr(np.asarray(image)[:, :, ::-1].copy(),unclip_ratio=1.6)

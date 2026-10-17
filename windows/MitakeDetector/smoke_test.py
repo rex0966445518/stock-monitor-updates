@@ -46,6 +46,7 @@ def run_smoke_test(report):
                 draw.text((x*12,60+row*65),text,font=font,fill='white',anchor='mm')
         quotes,rejected=app.scan(im,DEFAULT['centers'])
         assert len(quotes)==2 and rejected==0, f'OCR result: {quotes}, rejected {rejected}'
+        assert app.ocr.use_cls is False
         assert quotes[0].code=='2330' and quotes[0].volume==1500 and quotes[1].price==205
         from fast_quotes import StockNames,scan_numeric_batch
         from MitakeDetector import FIELDS

@@ -131,6 +131,11 @@ class AutoUI:
         return parse_ocr(tokens,600,[100*(50+i*100)/600 for i in range(6)],time.time())
 
     def scan_recovering_table(self,image,bounds):
+        started=time.perf_counter()
+        try:return self._scan_recovering_table(image,bounds)
+        finally:self.last_table_seconds=time.perf_counter()-started
+
+    def _scan_recovering_table(self,image,bounds):
         """Retry whole-table OCR when narrow strips yield no complete rows."""
         from MitakeDetector import FIELDS,parse_ocr
         import re,unicodedata
@@ -397,7 +402,7 @@ class AutoUI:
                 self.ocr_cache_hits=getattr(self,'ocr_cache_hits',0)+1
                 learning.record(persistent_key,remembered,time.perf_counter()-started,'跨次重用')
                 return remembered
-        if self.ocr is None:self.ocr=RapidOCR()
+        if self.ocr is None:self.ocr=RapidOCR(det_limit_type="max",det_limit_side_len=1600,intra_op_num_threads=2,inter_op_num_threads=1,use_cls=False)
         # Preserve pixel coordinates for clicking; upscale OCR output is scaled back.
         from PIL import ImageOps
         raw=image.convert('RGB')

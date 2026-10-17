@@ -6,7 +6,7 @@ import math
 from pathlib import Path
 import sqlite3
 
-PROFILE='rapidocr1.4.4-pad24-scale2-unclip2'
+PROFILE='rapidocr1.4.4-pad24-scale2-unclip2-max1600-cls0'
 
 
 def clean_tokens(tokens):
