@@ -1,5 +1,5 @@
 import unittest
-from task_progress import status_bounds,duration_text
+from task_progress import status_bounds,status_top,duration_text
 
 class StatusBoundsTests(unittest.TestCase):
     def test_right_side_reserves_entire_popup(self):
@@ -13,3 +13,10 @@ class StatusBoundsTests(unittest.TestCase):
         self.assertGreater(result[1],265)
     def test_duration_does_not_wrap_at_one_hour(self):
         self.assertEqual(duration_text(3661),'01:01:01')
+
+    def test_bottom_dock_clears_top_header_at_multiple_heights(self):
+        for height in (72,136,180):
+            bounds=status_bounds((0,0,1920,1040),[0,.02,.1,.04],[0,.06,.2,.6])
+            top=status_top(bounds,height)
+            self.assertGreater(top,100)
+            self.assertEqual(top+height,1032)

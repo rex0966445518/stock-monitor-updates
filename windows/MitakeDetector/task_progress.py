@@ -41,6 +41,11 @@ def status_bounds(rect,combo=None,menu=None):
     return (x+8,int(protected_bottom),right,bottom)
 
 
+def status_top(bounds,panel_height):
+    """Bottom docking keeps the complete ranking header clear at every DPI."""
+    return max(bounds[1]+2,bounds[3]-panel_height-8)
+
+
 class TaskProgress:
     def __init__(self,root,tk,ttk,rect,message,combo=None,menu=None):
         self.root=root;self.tk=tk;self.started=time.monotonic();self.alive=True;self.after_id=None
@@ -103,7 +108,8 @@ class TaskProgress:
         self.metrics.place(x=8 if stacked else width-table_width-8,y=table_top,width=table_width,height=table_height)
         for row in range(2):self.metrics.rowconfigure(row,minsize=row_height)
         self.bar.place(x=8,y=panel_height-6,width=width-16,height=4)
-        self.window.geometry(f'{width}x{panel_height}{left:+d}{rect[1]+2:+d}')
+        top=status_top(rect,panel_height)
+        self.window.geometry(f'{width}x{panel_height}{left:+d}{top:+d}')
         self.window.update_idletasks()
         self.native_hwnd=None
         if sys.platform=='win32':
