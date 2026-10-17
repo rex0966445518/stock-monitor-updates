@@ -9,6 +9,22 @@ def duration_text(seconds):
     return f'{seconds//3600:02d}:{seconds//60%60:02d}:{seconds%60:02d}'
 
 
+SCAN_GOAL='目標：潛在漲停轉強股（觀察候選）'
+
+
+def goal_conditions(config):
+    parts=[f"股價≥{config['min_price']:g}元",f"總量≥{config['min_volume']:g}張",
+           f"漲幅{config['min_gain']:g}～{config['max_gain']:g}%"]
+    if config.get('use_turnover'):parts.append(f"換手率≥{config['min_turnover']:g}%")
+    if config.get('use_accel'):parts.append(f"近5分量速比≥{config['accel']:g}倍（需累積觀測）")
+    if config.get('use_breakout'):parts.append('觀測突破後連續兩次守穩')
+    return '｜'.join(parts)+'｜須有第二次有效讀值；候選不代表一定漲停'
+
+
+def goal_title(stage,pulse='●'):
+    return f'{pulse} {SCAN_GOAL}｜{stage}｜F8 停止'
+
+
 def task_stage(text):
     text=str(text)
     if '準備自動定位' in text:return '設定1/4：尋找視窗與欄位'
@@ -132,7 +148,7 @@ class TaskProgress:
         if not self.alive:return
         seconds=int(time.monotonic()-self.started)
         pulse=['●','◉','●','○'][seconds%4]
-        self.title.set(f'{pulse} 機器人工作中｜{self.stage}｜F8 停止')
+        self.title.set(goal_title(self.stage,pulse))
         self.values['elapsed'].set(duration_text(seconds))
         if self.last_success is not None:
             age=int(time.monotonic()-self.last_success)
@@ -144,7 +160,7 @@ class TaskProgress:
         self.stage=task_stage(text)
         self.detail.set(str(text))
         seconds=int(time.monotonic()-self.started)
-        self.title.set(f'● 機器人工作中｜{self.stage}｜F8 停止')
+        self.title.set(goal_title(self.stage))
         if total is not None and total>0:
             self.bar.stop();self.bar.configure(mode='determinate',maximum=total,value=max(0,min(total,completed or 0)))
         else:

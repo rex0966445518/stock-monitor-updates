@@ -96,6 +96,7 @@ def run_automation_smoke(root,app):
     assert '15.00 檔／秒' in progress_panel.rate.get()
     root.update()
     assert '26檔' in progress_panel.detail.get()
+    assert '目標：潛在漲停轉強股' in progress_panel.title.get(),'Scan goal must survive task updates'
     from PIL import ImageGrab
     from pathlib import Path
     root.update_idletasks()

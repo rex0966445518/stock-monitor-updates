@@ -119,6 +119,8 @@ class AutoUI:
         target,title=candidates[0]
         token=self.reset('自動定位與欄位校正')
         self.events.put((token,'auto_phase','設定中｜正在辨識視窗與欄位'))
+        from task_progress import SCAN_GOAL,goal_conditions
+        self.say(SCAN_GOAL+'｜'+goal_conditions(cfg))
         self.auto_active=True
         stop=self.stop_event
         self.root.iconify()
@@ -542,6 +544,8 @@ class AutoUI:
             self.scan_total_elapsed=0
             token=self.reset('自動輪切測試' if test_only else '自動輪切')
             self.auto_engines={}
+        from task_progress import SCAN_GOAL,goal_conditions
+        self.say(SCAN_GOAL+'｜'+goal_conditions(cfg))
         self.auto_active=True
         self.events.put((token,'auto_phase','掃描中｜正在啟動或接續前次進度'))
         stop=self.stop_event;target=self.auto_hwnd

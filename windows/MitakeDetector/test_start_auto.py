@@ -152,3 +152,19 @@ class YellowBandTests(unittest.TestCase):
             self.assertGreaterEqual(t,y)
             self.assertLessEqual(right,r)
             self.assertLessEqual(bottom,y+round((b-y)*.049))
+
+class ScanGoalTests(unittest.TestCase):
+    def test_goal_survives_stage_changes(self):
+        from task_progress import goal_title,SCAN_GOAL
+        for stage in ['搜尋選單類目','逐段捲動與讀取股票','本次擷取完成，等待繼續']:
+            self.assertIn(SCAN_GOAL,goal_title(stage))
+            self.assertIn(stage,goal_title(stage))
+    def test_only_enabled_conditions_described(self):
+        from task_progress import goal_conditions
+        cfg=dict(DEFAULT,use_turnover=False,use_accel=False,use_breakout=False)
+        text=goal_conditions(cfg)
+        self.assertIn('總量≥1000張',text)
+        self.assertNotIn('換手率',text);self.assertNotIn('量速比',text);self.assertNotIn('守穩',text)
+        cfg.update(use_turnover=True,min_turnover=3,use_accel=True,accel=1.8,use_breakout=True)
+        text=goal_conditions(cfg)
+        self.assertIn('換手率≥3%',text);self.assertIn('量速比≥1.8倍',text);self.assertIn('兩次守穩',text)
