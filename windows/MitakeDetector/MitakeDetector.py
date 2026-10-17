@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.29'
+VERSION = '0.3.30'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -157,7 +157,7 @@ class Engine:
         return rows, alerts
 
 
-HELP = '''漲停板探測器-雷允澤製 v0.3.29
+HELP = '''漲停板探測器-雷允澤製 v0.3.30
 
 【開始觀察】
 開啟三竹「熱門排行」，保持視窗完整可見，按F8或「開始掃描」。
@@ -578,7 +578,19 @@ class App(AutoUI):
             except sqlite3.Error as exc: self.say('資料寫入失敗：' + str(exc))
         for q, reason in alerts:
             self.say(f'【{self.mode}】{q.code} {q.name} {q.price:.2f} / {q.gain:+.2f}%：{reason}')
-        if alerts: self.root.bell()
+        if alerts:
+            self.root.bell()
+            from task_progress import CandidateNotice,fresh_candidate_alerts
+            if not hasattr(self,'popup_alert_times'):self.popup_alert_times={}
+            fresh=fresh_candidate_alerts(alerts,self.popup_alert_times,cfg['cooldown'])
+            if fresh:
+                old=getattr(self,'candidate_notice',None)
+                if old:old.close()
+                text='\n'.join(f'{q.code} {q.name or "股名待補"}｜{q.price:.2f}元｜{q.gain:+.2f}%｜{q.volume:,.0f}張\n{reason}' for q,reason in fresh[:3])
+                if len(fresh)>3:text+=f'\n另有{len(fresh)-3}檔，請查看候選清單。'
+                text+='\n符合目前設定的觀察條件，不代表一定漲停。'
+                self.candidate_notice=CandidateNotice(self.root,self.tk,self.ttk,text)
+                self.announce_task('發現符合條件的轉強候選，請查看公告')
 
     def poll(self):
         try:
@@ -588,6 +600,13 @@ class App(AutoUI):
                     region,ready=payload
                     try:
                         if token==self.generation:
+                            notice=getattr(self,'candidate_notice',None)
+                            if notice and notice.alive:
+                                if region is None:notice.window.withdraw()
+                                elif notice.native_hwnd:
+                                    import ctypes
+                                    ctypes.windll.user32.ShowWindow(notice.native_hwnd,4)
+                                else:notice.window.deiconify()
                             self.show_scan_outline(region);self.root.update_idletasks()
                     finally:ready.set()
                     continue

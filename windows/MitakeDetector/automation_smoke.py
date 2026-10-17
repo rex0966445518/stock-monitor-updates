@@ -55,6 +55,15 @@ def run_automation_smoke(root,app):
     app.show_task_progress(hwnd,'正在測試進度窗｜第1/3頁')
     root.update()
     assert u.GetForegroundWindow()==foreground,'Progress panel stole keyboard focus'
+    from task_progress import CandidateNotice
+    notice=CandidateNotice(root,app.tk,app.ttk,'2330 TEST｜100元｜+3%｜符合目前條件')
+    root.update()
+    assert notice.window.winfo_ismapped(),'Candidate notice is not visible'
+    assert u.GetForegroundWindow()==foreground,'Candidate notice stole scan focus'
+    exstyle=u.GetWindowLongW(notice.native_hwnd,-20)
+    assert exstyle&0x08000000 and exstyle&0x20,'Candidate notice must not activate or block mouse'
+    notice.close();root.update()
+    assert not notice.alive
     progress_panel=app.task_panel
     assert progress_panel.alive and progress_panel.window.winfo_ismapped(),'Progress panel is not visible'
     progress_panel.rate.set('2.0 秒／段｜15.00 檔／秒')

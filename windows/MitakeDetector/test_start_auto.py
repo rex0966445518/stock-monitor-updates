@@ -110,3 +110,17 @@ class StartAutoTests(unittest.TestCase):
                     self.assertEqual(report['ranking'],'漲幅排行')
                     self.assertEqual(report['error_type'],'AutomationStopped')
                     self.assertIn('test pause',report['traceback'])
+
+class CandidateAlertTests(unittest.TestCase):
+    def test_cross_ranking_cooldown_and_new_target(self):
+        from task_progress import fresh_candidate_alerts
+        last={};q=Quote('2330','TEST',100,2,1500,1,100)
+        self.assertEqual(len(fresh_candidate_alerts([(q,'hit')],last,60)),1)
+        self.assertEqual(fresh_candidate_alerts([(q,'other rank')],last,60),[])
+        q.ts=159;self.assertEqual(fresh_candidate_alerts([(q,'hit')],last,60),[])
+        q.ts=160;self.assertEqual(len(fresh_candidate_alerts([(q,'hit')],last,60)),1)
+        q2=Quote('2454','TEST2',100,2,1500,1,160)
+        self.assertEqual(len(fresh_candidate_alerts([(q2,'hit')],last,60)),1)
+    def test_no_hits_no_popup(self):
+        from task_progress import fresh_candidate_alerts
+        self.assertEqual(fresh_candidate_alerts([],{},60),[])

@@ -33,10 +33,13 @@ class TaskProgress:
         left=max(rect[0]+8,min(rect[2]-width-8,rect[0]+(rect[2]-rect[0]-width)//2))
         self.window.geometry(f'{width}x48{left:+d}{rect[1]+2:+d}')
         self.title=tk.StringVar();self.detail=tk.StringVar(value=message);self.stage=task_stage(message)
-        tk.Label(self.window,textvariable=self.title,bg='#101a2b',fg='#68f5d1',font=('Microsoft JhengHei',10,'bold'),anchor='w').place(x=8,y=0,width=max(80,width-340),height=20)
+        self.title_label=tk.Label(self.window,textvariable=self.title,bg='#101a2b',fg='#68f5d1',font=('Microsoft JhengHei',10,'bold'),anchor='w')
+        self.title_label.place(x=8,y=0,width=max(80,width-340),height=20)
         self.rate=tk.StringVar(value='讀取速率：等待首段')
-        tk.Label(self.window,textvariable=self.rate,bg='#101a2b',fg='#68f5d1',font=('Microsoft JhengHei',8),anchor='e').place(x=max(90,width-330),y=0,width=min(320,width-100),height=20)
-        tk.Label(self.window,textvariable=self.detail,bg='#101a2b',fg='#edf2ff',font=('Microsoft JhengHei',8),anchor='w').place(x=8,y=20,width=width-16,height=20)
+        self.rate_label=tk.Label(self.window,textvariable=self.rate,bg='#101a2b',fg='#68f5d1',font=('Microsoft JhengHei',8),anchor='e')
+        self.rate_label.place(x=max(90,width-330),y=0,width=min(320,width-100),height=20)
+        self.detail_label=tk.Label(self.window,textvariable=self.detail,bg='#101a2b',fg='#edf2ff',font=('Microsoft JhengHei',8),anchor='w')
+        self.detail_label.place(x=8,y=20,width=width-16,height=20)
         self.bar=ttk.Progressbar(self.window,mode='indeterminate',length=370);self.bar.place(x=8,y=42,width=width-16,height=4)
         self.bar.start(90)
         self.window.update_idletasks()
@@ -85,3 +88,30 @@ class TaskProgress:
         self.alive=False
         if self.after_id is not None:self.root.after_cancel(self.after_id)
         self.bar.stop();self.window.destroy()
+
+
+class CandidateNotice(TaskProgress):
+    """Topmost, non-activating, click-through notice; scanning keeps its focus."""
+    def tick(self):pass
+
+    def __init__(self,root,tk,ttk,text):
+        w=root.winfo_screenwidth();h=root.winfo_screenheight()
+        super().__init__(root,tk,ttk,(0,0,w,h),text)
+        width=min(680,max(280,w-32));height=min(220,h-80)
+        self.window.geometry(f'{width}x{height}+{max(0,w-width-16)}+{max(0,h-height-60)}')
+        self.title.set('符合條件的轉強候選｜掃描持續進行')
+        self.title_label.configure(fg='#ffd36a')
+        self.title_label.place(x=12,y=8,width=width-24,height=24)
+        self.rate_label.place_forget();self.bar.stop();self.bar.place_forget()
+        self.detail_label.configure(wraplength=width-24,justify='left',anchor='nw',font=('Microsoft JhengHei',10))
+        self.detail_label.place(x=12,y=40,width=width-24,height=height-48)
+        self.after_id=root.after(30000,self.close)
+
+
+def fresh_candidate_alerts(alerts,last,cooldown):
+    """Share cooldown across rankings; only genuine engine hits enter here."""
+    accepted=[]
+    for q,reason in alerts:
+        if q.ts-last.get(q.code,-1e20)<cooldown:continue
+        last[q.code]=q.ts;accepted.append((q,reason))
+    return accepted
