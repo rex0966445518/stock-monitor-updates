@@ -175,6 +175,19 @@ class AutoUI:
         self.last_scan_diagnostic=(f'整表複查：有效{len(quotes)}列｜股號文字{counts["code"]}、成交價{counts["price"]}、漲幅{counts["gain"]}、總量{counts["volume"]}；請核對欄位是否完整可見')
         return quotes,max(bad,rejected) if not quotes else rejected
 
+    def show_scan_diagnostics(self):
+        from MitakeDetector import BASE
+        from tkinter.scrolledtext import ScrolledText
+        top=self.tk.Toplevel(self.root);top.title('掃描中斷診斷');top.geometry('1000x620')
+        text=ScrolledText(top,wrap='word');text.pack(fill='both',expand=True)
+        try:
+            path=BASE/'scan-interruptions.jsonl'
+            records=path.read_text(encoding='utf-8').splitlines() if path.exists() else []
+            value='\n\n'.join(json.dumps(json.loads(line),ensure_ascii=False,indent=2) for line in reversed(records)) or '尚無掃描中斷紀錄'
+        except (OSError,ValueError) as exc:value='無法讀取中斷紀錄：'+str(exc)
+        text.insert('1.0',value);text.configure(state='disabled')
+        self.ttk.Button(top,text='複製全部診斷',command=lambda:(top.clipboard_clear(),top.clipboard_append(value))).pack(pady=6)
+
     def clear_stock_names(self):
         if not self.idle():return
         from MitakeDetector import BASE
@@ -459,6 +472,7 @@ class AutoUI:
         if announce:self.announce_task('開始測試輪切' if test_only else ('接續前次掃描' if saved else '開始執行掃描'))
         def job():
             nonlocal saved
+            diagnostic=dict(cycle=saved['cycle'] if saved else 1,ranking='啟動',segment=0,count=0,stage='檢查視窗與表頭')
             try:
                 c=WindowsController(target,stop)
                 c.highlight=lambda region:self.highlight_scan(token,region,stop)
@@ -483,6 +497,7 @@ class AutoUI:
                 while not stop.is_set():
                     for rank_index in range(start_index,len(auto['rankings'])):
                         name=auto['rankings'][rank_index]
+                        diagnostic.update(cycle=cycle,ranking=name,segment=0,count=0,stage='切換排行')
                         table_resume=saved.get('table') if saved and rank_index==saved['rank'] else None
                         if store:store.update(context,dict(cycle=cycle,rank=rank_index,table=table_resume))
                         c.check();self.events.put((token,'auto_status',f'第{cycle}輪｜排行{rank_index+1}/{len(auto["rankings"])}：正在切換{name}'))
@@ -493,6 +508,7 @@ class AutoUI:
                         table=absolute_roi(auto['table'],c.rect());center=(table['left']+table['width']//2,table['top']+table['height']//2)
                         from table_scan import scan_table
                         def progress(segment,count,stage):
+                            diagnostic.update(segment=segment,count=count,stage=stage,seconds_per_segment=getattr(self,"last_table_seconds",0))
                             reused=getattr(getattr(self,'stock_names',None),'reused',0)
                             seconds=getattr(self,'last_table_seconds',0)
                             detail=f'第{cycle}輪｜類目{rank_index+1}/{len(auto["rankings"])} {name}｜第{segment}段｜已讀{count}檔｜股名重用{reused}次｜{stage}｜{seconds:.1f}秒/段'
@@ -506,6 +522,7 @@ class AutoUI:
                             first_batch[0]=False
                             self.events.put((token,'auto_quotes',(name,quotes,bad,time.monotonic()-begin,current)))
                         def checkpoint(state):
+                            diagnostic.update(last_codes=state.get("codes",[]),wheel_offset=state.get("offset",0),scroll_notches=state.get("notches",1))
                             if store:store.update(context,dict(cycle=cycle,rank=rank_index,table=state))
                         quotes,rejected=scan_table(c,auto['table'],read,progress,observed=observed,resume=table_resume,checkpoint=checkpoint,
                                                    limit_pages=None if auto.get('full_table',True) else auto['pages'],scroll_cap=experience.scroll_cap(name),
@@ -522,6 +539,7 @@ class AutoUI:
                         experience.observed(name,bool(collected) and rejected==0)
                         dwell=experience.wait(name,auto['seconds'])
                         mode='自適應加速' if experience.enabled else '固定間隔'
+                        diagnostic.update(stage='排行讀取完成，等待下次切換',count=len(collected))
                         wait_until=time.monotonic()+dwell
                         while time.monotonic()<wait_until:
                             remaining=max(1,int(wait_until-time.monotonic()+.999))
@@ -530,7 +548,11 @@ class AutoUI:
                     if test_only:break
                     cycle+=1;start_index=0
                 self.events.put((token,'auto_end','輪切測試完成' if test_only else '自動輪切已停止'))
-            except Exception as exc:self.events.put((token,'auto_end','掃描已暫停，進度保留：'+str(exc)+('｜'+getattr(self,'last_scan_diagnostic','') if '辨識' in str(exc) else '')))
+            except Exception as exc:
+                from scan_diagnostics import record_interruption
+                from MitakeDetector import BASE,VERSION
+                location=record_interruption(BASE/'scan-interruptions.jsonl',VERSION,diagnostic,exc)
+                self.events.put((token,'auto_end','掃描已暫停，進度保留：'+str(exc)+'｜'+location))
             finally:stop.set()
         def launch():
             if token!=self.generation:return

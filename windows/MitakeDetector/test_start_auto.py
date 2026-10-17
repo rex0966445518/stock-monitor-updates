@@ -65,4 +65,10 @@ class StartAutoTests(unittest.TestCase):
                     while not app.events.empty():messages.append(app.events.get())
                     endings=[value for _,kind,value in messages if kind=='auto_end']
                     self.assertTrue(endings)
-                    self.assertNotIn('saved',endings[-1])
+                    self.assertNotIn("local variable 'saved'",endings[-1])
+                    self.assertIn('診斷已保存',endings[-1])
+                    import json
+                    report=json.loads((Path(folder)/'scan-interruptions.jsonl').read_text().splitlines()[-1])
+                    self.assertEqual(report['ranking'],'漲幅排行')
+                    self.assertEqual(report['error_type'],'AutomationStopped')
+                    self.assertIn('test pause',report['traceback'])
