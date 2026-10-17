@@ -114,8 +114,10 @@ def run_automation_smoke(root,app):
             before=len(clicks)
             switcher.switch('漲幅排行',menu_open=True)
             assert len(clicks)==before+1,'Open popup was toggled rather than selected'
-            switcher.switch('大單流入')
-            switcher.switch('漲幅排行')
+            # Repeat a complete rotation with the visible status table present.
+            for _ in range(2):
+                switcher.switch('大單流入')
+                switcher.switch('漲幅排行')
             stop.set()
             try:controller.click((rect[0]+50,rect[1]+50))
             except AutomationStopped:pass

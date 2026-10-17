@@ -29,11 +29,24 @@ def task_stage(text):
     return '正在執行任務'
 
 
+def status_bounds(rect,combo=None,menu=None):
+    """Keep the panel outside both the closed combo and its expanded popup."""
+    x,y,right,bottom=rect;w=right-x;h=bottom-y
+    regions=[r for r in (combo,menu) if r and len(r)==4]
+    if not regions:regions=[[0,0,.4,.5]]
+    protected_right=max(x+(r[0]+r[2])*w for r in regions)+12
+    protected_bottom=max(y+(r[1]+r[3])*h for r in regions)+12
+    left=max(x+8,int(protected_right));available=right-left-8
+    if available>=360:return (left,y+2,right,bottom)
+    return (x+8,int(protected_bottom),right,bottom)
+
+
 class TaskProgress:
-    def __init__(self,root,tk,ttk,rect,message):
+    def __init__(self,root,tk,ttk,rect,message,combo=None,menu=None):
         self.root=root;self.tk=tk;self.started=time.monotonic();self.alive=True;self.after_id=None
         self.window=tk.Toplevel(root);self.window.withdraw();self.window.overrideredirect(True)
         self.window.configure(bg='#101a2b');self.window.attributes('-topmost',True)
+        rect=status_bounds(rect,combo,menu)
         width=max(280,rect[2]-rect[0]-16)
         left=max(rect[0]+8,min(rect[2]-width-8,rect[0]+(rect[2]-rect[0]-width)//2))
         self.window.geometry(f'{width}x72{left:+d}{rect[1]+2:+d}')

@@ -81,7 +81,8 @@ class AutoUI:
         if panel and panel.alive:
             panel.update(message);return
         rect=WindowsController(target,threading.Event()).rect()
-        self.task_panel=TaskProgress(self.root,self.tk,self.ttk,rect,message)
+        auto=self.config.get('auto_config') or {}
+        self.task_panel=TaskProgress(self.root,self.tk,self.ttk,rect,message,combo=auto.get('combo'),menu=auto.get('menu'))
         self.task_panel.started-=getattr(self,'scan_total_elapsed',0)
 
     def update_task_progress(self,message,completed=None,total=None):
