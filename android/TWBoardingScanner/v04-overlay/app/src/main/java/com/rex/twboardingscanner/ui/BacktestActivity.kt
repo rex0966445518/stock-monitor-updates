@@ -259,6 +259,7 @@ class BacktestActivity:AppCompatActivity(){
             val aSelected=btRules[RadarType.A_EARLY_BREAKOUT].orEmpty()
             options.forEachIndexed{i,rule->if(rule.id in ScanConditions.A_RULE_IDS)boxes[i].isChecked=rule.id in aSelected}
         }.apply{tag="backtest-d-copy-a"})
+        if(type==RadarType.A_EARLY_BREAKOUT){val presets=NeonUi.vertical(this);AVideoPresets.add(this,presets){ids->options.forEachIndexed{i,rule->boxes[i].isChecked=rule.id in ids}};content.addView(presets,0)}
         if(type==RadarType.B_DEEP_REVERSAL){val presets=NeonUi.vertical(this);BReversalPresets.add(this,presets){ids->options.forEachIndexed{i,rule->boxes[i].isChecked=rule.id in ids}};content.addView(presets,0)}
         val readExclusions=ExclusionEditor.fields(this,content,type,btExclusions.getValue(type))
         content.addView(NeonUi.row(this,listOf(NeonUi.button(this,"全不選"){boxes.forEach{it.isChecked=false}},NeonUi.button(this,"恢復基本條件"){boxes.forEachIndexed{i,box->box.isChecked=options[i].defaultEnabled}})))

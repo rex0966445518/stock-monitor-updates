@@ -36,8 +36,8 @@ internal object BtRobotRulesDialog {
             val dType=RadarType.D_MAIN_FORCE
             selected.getValue(dType).removeAll(ScanConditions.A_RULE_IDS)
             excluded.getValue(dType).removeAll(ScanConditions.A_RULE_IDS)
-            selected.getValue(dType).addAll(selected.getValue(aType))
-            excluded.getValue(dType).addAll(excluded.getValue(aType))
+            selected.getValue(dType).addAll(selected.getValue(aType).intersect(ScanConditions.A_RULE_IDS))
+            excluded.getValue(dType).addAll(excluded.getValue(aType).intersect(ScanConditions.A_RULE_IDS))
             populate(a,body,numbers,dType,selected.getValue(dType),excluded.getValue(dType)){summary()}
             summary()
         }.apply{tag="robot-d-copy-a"})
@@ -56,6 +56,9 @@ internal object BtRobotRulesDialog {
     }
     private fun populate(a:AppCompatActivity,body:LinearLayout,numbers:RuleNumberFields,type:RadarType,selected:MutableSet<String>,excluded:MutableSet<String>,change:()->Unit){
         body.removeAllViews();body.addView(NeonUi.label(a,"${type.label} · 必選／排除",15f,NeonUi.cyan,true))
+        if(type==RadarType.A_EARLY_BREAKOUT)AVideoPresets.add(a,body){ids->
+            selected.clear();selected.addAll(ids);excluded.clear();populate(a,body,numbers,type,selected,excluded,change);change()
+        }
         if(type==RadarType.B_DEEP_REVERSAL)BReversalPresets.add(a,body){ids->
             selected.clear();selected.addAll(ids);excluded.clear();populate(a,body,numbers,type,selected,excluded,change);change()
         }

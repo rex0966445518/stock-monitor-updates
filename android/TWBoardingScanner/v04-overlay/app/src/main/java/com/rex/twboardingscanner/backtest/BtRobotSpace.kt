@@ -10,7 +10,7 @@ object BtRobotSpace {
     // used 65 bits. Append new features after ALL historical positions.
     val legacySlots=RadarType.entries.take(3).flatMap{type->
         ScanConditions.forRadar(type).filterNot{
-            it.id in BPattern.IDS||it.id in ScanConditions.MOMENTUM_IDS||it.id in ScanConditions.NEW_IDS||it.id==ScanConditions.MAIN_FORCE_COST_20||it.id==RsiGoldenCross.ID
+            it.id in APattern.IDS||it.id in BPattern.IDS||it.id in ScanConditions.MOMENTUM_IDS||it.id in ScanConditions.NEW_IDS||it.id==ScanConditions.MAIN_FORCE_COST_20||it.id==RsiGoldenCross.ID
         }.map{type to it.id}
     }
     val slots=legacySlots+RadarType.entries.take(3).flatMap{type->
@@ -29,7 +29,8 @@ object BtRobotSpace {
     val rsiSlots=RadarType.entries.take(5).map{it to RsiGoldenCross.ID}
     val v6Slots=v5Slots+eSlots+rsiSlots+ScanConditions.forRadar(RadarType.F_VOLUME_CONTRACTION).filterNot{it.id in ScanConditions.MOMENTUM_IDS}.map{RadarType.F_VOLUME_CONTRACTION to it.id}
     val v7Slots=v6Slots+RadarType.entries.flatMap{type->ScanConditions.MOMENTUM_IDS.map{type to it}}
-    val allSlots=v7Slots+BPattern.IDS.map{RadarType.B_DEEP_REVERSAL to it}
+    val v8Slots=v7Slots+BPattern.IDS.map{RadarType.B_DEEP_REVERSAL to it}
+    val allSlots=v8Slots+APattern.IDS.map{RadarType.A_EARLY_BREAKOUT to it}
     val total:BigInteger=BigInteger.ONE.shiftLeft(allSlots.size)
     val legacyTotal:BigInteger=BigInteger.ONE.shiftLeft(legacySlots.size)
     fun key(rules:Map<RadarType,Set<String>>):String=allSlots.foldIndexed(BigInteger.ZERO){i,n,(type,id)->if(id in rules[type].orEmpty())n.setBit(i)else n}.toString(16)

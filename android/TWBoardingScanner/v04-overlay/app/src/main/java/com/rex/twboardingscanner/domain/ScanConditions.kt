@@ -25,19 +25,19 @@ object ScanConditions {
     /** New D defaults are moderate: no forced breakout/convergence on top of D momentum. */
     val D_A_DEFAULT_IDS=setOf("price","volume","macd","rsi","ma5up")
     /** Every A checkbox can be applied independently inside D, including financial rules. */
-    val A_RULE_IDS by lazy { forRadar(RadarType.A_EARLY_BREAKOUT).map{it.id}.toSet() }
+    val A_RULE_IDS by lazy { forRadar(RadarType.A_EARLY_BREAKOUT).filterNot{it.id in APattern.IDS}.map{it.id}.toSet() }
     const val MA5_TOUCH_MA10 = "ma5_touch_ma10"
     const val ACTIVE_BUY_SELL_15 = "active_buy_sell_15"
     val NEW_IDS=setOf(MA5_TOUCH_MA10,ACTIVE_BUY_SELL_15)
     fun forEditor(type:RadarType)=forRadar(type).let{rules->if(type==RadarType.B_DEEP_REVERSAL)rules.sortedBy{if(it.defaultEnabled)0 else 1} else rules}
     fun forRadar(type: RadarType): List<ScanCondition> {
-        if(type==RadarType.F_VOLUME_CONTRACTION)return FPattern.rules()+forRadar(RadarType.A_EARLY_BREAKOUT).map{it.copy(extra=true)}
+        if(type==RadarType.F_VOLUME_CONTRACTION)return FPattern.rules()+forRadar(RadarType.A_EARLY_BREAKOUT).filterNot{it.id in APattern.IDS}.map{it.copy(extra=true)}
 
         if(type==RadarType.E_DIF_TOUCH){
             return listOf(
                 ScanCondition(EPattern.EVENT,"DIF 向上接觸 MACD 訊號線（線距門檻可調）"){it.ePattern?.passes},
                 ScanCondition(EPattern.CROSS,"DIF金叉：僅限本日剛向上交叉（須符合接觸門檻並納入交叉）",true){it.ePattern?.let{e->e.passes&&e.crossed}}
-            )+forRadar(RadarType.A_EARLY_BREAKOUT).map{it.copy(extra=true)}
+            )+forRadar(RadarType.A_EARLY_BREAKOUT).filterNot{it.id in APattern.IDS}.map{it.copy(extra=true)}
         }
         if(type==RadarType.D_MAIN_FORCE){
             // Keep the original SIX D bit positions identical to v0.4.47.
@@ -52,7 +52,7 @@ object ScanConditions {
                 ScanCondition(DPattern.VOLUME,"最近連續放量，達放量前均量指定倍數（日數／倍數可填）"){DPattern.checks(it.dPattern)[DPattern.VOLUME]},
                 ScanCondition(DPattern.RELATIVE,"連陽期間個股漲幅高於加權指數（需官方同期資料）",true){DPattern.checks(it.dPattern)[DPattern.RELATIVE]}
             )
-            val aOptions=forRadar(RadarType.A_EARLY_BREAKOUT).map{rule->
+            val aOptions=forRadar(RadarType.A_EARLY_BREAKOUT).filterNot{it.id in APattern.IDS}.map{rule->
                 rule.copy(extra=rule.id !in D_A_DEFAULT_IDS)
             }
             check(aOptions.map{it.id}.distinct().size==aOptions.size)
@@ -121,6 +121,7 @@ object ScanConditions {
             ScanCondition(MACD_ABOVE_ZERO,"MACD 訊號線（DIF 的 EMA9）在 0 軸上方",true){it.macdAboveZero},
             ScanCondition(RSI_30_TO_50,"近一日 RSI(14) 由 ≤30 上升突破 50（前日≤30、當日>50；Wilder）",true){it.rsi30To50}
         )
+        if(type==RadarType.A_EARLY_BREAKOUT)return result+APattern.rules()
         return if(type==RadarType.B_DEEP_REVERSAL)result.map{it.copy(extra=it.id !in BPattern.EARLY)} else result
     }
 }
@@ -134,6 +135,7 @@ class RuleMetrics(val s: StockSnapshot) {
     val belowMainForceCost20:Boolean? get() = MainForceCost.below(last?.close?:Double.NaN,estimatedMainCost20)
     val bearishTurn by lazy(LazyThreadSafetyMode.NONE){BearishTurn.inspect(bars.map{it.close})}
     val rsiGoldenCross by lazy(LazyThreadSafetyMode.NONE){RsiGoldenCross.inspect(bars.map{it.close})}
+    val aPattern by lazy(LazyThreadSafetyMode.NONE){APattern.inspect(bars)}
     val bPattern by lazy(LazyThreadSafetyMode.NONE){BPattern.inspect(bars,s.bConfig)}
     val fPattern by lazy(LazyThreadSafetyMode.NONE){FPattern.inspect(bars,s.fConfig)}
     val ePattern by lazy(LazyThreadSafetyMode.NONE){EPattern.inspect(bars.map{it.close},s.eConfig)}
