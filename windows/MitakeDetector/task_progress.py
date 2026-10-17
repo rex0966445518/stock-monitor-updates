@@ -60,6 +60,10 @@ class TaskProgress:
             set_style(hwnd,-20,get_style(hwnd,-20)|0x08000000|0x20|0x80000|0x80)
             u.SetLayeredWindowAttributes.argtypes=[W.HWND,W.DWORD,ctypes.c_ubyte,W.DWORD]
             u.SetLayeredWindowAttributes(hwnd,0,245,2)
+            # Keep the wider overlay out of OCR screenshots of the target window.
+            u.SetWindowDisplayAffinity.argtypes=[W.HWND,W.DWORD]
+            u.SetWindowDisplayAffinity.restype=W.BOOL
+            u.SetWindowDisplayAffinity(hwnd,0x11)
             self.window.deiconify()
             u.ShowWindow.argtypes=[W.HWND,ctypes.c_int];u.ShowWindow(hwnd,4)
             u.SetWindowPos.argtypes=[W.HWND,W.HWND,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,W.UINT]
