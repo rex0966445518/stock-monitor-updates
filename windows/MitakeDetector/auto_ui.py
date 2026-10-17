@@ -82,6 +82,7 @@ class AutoUI:
             panel.update(message);return
         rect=WindowsController(target,threading.Event()).rect()
         self.task_panel=TaskProgress(self.root,self.tk,self.ttk,rect,message)
+        self.task_panel.started-=getattr(self,'scan_total_elapsed',0)
 
     def update_task_progress(self,message,completed=None,total=None):
         if '後繼續' in message:
@@ -98,7 +99,9 @@ class AutoUI:
         for extra in getattr(self,"scan_outline_extras",[]):extra.close()
         self.scan_outline_extras=[]
         panel=getattr(self,'task_panel',None)
-        if panel:panel.close()
+        if panel:
+            self.scan_total_elapsed=max(0,time.monotonic()-panel.started)
+            panel.close()
         self.task_panel=None
 
     def auto_setup(self,start_after=False):
@@ -535,6 +538,7 @@ class AutoUI:
             self.restore_scan_snapshot(store.data.get('ui'))
             self.say(f'接續第{saved["cycle"]}輪、排行{saved["rank"]+1}；保留已讀資料')
         else:
+            self.scan_total_elapsed=0
             token=self.reset('自動輪切測試' if test_only else '自動輪切')
             self.auto_engines={}
         self.auto_active=True

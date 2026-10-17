@@ -66,7 +66,17 @@ def run_automation_smoke(root,app):
     assert not notice.alive
     progress_panel=app.task_panel
     assert progress_panel.alive and progress_panel.window.winfo_ismapped(),'Progress panel is not visible'
+    progress_panel.counts.set('漲幅排行：已掃描 26 股／總股數 100（上輪參考）｜目前第 3 輪｜累計完成 2 遍')
+    assert progress_panel.values['scanned'].get()=='26 股'
+    assert progress_panel.values['passes'].get()=='2 遍'
+    assert '100' in progress_panel.values['total'].get()
+    progress_panel.started=time.monotonic()-3661
+    progress_panel.mark_success()
+    root.after_cancel(progress_panel.after_id);progress_panel.tick()
+    assert progress_panel.values['elapsed'].get()=='01:01:01'
+    assert progress_panel.metrics.winfo_ismapped()
     progress_panel.rate.set('2.0 秒／段｜15.00 檔／秒')
+    assert progress_panel.values['rate'].get()=='15.00 股/秒'
     progress_panel.update('排行1/5｜已讀26檔｜等待3秒',1,5)
     assert '15.00 檔／秒' in progress_panel.rate.get()
     root.update()
@@ -74,7 +84,7 @@ def run_automation_smoke(root,app):
     from PIL import ImageGrab
     from pathlib import Path
     root.update_idletasks()
-    ImageGrab.grab(bbox=(progress_panel.window.winfo_rootx(),progress_panel.window.winfo_rooty(),progress_panel.window.winfo_rootx()+progress_panel.window.winfo_width(),progress_panel.window.winfo_rooty()+48)).save(Path('release-output')/'progress-panel.png')
+    ImageGrab.grab(bbox=(progress_panel.window.winfo_rootx(),progress_panel.window.winfo_rooty(),progress_panel.window.winfo_rootx()+progress_panel.window.winfo_width(),progress_panel.window.winfo_rooty()+progress_panel.window.winfo_height())).save(Path('release-output')/'progress-panel.png')
     get_style=u.GetWindowLongPtrW if ctypes.sizeof(ctypes.c_void_p)==8 else u.GetWindowLongW
     get_style.argtypes=[W.HWND,ctypes.c_int];get_style.restype=ctypes.c_ssize_t
     style=get_style(progress_panel.native_hwnd,-20)

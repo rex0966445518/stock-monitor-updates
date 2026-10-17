@@ -2,6 +2,11 @@
 import ctypes
 import sys
 import time
+import re
+
+def duration_text(seconds):
+    seconds=max(0,int(seconds))
+    return f'{seconds//3600:02d}:{seconds//60%60:02d}:{seconds%60:02d}'
 
 
 def task_stage(text):
@@ -34,16 +39,40 @@ class TaskProgress:
         self.window.geometry(f'{width}x72{left:+d}{rect[1]+2:+d}')
         self.title=tk.StringVar();self.detail=tk.StringVar(value=message);self.stage=task_stage(message)
         self.title_label=tk.Label(self.window,textvariable=self.title,bg='#101a2b',fg='#68f5d1',font=('Microsoft JhengHei',10,'bold'),anchor='w')
-        self.title_label.place(x=8,y=0,width=max(80,width-340),height=20)
+        # Reserve fixed cells; changing task messages never displaces the metrics.
+        table_width=min(560,max(270,width//2));text_width=width-table_width-24
+        self.title_label.place(x=8,y=0,width=max(80,text_width),height=24)
         self.rate=tk.StringVar(value='讀取速率：等待首段')
-        self.rate_label=tk.Label(self.window,textvariable=self.rate,bg='#101a2b',fg='#68f5d1',font=('Microsoft JhengHei',8),anchor='e')
-        self.rate_label.place(x=max(90,width-330),y=0,width=min(320,width-100),height=20)
-        self.detail_label=tk.Label(self.window,textvariable=self.detail,bg='#101a2b',fg='#edf2ff',font=('Microsoft JhengHei',8),anchor='w')
-        self.detail_label.place(x=8,y=20,width=width-16,height=20)
+        self.rate_label=tk.Label(self.window,textvariable=self.rate)
+        self.detail_label=tk.Label(self.window,textvariable=self.detail,bg='#101a2b',fg='#edf2ff',font=('Microsoft JhengHei',8),anchor='nw',justify='left',wraplength=max(80,text_width))
+        self.detail_label.place(x=8,y=26,width=max(80,text_width),height=38)
         self.counts=tk.StringVar(value='已掃描 0 股／總股數待確認｜累計完成 0 遍')
-        self.count_label=tk.Label(self.window,textvariable=self.counts,bg='#101a2b',fg='#ffd36a',font=('Microsoft JhengHei',10,'bold'),anchor='w')
-        self.count_label.place(x=8,y=40,width=width-16,height=24)
-        self.bar=ttk.Progressbar(self.window,mode='indeterminate',length=370);self.bar.place(x=8,y=66,width=width-16,height=4)
+        self.count_label=tk.Label(self.window,textvariable=self.counts)
+        self.metrics=tk.Frame(self.window,bg='#30415d')
+        self.metrics.place(x=width-table_width-8,y=2,width=table_width,height=62)
+        self.values={}
+        for i,(key,label,value) in enumerate([
+            ('elapsed','掃描總時長','00:00:00'),('scanned','已掃描股數','0 股'),('total','目前排行總股數','待確認'),
+            ('passes','累計完成遍數','0 遍'),('rate','讀取速率','等待首段'),('freshness','最近成功讀取','尚未讀取')]):
+            cell=tk.Frame(self.metrics,bg='#15243a',highlightbackground='#30415d',highlightthickness=1)
+            cell.grid(row=i//3,column=i%3,sticky='nsew')
+            self.metrics.columnconfigure(i%3,weight=1,uniform='metric')
+            self.metrics.rowconfigure(i//3,weight=1)
+            tk.Label(cell,text=label,bg='#15243a',fg='#9baecb',font=('Microsoft JhengHei',8)).pack()
+            var=tk.StringVar(value=value);self.values[key]=var
+            tk.Label(cell,textvariable=var,bg='#15243a',fg='#ffd36a',font=('Microsoft JhengHei',9,'bold')).pack()
+        self.last_success=None
+        self.counts.trace_add('write',self.refresh_counts)
+        self.rate.trace_add('write',self.refresh_rate)
+        if width<640:
+            # Narrow target windows keep the table readable on its own second row.
+            self.window.geometry(f'{width}x136{left:+d}{rect[1]+2:+d}')
+            self.title_label.place_configure(width=width-16)
+            self.detail_label.place_configure(width=width-16)
+            self.detail_label.configure(wraplength=width-16)
+            self.metrics.place(x=8,y=66,width=width-16,height=62)
+        self.bar=ttk.Progressbar(self.window,mode='indeterminate',length=370)
+        self.bar.place(x=8,y=130 if width<640 else 66,width=width-16,height=4)
         self.bar.start(90)
         self.window.update_idletasks()
         self.native_hwnd=None
@@ -71,11 +100,31 @@ class TaskProgress:
         else:self.window.deiconify()
         self.tick()
 
+    def refresh_counts(self,*args):
+        text=self.counts.get()
+        for key,pattern,suffix in [('scanned',r'已掃描 (\d+) 股',' 股'),('total',r'總股數 ([^｜]+)',''),('passes',r'累計完成 (\d+) 遍',' 遍')]:
+            match=re.search(pattern,text)
+            if match:
+                value=match.group(1).strip().replace('待完整掃描確認','待確認').replace('（上輪參考）',' (上輪)')
+                self.values[key].set(value+suffix)
+
+    def refresh_rate(self,*args):
+        text=self.rate.get().split('｜本次讀取')[0]
+        match=re.search(r'([\d.]+) 檔／秒',text)
+        self.values['rate'].set(match.group(1)+' 股/秒' if match else '等待首段')
+
+    def mark_success(self):
+        self.last_success=time.monotonic()
+
     def tick(self):
         if not self.alive:return
         seconds=int(time.monotonic()-self.started)
         pulse=['●','◉','●','○'][seconds%4]
-        self.title.set(f'{pulse} 機器人工作中｜{self.stage}｜{seconds//60:02d}:{seconds%60:02d}｜F8 停止')
+        self.title.set(f'{pulse} 機器人工作中｜{self.stage}｜F8 停止')
+        self.values['elapsed'].set(duration_text(seconds))
+        if self.last_success is not None:
+            age=int(time.monotonic()-self.last_success)
+            self.values['freshness'].set(f'{age} 秒前')
         self.after_id=self.root.after(500,self.tick)
 
     def update(self,text,completed=None,total=None):
@@ -83,7 +132,7 @@ class TaskProgress:
         self.stage=task_stage(text)
         self.detail.set(str(text))
         seconds=int(time.monotonic()-self.started)
-        self.title.set(f'● 機器人工作中｜{self.stage}｜{seconds//60:02d}:{seconds%60:02d}｜F8 停止')
+        self.title.set(f'● 機器人工作中｜{self.stage}｜F8 停止')
         if total is not None and total>0:
             self.bar.stop();self.bar.configure(mode='determinate',maximum=total,value=max(0,min(total,completed or 0)))
         else:
@@ -109,7 +158,7 @@ class CandidateNotice(TaskProgress):
         self.title.set('符合條件的轉強候選｜掃描持續進行')
         self.title_label.configure(fg='#ffd36a')
         self.title_label.place(x=12,y=8,width=width-24,height=24)
-        self.count_label.place_forget();self.rate_label.place_forget();self.bar.stop();self.bar.place_forget()
+        self.metrics.place_forget();self.count_label.place_forget();self.rate_label.place_forget();self.bar.stop();self.bar.place_forget()
         self.detail_label.configure(wraplength=width-24,justify='left',anchor='nw',font=('Microsoft JhengHei',10))
         self.detail_label.place(x=12,y=40,width=width-24,height=height-48)
         self.after_id=root.after(30000,self.close)

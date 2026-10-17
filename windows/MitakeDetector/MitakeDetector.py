@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.32'
+VERSION = '0.3.33'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -625,6 +625,8 @@ class App(AutoUI):
                     if panel and panel.alive:panel.counts.set(payload)
                 elif kind == 'auto_rate':
                     self.scan_rate.update(payload)
+                    panel=getattr(self,'task_panel',None)
+                    if payload.get('count',0)>0 and panel and panel.alive:panel.mark_success()
                 elif kind == 'auto_status':
                     self.status.set(payload); self.say(payload); self.update_task_progress(payload)
                 elif kind == 'auto_progress':
