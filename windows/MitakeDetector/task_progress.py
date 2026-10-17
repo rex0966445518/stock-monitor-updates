@@ -29,9 +29,9 @@ class TaskProgress:
         self.root=root;self.tk=tk;self.started=time.monotonic();self.alive=True;self.after_id=None
         self.window=tk.Toplevel(root);self.window.withdraw();self.window.overrideredirect(True)
         self.window.configure(bg='#101a2b');self.window.attributes('-topmost',True)
-        width=min(900,max(280,rect[2]-rect[0]-240))
+        width=max(280,rect[2]-rect[0]-16)
         left=max(rect[0]+8,min(rect[2]-width-8,rect[0]+(rect[2]-rect[0]-width)//2))
-        self.window.geometry(f'{width}x48{left:+d}{rect[1]+2:+d}')
+        self.window.geometry(f'{width}x72{left:+d}{rect[1]+2:+d}')
         self.title=tk.StringVar();self.detail=tk.StringVar(value=message);self.stage=task_stage(message)
         self.title_label=tk.Label(self.window,textvariable=self.title,bg='#101a2b',fg='#68f5d1',font=('Microsoft JhengHei',10,'bold'),anchor='w')
         self.title_label.place(x=8,y=0,width=max(80,width-340),height=20)
@@ -40,7 +40,10 @@ class TaskProgress:
         self.rate_label.place(x=max(90,width-330),y=0,width=min(320,width-100),height=20)
         self.detail_label=tk.Label(self.window,textvariable=self.detail,bg='#101a2b',fg='#edf2ff',font=('Microsoft JhengHei',8),anchor='w')
         self.detail_label.place(x=8,y=20,width=width-16,height=20)
-        self.bar=ttk.Progressbar(self.window,mode='indeterminate',length=370);self.bar.place(x=8,y=42,width=width-16,height=4)
+        self.counts=tk.StringVar(value='已掃描 0 股／總股數待確認｜累計完成 0 遍')
+        self.count_label=tk.Label(self.window,textvariable=self.counts,bg='#101a2b',fg='#ffd36a',font=('Microsoft JhengHei',10,'bold'),anchor='w')
+        self.count_label.place(x=8,y=40,width=width-16,height=24)
+        self.bar=ttk.Progressbar(self.window,mode='indeterminate',length=370);self.bar.place(x=8,y=66,width=width-16,height=4)
         self.bar.start(90)
         self.window.update_idletasks()
         self.native_hwnd=None
@@ -74,7 +77,7 @@ class TaskProgress:
     def update(self,text,completed=None,total=None):
         if not self.alive:return
         self.stage=task_stage(text)
-        self.detail.set(str(text)[:120])
+        self.detail.set(str(text))
         seconds=int(time.monotonic()-self.started)
         self.title.set(f'● 機器人工作中｜{self.stage}｜{seconds//60:02d}:{seconds%60:02d}｜F8 停止')
         if total is not None and total>0:
@@ -102,7 +105,7 @@ class CandidateNotice(TaskProgress):
         self.title.set('符合條件的轉強候選｜掃描持續進行')
         self.title_label.configure(fg='#ffd36a')
         self.title_label.place(x=12,y=8,width=width-24,height=24)
-        self.rate_label.place_forget();self.bar.stop();self.bar.place_forget()
+        self.count_label.place_forget();self.rate_label.place_forget();self.bar.stop();self.bar.place_forget()
         self.detail_label.configure(wraplength=width-24,justify='left',anchor='nw',font=('Microsoft JhengHei',10))
         self.detail_label.place(x=12,y=40,width=width-24,height=height-48)
         self.after_id=root.after(30000,self.close)

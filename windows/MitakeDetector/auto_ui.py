@@ -567,6 +567,7 @@ class AutoUI:
                     self.events.put((token,'auto_status','表頭頭尾一致，已略過逐欄辨識' if reused else '表頭配置已重新確認並記住'))
                     cfg['column_bounds']=layout['column_bounds'];auto['table']=layout['table']
                 cycle=saved['cycle'] if saved else 1
+                known_totals={}
                 start_index=saved['rank'] if saved else 0
                 while not stop.is_set():
                     for rank_index in range(start_index,len(auto['rankings'])):
@@ -580,6 +581,15 @@ class AutoUI:
                         self.events.put((token,'auto_status','已確認排行：'+name))
                         if test_only:continue
                         collected={};rejected=0;begin=time.monotonic()
+                        counted=set(q['code'] for q in (table_resume or {}).get('quotes',[]))
+                        def counts(done=False):
+                            if done and auto.get('full_table',True):known_totals[name]=len(counted)
+                            total=known_totals.get(name)
+                            total_text=str(total) if total is not None and total>=len(counted) else '待完整掃描確認'
+                            text=f'{name}：已掃描 {len(counted)} 股／總股數 {total_text}'+('（上輪參考）' if total is not None and not done else '')
+                            text+=f'｜目前第 {cycle} 輪｜累計完成 {cycle-1} 遍'
+                            self.events.put((token,'auto_counts',text))
+                        counts()
                         table=absolute_roi(auto['table'],c.rect());center=(table['left']+table['width']//2,table['top']+table['height']//2)
                         from table_scan import scan_table
                         def progress(segment,count,stage):
@@ -625,6 +635,7 @@ class AutoUI:
                             c.check()
                             current=dict(cfg,source_rank=name,source_partial=True,source_reset=first_batch[0])
                             first_batch[0]=False
+                            counted.update(q.code for q in quotes);counts()
                             self.events.put((token,'auto_quotes',(name,quotes,bad,time.monotonic()-begin,current)))
                         def checkpoint(state):
                             diagnostic.update(last_codes=state.get("codes",[]),wheel_offset=state.get("offset",0),scroll_notches=state.get("notches",1))
@@ -636,6 +647,7 @@ class AutoUI:
                                                    recover_layout=recover_layout)
                         saved=None
                         collected={q.code:q for q in quotes}
+                        counted.update(collected);counts(done=True)
                         # Verify label again after scanning, before any observations are accepted.
                         if not switcher.label_matches(name):raise RuntimeError('讀取後排行標題改變，已停止且捨棄本次資料')
                         c.check()
@@ -653,6 +665,7 @@ class AutoUI:
                             self.events.put((token,'auto_progress',(f'{name}｜已讀{len(collected)}檔｜略過{rejected}列｜{mode}｜{remaining}秒後繼續｜OCR重用{getattr(self,"ocr_cache_hits",0)}次',rank_index+1,len(auto['rankings']))))
                             c.pause(min(1,max(0,wait_until-time.monotonic())))
                     if test_only:break
+                    self.events.put((token,'auto_counts',f'本輪排行掃描完成｜累計完成 {cycle} 遍｜準備第 {cycle+1} 輪'))
                     self.events.put((token,'auto_phase',f'第{cycle}輪已完成｜自動開始第{cycle+1}輪'))
                     cycle+=1;start_index=0
                 self.events.put((token,'auto_end','輪切測試完成' if test_only else '自動輪切已停止'))
