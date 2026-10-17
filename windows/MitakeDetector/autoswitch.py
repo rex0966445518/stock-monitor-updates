@@ -1,6 +1,5 @@
 """Local Windows ranking-menu automation. All input is bounded to calibrated ROIs."""
 import ctypes
-import difflib
 import os
 import re
 import threading
@@ -71,6 +70,31 @@ def find_menu_item(ocr, name):
                 if len(pieces)>1 and text==target:
                     return ((min(p[0] for t in pieces for p in t[0])+max(p[0] for t in pieces for p in t[0]))/2,y)
                 if len(text)>=len(target):break
+    return None
+
+
+def find_buy_power_between_neighbors(tokens):
+    """Infer only the documented single row between two verified neighbors.
+
+    A third consecutive known row establishes actual row pitch; text height alone
+    cannot distinguish one missing row from several missing rows.
+    """
+    top=find_menu_item(tokens,'大單渙散')
+    bottom=find_menu_item(tokens,'分時賣力')
+    if not top or not bottom or bottom[1]<=top[1]:return None
+    pitch=(bottom[1]-top[1])/2
+    if pitch<6 or abs(top[0]-bottom[0])>pitch*.5:return None
+    for box,text,score in tokens or []:
+        if score<.65:continue
+        y=sum(p[1] for p in box)/4
+        if top[1]+pitch*.3<y<bottom[1]-pitch*.3:
+            if normalized(text) in {normalized(n) for n in RANKINGS if n!='分時買力'}:return None
+    # Confirm at least one adjacent row outside the ambiguous middle row.
+    for label,y in [('大單匯集',top[1]-pitch),('大單流出',top[1]-2*pitch),
+                    ('累計買力',bottom[1]+pitch),('累計賣力',bottom[1]+2*pitch)]:
+        point=find_menu_item(tokens,label)
+        if point and abs(point[1]-y)<=pitch*.2 and abs(point[0]-top[0])<=pitch*.5:
+            return ((top[0]+bottom[0])/2,(top[1]+bottom[1])/2)
     return None
 
 
@@ -189,12 +213,49 @@ class RankingSwitcher:
         self.c=controller;self.ocr=ocr;self.ocr_retry=ocr_retry;self.status=status or (lambda text:None)
         self.combo=validate_roi(combo_roi);self.menu=validate_roi(menu_roi)
 
+    def enlarged_reads(self,im,name):
+        if not hasattr(im,'resize'):return
+        from PIL import Image
+        for scale in (2,3):
+            self.c.check()
+            self.status(f'正在放大{scale}倍辨識「{name}」')
+            enlarged=im.resize((im.width*scale,im.height*scale),Image.Resampling.LANCZOS)
+            for reader in (self.ocr,self.ocr_retry):
+                if reader is None:continue
+                self.c.check()
+                yield [([[x/scale,y/scale] for x,y in box],text,score)
+                       for box,text,score in reader(enlarged) or []]
+
+    def menu_point(self,im,tokens,name):
+        point=find_menu_item(tokens,name)
+        if point:return point
+        candidates=[tokens]
+        if self.ocr_retry:
+            self.c.check()
+            retry=self.ocr_retry(im);candidates.append(retry)
+            point=find_menu_item(retry,name)
+            if point:return point
+        for enlarged in self.enlarged_reads(im,name):
+            candidates.append(enlarged)
+            point=find_menu_item(enlarged,name)
+            if point:return point
+        if name=='分時買力':
+            for candidate in candidates:
+                point=find_buy_power_between_neighbors(candidate)
+                if point:
+                    self.status('已核對大單渙散與分時賣力：定位中間的分時買力，準備驗證標題')
+                    return point
+        return None
+
     def label_matches(self,name):
         im,_=self.c.image(self.combo)
         for reader in [self.ocr,self.ocr_retry]:
             if reader is None:continue
             tokens=reader(im)
             text=''.join(str(item[1]) for item in sorted(tokens or [],key=lambda item:min(p[0] for p in item[0])) if item[2]>=.65)
+            if normalized(text)==normalized(name):return True
+        for tokens in self.enlarged_reads(im,name):
+            text=''.join(str(item[1]) for item in sorted(tokens,key=lambda item:min(p[0] for p in item[0])) if item[2]>=.65)
             if normalized(text)==normalized(name):return True
         return False
 
@@ -225,7 +286,7 @@ class RankingSwitcher:
             for _ in range(hint):
                 self.c.scroll(center,-120);self.c.pause(.12)
             im,region=self.c.image(self.menu)
-            point=find_menu_item(self.ocr(im),name)
+            point=self.menu_point(im,self.ocr(im),name)
             if point is not None:
                 self.c.click((region['left']+point[0],region['top']+point[1]))
                 if self.verify_label(name):return
@@ -238,11 +299,7 @@ class RankingSwitcher:
         for page in range(60):
             self.c.check();im,region=self.c.image(self.menu);tokens=self.ocr(im)
             self.status(f'正在尋找「{name}」｜選單第{page+1}段')
-            point=find_menu_item(tokens,name)
-            if point is None and self.ocr_retry and any(difflib.SequenceMatcher(None,normalized(t[1]),normalized(name)).ratio()>=.55 for t in tokens or []):
-                alternative=self.ocr_retry(im)
-                point=find_menu_item(alternative,name)
-                if point:tokens=alternative
+            point=self.menu_point(im,tokens,name)
             if point:
                 self.c.click((region['left']+point[0],region['top']+point[1]))
                 if self.verify_label(name):

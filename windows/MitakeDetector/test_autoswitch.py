@@ -96,3 +96,40 @@ class AutoTests(unittest.TestCase):
         RankingSwitcher(c,ocr,combo,menu).switch('大單流入')
         self.assertTrue(any(a[0]=='scroll' and a[1]<0 for a in c.actions))
 if __name__=='__main__':unittest.main()
+
+class NeighborTests(unittest.TestCase):
+    def test_neighbor_geometry(self):
+        from autoswitch import find_buy_power_between_neighbors as find
+        rows=[token('大單匯集',20),token('大單渙散',44),token('分時賣力',92)]
+        self.assertEqual(find(rows),(55,68))
+        self.assertIsNone(find(rows[1:]))
+        self.assertIsNone(find(rows+[token('累計買力',68)]))
+        self.assertIsNone(find([token('大單匯集',20),token('大單渙散',44),token('分時賣力',68)]))
+        shifted=([[110,87],[200,87],[200,97],[110,97]],'分時賣力',.99)
+        self.assertIsNone(find(rows[:2]+[shifted]))
+    def test_neighbor_click_requires_verified_title(self):
+        combo=[.1,.1,.2,.04];menu=[.1,.15,.2,.5]
+        rows=[token('大單匯集',20),token('大單渙散',44),token('分時賣力',92)]
+        for correct in (True,False):
+            c=FakeController()
+            def read(im):
+                if im==tuple(menu):return rows
+                return [token('分時買力' if correct and any(a[0]=='click' for a in c.actions) else '大單流入')]
+            switch=RankingSwitcher(c,read,combo,menu)
+            if correct:
+                switch.switch('分時買力',menu_open=True)
+                self.assertIn(('click',(255,288)),c.actions)
+            else:
+                with self.assertRaises(AutomationStopped):switch.switch('分時買力',menu_open=True)
+    def test_zoom_coordinates_and_label(self):
+        from PIL import Image
+        c=FakeController();seen=[]
+        def read(im):
+            seen.append(im.size)
+            return [([[20,30],[100,30],[100,50],[20,50]],'分時買力',.99)] if im.width==200 else []
+        switch=RankingSwitcher(c,read,[.1,.1,.2,.04],[.1,.15,.2,.5])
+        point=switch.menu_point(Image.new('RGB',(100,80)),[],'分時買力')
+        self.assertEqual(point,(30,20))
+        c.image=lambda roi:(Image.new('RGB',(100,80)),{})
+        self.assertTrue(switch.label_matches('分時買力'))
+        self.assertIn((200,160),seen)
