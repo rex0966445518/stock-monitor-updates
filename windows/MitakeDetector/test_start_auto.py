@@ -64,6 +64,20 @@ class StartAutoTests(unittest.TestCase):
         self.assertIn('2.0 秒／段',rate.text());self.assertIn('15.00 檔／秒',rate.text())
         rate.update(dict(start=20));rate.stop();self.assertIn('15.00 檔／秒',rate.text())
 
+    def test_completed_ranking_advances_to_second_cycle(self):
+        cfg=dict(DEFAULT,auto_config=dict(title='TEST RANK',window_size=[800,600],combo=[0,0,.2,.1],menu=[0,.1,.3,.5],table=[0,.2,1,.8],rankings=['漲幅排行'],seconds=3,pages=1,full_table=True))
+        app=UI(cfg);calls=[]
+        def scan(*args,**kwargs):
+            calls.append(True)
+            if len(calls)==2:app.stop_event.set()
+            return [Quote('2330','TEST',100,2,1500,1,1)],0
+        with tempfile.TemporaryDirectory() as folder,patch('MitakeDetector.BASE',Path(folder)),patch('auto_ui.WindowsController',Controller),patch('auto_ui.RankingSwitcher',Switcher),patch('adaptive.Experience.wait',return_value=0),patch('table_scan.scan_table',side_effect=scan):
+            app.start_auto();app.worker_thread.join(3)
+            self.assertFalse(app.worker_thread.is_alive());self.assertEqual(len(calls),2)
+            messages=[]
+            while not app.events.empty():messages.append(app.events.get())
+            self.assertTrue(any(kind=='auto_phase' and '第1輪已完成' in value and '第2輪' in value for _,kind,value in messages))
+
     def test_real_worker_enters_scan_for_new_and_resumed_sessions(self):
         for resumed in (False,True):
             with self.subTest(resumed=resumed),tempfile.TemporaryDirectory() as folder:

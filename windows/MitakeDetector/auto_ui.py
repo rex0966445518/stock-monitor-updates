@@ -34,7 +34,7 @@ class AutoUI:
         # Remove all inner column borders before the next full-table screenshot.
         self.highlight_scan(token,None,stop)
 
-    def focus_columns(self,image,bounds,fields,stage):
+    def focus_columns(self,image,bounds,fields,stage,row=None):
         source=getattr(self,'scan_capture_region',None);context=getattr(self,'scan_focus_context',None)
         if not source or not context or (source['width'],source['height'])!=image.size:return
         regions=[]
@@ -42,7 +42,8 @@ class AutoUI:
         for field in fields:
             left,right=bounds[field]
             x=round(left*image.width);end=round(right*image.width)
-            regions.append(dict(left=source['left']+x,top=source['top'],width=end-x,height=image.height))
+            top,bottom=row if row else (0,image.height)
+            regions.append(dict(left=source['left']+x,top=source['top']+top,width=end-x,height=bottom-top))
         token,stop=context
         self.events.put((token,'auto_status',stage+'：'+'、'.join(labels.get(f,f) for f in fields)))
         self.highlight_scan(token,regions,stop)
@@ -103,6 +104,7 @@ class AutoUI:
         if cfg is None:return
         target,title=candidates[0]
         token=self.reset('自動定位與欄位校正')
+        self.events.put((token,'auto_phase','設定中｜正在辨識視窗與欄位'))
         self.auto_active=True
         stop=self.stop_event
         self.root.iconify()
@@ -189,7 +191,7 @@ class AutoUI:
         from MitakeDetector import BASE
         names=getattr(self,'stock_names',None)
         if names is None:self.stock_names=names=StockNames(BASE/'stock-names.json')
-        quotes,bad=scan_numeric_batch(image,bounds,self.read_auto_ocr,names,memory=self.get_ocr_learning(),focus=lambda fields,stage:self.focus_columns(image,bounds,fields,stage))
+        quotes,bad=scan_numeric_batch(image,bounds,self.read_auto_ocr,names,memory=self.get_ocr_learning(),focus=lambda fields,stage,row=None:self.focus_columns(image,bounds,fields,stage,row))
         if not quotes:quotes,bad=self.scan_mapped_table(image,bounds)
         self.last_table_seconds=time.perf_counter()-started
         self.last_scan_diagnostic=f'欄位辨識：有效{len(quotes)}列，略過{bad}列'
@@ -515,6 +517,7 @@ class AutoUI:
             token=self.reset('自動輪切測試' if test_only else '自動輪切')
             self.auto_engines={}
         self.auto_active=True
+        self.events.put((token,'auto_phase','掃描中｜正在啟動或接續前次進度'))
         stop=self.stop_event;target=self.auto_hwnd
         self.root.iconify()
         self.show_task_progress(target,'接續前次斷點，正在核對畫面…' if saved else '準備開始自動輪切…')
@@ -547,6 +550,7 @@ class AutoUI:
                     for rank_index in range(start_index,len(auto['rankings'])):
                         name=auto['rankings'][rank_index]
                         diagnostic.update(cycle=cycle,ranking=name,segment=0,count=0,stage='切換排行')
+                        self.events.put((token,'auto_phase',f'掃描中｜第{cycle}輪｜{name}'))
                         table_resume=saved.get('table') if saved and rank_index==saved['rank'] else None
                         if store:store.update(context,dict(cycle=cycle,rank=rank_index,table=table_resume))
                         c.check();self.events.put((token,'auto_status',f'第{cycle}輪｜排行{rank_index+1}/{len(auto["rankings"])}：正在切換{name}'))
@@ -604,6 +608,7 @@ class AutoUI:
                             self.events.put((token,'auto_progress',(f'{name}｜已讀{len(collected)}檔｜略過{rejected}列｜{mode}｜{remaining}秒後繼續｜OCR重用{getattr(self,"ocr_cache_hits",0)}次',rank_index+1,len(auto['rankings']))))
                             c.pause(min(1,max(0,wait_until-time.monotonic())))
                     if test_only:break
+                    self.events.put((token,'auto_phase',f'第{cycle}輪已完成｜自動開始第{cycle+1}輪'))
                     cycle+=1;start_index=0
                 self.events.put((token,'auto_end','輪切測試完成' if test_only else '自動輪切已停止'))
             except Exception as exc:

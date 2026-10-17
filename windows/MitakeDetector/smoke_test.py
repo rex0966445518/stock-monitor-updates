@@ -20,11 +20,14 @@ def run_smoke_test(report):
         assert app.log.cget('wrap')=='word'
         root.update_idletasks()
         assert app.status_label.cget('justify')=='left'
+        app.status.set('掃描已暫停\n原因：焦點離開三竹\n第22段，已讀39檔\n進度保留，按F8接續')
         # Verify real Tk widgets with simulated bytes; never install in this test.
         root.deiconify()
         app.set_update_progress(dict(stage='checking',message='CI check'))
         root.update()
         assert app.update_panel.window.winfo_ismapped()
+        assert app.log.winfo_height()>=100
+        assert app.log.winfo_rooty()+app.log.winfo_height()<=root.winfo_rooty()+root.winfo_height()
         app.set_update_progress(dict(stage='downloading',version='99.0.0',percent=42,downloaded=42*1048576,total=100*1048576,elapsed=4,message='CI download'))
         root.update()
         assert float(app.update_panel.bar['value'])==42

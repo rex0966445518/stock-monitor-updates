@@ -133,7 +133,7 @@ class WindowsController:
             raise AutomationStopped('目標視窗已縮放，請重新設定位置')
         fg=self.u.GetForegroundWindow()
         if not self.belongs(fg):
-            raise AutomationStopped('焦點已離開三竹目標視窗，已停止；請手動重新開始')
+            raise AutomationStopped('焦點已離開三竹目標視窗，已暫停；回到三竹或按F8接續')
 
     def activate(self):
         self.rect();self.u.SetForegroundWindow(self.hwnd);self.pause(.4,check=False);self.check()

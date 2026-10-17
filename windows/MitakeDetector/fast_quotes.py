@@ -80,9 +80,24 @@ def scan_numeric_batch(image,bounds,read,names,memory=None,focus=None):
         tokens=read(crop)
         for code,y,h in unknown:
             near=[t for t in tokens if abs(sum(p[1] for p in t[0])/4-y)<h*.55]
-            if len(near)!=1:continue
-            box,text,confidence=near[0];text=unicodedata.normalize('NFKC',str(text)).replace(' ','').strip()
-            changed=names.learn(code,text,confidence) or changed
+            if len(near)==1:
+                box,text,confidence=near[0];text=unicodedata.normalize('NFKC',str(text)).replace(' ','').strip()
+                changed=names.learn(code,text,confidence) or changed
+            if code in names.names:continue
+            top=max(0,int(y-h*.70));bottom=min(crop.height,int(y+h*.70)+1)
+            if bottom<=top:continue
+            row=crop.crop((0,top,crop.width,bottom))
+            for scale in (2,3):
+                if focus:focus(['name'],f'股號{code}：股名放大{scale}倍複查',(top,bottom))
+                enlarged=row.resize((row.width*scale,row.height*scale),Image.Resampling.LANCZOS)
+                candidates=[]
+                for _,text,confidence in read(enlarged):
+                    text=unicodedata.normalize('NFKC',str(text)).replace(' ','').strip()
+                    if confidence>=.92 and names.valid(code,text):candidates.append((text,confidence))
+                if len(candidates)==1:
+                    text,confidence=candidates[0]
+                    changed=names.learn(code,text,confidence) or changed
+                    if code in names.names:break
     for code,y,h in anchors:
         name=names.names.get(code)
         if name:

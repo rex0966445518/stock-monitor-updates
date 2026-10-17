@@ -27,6 +27,23 @@ class FastQuoteTests(unittest.TestCase):
             self.assertEqual(len(calls),1);self.assertEqual(rows[0].name,'台積電')
             self.assertEqual(rows[0].price,102);self.assertEqual(names.reused,1)
 
+    def test_uncertain_name_is_zoomed_then_persisted_for_next_scan(self):
+        image=Image.new('RGB',(600,80));bounds={f:[i/6,(i+1)/6] for i,f in enumerate(FIELDS)}
+        calls=[];focus=[]
+        def read(im):
+            calls.append(im.width)
+            if im.width>500:return [token(t,40+i*164,20,width=50) for i,t in enumerate(['2330','100','+2%','1500','1%'])]
+            if im.width==100:return [(token('台積雷',5,20,width=60)[0],'台積雷',.6)]
+            return [token('台積電',5,5,width=100)]
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'names.json';names=StockNames(path)
+            rows,_=scan_numeric_batch(image,bounds,read,names,focus=lambda *args:focus.append(args))
+            self.assertEqual(rows[0].name,'台積電');self.assertIn(200,calls)
+            self.assertTrue(any(len(args)==3 and '放大' in args[1] for args in focus))
+            calls.clear()
+            rows,_=scan_numeric_batch(image,bounds,read,StockNames(path))
+            self.assertEqual(rows[0].name,'台積電');self.assertEqual(len(calls),1)
+
     def test_bad_identity_and_conflicting_names_do_not_replace_memory(self):
         names=StockNames()
         self.assertFalse(names.learn('2330','12345',.99))

@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.23'
+VERSION = '0.3.24'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -157,7 +157,7 @@ class Engine:
         return rows, alerts
 
 
-HELP = '''漲停板探測器-雷允澤製 v0.3.23
+HELP = '''漲停板探測器-雷允澤製 v0.3.24
 
 【開始觀察】
 開啟三竹「熱門排行」，保持視窗完整可見，按F8或「開始掃描」。
@@ -226,8 +226,8 @@ class App(AutoUI):
         self.update_busy = False
         self.update_status = tk.StringVar(value='')
         root.title('漲停板探測器-雷允澤製 v' + VERSION)
-        root.geometry('1180x860')
-        root.minsize(1100, 760)
+        root.geometry(f'{min(1540,root.winfo_screenwidth()-40)}x{min(1000,root.winfo_screenheight()-70)}')
+        root.minsize(min(1100,root.winfo_screenwidth()-40),min(800,root.winfo_screenheight()-70))
         root.configure(bg='#0b1020')
         style = ttk.Style()
         style.theme_use('clam')
@@ -267,6 +267,10 @@ class App(AutoUI):
             if valkey:
                 self.vars[valkey] = tk.StringVar(value=str(self.config[valkey]))
                 ttk.Entry(opts, textvariable=self.vars[valkey], width=7).grid(row=1, column=idx*4+3)
+        self.scan_phase=tk.StringVar(value='待機｜按 F8 開始連續掃描')
+        self.phase_label=tk.Label(root,textvariable=self.scan_phase,bg='#12243a',fg='#68f5d1',font=('Microsoft JhengHei',14,'bold'),anchor='w',justify='left')
+        self.phase_label.pack(fill='x',padx=20,pady=(7,0))
+        self.phase_label.bind('<Configure>',lambda event:self.phase_label.configure(wraplength=max(80,event.width-8)))
         self.status = tk.StringVar(value='開啟三竹「熱門排行」，按 F8 或「開始掃描」。首次會自動定位；再次按 F8 停止。')
         self.status_label=tk.Label(root,textvariable=self.status,bg='#0b1020',fg='#58ddd0',anchor='w',justify='left',wraplength=1120)
         self.status_label.pack(fill='x',padx=20,pady=10)
@@ -291,6 +295,9 @@ class App(AutoUI):
         self.log.configure(yscrollcommand=log_scroll.set)
         self.log.pack(side='left',fill='x',expand=True);log_scroll.pack(side='right',fill='y')
         foot = ttk.Frame(root); foot.pack(fill='x', padx=18, pady=(0,12))
+        # Reserve footer and diagnostic space before the expanding quote table.
+        foot.pack_configure(side='bottom',before=table_frame)
+        log_frame.pack_configure(side='bottom',before=table_frame)
         ttk.Button(foot, text='匯出本輪 CSV', command=self.export).pack(side='left')
         self.update_bar=ttk.Progressbar(foot,mode='determinate',maximum=100,length=150)
         ttk.Label(foot, textvariable=self.update_status).pack(side='left',padx=8)
@@ -511,6 +518,8 @@ class App(AutoUI):
         tick()
 
     def stop(self):
+        self.scan_phase.set('已暫停｜停止請求已送出，進度保留')
+        self.phase_label.configure(fg='#ffb45e');self.scan_rate.stop()
         if self.auto_active:
             self.save_scan_snapshot();self.announce_task('掃描已暫停，進度已保留')
         self.close_task_progress()
@@ -579,7 +588,10 @@ class App(AutoUI):
                     else:self.handle_update(kind, payload)
                     continue
                 if token != self.generation: continue
-                if kind == 'auto_rate':
+                if kind == 'auto_phase':
+                    self.scan_phase.set(payload);self.phase_label.configure(fg='#68f5d1')
+                    self.say(payload)
+                elif kind == 'auto_rate':
                     self.scan_rate.update(payload)
                 elif kind == 'auto_status':
                     self.status.set(payload); self.say(payload); self.update_task_progress(payload)
@@ -589,6 +601,7 @@ class App(AutoUI):
                 elif kind == 'auto_setup_done':
                     cfg,target,count,start_after=payload
                     self.auto_active=False;self.auto_hwnd=target;self.config=cfg
+                    self.scan_phase.set('設定完成｜準備連續掃描' if start_after else '設定完成｜按 F8 開始連續掃描')
                     self.save();self.status.set(f'自動設定完成｜已驗證 {count} 檔資料｜F8 開始／停止')
                     self.say('已自動定位選單、表格與六欄；預設輪切五個排行，逐段捲動並複查末端；持續重複觀察轉強條件。')
                     if start_after:
@@ -596,6 +609,8 @@ class App(AutoUI):
                         self.root.after(300,lambda:self.start_auto(announce=False))
                     else:self.announce_task('自動設定完成');self.close_task_progress();self.root.deiconify()
                 elif kind == 'auto_end':
+                    self.scan_phase.set('測試完成｜按 F8 開始連續掃描' if payload=='輪切測試完成' else '已暫停｜進度已保留，按 F8 接續')
+                    self.phase_label.configure(fg='#ffb45e')
                     self.scan_rate.stop()
                     self.save_scan_snapshot()
                     self.announce_task('任務執行失敗，請查看訊息' if '未完成' in payload or '：' in payload else '任務已停止')
