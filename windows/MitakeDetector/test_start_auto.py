@@ -136,3 +136,19 @@ class CursorIdleTests(unittest.TestCase):
         self.assertEqual(state.tick(13),'hide')
         self.assertEqual(state.motion(14),'show')
         self.assertEqual(state.tick(16),'hide')
+
+class YellowBandTests(unittest.TestCase):
+    def test_reference_screenshot_bounds(self):
+        from task_progress import status_bounds
+        l,t,r,b=status_bounds((0,0,2000,1066),[0,.021,.077,.024])
+        self.assertGreaterEqual(l,155);self.assertGreaterEqual(t,0)
+        self.assertLessEqual(r,1985);self.assertLessEqual(b,53)
+    def test_scaled_and_negative_origin_bounds(self):
+        from task_progress import status_bounds
+        for rect in [(0,0,800,600),(-1920,0,0,1080),(50,60,1550,960)]:
+            x,y,r,b=rect
+            l,t,right,bottom=status_bounds(rect,[0,.02,.077,.025])
+            self.assertGreater(l,x+(r-x)*.077)
+            self.assertGreaterEqual(t,y)
+            self.assertLessEqual(right,r)
+            self.assertLessEqual(bottom,y+round((b-y)*.049))

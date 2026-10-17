@@ -30,20 +30,17 @@ def task_stage(text):
 
 
 def status_bounds(rect,combo=None,menu=None):
-    """Keep the panel outside both the closed combo and its expanded popup."""
+    """Yellow reference strip: right of combo, within top 5% of target."""
     x,y,right,bottom=rect;w=right-x;h=bottom-y
-    regions=[r for r in (combo,menu) if r and len(r)==4]
-    if not regions:regions=[[0,0,.4,.5]]
-    protected_right=max(x+(r[0]+r[2])*w for r in regions)+12
-    protected_bottom=max(y+(r[1]+r[3])*h for r in regions)+12
-    left=max(x+8,int(protected_right));available=right-left-8
-    if available>=360:return (left,y+2,right,bottom)
-    return (x+8,int(protected_bottom),right,bottom)
+    left=x+round(w*.078)+2
+    if combo and len(combo)==4:left=max(left,x+round((combo[0]+combo[2])*w)+3)
+    right=max(left+1,right-max(4,round(w*.008)))
+    top=y+2;end=y+max(3,round(h*.049))
+    return (min(left,right-1),top,right,max(top+1,end))
 
 
 def status_top(bounds,panel_height):
-    """Bottom docking keeps the complete ranking header clear at every DPI."""
-    return max(bounds[1]+2,bounds[3]-panel_height-8)
+    return bounds[1]
 
 
 class TaskProgress:
@@ -52,64 +49,42 @@ class TaskProgress:
         self.window=tk.Toplevel(root);self.window.withdraw();self.window.overrideredirect(True)
         self.window.configure(bg='#101a2b');self.window.attributes('-topmost',True)
         rect=status_bounds(rect,combo,menu)
-        width=max(280,rect[2]-rect[0]-16)
-        left=max(rect[0]+8,min(rect[2]-width-8,rect[0]+(rect[2]-rect[0]-width)//2))
-        self.window.geometry(f'{width}x72{left:+d}{rect[1]+2:+d}')
+        width=max(1,rect[2]-rect[0]);height=max(1,rect[3]-rect[1])
+        left=rect[0]
+        self.allowed_bounds=rect
+        self.window.geometry(f'{width}x{height}{left:+d}{rect[1]:+d}')
+        pixels=max(5,min(13,(height-16)//2))
+        label_pixels=max(5,min(10,(height-16)//2))
         self.title=tk.StringVar();self.detail=tk.StringVar(value=message);self.stage=task_stage(message)
-        self.title_label=tk.Label(self.window,textvariable=self.title,bg='#101a2b',fg='#68f5d1',font=('Microsoft JhengHei',10,'bold'),anchor='w')
-        # Reserve fixed cells; changing task messages never displaces the metrics.
-        table_width=min(560,max(270,width//2));text_width=width-table_width-24
-        self.title_label.place(x=8,y=0,width=max(80,text_width),height=24)
+        table_width=max(1,round(width*.56));text_width=max(1,width-table_width-12)
+        self.title_label=tk.Label(self.window,textvariable=self.title,bg='#101a2b',fg='#68f5d1',font=('Microsoft JhengHei',-pixels,'bold'),anchor='w')
+        self.title_label.place(x=4,y=1,width=text_width,height=max(1,(height-4)//2))
+        self.detail_label=tk.Label(self.window,textvariable=self.detail,bg='#101a2b',fg='#edf2ff',font=('Microsoft JhengHei',-label_pixels),anchor='w')
+        self.detail_label.place(x=4,y=max(1,(height-4)//2),width=text_width,height=max(1,height//2-2))
         self.rate=tk.StringVar(value='讀取速率：等待首段')
         self.rate_label=tk.Label(self.window,textvariable=self.rate)
-        self.detail_label=tk.Label(self.window,textvariable=self.detail,bg='#101a2b',fg='#edf2ff',font=('Microsoft JhengHei',8),anchor='nw',justify='left',wraplength=max(80,text_width))
-        self.detail_label.place(x=8,y=26,width=max(80,text_width),height=38)
         self.counts=tk.StringVar(value='已掃描 0 股／總股數待確認｜累計完成 0 遍')
         self.count_label=tk.Label(self.window,textvariable=self.counts)
         self.metrics=tk.Frame(self.window,bg='#30415d')
-        self.metrics.place(x=width-table_width-8,y=2,width=table_width,height=62)
+        self.metrics.place(x=width-table_width-3,y=1,width=table_width,height=max(1,height-5))
         self.values={};self.metric_cells=[]
         for i,(key,label,value) in enumerate([
-            ('elapsed','掃描總時長','00:00:00'),('scanned','已掃描股數','0 股'),('total','目前排行總股數','待確認'),
+            ('elapsed','掃描總時長','00:00:00'),('scanned','已掃描股數','0 股'),('total','排行總股數','待確認'),
             ('passes','累計完成遍數','0 遍'),('rate','讀取速率','等待首段'),('freshness','最近成功讀取','尚未讀取')]):
             cell=tk.Frame(self.metrics,bg='#15243a',highlightbackground='#30415d',highlightthickness=1)
             self.metric_cells.append(cell)
-            cell.grid(row=i//3,column=i%3,sticky='nsew')
-            self.metrics.columnconfigure(i%3,weight=1,uniform='metric')
-            self.metrics.rowconfigure(i//3,weight=1)
-            tk.Label(cell,text=label,bg='#15243a',fg='#9baecb',font=('Microsoft JhengHei',8)).pack()
+            cell.grid(row=0,column=i,sticky='nsew')
+            self.metrics.columnconfigure(i,weight=1,uniform='metric')
+            self.metrics.rowconfigure(0,weight=1)
+            tk.Label(cell,text=label,bg='#15243a',fg='#9baecb',font=('Microsoft JhengHei',-label_pixels),pady=0).pack()
             var=tk.StringVar(value=value);self.values[key]=var
-            tk.Label(cell,textvariable=var,bg='#15243a',fg='#ffd36a',font=('Microsoft JhengHei',9,'bold')).pack()
+            tk.Label(cell,textvariable=var,bg='#15243a',fg='#ffd36a',font=('Microsoft JhengHei',-pixels,'bold'),pady=0).pack()
         self.last_success=None
         self.counts.trace_add('write',self.refresh_counts)
         self.rate.trace_add('write',self.refresh_rate)
         self.bar=ttk.Progressbar(self.window,mode='indeterminate',length=370)
+        self.bar.place(x=2,y=max(0,height-3),width=max(1,width-4),height=min(2,height))
         self.bar.start(90)
-        self.window.update_idletasks()
-        # Pixel heights must follow the actual font metrics and Windows DPI.
-        # Each cell contains TWO labels; 31px per row clipped the value label.
-        cell_width=max(140,max(cell.winfo_reqwidth() for cell in self.metric_cells)+24)
-        row_height=max(cell.winfo_reqheight() for cell in self.metric_cells)+8
-        table_width=3*cell_width;table_height=2*row_height
-        title_height=self.title_label.winfo_reqheight()+6
-        detail_height=2*self.detail_label.winfo_reqheight()+8
-        text_height=title_height+detail_height
-        stacked=width<table_width+360
-        if stacked:
-            table_width=width-16;text_width=width-16
-            table_top=text_height+8;panel_height=table_top+table_height+10
-        else:
-            text_width=width-table_width-24
-            table_top=4;panel_height=max(text_height,table_height)+14
-        self.title_label.configure(wraplength=text_width,justify='left',anchor='nw')
-        self.title_label.place(x=8,y=2,width=text_width,height=title_height)
-        self.detail_label.configure(wraplength=text_width)
-        self.detail_label.place(x=8,y=title_height+2,width=text_width,height=detail_height)
-        self.metrics.place(x=8 if stacked else width-table_width-8,y=table_top,width=table_width,height=table_height)
-        for row in range(2):self.metrics.rowconfigure(row,minsize=row_height)
-        self.bar.place(x=8,y=panel_height-6,width=width-16,height=4)
-        top=status_top(rect,panel_height)
-        self.window.geometry(f'{width}x{panel_height}{left:+d}{top:+d}')
         self.window.update_idletasks()
         self.native_hwnd=None
         if sys.platform=='win32':

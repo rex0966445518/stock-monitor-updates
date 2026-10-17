@@ -75,7 +75,12 @@ def run_automation_smoke(root,app):
     root.after_cancel(progress_panel.after_id);progress_panel.tick()
     assert progress_panel.values['elapsed'].get()=='01:01:01'
     assert progress_panel.metrics.winfo_ismapped()
-    assert progress_panel.window.winfo_rooty()>combo.winfo_rooty()+combo.winfo_height(),'Status panel covers ranking header'
+    bx,by,br,bb=progress_panel.allowed_bounds
+    assert progress_panel.window.winfo_rootx()>=bx
+    assert progress_panel.window.winfo_rooty()>=by
+    assert progress_panel.window.winfo_rootx()+progress_panel.window.winfo_width()<=br
+    assert progress_panel.window.winfo_rooty()+progress_panel.window.winfo_height()<=bb,'Status escaped yellow strip'
+    assert progress_panel.window.winfo_rootx()>combo.winfo_rootx()+combo.winfo_width(),'Status covers combo' 
     root.update_idletasks()
     for cell in progress_panel.metric_cells:
         assert cell.winfo_height()>=cell.winfo_reqheight(),'Metric row clips value at Windows DPI'
