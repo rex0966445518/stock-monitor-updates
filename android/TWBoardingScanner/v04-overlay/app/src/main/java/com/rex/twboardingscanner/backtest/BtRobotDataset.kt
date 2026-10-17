@@ -22,7 +22,7 @@ object BtRobotDataset {
         }
         RandomAccessFile(temp,"rw").use{it.fd.sync()};check(temp.renameTo(file)){"無法保存歷史資料快照"}
     }
-    fun read(file:File,progress:(String)->Unit={},cancel:()->Boolean={false}):BacktestData.Loaded=DataInputStream(BufferedInputStream(GZIPInputStream(BufferedInputStream(file.inputStream(),65536)),65536)).use{input->
+    fun read(file:File,progress:(String)->Unit={},cancel:()->Boolean={false},diskBacked:Boolean=false):BacktestData.Loaded=DataInputStream(BufferedInputStream(GZIPInputStream(BufferedInputStream(file.inputStream(),65536)),65536)).use{input->
         val version=input.readUTF();require(version in listOf("BTROBOT1","BTROBOT2")){"資料快照版本不符"}
         fun count(max:Int)=input.readInt().also{require(it in 0..max)}
         val requested=count(10000);val excluded=List(count(10000)){input.readUTF()}
@@ -30,7 +30,9 @@ object BtRobotDataset {
         val series=List(total){i->
             check(!cancel()){"已暫停測試"}
             val code=input.readUTF();val name=input.readUTF();val market=Market.valueOf(input.readUTF())
-            val bars=List(count(5000)){DailyBar(input.readLong(),input.readDouble(),input.readDouble(),input.readDouble(),input.readDouble(),input.readLong())}
+            val barCount=count(5000)
+            val bars=if(diskBacked)DiskDailyBars.readFrom(File(file.path+".bars","$i.bars"),input,barCount,cancel)
+                else List(barCount){DailyBar(input.readLong(),input.readDouble(),input.readDouble(),input.readDouble(),input.readDouble(),input.readLong())}
             val div=mutableMapOf<LocalDate,Double>();repeat(count(1000)){div[LocalDate.ofEpochDay(input.readLong())]=input.readDouble()}
             if(i%8==0||i==total-1)progress("讀取固定歷史資料 ${i+1}/$total 檔")
             BtSeries(code,name,market,bars,div)

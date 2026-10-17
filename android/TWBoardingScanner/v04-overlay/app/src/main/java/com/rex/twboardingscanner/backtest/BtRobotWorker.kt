@@ -93,15 +93,15 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
             require(base.marketGuardVersion>0){"舊批次未啟用大盤保護；按開始建立新批次，原紀錄保留"}
             var lastProgress=0L
             val progress={msg:String->check(!interrupted()){ "已暫停測試" };val now=System.currentTimeMillis();if(now-lastProgress>=800){store.status(id,token,msg);lastProgress=now}}
-            if(cached?.id!=id)cached=null // Release the previous session before reading another market snapshot.
+            if(cached?.id!=id){cached?.index?.releasePrepared();cached=null;DiskDailyBars.clearCache()} // Release the previous session before reading another market snapshot.
             val runtime=cached?.takeIf{it.id==id}?:run{
                 val file=store.dataset(id)
                 val data=if(file.exists()){
                     progress("讀取此測試的固定歷史資料…")
-                    BtRobotDataset.read(file,progress,interrupted)
+                    BtRobotDataset.read(file,progress,interrupted,diskBacked=true)
                 }else{
                     require(session.optLong("tested")==0L){"原歷史資料已遺失，不能接續比較；請建立新測試"}
-                    val loaded=BacktestData(applicationContext).load(base,progress,interrupted)
+                    val loaded=BacktestData(applicationContext).load(base,progress,interrupted,barDirectory=java.io.File(file.path+".bars"))
                     check(!cancel()){ "已暫停測試" };BtRobotDataset.write(file,loaded);loaded
                 }
                 require(data.market.isNotEmpty()){"缺少此批次的加權指數快照，請建立新測試"}
@@ -131,7 +131,7 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
                     val message=if(BtRobotSingleOption.active(session))"所有留空選項已逐項測試完成；每輪只新增一項條件"
                         else if(sweep==null)"所有 ${base.enabledRadars.sortedBy{it.ordinal}.joinToString(""){it.name.take(1)}} 組合測試完成；最佳收益僅限本次歷史樣本"
                         else "參數範圍 ${sweep.total} 組全部完成；已測最佳 ${end.optString("bestKey").ifBlank{"無"}}，可於結果榜檢閱"
-                    store.status(id,token,message,"DONE");cached=null;return@synchronized Result.success()
+                    store.status(id,token,message,"DONE");runtime.index.releasePrepared();cached=null;DiskDailyBars.clearCache();return@synchronized Result.success()
                 }
                 val settings=if(sweep==null)BtRobotSingleOption.settings(base,candidate.key,BtRobotSingleOption.baseline(session,candidate.key)) else sweep.settings(base,candidate.key)
                 val started=System.currentTimeMillis()
@@ -142,14 +142,16 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
                 val prepared=if(sweep==null)runtime.index.prepare(settings,interrupted,progress).copy(marketGuards=runtime.guards)
                     else runtime.gridPrepared?:runtime.index.prepare(base,interrupted,progress).copy(marketGuards=runtime.guards)
                         .also{runtime.gridPrepared=it}
-                val signalCounts=base.enabledRadars.associateWith{type->
-                    prepared.signals.values.sumOf{signals->signals.count{type.name.take(1) in it.radar.split("/")}}
-                }
+                val signalCounts=base.enabledRadars.associateWith{0}.toMutableMap()
+                prepared.signals.values.forEach{items->items.forEach{signal->base.enabledRadars.forEach{type->
+                    if(type.name.take(1) in signal.radar.split("/"))signalCounts[type]=signalCounts.getValue(type)+1
+                }}}
                 val feedback=signalCounts.entries.joinToString(" · "){"${it.key.name.take(1)} 符合 ${it.value} 筆"}
-                val run=BacktestEngine.run(prepared,settings,progress=progress,cancel=interrupted,execution=runtime.execution)
+                val run=BacktestEngine.run(prepared,settings,progress=progress,cancel=interrupted,execution=runtime.execution,skippedDetailLimit=5000)
                 check(!cancellation.check(force=true)){ "已暫停測試" }
-                val note="條件掃描回饋：$feedback；待查核 ${prepared.pendingChecks} 項。\n"+NOTE+if(sweep!=null)"本批次固定 ABCDEF 條件，逐一測試持倉 ${sweep.holdingFrom}～${sweep.holdingTo} 檔 × 扣費稅淨利 ${sweep.profitFrom}%～${sweep.profitTo}% 的 ${sweep.total} 組有限範圍；每組使用相同歷史樣本，沒有再搜尋 ABCDEF。" else ""
+                val note="省記憶體模式：日K與候選訊號按需讀取；未買明細最多保留5000筆，未買總數與每日統計完整保留，買賣明細完整保留。\n"+"條件掃描回饋：$feedback；待查核 ${prepared.pendingChecks} 項。\n"+NOTE+if(sweep!=null)"本批次固定 ABCDEF 條件，逐一測試持倉 ${sweep.holdingFrom}～${sweep.holdingTo} 檔 × 扣費稅淨利 ${sweep.profitFrom}%～${sweep.profitTo}% 的 ${sweep.total} 組有限範圍；每組使用相同歷史樣本，沒有再搜尋 ABCDEF。" else ""
                 val better=store.commit(id,token,candidate,BtResult(settings,run,runtime.data.requested,runtime.data.series.size,runtime.data.excluded,note,prepared.pendingChecks),started,signalCounts)
+                if(sweep==null)runtime.index.releasePrepared()
                 if(better)notifyBest(seq,run.profit)
                 completed++
             }
@@ -158,8 +160,8 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
             enqueue(applicationContext,id,token,ExistingWorkPolicy.APPEND_OR_REPLACE)
             Result.success()
         }catch(e:OutOfMemoryError){
-            cached=null
-            store.status(id,token,"記憶體不足，已停止本段；已完成結果與快取保留，請暫停其他工作後按開始／繼續","ERROR")
+            cached?.index?.releasePrepared();cached=null;DiskDailyBars.clearCache()
+            store.status(id,token,"記憶體不足，本輪未提交；歷史資料與已完成結果保留，可按開始／繼續","ERROR")
             Result.failure()
         }catch(e:Exception){
             if(cancel())return@synchronized if(isStopped)Result.retry() else Result.success()

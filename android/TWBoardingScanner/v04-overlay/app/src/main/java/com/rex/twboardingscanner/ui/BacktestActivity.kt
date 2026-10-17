@@ -441,7 +441,7 @@ class BacktestActivity:AppCompatActivity(){
         results.addView(NeonUi.button(this,"查看未買入與資料排除原因"){
             val a=data.getJSONArray("excluded");val skipped=r.optJSONArray("skipped")?:org.json.JSONArray()
             val lines=(0 until minOf(100,skipped.length())).map{val row=skipped.getJSONObject(it);"${row.getString("date")} ${row.getString("code")}：${row.getString("reason")}"}+(0 until minOf(100,a.length())).map{a.getString(it)}
-            MaterialAlertDialogBuilder(this).setTitle("未買 ${skipped.length()} 次／資料排除 ${a.length()} 檔").setMessage(if(lines.isEmpty())"無" else lines.joinToString("\n")+"\n完整清單見匯出報告").setPositiveButton("關閉",null).show()
+            MaterialAlertDialogBuilder(this).setTitle("未買 ${r.optInt("skippedTotal",skipped.length())} 次／資料排除 ${a.length()} 檔").setMessage(if(lines.isEmpty())"無" else lines.joinToString("\n")+(if(r.optInt("skippedOmitted",0)>0)"\n省記憶體模式：明細保留前5000筆，其餘${r.optInt("skippedOmitted")}筆保留每日統計；買賣紀錄完整。" else "\n完整清單見匯出報告")).setPositiveButton("關閉",null).show()
         })
     }
     private fun rebateRules(){MaterialAlertDialogBuilder(this).setTitle("折讓金").setMessage(
