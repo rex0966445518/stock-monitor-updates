@@ -10,6 +10,7 @@ from MitakeDetector import FIELDS
 class FastQuoteTests(unittest.TestCase):
     def test_remembers_names_restarts_and_always_reads_new_numbers(self):
         image=Image.new('RGB',(600,80));bounds={f:[i/6,(i+1)/6] for i,f in enumerate(FIELDS)}
+        focus=[]
         calls=[];price=['100.50']
         def read(im):
             calls.append(im.width)
@@ -17,9 +18,10 @@ class FastQuoteTests(unittest.TestCase):
             return [token(text,40+i*164,20,width=50) for i,text in enumerate(['2330',price[0],'+2.3%','1500','1.2%'])]
         with tempfile.TemporaryDirectory() as folder:
             path=Path(folder)/'names.json';names=StockNames(path)
-            rows,bad=scan_numeric_batch(image,bounds,read,names)
+            rows,bad=scan_numeric_batch(image,bounds,read,names,focus=lambda fields,stage:focus.append(list(fields)))
             self.assertEqual((rows[0].code,rows[0].name,rows[0].price,bad),('2330','台積電',100.5,0))
             self.assertEqual(len(calls),2)
+            self.assertEqual(focus,[['code','price','gain','volume','turnover'],['name']])
             calls.clear();price[0]='102.00';names=StockNames(path)
             rows,bad=scan_numeric_batch(image,bounds,read,names)
             self.assertEqual(len(calls),1);self.assertEqual(rows[0].name,'台積電')

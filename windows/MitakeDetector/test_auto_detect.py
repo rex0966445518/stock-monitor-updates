@@ -24,6 +24,18 @@ class DetectionTests(unittest.TestCase):
             self.assertFalse(cached_layout(im,*args)[1]);self.assertEqual(detect.call_count,2)
             self.assertFalse(cached_layout(im,lambda im:[],path,{},layout['table'])[1])
 
+    def test_column_focus_uses_screen_origin_and_clears_before_capture(self):
+        import queue
+        import threading
+        app=AutoUI();app.events=queue.Queue();shown=[]
+        app.highlight_scan=lambda token,region,stop:shown.append(region)
+        region=dict(left=200,top=100,width=600,height=80)
+        app.prepare_scan_capture(7,region,threading.Event())
+        self.assertIsNone(shown[-1])
+        app.focus_columns(Image.new('RGB',(600,80)),{'code':[.1,.2],'name':[0,.1]},['code'],'數字')
+        self.assertEqual(shown[-1],[dict(left=260,top=100,width=60,height=80)])
+        self.assertIn('股號',app.events.get()[2])
+
     def test_neon_borders_never_cover_captured_pixels(self):
         from scan_outline import border_rects
         region=dict(left=100,top=200,width=400,height=300)

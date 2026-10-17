@@ -39,6 +39,13 @@ def run_automation_smoke(root,app):
     app.scan_outline.hide();root.update()
     clean=ImageGrab.grab(bbox=(region['left'],region['top'],region['left']+260,region['top']+40))
     assert baseline.tobytes()==clean.tobytes(),'Scan border changed pixels inside the OCR area'
+    app.show_scan_outline([dict(region,width=50),dict(region,left=region['left']+100,width=50)])
+    root.update()
+    assert app.scan_outline.region['width']==50
+    assert len(app.scan_outline_extras)==1 and app.scan_outline_extras[0].visible
+    assert u.GetForegroundWindow()==foreground
+    app.show_scan_outline(None);root.update()
+    assert not app.scan_outline.visible and not app.scan_outline_extras[0].visible
     app.show_scan_outline(dict(region,left=region['left']+20))
     root.update()
     assert app.scan_outline.region['left']==region['left']+20

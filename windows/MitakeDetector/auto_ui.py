@@ -20,7 +20,32 @@ class AutoUI:
         from scan_outline import ScanOutline
         outline=getattr(self,'scan_outline',None)
         if outline is None:self.scan_outline=outline=ScanOutline(self.root,self.tk)
-        outline.show(region)
+        regions=region if isinstance(region,list) else ([region] if region else [])
+        extras=getattr(self,'scan_outline_extras',[])
+        while len(extras)<max(0,len(regions)-1):extras.append(ScanOutline(self.root,self.tk))
+        self.scan_outline_extras=extras
+        for index,item in enumerate([outline]+extras):
+            if index<len(regions):item.show(regions[index])
+            else:item.hide()
+
+    def prepare_scan_capture(self,token,region,stop):
+        self.scan_capture_region=dict(region)
+        self.scan_focus_context=(token,stop)
+        # Remove all inner column borders before the next full-table screenshot.
+        self.highlight_scan(token,None,stop)
+
+    def focus_columns(self,image,bounds,fields,stage):
+        source=getattr(self,'scan_capture_region',None);context=getattr(self,'scan_focus_context',None)
+        if not source or not context or (source['width'],source['height'])!=image.size:return
+        regions=[]
+        labels={'code':'股號','name':'股名','price':'成交價','gain':'漲幅','volume':'成交量','turnover':'換手率'}
+        for field in fields:
+            left,right=bounds[field]
+            x=round(left*image.width);end=round(right*image.width)
+            regions.append(dict(left=source['left']+x,top=source['top'],width=end-x,height=image.height))
+        token,stop=context
+        self.events.put((token,'auto_status',stage+'：'+'、'.join(labels.get(f,f) for f in fields)))
+        self.highlight_scan(token,regions,stop)
 
     def announce_task(self,message):
         if __import__('os').name!='nt' or not self.config.get('voice_enabled',True):return
@@ -51,6 +76,7 @@ class AutoUI:
         if '後繼續' in message:
             outline=getattr(self,'scan_outline',None)
             if outline:outline.hide()
+            for extra in getattr(self,'scan_outline_extras',[]):extra.hide()
         panel=getattr(self,'task_panel',None)
         if panel and panel.alive:panel.update(message,completed,total)
 
@@ -58,6 +84,8 @@ class AutoUI:
         outline=getattr(self,'scan_outline',None)
         if outline:outline.close()
         self.scan_outline=None
+        for extra in getattr(self,"scan_outline_extras",[]):extra.close()
+        self.scan_outline_extras=[]
         panel=getattr(self,'task_panel',None)
         if panel:panel.close()
         self.task_panel=None
@@ -84,7 +112,7 @@ class AutoUI:
             try:
                 from auto_detect import detect_layout,detect_menu
                 c=WindowsController(target,stop);c.activate()
-                c.highlight=lambda region:self.highlight_scan(token,region,stop)
+                c.highlight=lambda region:self.prepare_scan_capture(token,region,stop)
                 threading.Thread(target=c.monitor_hotkey,daemon=True).start()
                 im,_=c.image([0,0,1,1])
                 self.events.put((token,'auto_status','正在辨識排行下拉框與六個表頭…'))
@@ -120,6 +148,7 @@ class AutoUI:
             left,right=bounds[field]
             if not 0<=left<right<=1:raise ValueError('自動欄位範圍無效')
             crop=image.crop((round(left*image.width),0,round(right*image.width),image.height))
+            self.focus_columns(image,bounds,[field],'逐欄複查')
             for box,text,confidence in self.read_auto_ocr(crop):
                 if field=='code':
                     text=unicodedata.normalize('NFKC',text).strip()
@@ -144,7 +173,7 @@ class AutoUI:
         from MitakeDetector import BASE
         names=getattr(self,'stock_names',None)
         if names is None:self.stock_names=names=StockNames(BASE/'stock-names.json')
-        quotes,bad=scan_numeric_batch(image,bounds,self.read_auto_ocr,names,memory=self.get_ocr_learning())
+        quotes,bad=scan_numeric_batch(image,bounds,self.read_auto_ocr,names,memory=self.get_ocr_learning(),focus=lambda fields,stage:self.focus_columns(image,bounds,fields,stage))
         if not quotes:quotes,bad=self.scan_mapped_table(image,bounds)
         self.last_table_seconds=time.perf_counter()-started
         self.last_scan_diagnostic=f'欄位辨識：有效{len(quotes)}列，略過{bad}列'
@@ -395,6 +424,10 @@ class AutoUI:
         import numpy as np
         import hashlib
         from collections import OrderedDict
+        source=getattr(self,'scan_capture_region',None);context=getattr(self,'scan_focus_context',None)
+        if source and context and image.width==source['width'] and image.height<=source['height']:
+            token,stop=context
+            self.highlight_scan(token,dict(source,height=image.height),stop)
         started=time.perf_counter()
         raw=image.convert('RGB')
         key=(raw.size,hashlib.sha256(raw.tobytes()).digest())
@@ -475,7 +508,7 @@ class AutoUI:
             diagnostic=dict(cycle=saved['cycle'] if saved else 1,ranking='啟動',segment=0,count=0,stage='檢查視窗與表頭')
             try:
                 c=WindowsController(target,stop)
-                c.highlight=lambda region:self.highlight_scan(token,region,stop)
+                c.highlight=lambda region:self.prepare_scan_capture(token,region,stop)
                 if list((c.initial_rect[2]-c.initial_rect[0],c.initial_rect[3]-c.initial_rect[1]))!=auto.get('window_size'):
                     raise ValueError('三竹視窗尺寸與框選時不同，請重新設定位置')
                 c.activate()

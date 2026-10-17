@@ -31,7 +31,7 @@ class StockNames:
         except OSError:pass
 
 
-def scan_numeric_batch(image,bounds,read,names,memory=None):
+def scan_numeric_batch(image,bounds,read,names,memory=None,focus=None):
     from PIL import Image
     from MitakeDetector import FIELDS,parse_ocr
     import hashlib
@@ -61,6 +61,7 @@ def scan_numeric_batch(image,bounds,read,names,memory=None):
     for field,tokens in cached:
         for box,text,confidence in tokens:append(field,box,text,confidence)
     learned={field:[] for field,_,_,_,_ in pieces}
+    if pieces and focus:focus([p[0] for p in pieces],'批次辨識數字欄')
     for box,text,confidence in (read(sheet) if pieces else []):
         l=min(p[0] for p in box);r=max(p[0] for p in box)
         matches=[field for field,left,right,_,_ in pieces if left<=l and r<=right]
@@ -75,6 +76,7 @@ def scan_numeric_batch(image,bounds,read,names,memory=None):
     if unknown:
         left,right=bounds['name']
         crop=image.crop((round(left*image.width),0,round(right*image.width),image.height))
+        if focus:focus(['name'],'補讀未知股號的股名')
         tokens=read(crop)
         for code,y,h in unknown:
             near=[t for t in tokens if abs(sum(p[1] for p in t[0])/4-y)<h*.55]
