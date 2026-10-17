@@ -133,3 +133,27 @@ class NeighborTests(unittest.TestCase):
         c.image=lambda roi:(Image.new('RGB',(100,80)),{})
         self.assertTrue(switch.label_matches('分時買力'))
         self.assertIn((200,160),seen)
+
+class TitleTests(unittest.TestCase):
+    def switcher(self,read):
+        return RankingSwitcher(FakeController(),read,[.1,.1,.2,.04],[.1,.15,.2,.5])
+    def test_arrow_noise_is_not_ranking(self):
+        s=self.switcher(lambda im:[token('分時買力'),token('V',45)])
+        self.assertTrue(s.label_matches('分時買力'))
+        self.assertFalse(s.title_tokens_match([token('分時買力'),token('分時賣力',45)],'分時買力'))
+        self.assertFalse(s.title_tokens_match([token('分時買力量')],'分時買力'))
+    def test_inner_title_with_padding_can_be_read(self):
+        from PIL import Image
+        sizes=[]
+        def read(im):
+            sizes.append(im.size)
+            return [token('分時買力')] if im.size==(216,120) else []
+        s=self.switcher(read)
+        s.c.image=lambda roi:(Image.new('RGB',(100,40)),{})
+        self.assertTrue(s.label_matches('分時買力'))
+        self.assertIn((216,120),sizes)
+    def test_failure_includes_observed_title(self):
+        s=self.switcher(lambda im:[token('分時賣力')])
+        s.requested_title='分時買力'
+        self.assertFalse(s.label_matches('分時買力'))
+        self.assertIn('實際OCR：分時賣力',s.title_failure())

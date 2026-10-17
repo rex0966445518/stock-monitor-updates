@@ -247,17 +247,36 @@ class RankingSwitcher:
                     return point
         return None
 
+    def title_tokens_match(self,tokens,name):
+        observed='、'.join(str(t[1]) for t in tokens or [])[:120]
+        if observed:self.last_title_text=observed
+        # Ignore arrow/border OCR and unrelated toolbar text, but never accept a
+        # different recognized ranking alongside the requested label.
+        if any(find_menu_item(tokens,other) for other in RANKINGS if other!=name):return False
+        return find_menu_item(tokens,name) is not None
+
     def label_matches(self,name):
         im,_=self.c.image(self.combo)
         for reader in [self.ocr,self.ocr_retry]:
             if reader is None:continue
-            tokens=reader(im)
-            text=''.join(str(item[1]) for item in sorted(tokens or [],key=lambda item:min(p[0] for p in item[0])) if item[2]>=.65)
-            if normalized(text)==normalized(name):return True
+            self.c.check()
+            if self.title_tokens_match(reader(im),name):return True
+        if hasattr(im,'crop'):
+            from PIL import ImageOps
+            # The combo arrow and cyan frame can merge into the four-character
+            # label. Re-read the inner text strip with a quiet margin for OCR.
+            w,h=im.size
+            inner=im.crop((max(1,round(w*.02)),max(1,round(h*.08)),
+                           max(2,round(w*.84)),max(2,round(h*.92))))
+            padded=ImageOps.expand(inner,border=max(8,h//3),fill=inner.getpixel((0,0)))
+            for tokens in self.enlarged_reads(padded,name):
+                if self.title_tokens_match(tokens,name):return True
         for tokens in self.enlarged_reads(im,name):
-            text=''.join(str(item[1]) for item in sorted(tokens,key=lambda item:min(p[0] for p in item[0])) if item[2]>=.65)
-            if normalized(text)==normalized(name):return True
+            if self.title_tokens_match(tokens,name):return True
         return False
+
+    def title_failure(self):
+        return '切換後標題仍無法確認；預期：'+getattr(self,'requested_title','未知')+'；實際OCR：'+getattr(self,'last_title_text','無文字')+'；進度已保留，沒有記入該排行資料'
 
     def verify_label(self,name):
         # Fast first check, bounded backoff for a slow application. F8 remains active.
@@ -268,6 +287,7 @@ class RankingSwitcher:
 
     def switch(self,name,menu_open=False):
         if name not in RANKINGS:raise ValueError('未知排行名稱')
+        self.requested_title=name;self.last_title_text='無文字'
         self.c.check()
         # A verified current label needs no mouse input. An already-open popup must
         # instead be selected directly so setup never guesses its toggle state.
@@ -291,7 +311,7 @@ class RankingSwitcher:
                 self.c.click((region['left']+point[0],region['top']+point[1]))
                 if self.verify_label(name):return
                 self.experience.forget(name)
-                raise AutomationStopped('經驗位置選取後標題不符，已停止並清除該經驗')
+                raise AutomationStopped(self.title_failure()+'；已清除該位置經驗')
             self.experience.forget(name)
             self.status('選單內容有變，恢復完整搜尋')
             self.c.scroll(center,120*60);self.c.pause(.35)
@@ -306,7 +326,7 @@ class RankingSwitcher:
                     if self.experience:self.experience.record(name,page)
                     return
                 if self.experience:self.experience.forget(name)
-                raise AutomationStopped('切換後標題不符，已停止，沒有記入該排行資料')
+                raise AutomationStopped(self.title_failure())
             fingerprint=tuple(normalized(str(t[1])) for t in tokens or [])
             unchanged=unchanged+1 if fingerprint and fingerprint==previous else 0
             if unchanged>=2:break
