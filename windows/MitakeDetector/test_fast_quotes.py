@@ -44,6 +44,39 @@ class FastQuoteTests(unittest.TestCase):
             rows,_=scan_numeric_batch(image,bounds,read,StockNames(path))
             self.assertEqual(rows[0].name,'台積電');self.assertEqual(len(calls),1)
 
+    def test_moderate_names_need_two_distinct_proofs_and_survive_restart(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'names.json';names=StockNames(path)
+            self.assertFalse(names.consider('2330','台積電',.88,'original'))
+            self.assertFalse(names.consider('2330','台積電',.88,'original'))
+            names.save();names=StockNames(path)
+            self.assertTrue(names.consider('2330','台積電',.88,'zoom2'))
+            names.save();self.assertEqual(StockNames(path).names['2330'],'台積電')
+            self.assertFalse(names.consider('2330','台積雷',.99,'new'))
+            self.assertEqual(names.names['2330'],'台積電')
+    def test_same_unreadable_name_is_not_repeatedly_zoomed(self):
+        names=StockNames()
+        self.assertTrue(names.ready_to_zoom('2330','same',now=100))
+        self.assertFalse(names.ready_to_zoom('2330','same',now=101))
+        self.assertTrue(names.ready_to_zoom('2330','changed',now=102))
+        self.assertTrue(names.ready_to_zoom('2330','changed',now=223))
+    def test_fallback_also_learns_verified_identity(self):
+        from fast_quotes import learn_mapped_names
+        names=StockNames()
+        learn_mapped_names([token('2330',40,20,width=20),token('台積電',140,20,width=20)],names,'frame1')
+        self.assertEqual(names.names['2330'],'台積電')
+
+    def test_only_unknown_name_rows_are_batched_when_most_names_are_known(self):
+        image=Image.new('RGB',(600,260));bounds={f:[i/6,(i+1)/6] for i,f in enumerate(FIELDS)}
+        names=StockNames();names.names={'2330':'台積電','2317':'鴻海','2454':'聯發科'};name_heights=[]
+        def read(im):
+            if im.width==100:
+                name_heights.append(im.height);return [token('群電',5,10,width=60)]
+            return [token(value,40+i*164,20+r*60,width=50) for r,code in enumerate(['2330','2317','2454','6412']) for i,value in enumerate([code,'100','+2%','1500','1%'])]
+        rows,_=scan_numeric_batch(image,bounds,read,names)
+        self.assertEqual(len(rows),4);self.assertEqual(rows[-1].name,'群電')
+        self.assertEqual(len(name_heights),1);self.assertLess(name_heights[0],100)
+
     def test_bad_identity_and_conflicting_names_do_not_replace_memory(self):
         names=StockNames()
         self.assertFalse(names.learn('2330','12345',.99))

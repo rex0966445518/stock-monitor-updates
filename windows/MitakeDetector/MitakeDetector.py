@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.25'
+VERSION = '0.3.26'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -157,7 +157,7 @@ class Engine:
         return rows, alerts
 
 
-HELP = '''漲停板探測器-雷允澤製 v0.3.25
+HELP = '''漲停板探測器-雷允澤製 v0.3.26
 
 【開始觀察】
 開啟三竹「熱門排行」，保持視窗完整可見，按F8或「開始掃描」。
@@ -279,7 +279,9 @@ class App(AutoUI):
         self.scan_rate=ScanRate();self.scan_rate_var=tk.StringVar(value=self.scan_rate.text())
         tk.Label(root,textvariable=self.scan_rate_var,bg='#0b1020',fg='#68f5d1',anchor='w').pack(fill='x',padx=20)
         self.observation_summary=tk.StringVar(value='尚未讀取股票資料｜轉強候選待判斷')
-        ttk.Label(root,textvariable=self.observation_summary).pack(anchor='w',padx=20,pady=(0,6))
+        self.summary_label=tk.Label(root,textvariable=self.observation_summary,bg='#0b1020',fg='#edf2ff',anchor='w',justify='left',wraplength=1400)
+        self.summary_label.pack(fill='x',padx=20,pady=(0,6))
+        self.summary_label.bind('<Configure>',lambda event:self.summary_label.configure(wraplength=max(80,event.width-8)))
         table_frame = ttk.Frame(root); table_frame.pack(fill='both', expand=True, padx=18)
         cols = ['code','name','price','gain','volume','turnover','ratio','state']
         self.tree = ttk.Treeview(table_frame, columns=cols, show='headings')
@@ -550,12 +552,17 @@ class App(AutoUI):
             display=list(latest.values())
             newest=max((q.ts for q,_,_,_ in display),default=0)
             display=[(q,ratio,reason if newest-q.ts<60 else '等待重新複查｜'+reason,hit and newest-q.ts<60) for q,ratio,reason,hit in display]
+        names=getattr(getattr(self,'stock_names',None),'names',{})
+        for q,_,_,_ in display:
+            if q.code in names:q.name=names[q.code]
         from collections import Counter
         missing=Counter(reason for _,_,text,hit in display if not hit for reason in text.split('｜')[-1].split('；'))
         explanation='；'.join(f'{reason} {count}檔' for reason,count in missing.most_common(2))
         self.observation_summary.set(f'已辨識股票 {len(display)} 檔｜轉強候選 {sum(bool(item[3]) for item in display)} 檔'+('｜'+explanation if explanation else '｜候選股置頂'))
+        pending_names=sum(not q.name for q,_,_,_ in display)
+        self.observation_summary.set(self.observation_summary.get()+f'｜股名記憶 {len(names)} 檔、待補 {pending_names} 檔')
         for q, ratio, reason, hit in sorted(display, key=lambda item: (not item[3], -item[0].gain)):
-            values = [q.code, q.name, f'{q.price:.2f}', f'{q.gain:+.2f}', f'{q.volume:,.0f}', '—' if q.turnover is None else f'{q.turnover:.2f}', '待累積' if ratio is None else f'{ratio:.2f}', reason]
+            values = [q.code, q.name or '股名待補', f'{q.price:.2f}', f'{q.gain:+.2f}', f'{q.volume:,.0f}', '—' if q.turnover is None else f'{q.turnover:.2f}', '待累積' if ratio is None else f'{ratio:.2f}', reason]
             self.tree.insert('', 'end', values=values, tags=('hit',) if hit else ())
         for q, ratio, reason, hit in rows:
             record = [self.mode, dt.datetime.fromtimestamp(q.ts).isoformat(timespec='seconds'), q.code, q.name, q.price, q.gain, q.volume, q.turnover, ratio, reason, json.dumps(cfg, ensure_ascii=False)]

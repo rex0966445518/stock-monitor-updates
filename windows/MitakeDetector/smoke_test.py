@@ -81,6 +81,10 @@ def run_smoke_test(report):
         assert style.lookup('TEntry','foreground',('readonly',))=='#101827'
         history=app.show_version_history();root.update();assert history.winfo_exists();history.destroy()
         learning_window=app.show_ocr_learning();root.update();assert learning_window.winfo_exists();learning_window.destroy()
+        app.stock_names=StockNames();app.stock_names.names={'9001':'LEARNED'}
+        app.render([Quote('9001','',100,2,1500,1,now)],0,0,dict(DEFAULT),persist=False)
+        assert app.tree.item(app.tree.get_children()[0],'values')[1]=='LEARNED'
+        app.stock_names.names={}
         # Changing rankings must retain other observed stocks and deduplicate codes.
         cfg=dict(DEFAULT,source_rank='漲幅排行',use_breakout=False)
         app.render([Quote('9001','SMOKE',100,2,1500,1,now+1)],0,0,cfg,persist=False)

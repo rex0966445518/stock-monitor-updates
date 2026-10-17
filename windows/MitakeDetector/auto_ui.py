@@ -187,6 +187,11 @@ class AutoUI:
                 height=max(p[1] for p in box)-min(p[1] for p in box)
                 x=50+i*100
                 tokens.append(([[x-10,y-height/2],[x+10,y-height/2],[x+10,y+height/2],[x-10,y+height/2]],text,confidence))
+        names=getattr(self,'stock_names',None)
+        if names is not None:
+            from fast_quotes import learn_mapped_names
+            import hashlib
+            learn_mapped_names(tokens,names,'mapped:'+hashlib.sha256(image.tobytes()).hexdigest())
         return parse_ocr(tokens,600,[100*(50+i*100)/600 for i in range(6)],time.time())
 
     def scan_recovering_table(self,image,bounds):
@@ -225,6 +230,9 @@ class AutoUI:
                 height=max(p[1] for p in box)-min(p[1] for p in box)
                 x=50+i*100
                 mapped.append(([[x-10,y-height/2],[x+10,y-height/2],[x+10,y+height/2],[x-10,y+height/2]],text,confidence))
+            from fast_quotes import learn_mapped_names
+            import hashlib
+            learn_mapped_names(mapped,names,'whole:'+hashlib.sha256(image.tobytes()).hexdigest())
             return parse_ocr(mapped,600,[100*(50+i*100)/600 for i in range(6)],time.time())
         quotes,rejected=parse(self.read_auto_ocr(image))
         if not quotes:
@@ -252,6 +260,7 @@ class AutoUI:
         from MitakeDetector import BASE
         try:
             (BASE/'stock-names.json').unlink(missing_ok=True)
+            (BASE/'stock-names-learning.json').unlink(missing_ok=True)
             self.stock_names=None
             self.say('股名記憶已清除，下次讀取時重新學習。')
         except OSError as exc:self.say('無法清除股名記憶：'+str(exc))
