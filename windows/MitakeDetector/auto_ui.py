@@ -597,6 +597,28 @@ class AutoUI:
                             except Exception:
                                 self.events.put((token,'auto_rate',dict(elapsed=time.monotonic()-started,count=0)))
                                 raise
+                        def recover_layout():
+                            from auto_detect import detect_layout
+                            diagnostic.update(stage='掃描中重新定位表頭')
+                            self.events.put((token,'auto_status','讀不到股票資料：重新定位表頭與欄位，保留目前進度…'))
+                            c.check();full,_=c.image([0,0,1,1])
+                            try:
+                                layout=detect_layout(full,self.read_auto_ocr,require_combo=False)
+                            except ValueError as error:
+                                self.events.put((token,'auto_status','表頭重定位尚未成功：'+str(error)))
+                                diagnostic.update(layout_recovery_error=str(error))
+                                return False
+                            c.check()
+                            if not switcher.label_matches(name):
+                                raise RuntimeError('表頭重定位時排行標題無法確認，進度已保留')
+                            cfg['column_bounds']=layout['column_bounds']
+                            # scan_table holds this list; mutate it so fresh captures
+                            # and overlap checks both use the new table geometry.
+                            auto['table'][:]=layout['table']
+                            auto['discovered']=True
+                            diagnostic.update(stage='表頭已重定位，重讀當前區段',column_bounds=layout['column_bounds'])
+                            self.events.put((token,'auto_status','已更新欄位位置，繼續讀取當前區段'))
+                            return True
                         first_batch=[not bool(table_resume)]
                         def observed(quotes,bad):
                             if not switcher.label_matches(name):raise RuntimeError('本段股票類目改變，未接收本段資料')
@@ -610,7 +632,8 @@ class AutoUI:
                         quotes,rejected=scan_table(c,auto['table'],read,progress,observed=observed,resume=table_resume,checkpoint=checkpoint,
                                                    limit_pages=None if auto.get('full_table',True) else auto['pages'],scroll_cap=experience.scroll_cap(name),
                                                    learn_scroll=lambda cap,recovered:experience.record_scroll(name,cap,recovered),
-                                                   read_anchors=(lambda image:self.read_stock_anchors(image,cfg['column_bounds'])) if auto.get('discovered') else None)
+                                                   read_anchors=(lambda image:self.read_stock_anchors(image,cfg['column_bounds'])) if auto.get('discovered') else None,
+                                                   recover_layout=recover_layout)
                         saved=None
                         collected={q.code:q for q in quotes}
                         # Verify label again after scanning, before any observations are accepted.

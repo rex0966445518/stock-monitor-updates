@@ -52,7 +52,7 @@ ALIASES={
 def clean(text):return re.sub(r'[^\u3400-\u9fffA-Za-z0-9]','',unicodedata.normalize('NFKC',text))
 
 
-def detect_layout(image,ocr):
+def detect_layout(image,ocr,require_combo=True):
     import numpy as np
     w,h=image.size
     top=image.crop((0,0,w,min(h,max(150,int(h*.18)))))
@@ -83,9 +83,10 @@ def detect_layout(image,ocr):
         # Quotes are right-aligned; allow the header's right gap but keep the code away from name icons.
         if field=='code':left=max(left,l-18)
         bounds[field]=[max(0,left/w),min(1,right/w)]
-    frame=combo_frame(image,tokens)
-    l,t,r,b=frame
-    combo=[l/w,t/h,(r-l)/w,(b-t)/h]
+    combo=None
+    if require_combo:
+        l,t,r,b=combo_frame(image,tokens)
+        combo=[l/w,t/h,(r-l)/w,(b-t)/h]
     table=[0,yb/h,1,max(.01,(h-yb-12)/h)]
     return dict(combo=combo,table=table,column_bounds=bounds,headers=headers)
 

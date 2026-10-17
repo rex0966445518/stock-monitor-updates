@@ -1,5 +1,5 @@
 """Read overlapping viewports; stop only after repeated stable stock-code rows."""
-def scan_table(controller, roi, read, progress, max_segments=2000, observed=None,resume=None,checkpoint=None,limit_pages=None,scroll_cap=6,learn_scroll=None,read_anchors=None):
+def scan_table(controller, roi, read, progress, max_segments=2000, observed=None,resume=None,checkpoint=None,limit_pages=None,scroll_cap=6,learn_scroll=None,read_anchors=None,recover_layout=None):
     from autoswitch import absolute_roi
     table=absolute_roi(roi,controller.rect())
     center=(table['left']+table['width']//2,table['top']+table['height']//2)
@@ -10,7 +10,7 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
     previous=tuple(saved['codes']) if saved.get('codes') else None
     stable=0;rejected=saved.get('rejected',0);notches=saved.get('notches',1)
     cap=max(1,min(6,scroll_cap,int(saved.get('cap',scroll_cap))));recovery_stalls=0
-    rebuilds=0
+    rebuilds=0;layout_repairs=0
     offset=saved.get('offset',0);first=saved.get('segment',0)
     if not saved:
         controller.scroll(center,120*4000);controller.pause(.6)
@@ -28,6 +28,17 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
         progress(segment+1,len(collected),'擷取股票資料')
         image,_=controller.image(roi)
         quotes,bad=read(image)
+        # Repair geometry before repeating OCR against the same stale columns.
+        if not quotes and recover_layout and layout_repairs<3:
+            layout_repairs+=1
+            progress(segment+1,len(collected),f'資料欄位失效，重新定位表頭 {layout_repairs}/3')
+            controller.check()
+            if recover_layout():
+                controller.check()
+                table=absolute_roi(roi,controller.rect())
+                center=(table['left']+table['width']//2,table['top']+table['height']//2)
+                image,_=controller.image(roi);quotes,bad=read(image)
+                progress(segment+1,len(collected),'表頭已重新定位，重讀當前區段並核對重疊')
         # A blank OCR result cannot establish the bottom; retry fresh captures.
         for retry in range(2):
             if quotes:break

@@ -135,3 +135,34 @@ class TableScanTests(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+
+class LayoutRecoveryTests(unittest.TestCase):
+    def test_shift_repairs_same_segment_and_preserves_rows(self):
+        c=TableController(rows=17);state={'fixed':False};repairs=[];messages=[]
+        roi=[0,0,1,1]
+        def read(n):
+            if n>=3 and not state['fixed']:return [],6
+            return [SimpleNamespace(code=str(1000+i)) for i in range(n,n+6)],0
+        def repair():
+            repairs.append(c.position);state['fixed']=True;roi[:]=[.1,.1,.9,.9];return True
+        rows,bad=scan_table(c,roi,read,lambda *s:messages.append(s[2]),recover_layout=repair)
+        self.assertEqual(repairs,[3])
+        self.assertEqual({q.code for q in rows},{str(1000+i) for i in range(17)})
+        self.assertEqual(bad,0)
+        self.assertTrue(any('重讀當前區段' in m for m in messages))
+    def test_failed_header_search_does_not_claim_completion(self):
+        c=TableController();calls=[]
+        with self.assertRaisesRegex(RuntimeError,'連續三次'):
+            scan_table(c,[0,0,1,1],lambda image:([],0),lambda *s:None,
+                       recover_layout=lambda:calls.append(c.position) or False)
+        self.assertEqual(calls,[0])
+    def test_repeated_moves_have_bounded_repairs(self):
+        c=TableController(rows=40);state={'ready':False};calls=[]
+        def repair():state['ready']=True;calls.append(c.position);return True
+        def read(n):
+            if not state['ready']:return [],0
+            state['ready']=False
+            return [SimpleNamespace(code=str(1000+i)) for i in range(n,n+6)],0
+        with self.assertRaises(RuntimeError):
+            scan_table(c,[0,0,1,1],read,lambda *s:None,recover_layout=repair)
+        self.assertEqual(len(calls),3)
