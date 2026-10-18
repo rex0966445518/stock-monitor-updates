@@ -65,6 +65,7 @@ class FullMarketScanWorker(context:Context,params:WorkerParameters):Worker(conte
         fun stop(c:Context) {
             val id=BackgroundScanState.read(c).id
             BackgroundScanState.cancel(c,id)
+            BackgroundScanLive.clear(id)
             WorkManager.getInstance(c).cancelUniqueWork(BackgroundScanState.WORK)
         }
     }
