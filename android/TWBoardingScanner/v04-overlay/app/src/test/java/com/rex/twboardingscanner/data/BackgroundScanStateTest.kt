@@ -51,4 +51,27 @@ class BackgroundScanStateTest {
         BackgroundScanState.failure(app,second,"actual error")
         assertEquals("ERROR",BackgroundScanState.read(app).state)
     }
+    @Test fun onlyHeartbeatOwnerCanAdvanceAndStaleOwnerCanBeTakenOver(){
+        val id=BackgroundScanState.begin(app,JSONObject().put("date","2026-10-18"))
+        assertFalse(BackgroundScanState.freshService(app,id,now=1000))
+        assertTrue(BackgroundScanState.claim(app,id,"service:first",now=1000))
+        assertFalse(BackgroundScanState.claim(app,id,"worker:other",now=2000))
+        BackgroundScanState.report(app,id,"正常執行",done=15,total=100,owner="service:first")
+        assertTrue(BackgroundScanState.owns(app,id,"service:first"))
+        val first=BackgroundScanState.read(app)
+        assertTrue(first.lastAdvanceAt>0)
+        BackgroundScanState.report(app,id,"舊工作不可覆蓋",done=33,total=100,owner="worker:other")
+        assertEquals(15,BackgroundScanState.read(app).done)
+        assertTrue(BackgroundScanState.claim(app,id,"worker:recovery",staleMs=45_000,now=first.heartbeatAt+46_000))
+        assertFalse(BackgroundScanState.owns(app,id,"service:first"))
+        BackgroundScanState.report(app,id,"舊工作不可覆蓋",done=99,total=100,owner="service:first")
+        assertEquals(15,BackgroundScanState.read(app).done)
+        BackgroundScanState.report(app,id,"備援運作",done=20,total=100,owner="worker:recovery")
+        assertEquals(20,BackgroundScanState.read(app).done)
+        BackgroundScanState.complete(app,id,"wrong-folder","wrong",owner="service:first")
+        assertTrue(BackgroundScanState.read(app).active)
+        BackgroundScanState.complete(app,id,"folder-ok","完成",owner="worker:recovery")
+        assertEquals("folder-ok",BackgroundScanState.read(app).folderId)
+    }
+
 }
