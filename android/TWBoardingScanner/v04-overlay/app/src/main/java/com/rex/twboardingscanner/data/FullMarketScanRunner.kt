@@ -269,7 +269,7 @@ class FullMarketScanRunner(
     private fun notifySignal(r:SignalResult) {
         runCatching {
             notificationManager().createNotificationChannel(NotificationChannel("signals","上車雷達訊號",NotificationManager.IMPORTANCE_HIGH))
-            val note=NotificationCompat.Builder(applicationContext,"signals")
+            val note=NotificationCompat.Builder(c,"signals")
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentTitle(r.code+" "+r.name+" 新觸發")
                 .setContentText(r.radarType.label+"｜條件通過 "+r.score+"%")
