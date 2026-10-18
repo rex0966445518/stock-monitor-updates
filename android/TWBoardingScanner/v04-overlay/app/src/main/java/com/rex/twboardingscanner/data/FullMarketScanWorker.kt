@@ -271,6 +271,7 @@ class FullMarketScanWorker(context:Context,params:WorkerParameters):Worker(conte
                 }
             }
             var lastNote=0L
+            var lastPreview=0L
             while(!latch.await(800,TimeUnit.MILLISECONDS)){
                 ensureActive(id)
                 val n=done.get()
@@ -279,6 +280,12 @@ class FullMarketScanWorker(context:Context,params:WorkerParameters):Worker(conte
                     done=n,total=total,analyzed=analyzed.get(),excluded=excluded.get(),
                     insufficient=insufficient.get(),failed=failed.get(),pending=enrichment.pending)
                 val now=SystemClock.elapsedRealtime()
+                if(now-lastPreview>=1800){
+                    val partial=synchronized(results){results.toList()}
+                    BackgroundScanLive.publish(id,participation.mainResults(partial),
+                        if(paperSettings==null)participation.mainResults(partial) else participation.paperResults(partial))
+                    lastPreview=now
+                }
                 if(now-lastNote>=5000){
                     runCatching{manager().notify(NOTIFICATION_ID,progressNote(n,total,"正在掃描"))}
                     lastNote=now
@@ -298,6 +305,7 @@ class FullMarketScanWorker(context:Context,params:WorkerParameters):Worker(conte
             val all=synchronized(results){results.toList()}
             val main=participation.mainResults(all)
             val paper=if(paperSettings==null)main else participation.paperResults(all)
+            BackgroundScanLive.publish(id,main,paper)
             val snapshot=config.put("requested",total).put("analyzed",analyzed.get()).put("failed",failed.get())
             BackgroundScanState.report(c,id,"保存掃描資料夾中…",done=total,total=total,pending=0)
             val folder=ScanArchiveStore(c).use{it.addCompleteScan(date.toString(),created,snapshot,main,paper)}
@@ -340,8 +348,10 @@ class FullMarketScanWorker(context:Context,params:WorkerParameters):Worker(conte
                 "全市場背景掃描完成，結果已存入掃描資料夾"
             else "背景掃描完成；部分行情待查核，請參閱掃描資料夾"
             BackgroundScanState.complete(c,id,folder.id,message)
+            BackgroundScanLive.clear(id)
             ScanDiagnostics.phase(c,"全市場背景掃描完成，結果已保存")
         }finally{
+            if(!BackgroundScanState.read(c).active)BackgroundScanLive.clear(id)
             pool.shutdownNow()
             financialPool.shutdownNow()
         }
