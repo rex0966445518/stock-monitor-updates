@@ -1,9 +1,9 @@
 package com.rex.twboardingscanner.backtest
 
-/** Android 12+ background continuations must not unconditionally start an FGS. */
+/** User-started robot work may promote to an FGS; resumed Android 12+ jobs cannot assume that permission. */
 object RobotWorkPolicy {
     const val SLICE_MS=7*60_000L
-    fun promoteForeground(sdk:Int)=sdk<31
+    fun promoteForeground(sdk:Int,userStarted:Boolean=false)=sdk<31||userStarted
     fun expedited(sdk:Int,userStarted:Boolean,delaySeconds:Long)=sdk>=31&&userStarted&&delaySeconds==0L
     fun expired(start:Long,now:Long)=now-start>=SLICE_MS
     fun foregroundDenied(error:Throwable):Boolean {

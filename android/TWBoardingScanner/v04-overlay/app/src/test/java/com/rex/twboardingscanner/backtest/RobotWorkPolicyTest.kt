@@ -15,6 +15,7 @@ class RobotWorkPolicyTest {
         assertTrue(RobotWorkPolicy.promoteForeground(30))
         listOf(31,34,35,36).forEach { sdk->
             assertFalse(RobotWorkPolicy.promoteForeground(sdk))
+            assertTrue(RobotWorkPolicy.promoteForeground(sdk,true))
             assertTrue(RobotWorkPolicy.expedited(sdk,true,0))
             assertFalse(RobotWorkPolicy.expedited(sdk,false,0))
             assertFalse(RobotWorkPolicy.expedited(sdk,true,10))
@@ -24,6 +25,7 @@ class RobotWorkPolicyTest {
         assertTrue(start.workSpec.expedited)
         assertEquals(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST,start.workSpec.outOfQuotaPolicy)
         assertEquals("session",start.workSpec.input.getString("session"))
+        assertTrue(start.workSpec.input.getBoolean("userStarted",false))
         assertFalse(BtRobotWorker.request("session","token").workSpec.expedited)
         assertFalse(BtRobotWorker.request("session","token",10,true).workSpec.expedited)
     }

@@ -20,6 +20,9 @@ import androidx.core.app.NotificationCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.rex.twboardingscanner.data.BackgroundScanLive
+import com.rex.twboardingscanner.data.BackgroundScanState
+import com.rex.twboardingscanner.data.FullMarketScanWorker
 import com.rex.twboardingscanner.data.HistoryRow
 import com.rex.twboardingscanner.data.MarketDataProvider
 import com.rex.twboardingscanner.data.SignalHistoryDb
@@ -70,6 +73,16 @@ class MainActivity: AppCompatActivity() {
     private val guardHandler=android.os.Handler(android.os.Looper.getMainLooper())
     private val guardBusy=java.util.concurrent.atomic.AtomicBoolean(false)
     private val guardPoll=object:Runnable{override fun run(){refreshMarketGuard();guardHandler.postDelayed(this,30000)}}
+    private val backgroundHandler=android.os.Handler(android.os.Looper.getMainLooper())
+    private val backgroundPoll=object:Runnable{
+        override fun run(){
+            syncBackgroundScan()
+            backgroundHandler.postDelayed(this,1500)
+        }
+    }
+    private var backgroundLoadedFolder=""
+    private var backgroundPreviewVersion=0L
+    private var backgroundResultLoading=false
     private val workers = Executors.newFixedThreadPool(6)
     private val enrichmentWorkers = Executors.newSingleThreadExecutor()
 
@@ -239,6 +252,7 @@ class MainActivity: AppCompatActivity() {
         b.etaText.text="待命中"
         b.scanProgress.isIndeterminate=false
         render()
+        syncBackgroundScan()
         restoreLatestScan()
     }
 
@@ -291,6 +305,11 @@ class MainActivity: AppCompatActivity() {
         val body=NeonUi.vertical(this).apply{background=NeonUi.backdrop(this@MainActivity)}
         body.addView(NeonUi.label(this,"條件與工具",23f,NeonUi.ink,true).apply{setPadding(dp(16),dp(12),dp(16),dp(4))})
         body.addView(NeonUi.label(this,"入場、下車與股票管理集中設定",12f).apply{setPadding(dp(16),0,dp(16),dp(8))})
+        body.addView(NeonUi.button(this,"背景執行權限設定 · 通知／電池",NeonUi.cyan){
+            Toast.makeText(this,"請開啟通知，並在電池設定中允許背景使用或設為不受限制",Toast.LENGTH_LONG).show()
+            startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                android.net.Uri.parse("package:"+packageName)))
+        }.apply{tag="background-permission-settings"})
         body.addView(NeonUi.button(this,"匯入內／外盤成交量 CSV（主動買賣 ≥1.5 倍）",NeonUi.cyan){
             startActivity(android.content.Intent(this,TradeSideVolumeImportActivity::class.java))
         }.apply{tag="scan-import-trade-side"})
@@ -314,10 +333,110 @@ class MainActivity: AppCompatActivity() {
         dialog.behavior.state=com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
     }
 
-    override fun onResume() { super.onResume();guardHandler.post(guardPoll);loadScanSettings();if(::trendHoldCheck.isInitialized)trendHoldCheck.isChecked=com.rex.twboardingscanner.data.ExitRuleStore(this).readProfitTrendHold(StockScope.SCANNER);b.exitRulesButton.text="下車賣出條件 · ${com.rex.twboardingscanner.data.ExitRuleStore(this).read(com.rex.twboardingscanner.domain.StockScope.SCANNER).count{it.active}} / 7 項";if(::paperLoop.isInitialized){paperLoop.start();render()} }
-    override fun onPause() { guardHandler.removeCallbacks(guardPoll);if(::paperLoop.isInitialized)paperLoop.stop();super.onPause() }
+    override fun onResume() { super.onResume();backgroundHandler.removeCallbacks(backgroundPoll);backgroundHandler.post(backgroundPoll);guardHandler.post(guardPoll);loadScanSettings();if(::trendHoldCheck.isInitialized)trendHoldCheck.isChecked=com.rex.twboardingscanner.data.ExitRuleStore(this).readProfitTrendHold(StockScope.SCANNER);b.exitRulesButton.text="下車賣出條件 · ${com.rex.twboardingscanner.data.ExitRuleStore(this).read(com.rex.twboardingscanner.domain.StockScope.SCANNER).count{it.active}} / 7 項";if(::paperLoop.isInitialized){paperLoop.start();render()} }
+    override fun onPause() { backgroundHandler.removeCallbacks(backgroundPoll);guardHandler.removeCallbacks(guardPoll);if(::paperLoop.isInitialized)paperLoop.stop();super.onPause() }
+
+    /**
+     * Production scans run in WorkManager and survive Activity destruction.
+     * The original Activity pipeline remains available for offline fixture tests.
+     */
+    private fun startBackgroundScan(){
+        val state=BackgroundScanState.read(this)
+        if(state.active){
+            MaterialAlertDialogBuilder(this).setTitle("停止背景掃描？")
+                .setMessage("背景掃描正在進行，切換到 LINE 或其他軟體不會自動停止。確定取消本次掃描嗎？")
+                .setNegativeButton("繼續掃描",null)
+                .setPositiveButton("停止掃描"){_,_->
+                    FullMarketScanWorker.stop(applicationContext)
+                    syncBackgroundScan()
+                }.show()
+            return
+        }
+        if(radarEnabled.isEmpty()){
+            Toast.makeText(this,"請至少啟用 A～F 的一組條件",Toast.LENGTH_LONG).show()
+            return
+        }
+        val date=java.time.LocalDate.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI)
+        val created=System.currentTimeMillis()
+        val paper=runCatching{com.rex.twboardingscanner.paper.PaperRepository(this).read()}.getOrNull()
+        val flowRevision=com.rex.twboardingscanner.data.TradeSideVolumeStore(this).revision()
+        val frozen=com.rex.twboardingscanner.data.ScanArchiveStore.snapshot(
+            date.toString(),created,radarSelections.mapValues{it.value.toSet()},
+            enabledSectors.toSet(),com.rex.twboardingscanner.data.StockPolicyStore(this).read(),
+            flowRevision,0,0,0,enabledRadars=radarEnabled.toSet(),
+            dConfig=dConfig,eConfig=eConfig,fConfig=fConfig,bConfig=bConfig,
+            exclusions=scanExclusions.mapValues{it.value.toSet()}
+        ).put("paperEnabled",paper?.enabled==true)
+         .put("paperStrategy",paper?.strategy?.let{com.rex.twboardingscanner.backtest.BtSettingsCodec.encode(it)}
+             ?:org.json.JSONObject.NULL)
+        runCatching{FullMarketScanWorker.start(applicationContext,frozen)}
+            .onSuccess{
+                latest=emptyList()
+                latestPaper=emptyList()
+                latestScanDate=date.toString()
+                latestScanAt=created
+                latestFolderId=""
+                resultRadars=null;resultSectors=null;resultPolicy=null
+                selectedTab=6
+                backgroundLoadedFolder=""
+                backgroundPreviewVersion=0L
+                syncBackgroundScan()
+                render()
+                Toast.makeText(this,"背景掃描已啟動；切換其他 App 仍會繼續",Toast.LENGTH_SHORT).show()
+            }.onFailure{
+                Toast.makeText(this,"背景掃描啟動失敗："+it.message,Toast.LENGTH_LONG).show()
+                syncBackgroundScan()
+            }
+    }
+
+    private fun syncBackgroundScan(){
+        if(!::b.isInitialized)return
+        val s=BackgroundScanState.read(this)
+        if(s.id.isBlank())return
+        isScanning=s.active
+        if(s.active){
+            val preview=BackgroundScanLive.read(s.id)
+            if(preview!=null&&preview.version!=backgroundPreviewVersion){
+                backgroundPreviewVersion=preview.version
+                latest=preview.main
+                latestPaper=preview.paper
+                render()
+            }
+        }
+        b.startScanButton.isEnabled=true
+        b.startScanButton.text=if(s.active)"停止背景掃描" else "開始掃描"
+        b.scanProgress.isIndeterminate=s.active&&s.total==0
+        b.scanProgress.max=s.total.coerceAtLeast(1)
+        b.scanProgress.progress=s.done.coerceIn(0,b.scanProgress.max)
+        b.progressTitle.text=s.message
+        b.progressCount.text=if(s.total>0)"已掃描 "+s.done+" / "+s.total+" 檔（"+s.percent+"%）"
+            else if(s.active)"背景工作啟動中…" else s.message
+        b.progressStats.text="已分析 "+s.analyzed+"｜排除 "+s.excluded+"｜資料不足 "+s.insufficient+
+            "｜失敗 "+s.failed+(if(s.pending>0)"｜待查核 "+s.pending else "")
+        b.etaText.text=if(s.active)"背景執行中 · 切換 App 仍會繼續"
+            else if(s.state=="DONE")"已完成 · 掃描結果自動保存"
+            else if(s.state=="ERROR")"請檢查錯誤後重新掃描" else "背景掃描已停止"
+        if(s.state=="DONE"&&s.folderId.isNotBlank()&&backgroundLoadedFolder!=s.folderId&&!backgroundResultLoading){
+            backgroundLoadedFolder=s.folderId
+            backgroundResultLoading=true
+            coordinator.submit{
+                val saved=runCatching{com.rex.twboardingscanner.data.ScanArchiveStore(this).use{it.saved(s.folderId)}}.getOrNull()
+                runOnUiThread{
+                    backgroundResultLoading=false
+                    if(isFinishing||isDestroyed||BackgroundScanState.read(this).folderId!=s.folderId)return@runOnUiThread
+                    if(saved==null){backgroundLoadedFolder="";b.progressTitle.text="掃描完成，但載入卡片失敗；請開啟掃描資料夾";return@runOnUiThread}
+                    latest=saved.main;latestPaper=saved.paper
+                    latestScanDate=saved.date;latestScanAt=saved.created;latestFolderId=saved.id
+                    resultRadars=saved.radars;resultSectors=saved.sectors;resultPolicy=saved.policy
+                    selectedTab=6
+                    render()
+                }
+            }
+        }
+    }
 
     private fun startFullScan() {
+        if(scanInput==null){startBackgroundScan();return}
         if (isScanning) {
             Toast.makeText(this, "掃描進行中", Toast.LENGTH_SHORT).show()
             return
@@ -830,6 +949,10 @@ class MainActivity: AppCompatActivity() {
     }
 
     private fun requestConfiguredScan() {
+        if(scanInput==null&&BackgroundScanState.read(this).active){
+            Toast.makeText(this,"新條件已儲存；目前背景掃描沿用開始時的條件，下一次掃描才會套用",Toast.LENGTH_LONG).show()
+            return
+        }
         scanRevision.incrementAndGet()
         if(isScanning||latestFolderId.isBlank()){latest=emptyList();latestPaper=emptyList()}
         render()
@@ -1024,6 +1147,7 @@ class MainActivity: AppCompatActivity() {
         chartDialog?.dismiss()
         chartDialog = null
         handler.removeCallbacksAndMessages(null)
+        backgroundHandler.removeCallbacksAndMessages(null)
         guardHandler.removeCallbacksAndMessages(null);guardExecutor.shutdownNow()
         coordinator.shutdownNow()
         workers.shutdownNow()
