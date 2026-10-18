@@ -305,6 +305,19 @@ class MainActivity: AppCompatActivity() {
         val body=NeonUi.vertical(this).apply{background=NeonUi.backdrop(this@MainActivity)}
         body.addView(NeonUi.label(this,"條件與工具",23f,NeonUi.ink,true).apply{setPadding(dp(16),dp(12),dp(16),dp(4))})
         body.addView(NeonUi.label(this,"入場、下車與股票管理集中設定",12f).apply{setPadding(dp(16),0,dp(16),dp(8))})
+        body.addView(NeonUi.button(this,"複製背景工作診斷（心跳／排程／權限）",NeonUi.cyan){
+            coordinator.submit{
+                val diagnosis=runCatching{com.rex.twboardingscanner.data.BackgroundScanDiagnostics.collect(applicationContext)}
+                    .getOrElse{"背景診斷讀取失敗："+it.message}
+                runOnUiThread{
+                    if(!isFinishing&&!isDestroyed){
+                        getSystemService(android.content.ClipboardManager::class.java).setPrimaryClip(
+                            android.content.ClipData.newPlainText("背景掃描診斷",diagnosis))
+                        Toast.makeText(this,"背景工作診斷已複製，若仍停止請貼給我分析",Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }.apply{tag="background-diagnostics-copy"})
         body.addView(NeonUi.button(this,"背景執行權限設定 · 通知／電池",NeonUi.cyan){
             Toast.makeText(this,"請開啟通知，並在電池設定中允許背景使用或設為不受限制",Toast.LENGTH_LONG).show()
             startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
@@ -337,12 +350,26 @@ class MainActivity: AppCompatActivity() {
     override fun onPause() { backgroundHandler.removeCallbacks(backgroundPoll);guardHandler.removeCallbacks(guardPoll);if(::paperLoop.isInitialized)paperLoop.stop();super.onPause() }
 
     /**
-     * Production scans run in WorkManager and survive Activity destruction.
+     * Production scans run in a direct foreground service with WorkManager recovery.
      * The original Activity pipeline remains available for offline fixture tests.
      */
     private fun startBackgroundScan(){
         val state=BackgroundScanState.read(this)
         if(state.active){
+            val now=System.currentTimeMillis()
+            val heartbeatFresh=state.state=="RUNNING"&&state.heartbeatAt>0&&
+                now-state.heartbeatAt in 0L..45000L
+            val preparing=state.state=="QUEUED"&&now-state.started in 0L..30000L
+            if(!heartbeatFresh&&!preparing){
+                runCatching{FullMarketScanWorker.resume(this)}
+                    .onSuccess{
+                        Toast.makeText(this,"已要求重新啟動持續背景服務；原掃描條件保留",Toast.LENGTH_LONG).show()
+                    }.onFailure{
+                        Toast.makeText(this,"恢復掃描失敗："+it.message,Toast.LENGTH_LONG).show()
+                    }
+                syncBackgroundScan()
+                return
+            }
             MaterialAlertDialogBuilder(this).setTitle("停止背景掃描？")
                 .setMessage("背景掃描正在進行，切換到 LINE 或其他軟體不會自動停止。確定取消本次掃描嗎？")
                 .setNegativeButton("繼續掃描",null)
@@ -403,8 +430,16 @@ class MainActivity: AppCompatActivity() {
                 render()
             }
         }
+        val now=System.currentTimeMillis()
+        val heartbeatAge=if(s.heartbeatAt>0)(now-s.heartbeatAt).coerceAtLeast(0L) else Long.MAX_VALUE
+        val actuallyRunning=s.active&&s.state=="RUNNING"&&heartbeatAge<45000L
+        val preparing=s.active&&s.state=="QUEUED"&&(now-s.started) in 0L..30000L
         b.startScanButton.isEnabled=true
-        b.startScanButton.text=if(s.active)"停止背景掃描" else "開始掃描"
+        b.startScanButton.text=when{
+            !s.active->"開始掃描"
+            actuallyRunning||preparing->"停止背景掃描"
+            else->"恢復背景掃描"
+        }
         b.scanProgress.isIndeterminate=s.active&&s.total==0
         b.scanProgress.max=s.total.coerceAtLeast(1)
         b.scanProgress.progress=s.done.coerceIn(0,b.scanProgress.max)
@@ -413,9 +448,14 @@ class MainActivity: AppCompatActivity() {
             else if(s.active)"背景工作啟動中…" else s.message
         b.progressStats.text="已分析 "+s.analyzed+"｜排除 "+s.excluded+"｜資料不足 "+s.insufficient+
             "｜失敗 "+s.failed+(if(s.pending>0)"｜待查核 "+s.pending else "")
-        b.etaText.text=if(s.active)"背景執行中 · 切換 App 仍會繼續"
-            else if(s.state=="DONE")"已完成 · 掃描結果自動保存"
-            else if(s.state=="ERROR")"請檢查錯誤後重新掃描" else "背景掃描已停止"
+        b.etaText.text=when{
+            actuallyRunning->"背景服務心跳正常 · ${heartbeatAge/1000} 秒前 · 可切換其他 App"
+            preparing->"持續背景服務啟動中…"
+            s.active->"背景執行可能已暫停 · 按「恢復背景掃描」"
+            s.state=="DONE"->"已完成 · 掃描結果自動保存"
+            s.state=="ERROR"->"背景執行失敗 · 複製診斷檢查原因"
+            else->"背景掃描已停止"
+        }
         if(s.state=="DONE"&&s.folderId.isNotBlank()&&backgroundLoadedFolder!=s.folderId&&!backgroundResultLoading){
             backgroundLoadedFolder=s.folderId
             backgroundResultLoading=true
