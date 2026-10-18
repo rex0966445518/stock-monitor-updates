@@ -107,7 +107,7 @@ internal object BtRobotRunner {
                 val feedback=signalCounts.entries.joinToString(" · "){"${it.key.name.take(1)} 符合 ${it.value} 筆"}
                 val run=BacktestEngine.run(prepared,settings,progress=progress,cancel=interrupted,execution=runtime.execution,skippedDetailLimit=5000)
                 check(!cancellation.check(force=true)){ "已暫停測試" }
-                val note="省記憶體模式：日K與候選訊號按需讀取；未買明細最多保留5000筆，未買總數與每日統計完整保留，買賣明細完整保留。\n"+"條件掃描回饋：$feedback；待查核 ${prepared.pendingChecks} 項。\n"+NOTE+if(sweep!=null)"本批次固定 ABCDEF 條件，逐一測試持倉 ${sweep.holdingFrom}～${sweep.holdingTo} 檔 × 扣費稅淨利 ${sweep.profitFrom}%～${sweep.profitTo}% 的 ${sweep.total} 組有限範圍；每組使用相同歷史樣本，沒有再搜尋 ABCDEF。" else ""
+                val note="省記憶體模式：日K與候選訊號按需讀取；未買明細最多保留5000筆，未買總數與每日統計完整保留，買賣明細完整保留。\n"+"條件掃描回饋：$feedback；待查核 ${prepared.pendingChecks} 項。\n"+BtRobotWorker.NOTE+if(sweep!=null)"本批次固定 ABCDEF 條件，逐一測試持倉 ${sweep.holdingFrom}～${sweep.holdingTo} 檔 × 扣費稅淨利 ${sweep.profitFrom}%～${sweep.profitTo}% 的 ${sweep.total} 組有限範圍；每組使用相同歷史樣本，沒有再搜尋 ABCDEF。" else ""
                 val better=store.commit(id,token,candidate,BtResult(settings,run,runtime.data.requested,runtime.data.series.size,runtime.data.excluded,note,prepared.pendingChecks),started,signalCounts,owner)
                 if(sweep==null){runtime.index.releasePrepared();if(store.seen(id,candidate.key))runtime.index.clearCheckpoint(candidate.key)}
                 if(better)onBest(seq,run.profit)
