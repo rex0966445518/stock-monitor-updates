@@ -21,7 +21,7 @@ object BackgroundScanState {
         val excluded:Int, val insufficient:Int, val failed:Int,
         val pending:Int, val started:Long, val folderId:String
     ) {
-        val active get()=state in running
+        val active get()=state in setOf("QUEUED","RUNNING","RETRY")
         val percent get()=if(total>0) (done.toLong()*100/total).toInt().coerceIn(0,100) else 0
     }
 
