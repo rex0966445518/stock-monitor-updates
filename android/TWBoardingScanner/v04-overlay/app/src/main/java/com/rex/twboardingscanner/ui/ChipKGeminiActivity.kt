@@ -43,7 +43,7 @@ class ChipKGeminiActivity : AppCompatActivity() {
             statusView.text = "使用者已取消螢幕擷取授權；沒有擷取任何畫面。"
             return@registerForActivityResult
         }
-        prefs.edit().putString("stock", code).apply()
+        prefs.edit().putString("stock", code).remove("capture").remove("capture_stock").apply()
         val command = Intent(this, ChipKCaptureService::class.java)
             .putExtra(ChipKCaptureService.EXTRA_CONSENT_CODE, result.resultCode)
             .putExtra(ChipKCaptureService.EXTRA_CONSENT_DATA, data)
@@ -67,7 +67,9 @@ class ChipKGeminiActivity : AppCompatActivity() {
                 target.outputStream().use { output -> input.copyTo(output) }
             }
             // Imported file may be PNG/WebP; sniffed by Android when displaying; sharing uses image/*.
-            prefs.edit().putString("capture", target.name).putString("stock", stockInput.text.toString()).apply()
+            prefs.edit().putString("capture", target.name)
+                .putString("capture_stock", stockInput.text.toString().trim())
+                .putString("stock", stockInput.text.toString().trim()).apply()
             showLatest()
         }.onFailure {
             statusView.text = "讀取圖片失敗：" + (it.message ?: "未知錯誤")
@@ -123,7 +125,7 @@ class ChipKGeminiActivity : AppCompatActivity() {
             capturePermission.launch(mgr.createScreenCaptureIntent())
         })
         root.addView(button("或者：選取已保存的籌碼K線截圖") {
-            imagePicker.launch("image/*")
+            if (validCode() != null) imagePicker.launch("image/*")
         })
         statusView = label("等待截圖。Android 會要求你同意擷取；截圖完成後通知列會顯示結果。", 13f, Color.rgb(158, 181, 203))
         root.addView(statusView)
@@ -176,7 +178,8 @@ class ChipKGeminiActivity : AppCompatActivity() {
             statusView.text = "圖片無法解碼。請改選其他截圖。"
         } else {
             preview.setImageBitmap(bitmap)
-            statusView.text = "截圖已保存於本機：" + file.name + "。請先檢查是否為正確股票畫面，再選擇分享。"
+            val savedCode = prefs.getString("capture_stock", "").orEmpty()
+            statusView.text = "截圖已保存於本機：" + file.name + "（標記股號：" + savedCode + "）。請確認畫面與輸入股號一致。"
         }
     }
 
@@ -199,6 +202,12 @@ class ChipKGeminiActivity : AppCompatActivity() {
             return
         }
         val text = analysisText() ?: return
+        val capturedCode = prefs.getString("capture_stock", "").orEmpty()
+        val requestedCode = stockInput.text.toString().trim()
+        if (capturedCode != requestedCode) {
+            Toast.makeText(this, "截圖標記股號 $capturedCode 與輸入股號 $requestedCode 不同，請重新擷取或選圖", Toast.LENGTH_LONG).show()
+            return
+        }
         val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("籌碼K線分析指令", text))
         val uri = FileProvider.getUriForFile(this, packageName + ".posters", file)
@@ -214,7 +223,7 @@ class ChipKGeminiActivity : AppCompatActivity() {
 
     private fun clearLatest() {
         selectedFile()?.delete()
-        prefs.edit().remove("capture").apply()
+        prefs.edit().remove("capture").remove("capture_stock").apply()
         preview.setImageDrawable(null)
         statusView.text = "本機截圖已清除。"
     }
