@@ -74,7 +74,14 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
             else->0 // includes a user's manual pause, completed and invalid-data states
         }
         internal fun recover(c:Context,id:String,token:String,now:Long=System.currentTimeMillis()){
-            val store=BtRobotStore(c);if(!store.current(id,token)||store.freshService(id,token,now))return
+            val store=BtRobotStore(c);if(!store.current(id,token))return
+            if(store.freshService(id,token,now)){
+                // Keep a single delayed watchdog while the service is healthy.
+                // If the OS kills its process without onDestroy, the next run
+                // can detect the stale heartbeat and resume via WorkManager.
+                scheduleRecovery(c,id,token,90)
+                return
+            }
             val work=WorkManager.getInstance(c).getWorkInfosForUniqueWork(WORK).get()
             val s=store.session(id)!!
             val action=recoveryAction(s.optString("state"),work.any{!it.state.isFinished},s.optLong("updatedAt"),now)
