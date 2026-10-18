@@ -20,6 +20,7 @@ import androidx.core.app.NotificationCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.rex.twboardingscanner.data.BackgroundScanLive
 import com.rex.twboardingscanner.data.BackgroundScanState
 import com.rex.twboardingscanner.data.FullMarketScanWorker
 import com.rex.twboardingscanner.data.HistoryRow
@@ -80,6 +81,7 @@ class MainActivity: AppCompatActivity() {
         }
     }
     private var backgroundLoadedFolder=""
+    private var backgroundPreviewVersion=0L
     private var backgroundResultLoading=false
     private val workers = Executors.newFixedThreadPool(6)
     private val enrichmentWorkers = Executors.newSingleThreadExecutor()
@@ -372,6 +374,7 @@ class MainActivity: AppCompatActivity() {
                 resultRadars=null;resultSectors=null;resultPolicy=null
                 selectedTab=6
                 backgroundLoadedFolder=""
+                backgroundPreviewVersion=0L
                 syncBackgroundScan()
                 render()
                 Toast.makeText(this,"背景掃描已啟動；切換其他 App 仍會繼續",Toast.LENGTH_SHORT).show()
@@ -386,6 +389,15 @@ class MainActivity: AppCompatActivity() {
         val s=BackgroundScanState.read(this)
         if(s.id.isBlank())return
         isScanning=s.active
+        if(s.active){
+            val preview=BackgroundScanLive.read(s.id)
+            if(preview!=null&&preview.version!=backgroundPreviewVersion){
+                backgroundPreviewVersion=preview.version
+                latest=preview.main
+                latestPaper=preview.paper
+                render()
+            }
+        }
         b.startScanButton.isEnabled=true
         b.startScanButton.text=if(s.active)"停止背景掃描" else "開始掃描"
         b.scanProgress.isIndeterminate=s.active&&s.total==0
