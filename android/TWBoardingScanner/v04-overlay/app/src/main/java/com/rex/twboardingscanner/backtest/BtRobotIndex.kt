@@ -11,20 +11,50 @@ internal class BtRobotIndex private constructor(private val series:List<BtSeries
     fun releasePrepared(){activeSignals?.dispose();activeSignals=null}
     private fun key(i:Int)="$fingerprint:chunk:$chunkSize:$i"
     private fun file(i:Int)=File(parts,"$i.bin.gz")
-    fun prepare(settings:BtSettings,cancel:()->Boolean={false},progress:(String)->Unit={}):BtPrepared {
+    private fun checkpointFolder(key:String):File {
+        val bytes=java.security.MessageDigest.getInstance("SHA-256")
+            .digest(("$fingerprint:$key").toByteArray(Charsets.UTF_8))
+        val hash=bytes.take(16).joinToString(""){"%02x".format(it)}
+        return File(parts,"prepared-$hash")
+    }
+
+    fun clearCheckpoint(key:String){
+        checkpointFolder(key).deleteRecursively()
+    }
+
+    fun prepare(settings:BtSettings,cancel:()->Boolean={false},progress:(String)->Unit={},
+                checkpointKey:String?=null):BtPrepared {
         releasePrepared()
-        val builder=DiskSignals.Builder(File(parts,"signals-${java.util.UUID.randomUUID()}"));var missing=0
-        try {
-        series.chunked(chunkSize).forEachIndexed { i,chunk->
-            check(!cancel()){"已暫停測試"}
-            val prepared=BtConditionIndex.read(file(i),chunk,key(i)).prepare(settings,cancel)
-            builder.append(prepared.signals)
-            missing+=prepared.pendingChecks
-            progress("分段套用條件 ${minOf((i+1)*chunkSize,series.size)}/${series.size} 檔")
+        val folder=checkpointKey?.let{checkpointFolder(it)}
+        folder?.mkdirs()
+        val builder=DiskSignals.Builder(File(parts,"signals-${java.util.UUID.randomUUID()}"))
+        var missing=0
+        try{
+            series.chunked(chunkSize).forEachIndexed{i,chunk->
+                check(!cancel()){"已暫停測試"}
+                val saved=folder?.let{File(it,"$i.bin.gz")}
+                val fingerprintKey="$fingerprint:prepared:$checkpointKey:$chunkSize:$i"
+                val cached=saved?.takeIf{it.isFile}?.let{
+                    runCatching{BtRobotPreparedChunk.read(it,fingerprintKey)}.getOrNull()
+                }
+                val slice=cached?:BtConditionIndex.read(file(i),chunk,key(i)).prepare(settings,cancel)
+                    .let{BtRobotPreparedChunk.Slice(it.signals,it.pendingChecks)}
+                    .also{computed->
+                        check(!cancel()){"已暫停測試"}
+                        if(saved!=null)BtRobotPreparedChunk.save(saved,fingerprintKey,computed.signals,computed.missing)
+                    }
+                missing+=slice.missing
+                builder.append(slice.signals)
+                progress("分段套用條件 ${minOf((i+1)*chunkSize,series.size)}/${series.size} 檔 · "+
+                    if(cached!=null)"恢復已保存分段" else "已完成並保存")
+            }
+            val signals=builder.finish()
+            activeSignals=signals
+            return BtPrepared(series,signals,days,missing)
+        }catch(error:Throwable){
+            builder.abort()
+            throw error
         }
-        val signals=builder.finish();activeSignals=signals
-        return BtPrepared(series,signals,days,missing)
-        } catch(error:Throwable){builder.abort();throw error}
     }
     companion object {
         fun open(series:List<BtSeries>,settings:BtSettings,parts:File,fingerprint:String,
