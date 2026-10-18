@@ -55,7 +55,7 @@ class BtRobotStore(private val c:Context){
             .put("settings",BtSettingsCodec.encode(s)).put("sourceJournalId",sourceJournalId?:JSONObject.NULL)
             .put("sweep",sweep?.json()?:JSONObject.NULL)
             .put("flowRevision",com.rex.twboardingscanner.data.TradeSideVolumeStore(c).revision()).put("tested",0).put("bestKey","").put("bestSeq",0).put("ack",0)
-            .put("seed",BigInteger(80,java.security.SecureRandom()).toString()).put("cursor","0").put("message","按開始測試啟動")
+            .put("seed",BigInteger(80,java.security.SecureRandom()).toString()).put("cursor","0").put("message","按開始測試啟動").put("owner","").put("heartbeatAt",0L).put("phaseSeq",0L).put("phaseDone",0)
             .put("analysisVersion",2).put("appVersion",c.packageManager.getPackageInfo(c.packageName,0).versionName).put("searchVersion",if(singleOption&&sweep==null)if(includeBaseline)10 else 9 else 8).put("required",required).put("forbidden",forbidden).put("engineVersion",BtRobotCheckpoint.ENGINE).put("cleared",0)
         check(db.insertOrThrow("sessions",null,ContentValues().apply{put("id",id);put("created",o.getLong("created"));put("json",o.toString())})>0)
         check(prefs.edit().putString("active",id).commit());id
@@ -82,15 +82,62 @@ class BtRobotStore(private val c:Context){
             val total=BtRobotSingleOption.total(o.optString("required","0"),o.optString("forbidden","0"),base.enabledRadars,BtRobotSingleOption.baselineFirst(o))
             require(BigInteger(o.getString("cursor"))==BigInteger.valueOf(o.getLong("tested"))&&BigInteger.valueOf(o.getLong("tested"))<=total){"逐項測試斷點不一致"}
         }
-        val token=UUID.randomUUID().toString();putSession(o.put("state","RUNNING").put("token",token).put("message","排入測試工作…").put("updatedAt",System.currentTimeMillis()));token
+        val token=UUID.randomUUID().toString();putSession(o.put("state","RUNNING").put("token",token).put("owner","").put("heartbeatAt",0L).put("message","排入測試工作…").put("updatedAt",System.currentTimeMillis()));token
     }
     fun current(id:String,token:String)=synchronized(lock){session(id)?.let{it.optString("token")==token&&token.isNotEmpty()&&it.optString("state") in setOf("RUNNING","RETRY")}?:false}
-    fun pause(id:String)=synchronized(lock){session(id)?.let{if(it.optString("state")!="DONE")putSession(it.put("state","PAUSED").put("token","").put("message","已暫停；完成組合及歷史資料保留"))}}
-    fun status(id:String,token:String,message:String,state:String="RUNNING")=synchronized(lock){
-        if(current(id,token))putSession(session(id)!!.put("message",message).put("state",state).put("updatedAt",System.currentTimeMillis()))
+
+    @Synchronized fun owns(id:String,token:String,owner:String):Boolean=synchronized(lock){
+        current(id,token)&&session(id)?.optString("owner")==owner&&owner.isNotBlank()
     }
-    fun coverage(id:String,token:String,loaded:Int,requested:Int,digest:String)=synchronized(lock){
-        if(current(id,token))putSession(session(id)!!.put("loaded",loaded).put("requested",requested).put("datasetSha256",digest))
+    /** Exclusive execution lease for either the foreground service or fallback Worker. */
+    fun claim(id:String,token:String,owner:String,now:Long=System.currentTimeMillis(),staleMs:Long=45000L):Boolean=synchronized(lock){
+        if(!current(id,token)||owner.isBlank())return@synchronized false
+        val s=session(id)!!
+        val old=s.optString("owner")
+        val age=now-s.optLong("heartbeatAt")
+        if(old.isNotBlank()&&old!=owner&&age in 0 until staleMs)return@synchronized false
+        putSession(s.put("owner",owner).put("heartbeatAt",now).put("updatedAt",now))
+        true
+    }
+    fun freshService(id:String,token:String,now:Long=System.currentTimeMillis()):Boolean=synchronized(lock){
+        val s=session(id)?:return@synchronized false
+        current(id,token)&&s.optString("owner").startsWith("service:")&&
+            s.optLong("heartbeatAt")>0L&&now-s.optLong("heartbeatAt") in 0L..45000L
+    }
+    fun heartbeat(id:String,token:String,owner:String,now:Long=System.currentTimeMillis()):Boolean=synchronized(lock){
+        if(!owns(id,token,owner))return@synchronized false
+        val s=session(id)!!.put("heartbeatAt",now)
+        putSession(s)
+        true
+    }
+    fun release(id:String,token:String,owner:String,message:String):Boolean=synchronized(lock){
+        if(!owns(id,token,owner))return@synchronized false
+        putSession(session(id)!!.put("owner","").put("heartbeatAt",0L)
+            .put("state","RETRY").put("message",message).put("updatedAt",System.currentTimeMillis()))
+        true
+    }
+    /** Stage progress is monotonic for an uncommitted trial even after Android restarts. */
+    fun stage(id:String,token:String,owner:String,message:String,done:Int,total:Int):Boolean=synchronized(lock){
+        if(!owns(id,token,owner))return@synchronized false
+        val s=session(id)!!
+        val sequence=s.optLong("tested")+1L
+        val previous=if(s.optLong("phaseSeq")==sequence)s.optInt("phaseDone")else 0
+        val current=done.coerceIn(0,total.coerceAtLeast(0))
+        val progress=maxOf(previous,current)
+        val label=if(current<previous)
+            "恢復已保存的條件分段 $progress/$total 檔（重新載入快取 $current/$total）"
+        else message
+        putSession(s.put("phaseSeq",sequence).put("phaseDone",progress).put("phaseTotal",total)
+            .put("message",label).put("state","RUNNING").put("updatedAt",System.currentTimeMillis()))
+        true
+    }
+    fun pause(id:String)=synchronized(lock){session(id)?.let{if(it.optString("state")!="DONE")putSession(it.put("state","PAUSED").put("token","").put("owner","").put("heartbeatAt",0L).put("message","已暫停；完成組合及歷史資料保留"))}}
+
+    fun status(id:String,token:String,message:String,state:String="RUNNING",owner:String?=null)=synchronized(lock){
+        if(current(id,token)&&(owner==null||owns(id,token,owner)))putSession(session(id)!!.put("message",message).put("state",state).put("updatedAt",System.currentTimeMillis()))
+    }
+    fun coverage(id:String,token:String,loaded:Int,requested:Int,digest:String,owner:String?=null)=synchronized(lock){
+        if(current(id,token)&&(owner==null||owns(id,token,owner)))putSession(session(id)!!.put("loaded",loaded).put("requested",requested).put("datasetSha256",digest))
     }
     fun seen(id:String,key:String)=synchronized(lock){db.rawQuery("SELECT 1 FROM trials WHERE session=? AND key=? LIMIT 1",arrayOf(id,key)).use{it.moveToFirst()}}
     fun next(id:String):BtRobotSpace.Candidate?=synchronized(lock){
@@ -151,8 +198,8 @@ class BtRobotStore(private val c:Context){
         }finally{db.endTransaction()};removed
     }
     internal fun <T> locked(action:(SQLiteDatabase)->T):T=synchronized(lock){action(db)}
-    fun commit(id:String,token:String,candidate:BtRobotSpace.Candidate,result:BtResult,started:Long,signalCounts:Map<com.rex.twboardingscanner.domain.RadarType,Int> = emptyMap()):Boolean=synchronized(lock){
-        if(!current(id,token)||seen(id,candidate.key))return@synchronized false
+    fun commit(id:String,token:String,candidate:BtRobotSpace.Candidate,result:BtResult,started:Long,signalCounts:Map<com.rex.twboardingscanner.domain.RadarType,Int> = emptyMap(),owner:String?=null):Boolean=synchronized(lock){
+        if(!current(id,token)||(owner!=null&&!owns(id,token,owner))||seen(id,candidate.key))return@synchronized false
         BtRobotSpace.validate(result.settings)
         require(result.run.profit.isFinite())
         val s=session(id)!!
@@ -191,7 +238,7 @@ class BtRobotStore(private val c:Context){
         try{
             db.insertOrThrow("trials",null,ContentValues().apply{put("session",id);put("key",candidate.key);put("summary",summary.toString());put("report",bytes);put("radars",RobotHistoryCategory.mask(BtSettingsCodec.encode(result.settings),candidate.key,summary));put("net_profit",result.run.profit)})
             if(better)s.put("bestKey",candidate.key).put("bestProfit",result.run.profit).put("bestSeq",seq)
-            s.put("updatedAt",finished).put("tested",seq).put("cursor",candidate.cursor.toString())
+            s.put("updatedAt",finished).put("tested",seq).put("cursor",candidate.cursor.toString()).put("phaseSeq",0L).put("phaseDone",0)
                 .put("message",if(BtRobotSingleOption.active(s))"逐項測試已完成第 $seq 組 · ${BtRobotSingleOption.label(s.optString("required","0"),candidate.key,base.enabledRadars)}"
                     else if(sweep==null)"已完成第 $seq 組；持續搜尋更高收益"
                     else "參數範圍第 $seq／${sweep.total} 組完成 · ${sweep.parseKey(candidate.key).label}")

@@ -63,6 +63,7 @@ class BtRobotActivity:AppCompatActivity(){
     private lateinit var topButton:com.google.android.material.button.MaterialButton
     private var fieldsSession=""
     private var busy=false;private var recovering=false;private var exportId=""
+    private var lastForegroundRecoverAt=0L
     private var stamp="";private var lastId="";private var page=0
     private var screenFailed=false
     private lateinit var scanAnimation:RobotScanPanel
@@ -479,8 +480,9 @@ class BtRobotActivity:AppCompatActivity(){
         busy=true;startButton.isEnabled=false
         scanAnimation.update(true,"準備機器人掃描文件…");NeonUi.reveal(scanAnimation)
         Thread{
-            val result=runCatching{val id=policySession(params,grid,range);BtRobotWorker.start(this,id)}
+            val prepared=runCatching{policySession(params,grid,range)}
             runOnUiThread{if(!isFinishing&&!isDestroyed){
+                val result=prepared.mapCatching{id->BtRobotWorker.start(this,id)}
                 busy=false
                 result.onFailure{Toast.makeText(this,"無法開始：${it.message}",Toast.LENGTH_LONG).show()}
                 render()
@@ -567,9 +569,11 @@ class BtRobotActivity:AppCompatActivity(){
             policyChanged->"禁股／限價已更新；按開始將建立新批次並沿用快取"
             else->s?.optString("message")?:"按開始測試，自動尋找更高收益組合"
         }
-        counts.text=if(effectiveSweep==null)
+        val savedStage=if(s!=null&&s.optLong("phaseSeq")==tested+1&&s.optInt("phaseTotal")>0)
+            "\n本輪已保存 ${s?.optInt("phaseDone")?:0} / ${s?.optInt("phaseTotal")?:0} 檔條件分段" else ""
+        counts.text=(if(effectiveSweep==null)
             "逐項測試共 ${num(total)} 輪\n已完成 ${num(tested)} 輪 · 尚待 ${num(remaining)} 輪\n已清理 ${num(if(samePlan)s?.optLong("cleared")?:0L else 0L)} 組零收益"
-        else "參數測試進度：$tested / ${effectiveSweep.total} 組（${String.format(Locale.TAIWAN,"%.1f",tested.toDouble()/effectiveSweep.total*100)}%）\n剩餘 ${num(remaining)} 組 · 已清理 ${num(s?.optLong("cleared")?:0L)} 組"
+        else "參數測試進度：$tested / ${effectiveSweep.total} 組（${String.format(Locale.TAIWAN,"%.1f",tested.toDouble()/effectiveSweep.total*100)}%）\n剩餘 ${num(remaining)} 組 · 已清理 ${num(s?.optLong("cleared")?:0L)} 組")+savedStage
         val key=s?.optString("bestKey").orEmpty()
         best.text=if(key.isEmpty())"目前已測最佳：—" else "目前已測最佳\n${signed(s!!.getDouble("bestProfit"))} 元"+
             (sessionSweep?.let{"\n${it.parseKey(key).label}"}?:"")
@@ -838,8 +842,20 @@ class BtRobotActivity:AppCompatActivity(){
         if(recovering||busy)return
         val s=store.session()?:return
         if(s.optString("state") !in setOf("RUNNING","RETRY"))return
+        val id=s.getString("id");val token=s.optString("token")
+        if(token.isBlank()||store.freshService(id,token))return
+        val now=System.currentTimeMillis()
+        val age=now-s.optLong("heartbeatAt")
+        if(s.optString("owner").isNotBlank()&&age in 0L..45000L)return
+        if(now-lastForegroundRecoverAt<30000L)return
+        lastForegroundRecoverAt=now
         recovering=true
-        Thread{runCatching{BtRobotWorker.recover(this,s.getString("id"),s.optString("token"))};runOnUiThread{recovering=false}}.start()
+        runCatching{BtRobotWorker.resumeForeground(this,id,token)}
+            .onFailure{
+                android.util.Log.w("BtRobotActivity","Unable to restore foreground backtest; trying scheduled recovery",it)
+                Thread{runCatching{BtRobotWorker.recover(applicationContext,id,token)}}.start()
+            }
+        recovering=false
     }
     private fun radarLabel(session:JSONObject):String = BtSettingsCodec.decode(session.getJSONObject("settings")).enabledRadars
         .sortedBy{it.ordinal}.joinToString(""){it.name.take(1)}
