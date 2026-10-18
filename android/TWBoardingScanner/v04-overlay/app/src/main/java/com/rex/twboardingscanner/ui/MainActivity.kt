@@ -305,6 +305,11 @@ class MainActivity: AppCompatActivity() {
         val body=NeonUi.vertical(this).apply{background=NeonUi.backdrop(this@MainActivity)}
         body.addView(NeonUi.label(this,"條件與工具",23f,NeonUi.ink,true).apply{setPadding(dp(16),dp(12),dp(16),dp(4))})
         body.addView(NeonUi.label(this,"入場、下車與股票管理集中設定",12f).apply{setPadding(dp(16),0,dp(16),dp(8))})
+        body.addView(NeonUi.button(this,"背景執行權限設定 · 通知／電池",NeonUi.cyan){
+            Toast.makeText(this,"請開啟通知，並在電池設定中允許背景使用或設為不受限制",Toast.LENGTH_LONG).show()
+            startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                android.net.Uri.parse("package:"+packageName)))
+        }.apply{tag="background-permission-settings"})
         body.addView(NeonUi.button(this,"匯入內／外盤成交量 CSV（主動買賣 ≥1.5 倍）",NeonUi.cyan){
             startActivity(android.content.Intent(this,TradeSideVolumeImportActivity::class.java))
         }.apply{tag="scan-import-trade-side"})
