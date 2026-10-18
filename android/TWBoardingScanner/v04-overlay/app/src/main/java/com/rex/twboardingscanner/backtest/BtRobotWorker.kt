@@ -34,7 +34,7 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
         }
         internal fun request(id:String,token:String,delay:Long=0,userStarted:Boolean=false):OneTimeWorkRequest {
             val builder=OneTimeWorkRequestBuilder<BtRobotWorker>()
-                .setInputData(workDataOf("session" to id,"token" to token))
+                .setInputData(workDataOf("session" to id,"token" to token,"userStarted" to userStarted))
                 .setInitialDelay(delay,TimeUnit.SECONDS).setBackoffCriteria(BackoffPolicy.LINEAR,10,TimeUnit.SECONDS)
             if(RobotWorkPolicy.expedited(Build.VERSION.SDK_INT,userStarted,delay))builder.setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             return builder.build()
@@ -84,7 +84,15 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
         val expired={RobotWorkPolicy.expired(sliceStarted,android.os.SystemClock.elapsedRealtime())}
         val interrupted={cancel()||expired()}
         try{
-            if(RobotWorkPolicy.promoteForeground(Build.VERSION.SDK_INT))setForegroundAsync(foreground()).get()
+            if(RobotWorkPolicy.promoteForeground(Build.VERSION.SDK_INT,inputData.getBoolean("userStarted",false))){
+                try { setForegroundAsync(foreground()).get() }
+                catch(e:Exception){
+                    if(!RobotWorkPolicy.foregroundDenied(e))throw e
+                    // The platform may reject a foreground promotion after the user has left the app.
+                    // WorkManager is still responsible for executing/rescheduling this saved batch.
+                    store.status(id,token,"系統限制常駐通知，已改用背景排程；結果和斷點仍會保存")
+                }
+            }
             val session=store.session(id)!!
             require(BtRobotCheckpoint.compatible(session)){"回測引擎版本不相容；原紀錄可檢閱，請建立新測試"}
             require(session.optInt("analysisVersion")>=2){"條件快取檢核已更新；請按開始建立新批次，舊績效保留"}
