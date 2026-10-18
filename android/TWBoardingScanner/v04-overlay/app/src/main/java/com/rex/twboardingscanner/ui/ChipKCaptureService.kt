@@ -147,7 +147,8 @@ class ChipKCaptureService : Service() {
                 dir.listFiles()?.filter { it.isFile }?.sortedByDescending { it.lastModified() }
                     ?.drop(20)?.forEach { it.delete() }
                 getSharedPreferences("chipk-gemini", 0).edit()
-                    .putString("capture", file.name).putString("stock", stockCode).commit()
+                    .putString("capture", file.name).putString("capture_stock", stockCode)
+                    .putString("stock", stockCode).commit()
                 finishCapture(true, "已擷取 $stockCode：點擊檢查圖片並分享到 Gemini")
             } catch (e: Exception) {
                 finishCapture(false, "畫面擷取失敗：" + (e.message ?: "未知錯誤"))
