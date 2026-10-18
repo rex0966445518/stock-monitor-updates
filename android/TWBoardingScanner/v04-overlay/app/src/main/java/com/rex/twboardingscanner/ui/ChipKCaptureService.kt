@@ -137,7 +137,7 @@ class ChipKCaptureService : Service() {
         val elapsed = System.currentTimeMillis() - begunAt
         val stillSearching = ChipKSearchRequest.get(this) != null
         if (elapsed < 12_000 || (stillSearching && elapsed < 45_000)) return
-        val photo = captureBitmap()
+        val photo = runCatching { captureBitmap() }.getOrNull()
         if (photo == null) {
             if (elapsed >= 50_000) finishCapture(false, "尚未取得可用畫面")
             return
@@ -145,7 +145,7 @@ class ChipKCaptureService : Service() {
         try {
             val dir = File(cacheDir, "chipk").apply { mkdirs() }
             val file = File(dir, "chipk-$stockCode-" + System.currentTimeMillis() + ".jpg")
-            photo.outputStream().use { output ->
+            file.outputStream().use { output ->
                 check(photo.bitmap.compress(Bitmap.CompressFormat.JPEG,92,output))
             }
             dir.listFiles()?.filter { it.isFile }?.sortedByDescending { it.lastModified() }
@@ -189,7 +189,7 @@ class ChipKCaptureService : Service() {
         if (session.readyIndex != index || session.readyAt == 0L ||
             now - session.readyAt < 1250 || now - session.seenAt > 1700) return
 
-        val photo = captureBitmap()
+        val photo = runCatching { captureBitmap() }.getOrNull()
         if (photo == null) {
             pageCaptureAttempts++
             if (pageCaptureAttempts >= 7)
