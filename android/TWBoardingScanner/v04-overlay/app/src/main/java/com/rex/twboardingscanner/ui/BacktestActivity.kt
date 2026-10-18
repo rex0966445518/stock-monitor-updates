@@ -200,7 +200,7 @@ class BacktestActivity:AppCompatActivity(){
             Toast.makeText(this,"請至少亮起一區且該區有勾選條件",Toast.LENGTH_LONG).show();return
         }
         val data=workDataOf("id" to id)
-        val request=OneTimeWorkRequestBuilder<BacktestWorker>().setInputData(data).setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build()
+        val request=OneTimeWorkRequestBuilder<BacktestWorker>().setInputData(data).setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST).build()
         // REPLACE also handles a process stopped before the old progress label was saved.
         runCatching{store.begin(id,s);WorkManager.getInstance(this).enqueueUniqueWork("historical-backtest",ExistingWorkPolicy.REPLACE,request)}
             .onFailure{store.update(id,"無法開始回測：${it.message}","ERROR");Toast.makeText(this,"無法開始：${it.message}",Toast.LENGTH_LONG).show()}
