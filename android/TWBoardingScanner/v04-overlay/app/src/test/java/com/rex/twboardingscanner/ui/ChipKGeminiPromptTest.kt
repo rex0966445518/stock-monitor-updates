@@ -11,7 +11,7 @@ class ChipKGeminiPromptTest {
         assertTrue(prompt.contains("未提供"))
         assertTrue(prompt.contains("券商分點"))
         assertTrue(prompt.contains("資料不足"))
-        assertTrue(prompt.contains("並非上漲機率"))
+        assertTrue(prompt.contains("絕非上漲機率"))
     }
 
     @Test(expected = IllegalArgumentException::class)
