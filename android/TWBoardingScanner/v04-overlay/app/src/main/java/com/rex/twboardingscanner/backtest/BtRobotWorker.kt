@@ -64,8 +64,7 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
         fun recoverAfterStop(c:Context,id:String,token:String){
             val store=BtRobotStore(c);if(!store.current(id,token)||store.freshService(id,token))return
             store.status(id,token,"測試中斷，備援工作將讀取已儲存的條件分段","RETRY")
-            val request=OneTimeWorkRequestBuilder<BtRobotRecoveryWorker>().setInputData(workDataOf("session" to id,"token" to token)).setInitialDelay(10,TimeUnit.SECONDS).build()
-            WorkManager.getInstance(c).enqueueUniqueWork(WORK+"-recover",ExistingWorkPolicy.REPLACE,request)
+            scheduleRecovery(c,id,token,30)
         }
         internal fun recoveryAction(state:String,scheduled:Boolean,updatedAt:Long,now:Long):Int = when{
             scheduled->0
