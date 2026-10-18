@@ -211,3 +211,25 @@ class OptionalLearningRecoveryTests(unittest.TestCase):
             self.assertTrue(any(kind=='auto_status' and '股名補讀失敗' in value for _,kind,value in messages))
             self.assertTrue(any(kind=='auto_phase' and '第2輪' in value for _,kind,value in messages))
             self.assertTrue((Path(folder)/'scan-interruptions.jsonl').exists())
+
+class PriorDayStartTests(unittest.TestCase):
+    def test_f8_start_archives_prior_day_and_enters_today_scan_without_dialog(self):
+        import json
+        from unittest.mock import Mock
+        cfg=dict(DEFAULT,auto_config=dict(title='TEST RANK',window_size=[800,600],combo=[0,0,.2,.1],menu=[0,.1,.3,.5],table=[0,.2,1,.8],rankings=['漲幅排行'],seconds=3,pages=1,full_table=True))
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'scan-checkpoint.json'
+            old=dict(version=1,day='2000-01-01',context=scan_context(cfg),cursor=dict(cycle=8,rank=0,table={'segment':9,'codes':['2330']}),ui={'old':'do not restore'})
+            path.write_text(json.dumps(old),encoding='utf-8');original=path.read_bytes()
+            app=UI(cfg);app.restore_scan_snapshot=Mock();app.say=Mock()
+            with patch('MitakeDetector.BASE',Path(folder)),patch('auto_ui.WindowsController',Controller),patch('auto_ui.RankingSwitcher',Switcher),patch('tkinter.messagebox.showerror') as dialog,patch('table_scan.scan_table',return_value=([Quote('2330','TEST',100,2,1500,1,1)],0)) as scan:
+                app.start_auto();app.worker_thread.join(3)
+                self.assertFalse(app.worker_thread.is_alive());dialog.assert_not_called();scan.assert_called_once()
+                self.assertIsNone(scan.call_args.kwargs['resume'])
+                app.restore_scan_snapshot.assert_not_called()
+            archives=list((Path(folder)/'scan-history').glob('*.json'))
+            self.assertEqual(len(archives),1);self.assertEqual(archives[0].read_bytes(),original)
+            self.assertEqual(ScanCheckpoint(path).data['cursor']['cycle'],2)  # First ranking completed; next cycle is queued.
+            report=json.loads((Path(folder)/'scan-interruptions.jsonl').read_text().splitlines()[-1])
+            self.assertEqual(report['cycle'],1)
+            self.assertTrue(any('開始今日第1輪' in call.args[0] for call in app.say.call_args_list))

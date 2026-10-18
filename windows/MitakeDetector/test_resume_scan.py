@@ -62,3 +62,34 @@ class ResumeTests(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+
+class DayRolloverTests(unittest.TestCase):
+    def test_prior_day_is_archived_exactly_then_today_starts_fresh(self):
+        import json
+        cfg=dict(DEFAULT,auto_config={'rankings':['漲幅排行']});context=scan_context(cfg)
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'resume.json'
+            old=dict(version=1,day='2000-01-01',context=context,cursor=dict(cycle=8,rank=0,table={'quotes':[{'code':'2330'}]}),ui={'records':['old-observation'],'cooldown':'old'})
+            path.write_text(json.dumps(old,ensure_ascii=False),encoding='utf-8');original=path.read_bytes()
+            store=ScanCheckpoint(path)
+            self.assertIsNone(store.resume(context))
+            self.assertEqual(store.archived_path.read_bytes(),original)
+            self.assertFalse(path.exists());self.assertEqual(store.data,{})
+            cursor=dict(cycle=1,rank=0,table=None);store.update(context,cursor)
+            today=ScanCheckpoint(path)
+            self.assertEqual(today.resume(context),cursor)
+            self.assertNotIn('ui',today.data)
+            self.assertEqual(len(list((Path(folder)/'scan-history').glob('*.json'))),1)
+    def test_archive_failure_keeps_original_and_refuses_to_overwrite(self):
+        import json
+        from unittest.mock import patch
+        context=scan_context(dict(DEFAULT,auto_config={'rankings':['漲幅排行']}))
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'resume.json'
+            old=dict(version=1,day='2000-01-01',context=context,cursor=dict(cycle=8,rank=0,table=None))
+            path.write_text(json.dumps(old),encoding='utf-8');original=path.read_bytes();store=ScanCheckpoint(path)
+            with patch('resume_scan.os.fsync',side_effect=OSError('disk full')):
+                with self.assertRaisesRegex(OSError,'原進度仍保留'):store.resume(context)
+            self.assertEqual(path.read_bytes(),original);self.assertEqual(store.data,old)
+            self.assertIsNone(store.archived_path)
+            self.assertFalse(list((Path(folder)/'scan-history').glob('*.json')))

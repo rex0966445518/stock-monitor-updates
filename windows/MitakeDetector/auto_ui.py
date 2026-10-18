@@ -599,6 +599,7 @@ class AutoUI:
                 store=ScanCheckpoint(BASE/'scan-checkpoint.json');saved=store.resume(context)
                 self.scan_checkpoint=store
             except (ValueError,OSError) as exc:messagebox.showerror('保留前次進度',str(exc));return
+        new_day=bool(store and store.archived_path)
         if saved:
             self.generation+=1;token=self.generation;self.stop_event=threading.Event()
             self.mode='接續自動掃描'
@@ -608,13 +609,14 @@ class AutoUI:
             self.scan_total_elapsed=0
             token=self.reset('自動輪切測試' if test_only else '自動輪切')
             self.auto_engines={}
+        if new_day:self.say('前次日期進度已完整封存，開始今日第1輪；歷史檔：'+str(store.archived_path))
         from task_progress import SCAN_GOAL,goal_conditions
         self.say(SCAN_GOAL+'｜'+goal_conditions(cfg))
         self.auto_active=True
-        self.events.put((token,'auto_phase','掃描中｜正在啟動或接續前次進度'))
+        self.events.put((token,'auto_phase','掃描中｜前次進度已封存，正在啟動今日新掃描' if new_day else '掃描中｜正在啟動或接續前次進度'))
         stop=self.stop_event;target=self.auto_hwnd
         self.root.iconify()
-        self.show_task_progress(target,'接續前次斷點，正在核對畫面…' if saved else '準備開始自動輪切…')
+        self.show_task_progress(target,'接續前次斷點，正在核對畫面…' if saved else '前次進度已封存，開始今日第1輪…' if new_day else '準備開始自動輪切…')
         if announce:self.announce_task('開始測試輪切' if test_only else ('接續前次掃描' if saved else '開始執行掃描'))
         def job():
             nonlocal saved
