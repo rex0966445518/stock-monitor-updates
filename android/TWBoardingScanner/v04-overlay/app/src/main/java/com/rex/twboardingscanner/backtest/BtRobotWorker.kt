@@ -10,7 +10,6 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.work.*
 import com.rex.twboardingscanner.ui.BtRobotActivity
-import java.security.MessageDigest
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -18,19 +17,19 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
     companion object {
         const val WORK="backtest-robot"
         const val NOTE="固定區間內調整條件，屬樣本內最佳化，可能過度擬合；目前已測最佳不等於全組合最高或未來收益。現存上市櫃及目前產業分類有存活偏差；已勾選財報／法人缺歷史證據即不通過。A/B/E/F 排除當日日線，C 包含當日；C 同收盤成交屬理想化假設。交易時刻為日線模型，並非逐筆成交。扣買賣費稅及滑價；留倉以扣估計賣出費稅估值。股息與折讓金列應收不再投資；超過 5 個日曆日可扣費稅保本賣出，虧損續抱；另有下車條件時，以前一完整日線判斷、下一可交易日開盤模擬認賠出場。"
-        private data class Runtime(val id:String,val data:BacktestData.Loaded,val index:BtRobotIndex,val execution:BtExecutionIndex,val guards:Map<java.time.LocalDate,com.rex.twboardingscanner.domain.MarketGuardDecision>){
-            // A grid tests identical ABC and historical observations each time.
-            // Prepare once per loaded snapshot; only holdings and take-profit are varied.
-            var gridPrepared:BtPrepared?=null
-        }
-        private val runLock=Any()
-        private var cached:Runtime?=null
         fun start(c:Context,id:String){
             val store=BtRobotStore(c)
             require(BtSettingsCodec.decode(store.session(id)!!.getJSONObject("settings")).stockPolicy==com.rex.twboardingscanner.data.StockPolicyStore(c).read()){"禁股／限價已變更，請從機器人頁面開始新批次"}
             require(BtSettingsCodec.decode(store.session(id)!!.getJSONObject("settings")).marketGuardVersion>0){"舊批次未啟用大盤保護，請從機器人頁面開始新批次"}
             val token=store.resume(id)
-            try{enqueue(c,id,token,ExistingWorkPolicy.REPLACE,userStarted=true)}catch(e:Exception){store.status(id,token,"無法排入測試：${e.message}","ERROR");throw e}
+            try{
+                BtRobotService.start(c,id,token)
+                scheduleRecovery(c,id,token,90)
+            }catch(e:Exception){
+                store.status(id,token,"前景服務無法啟動，切換系統備援排程："+(e.message?:"").take(120),"RETRY")
+                try{enqueue(c,id,token,ExistingWorkPolicy.REPLACE,userStarted=true)}
+                catch(error:Exception){store.status(id,token,"無法排入機器人工作："+error.message,"ERROR");throw error}
+            }
         }
         internal fun request(id:String,token:String,delay:Long=0,userStarted:Boolean=false):OneTimeWorkRequest {
             val builder=OneTimeWorkRequestBuilder<BtRobotWorker>()
@@ -42,10 +41,29 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
         private fun enqueue(c:Context,id:String,token:String,policy:ExistingWorkPolicy,delay:Long=0,userStarted:Boolean=false){
             WorkManager.getInstance(c).enqueueUniqueWork(WORK,policy,request(id,token,delay,userStarted)).result.get()
         }
-        fun pause(c:Context,id:String){BtRobotStore(c).pause(id);WorkManager.getInstance(c).cancelUniqueWork(WORK);WorkManager.getInstance(c).cancelUniqueWork(WORK+"-recover")}
+        fun pause(c:Context,id:String){
+            BtRobotStore(c).pause(id)
+            c.applicationContext.stopService(Intent(c.applicationContext,BtRobotService::class.java))
+            WorkManager.getInstance(c).cancelUniqueWork(WORK)
+            WorkManager.getInstance(c).cancelUniqueWork(WORK+"-recover")
+        }
+        fun resumeForeground(c:Context,id:String,token:String){
+            val store=BtRobotStore(c)
+            if(!store.current(id,token)||store.freshService(id,token))return
+            BtRobotService.start(c,id,token)
+            scheduleRecovery(c,id,token,90)
+        }
+        fun scheduleRecovery(c:Context,id:String,token:String,delay:Long=90){
+            if(!BtRobotStore(c).current(id,token))return
+            val request=OneTimeWorkRequestBuilder<BtRobotRecoveryWorker>()
+                .setInputData(workDataOf("session" to id,"token" to token))
+                .setInitialDelay(delay,TimeUnit.SECONDS).build()
+            WorkManager.getInstance(c).enqueueUniqueWork(WORK+"-recover",
+                ExistingWorkPolicy.APPEND_OR_REPLACE,request)
+        }
         fun recoverAfterStop(c:Context,id:String,token:String){
-            val store=BtRobotStore(c);if(!store.current(id,token))return
-            store.status(id,token,"測試中斷，10 秒後自動接續；沿用歷史條件快取","RETRY")
+            val store=BtRobotStore(c);if(!store.current(id,token)||store.freshService(id,token))return
+            store.status(id,token,"測試中斷，備援工作將讀取已儲存的條件分段","RETRY")
             val request=OneTimeWorkRequestBuilder<BtRobotRecoveryWorker>().setInputData(workDataOf("session" to id,"token" to token)).setInitialDelay(10,TimeUnit.SECONDS).build()
             WorkManager.getInstance(c).enqueueUniqueWork(WORK+"-recover",ExistingWorkPolicy.REPLACE,request)
         }
@@ -56,7 +74,7 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
             else->0 // includes a user's manual pause, completed and invalid-data states
         }
         internal fun recover(c:Context,id:String,token:String,now:Long=System.currentTimeMillis()){
-            val store=BtRobotStore(c);if(!store.current(id,token))return
+            val store=BtRobotStore(c);if(!store.current(id,token)||store.freshService(id,token,now))return
             val work=WorkManager.getInstance(c).getWorkInfosForUniqueWork(WORK).get()
             val s=store.session(id)!!
             val action=recoveryAction(s.optString("state"),work.any{!it.state.isFinished},s.optLong("updatedAt"),now)
@@ -68,135 +86,50 @@ class BtRobotWorker(c:Context,p:WorkerParameters):Worker(c,p){
             }
         }
     }
-    override fun doWork():Result = synchronized(runLock){
-        val id=inputData.getString("session")?:return@synchronized Result.failure()
-        val token=inputData.getString("token")?:return@synchronized Result.failure()
+    override fun doWork():Result {
+        val id=inputData.getString("session")?:return Result.failure()
+        val token=inputData.getString("token")?:return Result.failure()
         val store=BtRobotStore(applicationContext)
-        val policy=com.rex.twboardingscanner.data.StockPolicyStore(applicationContext)
-        val frozenSession=store.session(id)
-        val frozen=frozenSession?.let{BtSettingsCodec.decode(it.getJSONObject("settings")).stockPolicy}
-        val flowSource=com.rex.twboardingscanner.data.TradeSideVolumeStore(applicationContext)
-        val flowRevision=frozenSession?.optString("flowRevision",flowSource.revision())?:flowSource.revision()
-        val cancellation=RobotCancellation({isStopped},{!store.current(id,token)||policy.read()!=frozen||flowSource.revision()!=flowRevision})
-        val cancel={cancellation.check()}
-        if(cancel())return@synchronized Result.success()
-        val sliceStarted=android.os.SystemClock.elapsedRealtime()
-        val expired={RobotWorkPolicy.expired(sliceStarted,android.os.SystemClock.elapsedRealtime())}
-        val interrupted={cancel()||expired()}
+        if(!store.current(id,token))return Result.success()
+        if(store.freshService(id,token))return Result.success()
+        val owner="worker:"+java.util.UUID.randomUUID()
+        if(!store.claim(id,token,owner))return Result.retry()
         try{
             if(RobotWorkPolicy.promoteForeground(Build.VERSION.SDK_INT,inputData.getBoolean("userStarted",false))){
-                try { setForegroundAsync(foreground()).get() }
+                try{setForegroundAsync(foreground()).get()}
                 catch(e:Exception){
                     if(!RobotWorkPolicy.foregroundDenied(e))throw e
-                    // The platform may reject a foreground promotion after the user has left the app.
-                    // WorkManager is still responsible for executing/rescheduling this saved batch.
-                    store.status(id,token,"系統限制常駐通知，已改用背景排程；結果和斷點仍會保存")
+                    store.status(id,token,"系統暫時限制備援常駐通知；等待恢復排程","RETRY",owner)
+                    return Result.retry()
                 }
             }
-            val session=store.session(id)!!
-            require(BtRobotCheckpoint.compatible(session)){"回測引擎版本不相容；原紀錄可檢閱，請建立新測試"}
-            require(session.optInt("analysisVersion")>=2){"條件快取檢核已更新；請按開始建立新批次，舊績效保留"}
-            val base=BtSettingsCodec.decode(session.getJSONObject("settings"));BtRobotSpace.validate(base)
-            val sweep=BtRobotSweep.read(session.optJSONObject("sweep"))
-            require(base.marketGuardVersion>0){"舊批次未啟用大盤保護；按開始建立新批次，原紀錄保留"}
-            var lastProgress=0L
-            val progress={msg:String->check(!interrupted()){ "已暫停測試" };val now=System.currentTimeMillis();if(now-lastProgress>=800){store.status(id,token,msg);lastProgress=now}}
-            if(cached?.id!=id){cached?.index?.releasePrepared();cached=null;DiskDailyBars.clearCache()} // Release the previous session before reading another market snapshot.
-            val runtime=cached?.takeIf{it.id==id}?:run{
-                val file=store.dataset(id)
-                val data=if(file.exists()){
-                    progress("讀取此測試的固定歷史資料…")
-                    BtRobotDataset.read(file,progress,interrupted,diskBacked=true)
-                }else{
-                    require(session.optLong("tested")==0L){"原歷史資料已遺失，不能接續比較；請建立新測試"}
-                    val loaded=BacktestData(applicationContext).load(base,progress,interrupted,barDirectory=java.io.File(file.path+".bars"))
-                    check(!cancel()){ "已暫停測試" };BtRobotDataset.write(file,loaded);loaded
+            return when(BtRobotRunner.runSlice(applicationContext,id,token,owner,
+                stopped={isStopped},onBest={seq,profit->notifyBest(seq,profit)})){
+                BtRobotRunner.Outcome.DONE,BtRobotRunner.Outcome.STOP->Result.success()
+                BtRobotRunner.Outcome.FAILED->Result.failure()
+                BtRobotRunner.Outcome.CONTINUE->{
+                    if(store.owns(id,token,owner))
+                        enqueue(applicationContext,id,token,ExistingWorkPolicy.APPEND_OR_REPLACE)
+                    Result.success()
                 }
-                require(data.market.isNotEmpty()){"缺少此批次的加權指數快照，請建立新測試"}
-                progress("校驗固定歷史資料…")
-                val dataDigest=digest(file,interrupted)
-                val expected=session.optString("datasetSha256")
-                require(expected.isEmpty()||dataDigest==expected){"資料快照校驗失敗；請建立新測試，避免混用行情"}
-                store.coverage(id,token,data.series.size,data.requested,dataDigest)
-                val indexFile=store.conditionFile(id)
-                val fingerprint=BtConditionIndex.fingerprint(dataDigest,base,flowRevision)
-                var lastCode=""
-                var samples:Map<java.time.LocalDate,com.rex.twboardingscanner.domain.TradeSideVolume> = emptyMap()
-                val index=BtRobotIndex.open(data.series,base,java.io.File(indexFile.path+".parts"),fingerprint,progress,interrupted,
-                    flowFor={code,day->
-                        if(lastCode!=code){lastCode=code;samples=flowSource.forCode(code,base.start,base.end,completed=true)}
-                        samples[day]
-                    },benchmark=data.market.associate{it.date to it.close})
-                progress("歷史條件已備妥，準備交易測算…")
-                Runtime(id,data,index,BacktestEngine.executionIndex(data.series,base.start,base.end),com.rex.twboardingscanner.domain.MarketCrashGuard.forDays(data.market,index.days)).also{cached=it}
-            }
-            val batchStart=System.currentTimeMillis();var completed=0
-            while(!interrupted()&&completed<30&&(completed==0||System.currentTimeMillis()-batchStart<120000)){
-                require(applicationContext.filesDir.usableSpace>128L*1024*1024){"儲存空間不足 128 MB，請先釋出空間"}
-                val candidate=store.next(id)
-                if(candidate==null){
-                    val end=store.session(id)!!
-                    val message=if(BtRobotSingleOption.active(session))"所有留空選項已逐項測試完成；每輪只新增一項條件"
-                        else if(sweep==null)"所有 ${base.enabledRadars.sortedBy{it.ordinal}.joinToString(""){it.name.take(1)}} 組合測試完成；最佳收益僅限本次歷史樣本"
-                        else "參數範圍 ${sweep.total} 組全部完成；已測最佳 ${end.optString("bestKey").ifBlank{"無"}}，可於結果榜檢閱"
-                    store.status(id,token,message,"DONE");runtime.index.releasePrepared();cached=null;DiskDailyBars.clearCache();return@synchronized Result.success()
+                BtRobotRunner.Outcome.RETRY->{
+                    if(store.owns(id,token,owner))
+                        enqueue(applicationContext,id,token,ExistingWorkPolicy.APPEND_OR_REPLACE,10)
+                    Result.success()
                 }
-                val settings=if(sweep==null)BtRobotSingleOption.settings(base,candidate.key,BtRobotSingleOption.baseline(session,candidate.key)) else sweep.settings(base,candidate.key)
-                val started=System.currentTimeMillis()
-                val seq=store.session(id)!!.optLong("tested")+1
-                store.status(id,token,if(BtRobotSingleOption.active(session))"正在逐項測試第 $seq 組 · ${BtRobotSingleOption.label(session.optString("required","0"),candidate.key,base.enabledRadars)}"
-                    else if(sweep==null)"正在測試第 $seq 組 · ${candidate.key}"
-                    else "正在測試第 $seq／${sweep.total} 組 · ${sweep.parseKey(candidate.key).label}")
-                val prepared=if(sweep==null)runtime.index.prepare(settings,interrupted,progress).copy(marketGuards=runtime.guards)
-                    else runtime.gridPrepared?:runtime.index.prepare(base,interrupted,progress).copy(marketGuards=runtime.guards)
-                        .also{runtime.gridPrepared=it}
-                val signalCounts=base.enabledRadars.associateWith{0}.toMutableMap()
-                prepared.signals.values.forEach{items->items.forEach{signal->base.enabledRadars.forEach{type->
-                    if(type.name.take(1) in signal.radar.split("/"))signalCounts[type]=signalCounts.getValue(type)+1
-                }}}
-                val feedback=signalCounts.entries.joinToString(" · "){"${it.key.name.take(1)} 符合 ${it.value} 筆"}
-                val run=BacktestEngine.run(prepared,settings,progress=progress,cancel=interrupted,execution=runtime.execution,skippedDetailLimit=5000)
-                check(!cancellation.check(force=true)){ "已暫停測試" }
-                val note="省記憶體模式：日K與候選訊號按需讀取；未買明細最多保留5000筆，未買總數與每日統計完整保留，買賣明細完整保留。\n"+"條件掃描回饋：$feedback；待查核 ${prepared.pendingChecks} 項。\n"+NOTE+if(sweep!=null)"本批次固定 ABCDEF 條件，逐一測試持倉 ${sweep.holdingFrom}～${sweep.holdingTo} 檔 × 扣費稅淨利 ${sweep.profitFrom}%～${sweep.profitTo}% 的 ${sweep.total} 組有限範圍；每組使用相同歷史樣本，沒有再搜尋 ABCDEF。" else ""
-                val better=store.commit(id,token,candidate,BtResult(settings,run,runtime.data.requested,runtime.data.series.size,runtime.data.excluded,note,prepared.pendingChecks),started,signalCounts)
-                if(sweep==null)runtime.index.releasePrepared()
-                if(better)notifyBest(seq,run.profit)
-                completed++
             }
-            if(cancel())return@synchronized Result.success()
-            // Bounded batches yield to Android scheduling. A stopped batch commits only completed trials.
-            enqueue(applicationContext,id,token,ExistingWorkPolicy.APPEND_OR_REPLACE)
-            Result.success()
-        }catch(e:OutOfMemoryError){
-            cached?.index?.releasePrepared();cached=null;DiskDailyBars.clearCache()
-            store.status(id,token,"記憶體不足，本輪未提交；歷史資料與已完成結果保留，可按開始／繼續","ERROR")
-            Result.failure()
         }catch(e:Exception){
-            if(cancel())return@synchronized if(isStopped)Result.retry() else Result.success()
-            if(RobotWorkPolicy.foregroundDenied(e)){
-                store.status(id,token,"Android限制背景啟動；進度已保存，請返回機器人頁面按開始／繼續","ERROR")
-                return@synchronized Result.failure()
-            }
-            if(expired()){
-                store.status(id,token,"本段運算已保存，等待系統安排下一段接續")
-                return@synchronized try{enqueue(applicationContext,id,token,ExistingWorkPolicy.APPEND_OR_REPLACE);Result.success()}catch(_:Exception){Result.retry()}
-            }
-            if(e is IllegalArgumentException){
-                store.status(id,token,"需處理：${e.message?.take(180)}；完成紀錄保留，可重試","ERROR")
-                return@synchronized Result.failure()
-            }
-            store.status(id,token,"中斷：${e.message?.take(120)}；10 秒後自動接續","RETRY")
-            try{enqueue(applicationContext,id,token,ExistingWorkPolicy.APPEND_OR_REPLACE,10);Result.success()}catch(_:Exception){Result.retry()}
+            if(!store.owns(id,token,owner))return Result.success()
+            store.status(id,token,"備援排程異常："+(e.message?:"").take(100),"RETRY",owner)
+            return Result.retry()
+        } finally {
+            if(store.owns(id,token,owner))store.release(id,token,owner,"等待背景備援下一段")
         }
     }
     override fun onStopped(){
         super.onStopped()
         val id=inputData.getString("session")?:return;val token=inputData.getString("token")?:return
         runCatching{recoverAfterStop(applicationContext,id,token)}
-    }
-    private fun digest(file:java.io.File,cancel:()->Boolean={false}):String {
-        val hash=MessageDigest.getInstance("SHA-256");file.inputStream().use{val b=ByteArray(65536);while(true){check(!cancel()){"已暫停測試"};val n=it.read(b);if(n<0)break;hash.update(b,0,n)}}
-        return hash.digest().joinToString(""){"%02x".format(it)}
     }
     private fun manager():NotificationManager=(applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).also{
         it.createNotificationChannel(NotificationChannel("robot-progress","自動測試進度",NotificationManager.IMPORTANCE_LOW))
