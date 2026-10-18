@@ -38,7 +38,7 @@ data class ChipKTabNode(
 
 sealed class ChipKPageDecision {
     data class Tap(val key: Int): ChipKPageDecision()
-    data class Scroll(val key: Int): ChipKPageDecision()
+    data class Scroll(val key: Int, val forward: Boolean): ChipKPageDecision()
     data class Confirm(val evidence: String): ChipKPageDecision()
     data object Wait: ChipKPageDecision()
 }
@@ -90,6 +90,6 @@ object ChipKPageNavigator {
             it.scrollable && it.top >= 0 && it.bottom < it.screenHeight * 0.75 &&
                 it.bottom - it.top in 25..450
         }
-        return scroller?.let { ChipKPageDecision.Scroll(it.key) } ?: ChipKPageDecision.Wait
+        return scroller?.let { ChipKPageDecision.Scroll(it.key, scrollCount < 3) } ?: ChipKPageDecision.Wait
     }
 }
