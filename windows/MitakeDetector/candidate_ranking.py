@@ -29,3 +29,14 @@ def assess(row,cfg):
 
 def ordered_candidates(rows,cfg):
     return sorted(((row,assess(row,cfg)) for row in rows),key=lambda pair:pair[1]['key'])
+
+
+def name_eligible(match):
+    return match['count'] >= min(4,match['total'])
+
+
+def hidden_result(q,cfg,filters):
+    return bool((filters.get('gain') and not cfg['min_gain']<=q.gain<=cfg['max_gain'])
+                or (filters.get('price') and q.price<cfg['min_price'])
+                or (filters.get('turnover') and cfg['use_turnover']
+                    and (q.turnover is None or q.turnover<cfg['min_turnover'])))

@@ -249,3 +249,19 @@ class DashboardDisplayTests(unittest.TestCase):
             self.assertGreaterEqual(x,work[0]);self.assertGreaterEqual(y,work[1])
             self.assertLessEqual(x+w,work[2]);self.assertLessEqual(y+h,work[3])
             self.assertEqual((w,h),(3000,1800))
+
+
+class ResultFilterTests(unittest.TestCase):
+    def test_name_gate_and_filters(self):
+        from candidate_ranking import assess,name_eligible,hidden_result
+        cfg=dict(DEFAULT,use_turnover=True,min_turnover=3,use_accel=True,use_breakout=True)
+        q=Quote('2330','TEST',100,3,2000,1,100)
+        row=(q,None,'等待觀測突破守穩',False)
+        self.assertFalse(name_eligible(assess(row,cfg)))
+        q.turnover=4
+        self.assertTrue(name_eligible(assess(row,cfg)))
+        for key in ['price','gain','turnover']:self.assertFalse(hidden_result(q,cfg,{key:True}))
+        q.price=20;q.gain=12;q.turnover=None
+        for key in ['price','gain','turnover']:self.assertTrue(hidden_result(q,cfg,{key:True}))
+        self.assertFalse(hidden_result(q,dict(cfg,use_turnover=False),{'turnover':True}))
+        self.assertFalse(hidden_result(q,cfg,{}))

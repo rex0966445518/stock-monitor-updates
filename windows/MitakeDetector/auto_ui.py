@@ -188,7 +188,8 @@ class AutoUI:
         names=getattr(self,'stock_names',None)
         if not pending or not names:return 0
         sections=[];height=8;width=1
-        for code in list(pending)[:8]:
+        eligible=getattr(self,'name_eligible_codes',set())
+        for code in [c for c in list(pending) if c in eligible][:8]:
             crop,proof=pending.pop(code)
             if code in names.names:continue
             sections.append((code,height,height+crop.height,crop,proof))
@@ -575,6 +576,7 @@ class AutoUI:
         return tokens
 
     def start_auto(self,test_only=False,announce=True):
+        self.numeric_priority=True
         from tkinter import messagebox
         if not self.idle() or not self.dependencies():return
         cfg=self.settings()

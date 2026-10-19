@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.44'
+VERSION = '0.3.45'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -282,6 +282,14 @@ class App(AutoUI):
         self.summary_label=tk.Label(root,textvariable=self.observation_summary,bg='#0b1020',fg='#edf2ff',anchor='w',justify='left',wraplength=1400)
         self.summary_label.pack(fill='x',padx=20,pady=(0,6))
         self.summary_label.bind('<Configure>',lambda event:self.summary_label.configure(wraplength=max(80,event.width-8)))
+        filters=ttk.Frame(root);filters.pack(fill='x',padx=20,pady=(0,5))
+        ttk.Label(filters,text='隱藏結果：').pack(side='left')
+        self.result_filters={}
+        saved_filters=self.config.get('result_filters',{})
+        for key,label in [('gain','漲幅不符'),('turnover','換手率不足（已啟用條件時）'),('price','股價不足')]:
+            var=tk.BooleanVar(value=bool(saved_filters.get(key,False)))
+            self.result_filters[key]=var
+            ttk.Checkbutton(filters,text=label,variable=var,command=self.change_result_filters).pack(side='left',padx=5)
         table_frame = ttk.Frame(root); table_frame.pack(fill='both', expand=True, padx=18)
         cols = ['code','name','match','price','gain','volume','turnover','ratio','state']
         self.tree = ttk.Treeview(table_frame, columns=cols, show='headings')
@@ -544,6 +552,25 @@ class App(AutoUI):
         if self.auto_active:
             self.auto_active=False; self.root.deiconify()
 
+    def change_result_filters(self):
+        self.config['result_filters']={key:var.get() for key,var in self.result_filters.items()}
+        self.save()
+        self.draw_results()
+
+    def draw_results(self):
+        from candidate_ranking import ordered_candidates,name_eligible,hidden_result
+        for item in self.tree.get_children():self.tree.delete(item)
+        cfg=getattr(self,'display_cfg',self.config)
+        filters={key:var.get() for key,var in getattr(self,'result_filters',{}).items()}
+        eligible=set()
+        for (q,ratio,reason,hit),match in ordered_candidates(getattr(self,'display_rows',[]),cfg):
+            show_name=name_eligible(match)
+            if show_name:eligible.add(q.code)
+            if hidden_result(q,cfg,filters):continue
+            values=[q.code,(q.name or '股名待補') if show_name else '',match['text'],f'{q.price:.2f}',f'{q.gain:+.2f}',f'{q.volume:,.0f}','—' if q.turnover is None else f'{q.turnover:.2f}','待累積' if ratio is None else f'{ratio:.2f}',reason]
+            self.tree.insert('','end',values=values,tags=('hit',) if match['hit'] else ('near',) if match['label']=='接近候選' else ())
+        self.name_eligible_codes=eligible
+
     def render(self, quotes, rejected, elapsed, cfg, persist):
         from tkinter import messagebox
         engine = self.auto_engines.setdefault(cfg['source_rank'], Engine()) if cfg.get('source_rank') else self.engine
@@ -574,10 +601,8 @@ class App(AutoUI):
         self.observation_summary.set(f'已辨識股票 {len(display)} 檔｜轉強候選 {sum(bool(item[3]) for item in display)} 檔'+('｜'+explanation if explanation else '｜候選股置頂'))
         pending_names=sum(not q.name for q,_,_,_ in display)
         self.observation_summary.set(self.observation_summary.get()+f'｜股名記憶 {len(names)} 檔、待補 {pending_names} 檔')
-        from candidate_ranking import ordered_candidates
-        for (q,ratio,reason,hit),match in ordered_candidates(display,cfg):
-            values = [q.code, q.name or '股名待補',match['text'], f'{q.price:.2f}', f'{q.gain:+.2f}', f'{q.volume:,.0f}', '—' if q.turnover is None else f'{q.turnover:.2f}', '待累積' if ratio is None else f'{ratio:.2f}', reason]
-            self.tree.insert('', 'end', values=values, tags=('hit',) if match['hit'] else ('near',) if match['label']=='接近候選' else ())
+        self.display_rows=display;self.display_cfg=dict(cfg)
+        self.draw_results()
         for q, ratio, reason, hit in rows:
             record = [self.mode, dt.datetime.fromtimestamp(q.ts).isoformat(timespec='seconds'), q.code, q.name, q.price, q.gain, q.volume, q.turnover, ratio, reason, json.dumps(cfg, ensure_ascii=False)]
             self.records.append(record); batch.append(record)

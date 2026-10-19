@@ -119,6 +119,10 @@ class NumericPriorityTests(unittest.TestCase):
         self.assertEqual(app.read_stock_anchors(image,bounds),['2330'])
         self.assertEqual(calls,[])
         app.learn_deferred_names()
+        self.assertEqual(calls,[])
+        self.assertIn('2330',app.deferred_names)
+        app.name_eligible_codes={'2330'}
+        app.learn_deferred_names()
         self.assertEqual(app.stock_names.names['2330'],'台積電')
         self.assertEqual(len(calls),1)
         app.read_auto_ocr=lambda im:[]

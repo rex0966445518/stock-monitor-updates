@@ -114,7 +114,7 @@ def run_smoke_test(report):
         learning_window=app.show_ocr_learning();root.update();assert learning_window.winfo_exists();learning_window.destroy()
         app.stock_names=StockNames();app.stock_names.names={'9001':'LEARNED'}
         app.render([Quote('9001','',100,2,1500,1,now+.1)],0,0,dict(DEFAULT),persist=False)
-        assert app.tree.item(app.tree.get_children()[0],'values')[1]=='LEARNED'
+        assert app.tree.item(app.tree.get_children()[0],'values')[1]==''
         app.stock_names.names={}
         # Changing rankings must retain other observed stocks and deduplicate codes.
         cfg=dict(DEFAULT,source_rank='漲幅排行',use_breakout=False)
@@ -142,6 +142,17 @@ def run_smoke_test(report):
         # Verify ranking, highlight and stock-specific speech using real widgets.
         app.rank_rows={};app.auto_engines={}
         spoken=[];original_announce=app.announce_task;app.announce_task=spoken.append
+        app.display_cfg=dict(DEFAULT,use_turnover=True,min_turnover=3,use_accel=True,use_breakout=True)
+        app.display_rows=[(Quote('9080','LOW',20,0,50,1,now),None,'等待觀測突破守穩',False),
+                          (Quote('9081','GOOD',100,3,2000,4,now),2,'轉強候選',True)]
+        app.draw_results()
+        assert len(app.tree.get_children())==2
+        assert app.tree.item(app.tree.get_children()[-1],'values')[1]==''
+        app.result_filters['price'].set(True);app.change_result_filters()
+        assert len(app.tree.get_children())==1
+        assert json.loads((BASE/'settings.json').read_text('utf-8'))['result_filters']['price']
+        app.result_filters['price'].set(False);app.change_result_filters()
+        assert len(app.tree.get_children())==2
         candidate_cfg=dict(DEFAULT,source_rank='候選排序測試',use_breakout=False)
         try:
             for offset,volume in [(20,1500),(21,1501)]:
