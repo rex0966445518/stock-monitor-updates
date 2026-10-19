@@ -47,6 +47,7 @@ class BtRobotActivity:AppCompatActivity(){
     private var robotEConfig:EPatternConfig = EPatternConfig.DEFAULT
     private var robotBConfig:BPatternConfig=BPatternConfig.DEFAULT
     private var robotFConfig:FPatternConfig = FPatternConfig.DEFAULT
+    private var robotGConfig:GPatternConfig = GPatternConfig.DEFAULT
     private val radarModeButtons=mutableMapOf<RadarType,com.google.android.material.button.MaterialButton>()
     private fun refreshRadarModes(){
         radarModeButtons.forEach{(type,button)->
@@ -201,6 +202,7 @@ class BtRobotActivity:AppCompatActivity(){
         robotEConfig=if(useDraft)runCatching{EPatternConfig.read(org.json.JSONObject(prefs.getString("eConfig",settings.eConfig.json().toString())?:settings.eConfig.json().toString()))}.getOrDefault(settings.eConfig) else settings.eConfig
         robotBConfig=if(useDraft)runCatching{BPatternConfig.read(org.json.JSONObject(prefs.getString("bConfig",settings.bConfig.json().toString())?:settings.bConfig.json().toString()))}.getOrDefault(settings.bConfig) else settings.bConfig
         robotFConfig=if(useDraft)runCatching{FPatternConfig.read(org.json.JSONObject(prefs.getString("fConfig",settings.fConfig.json().toString())?:settings.fConfig.json().toString()))}.getOrDefault(settings.fConfig) else settings.fConfig
+        robotGConfig=if(useDraft)runCatching{GPatternConfig.read(org.json.JSONObject(prefs.getString("gConfig",settings.gConfig.json().toString())?:settings.gConfig.json().toString()))}.getOrDefault(settings.gConfig) else settings.gConfig
         robotDConfig=if(useDraft)runCatching{DPatternConfig.read(org.json.JSONObject(
             prefs.getString("dConfig",settings.dConfig.json().toString())?:settings.dConfig.json().toString()
         ))}.getOrDefault(settings.dConfig) else settings.dConfig
@@ -292,6 +294,9 @@ class BtRobotActivity:AppCompatActivity(){
         options.addView(NeonUi.button(this,"F 縮量上漲 · 天數與門檻",NeonUi.pink){
             FPatternEditor.show(this,robotFConfig){cfg->robotFConfig=cfg;refreshRadarModes()}
         }.apply{tag="robot-f-parameters"})
+        options.addView(NeonUi.button(this,"G 5MA波段 · G3/G4/G5 持股管理",NeonUi.pink){
+            GPatternEditor.show(this,robotGConfig){cfg->robotGConfig=cfg;refreshRadarModes()}
+        }.apply{tag="robot-g-parameters"})
         options.addView(NeonUi.gap(this,12))
         sectorButton=NeonUi.button(this,"產業保留／排除",NeonUi.mint){
             if(!busy){hideInput();val settings=store.session()?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()
@@ -386,7 +391,7 @@ class BtRobotActivity:AppCompatActivity(){
                         runTask("正在建立新的測試批次…"){
                             val previous=store.session()
                             val settings=chosenDates.applyTo(entered.applyTo(previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()))
-                                .copy(robotBaseline=false,enabledRadars=enabledRadars,dConfig=robotDConfig,eConfig=robotEConfig,fConfig=robotFConfig,bConfig=robotBConfig,exclusions=robotExclusions,stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(this).read(),
+                                .copy(robotBaseline=false,enabledRadars=enabledRadars,dConfig=robotDConfig,eConfig=robotEConfig,fConfig=robotFConfig,gConfig=robotGConfig,bConfig=robotBConfig,exclusions=robotExclusions,stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(this).read(),
                                     stockScope=StockScope.ROBOT,marketGuardVersion=MarketCrashGuard.VERSION,
                                     holdProfitUntilMa5Break=trendHoldCheck.isChecked)
                             BtRobotSpace.validate(settings)
@@ -428,7 +433,7 @@ class BtRobotActivity:AppCompatActivity(){
             .putString("holdings",robotHoldings.text.toString()).putString("profit",robotProfit.text.toString())
             .putBoolean("gridEnabled",sweepCheck.isChecked).putBoolean("profitTrendHold",trendHoldCheck.isChecked)
             .putStringSet("activeRadars",enabledRadars.map{it.name}.toSet())
-            .putString("dConfig",robotDConfig.json().toString()).putString("eConfig",robotEConfig.json().toString()).putString("fConfig",robotFConfig.json().toString()).putString("bConfig",robotBConfig.json().toString()).putString("exclusions",ExclusionConditions.json(robotExclusions).toString())
+            .putString("dConfig",robotDConfig.json().toString()).putString("eConfig",robotEConfig.json().toString()).putString("fConfig",robotFConfig.json().toString()).putString("gConfig",robotGConfig.json().toString()).putString("bConfig",robotBConfig.json().toString()).putString("exclusions",ExclusionConditions.json(robotExclusions).toString())
             .putString("holdingFrom",hFrom.text.toString()).putString("holdingTo",hTo.text.toString())
             .putString("profitFrom",pFrom.text.toString()).putString("profitTo",pTo.text.toString()).apply()
         super.onPause()
@@ -448,7 +453,7 @@ class BtRobotActivity:AppCompatActivity(){
         val original=saved?:base()
         val policy=com.rex.twboardingscanner.data.StockPolicyStore(this).read()
         val next=RobotRuleSelection.prepare(dateRange.applyTo(params.applyTo(original))
-            .copy(robotBaseline=false,enabledRadars=enabledRadars,dConfig=robotDConfig,eConfig=robotEConfig,fConfig=robotFConfig,bConfig=robotBConfig,exclusions=robotExclusions,stockPolicy=policy,stockScope=StockScope.ROBOT,marketGuardVersion=MarketCrashGuard.VERSION,
+            .copy(robotBaseline=false,enabledRadars=enabledRadars,dConfig=robotDConfig,eConfig=robotEConfig,fConfig=robotFConfig,gConfig=robotGConfig,bConfig=robotBConfig,exclusions=robotExclusions,stockPolicy=policy,stockScope=StockScope.ROBOT,marketGuardVersion=MarketCrashGuard.VERSION,
                 holdProfitUntilMa5Break=trendHoldCheck.isChecked),fixedRules=sweep!=null)
         BtRobotSpace.validate(next)
         if(old!=null&&old.optInt("analysisVersion")>=2&&(sweep!=null||old.optInt("searchVersion")>=10)&&old.optInt("searchVersion")>=6&&next==saved&&sweep==previousSweep)return old.getString("id")
@@ -724,6 +729,7 @@ class BtRobotActivity:AppCompatActivity(){
         if(busy)return
         hideInput()
         BtRobotRulesDialog.show(this,required(),forbidden(),enabledRadars,type,robotDConfig,robotFConfig,bConfig=robotBConfig,onBParameters={robotBConfig=it},
+            gConfig=robotGConfig,onGParameters={robotGConfig=it},
             onParameters={d,f->robotDConfig=d;robotFConfig=f}){on,off->applyRequired(on,off)}
     }
     internal fun applySectors(sectors:Set<StockSector>){
@@ -736,7 +742,7 @@ class BtRobotActivity:AppCompatActivity(){
         val range=runCatching{dates().validated()}.getOrElse{Toast.makeText(this,it.message,Toast.LENGTH_LONG).show();return}
         val grid=runCatching{selectedSweep()}.getOrElse{Toast.makeText(this,it.message,Toast.LENGTH_LONG).show();return}
         val settings=range.applyTo(entered.applyTo(saved)).copy(sectors=sectors,
-            enabledRadars=enabledRadars,dConfig=robotDConfig,eConfig=robotEConfig,fConfig=robotFConfig,bConfig=robotBConfig,exclusions=robotExclusions,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
+            enabledRadars=enabledRadars,dConfig=robotDConfig,eConfig=robotEConfig,fConfig=robotFConfig,gConfig=robotGConfig,bConfig=robotBConfig,exclusions=robotExclusions,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
         val old=store.active()
         runTask("正在儲存產業範圍…"){
             if(old.isNotBlank())BtRobotWorker.pause(this,old)
@@ -750,7 +756,7 @@ class BtRobotActivity:AppCompatActivity(){
     internal fun applyRequired(key:String,forbiddenKey:String=forbidden()){
         BtRobotSpace.validateConstraints(key,forbiddenKey)
         val savedParams=store.session()?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}
-        if(key==required()&&forbiddenKey==forbidden()&&!sweepCheck.isChecked&&BtRobotSingleOption.current(store.session())&&savedParams?.enabledRadars==enabledRadars&&savedParams?.dConfig==robotDConfig&&savedParams?.eConfig==robotEConfig&&savedParams?.fConfig==robotFConfig&&savedParams?.bConfig==robotBConfig&&savedParams?.exclusions==robotExclusions)return
+        if(key==required()&&forbiddenKey==forbidden()&&!sweepCheck.isChecked&&BtRobotSingleOption.current(store.session())&&savedParams?.enabledRadars==enabledRadars&&savedParams?.dConfig==robotDConfig&&savedParams?.eConfig==robotEConfig&&savedParams?.fConfig==robotFConfig&&savedParams?.gConfig==robotGConfig&&savedParams?.bConfig==robotBConfig&&savedParams?.exclusions==robotExclusions)return
         val entered=runCatching{parameters()}.getOrElse{
             Toast.makeText(this,"請修正測試參數：${it.message}",Toast.LENGTH_LONG).show();return
         }
@@ -759,7 +765,7 @@ class BtRobotActivity:AppCompatActivity(){
         }
         val old=store.active();val previous=store.session()
         val settings=range.applyTo(entered.applyTo(previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()))
-            .copy(robotBaseline=false,enabledRadars=enabledRadars,dConfig=robotDConfig,eConfig=robotEConfig,fConfig=robotFConfig,bConfig=robotBConfig,exclusions=robotExclusions,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
+            .copy(robotBaseline=false,enabledRadars=enabledRadars,dConfig=robotDConfig,eConfig=robotEConfig,fConfig=robotFConfig,gConfig=robotGConfig,bConfig=robotBConfig,exclusions=robotExclusions,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
         sweepCheck.isChecked=false
         runTask("正在保存必選／排除條件並沿用快取…"){
             if(old.isNotBlank())BtRobotWorker.pause(this,old)
@@ -782,7 +788,7 @@ class BtRobotActivity:AppCompatActivity(){
         }
         val previous=store.session();val old=previous?.getString("id").orEmpty()
         val settings=range.applyTo(entered.applyTo(previous?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()))
-            .copy(robotBaseline=false,enabledRadars=enabledRadars,dConfig=robotDConfig,eConfig=robotEConfig,fConfig=robotFConfig,bConfig=robotBConfig,exclusions=robotExclusions,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
+            .copy(robotBaseline=false,enabledRadars=enabledRadars,dConfig=robotDConfig,eConfig=robotEConfig,fConfig=robotFConfig,gConfig=robotGConfig,bConfig=robotBConfig,exclusions=robotExclusions,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
         if(settings.exitRules==rules&&
            (previous==null||BtSettingsCodec.decode(previous.getJSONObject("settings")).holdProfitUntilMa5Break==trendHoldCheck.isChecked)&&
            (previous==null||RobotTradingParams.of(BtSettingsCodec.decode(previous.getJSONObject("settings")))==entered)&&
