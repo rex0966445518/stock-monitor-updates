@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.49'
+VERSION = '0.3.50'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -257,7 +257,7 @@ class App(AutoUI):
         auto_bar = ttk.Frame(root); auto_bar.pack(fill='x', padx=18, pady=(0, 8))
         self.voice_var=tk.BooleanVar(value=self.config.get('voice_enabled',True))
         ttk.Checkbutton(auto_bar,text='語音提醒',variable=self.voice_var,command=self.toggle_task_voice).pack(side='left',padx=5)
-        ttk.Label(auto_bar, text='F8 開始／停止 · 輪切會使用滑鼠 · 離開三竹視窗自動停止').pack(side='left', padx=8)
+        ttk.Label(auto_bar, text='F8 開始／停止 · 可操作探測器主頁 · 三竹畫面請保持可見').pack(side='left', padx=8)
         opts = ttk.LabelFrame(root, text='篩選條件（變更後，停止並重新開始以套用）'); opts.pack(fill='x', padx=18)
         self.vars = {}
         fields = [('min_price', '股價 ≥'), ('min_volume', '總量張 ≥'), ('min_gain', '漲幅 ≥%'), ('max_gain', '漲幅 ≤%'), ('interval', '間隔秒'), ('cooldown', '提醒間隔秒')]

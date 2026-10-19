@@ -113,6 +113,9 @@ class WindowsController:
         self.u.IsWindow.argtypes=[W.HWND];self.u.IsIconic.argtypes=[W.HWND]
         self.u.SetCursorPos.argtypes=[ctypes.c_int,ctypes.c_int]
         self.u.mouse_event.argtypes=[W.DWORD,W.DWORD,W.DWORD,W.DWORD,ctypes.c_size_t]
+        self.u.PostMessageW.argtypes=[W.HWND,W.UINT,W.WPARAM,W.LPARAM]
+        self.u.PostMessageW.restype=W.BOOL
+        self.u.ScreenToClient.argtypes=[W.HWND,ctypes.POINTER(W.POINT)]
         self.pid=self.process_id(hwnd)
         self.initial_rect=self.rect()
 
@@ -156,8 +159,29 @@ class WindowsController:
         if abs((rect[2]-rect[0])-(a[2]-a[0]))>3 or abs((rect[3]-rect[1])-(a[3]-a[1]))>3:
             raise AutomationStopped('目標視窗已縮放，請重新設定位置')
         fg=self.u.GetForegroundWindow()
-        if not self.belongs(fg):
-            raise AutomationStopped('焦點已離開三竹目標視窗，已暫停；回到三竹或按F8接續')
+        if not self.belongs(fg) and not self.dashboard_foreground(fg):
+            raise AutomationStopped('焦點已切換到其他軟體，已暫停；三竹與探測器主頁之間切換不會停止')
+
+    def dashboard_foreground(self,hwnd=None):
+        hwnd=self.u.GetForegroundWindow() if hwnd is None else hwnd
+        return bool(hwnd) and self.process_id(hwnd)==os.getpid()
+
+    def background_input(self,point,delta=None):
+        """Send only to a verified target control, without moving the user's cursor."""
+        self.check();x,y=map(round,point)
+        owner=self.u.WindowFromPoint(W.POINT(x,y))
+        if not self.belongs(owner):raise AutomationStopped('操作區域被其他視窗遮住，已停止')
+        if delta is None:
+            local=W.POINT(x,y)
+            if not self.u.ScreenToClient(owner,ctypes.byref(local)):raise AutomationStopped('無法換算目標視窗座標')
+            packed=(local.x&0xffff)|((local.y&0xffff)<<16)
+            messages=[(0x200,0,packed),(0x201,1,packed),(0x202,0,packed)]
+        else:
+            messages=[(0x20a,(int(delta)&0xffff)<<16,(x&0xffff)|((y&0xffff)<<16))]
+        for message,wparam,lparam in messages:
+            self.check()
+            if not self.belongs(owner):raise AutomationStopped('目標控制項已更換')
+            if not self.u.PostMessageW(owner,message,wparam,lparam):raise AutomationStopped('目標視窗未接受背景操作')
 
     def activate(self):
         self.rect();self.u.SetForegroundWindow(self.hwnd);self.pause(.4,check=False);self.check()
@@ -181,11 +205,15 @@ class WindowsController:
         return x,y
 
     def click(self,point):
+        if self.dashboard_foreground() and not self.belongs(self.u.GetForegroundWindow()):
+            return self.background_input(point)
         self.point(point)
         # One complete click; no keyboard shortcuts or order-entry commands are sent.
         self.u.mouse_event(0x0002,0,0,0,0);self.u.mouse_event(0x0004,0,0,0,0)
 
     def scroll(self,point,delta):
+        if self.dashboard_foreground() and not self.belongs(self.u.GetForegroundWindow()):
+            return self.background_input(point,delta)
         self.point(point)
         self.u.mouse_event(0x0800,0,0,int(delta)&0xffffffff,0)
 

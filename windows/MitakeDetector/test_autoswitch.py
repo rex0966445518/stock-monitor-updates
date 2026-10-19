@@ -170,3 +170,34 @@ class VerifiedPixelCacheTests(unittest.TestCase):
         im.putpixel((0,0),(255,255,255))
         self.assertTrue(switch.label_matches('分時買力'));self.assertEqual(len(calls),2)
         self.assertFalse(switch.label_matches('分時賣力'));self.assertGreater(len(calls),2)
+
+class DashboardFocusTests(unittest.TestCase):
+    def controller(self,foreground=2):
+        from autoswitch import WindowsController
+        from types import SimpleNamespace
+        import os
+        c=WindowsController.__new__(WindowsController)
+        c.stop=threading.Event();c.hwnd=1;c.pid=123;c.initial_rect=(0,0,500,500)
+        c.rect=lambda:(0,0,500,500)
+        c.process_id=lambda hwnd:123 if hwnd==1 else os.getpid() if hwnd==2 else 456
+        c.belongs=lambda hwnd:hwnd==1
+        self.messages=[]
+        c.u=SimpleNamespace(GetAsyncKeyState=lambda key:0,GetForegroundWindow=lambda:foreground,
+            WindowFromPoint=lambda point:1,ScreenToClient=lambda hwnd,point:True,
+            PostMessageW=lambda *args:self.messages.append(args) or True)
+        return c
+
+    def test_dashboard_keeps_scan_alive_and_inputs_are_targeted(self):
+        c=self.controller()
+        c.check();c.click((10,20));c.scroll((10,20),-120)
+        self.assertEqual([m[1] for m in self.messages],[0x200,0x201,0x202,0x20a])
+        self.assertTrue(all(m[0]==1 for m in self.messages))
+        c.stop.set()
+        with self.assertRaises(AutomationStopped):c.click((10,20))
+
+    def test_other_apps_and_occluded_target_still_block_input(self):
+        c=self.controller(3)
+        with self.assertRaises(AutomationStopped):c.check()
+        c=self.controller();c.u.WindowFromPoint=lambda point:3
+        with self.assertRaises(AutomationStopped):c.scroll((10,20),-120)
+        self.assertEqual(self.messages,[])

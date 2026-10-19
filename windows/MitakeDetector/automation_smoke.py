@@ -14,7 +14,9 @@ def run_automation_smoke(root,app):
     panel=tk.Frame(win,bg='white',bd=1,relief='solid')
     combo=tk.Button(win,textvariable=label,font=('Microsoft JhengHei',16),bg='#102c40',fg='white',command=lambda:panel.place(x=25,y=65,width=260,height=150))
     combo.place(x=25,y=25,width=260,height=40)
+    selections=[]
     def select(name):
+        selections.append(name)
         label.set(name);panel.place_forget()
     for i,name in enumerate(['漲幅排行','預估量增','大單流入','大單匯集']):
         tk.Button(panel,text=name,font=('Microsoft JhengHei',16),bg='#102c40',fg='white',anchor='w',bd=0,command=lambda n=name:select(n)).place(x=1,y=i*36,width=255,height=36)
@@ -134,6 +136,19 @@ def run_automation_smoke(root,app):
             for _ in range(2):
                 switcher.switch('大單流入')
                 switcher.switch('漲幅排行')
+            # Native WM mouse messages must operate the target without moving cursor.
+            cursor_before=W.POINT();controller.u.GetCursorPos(ctypes.byref(cursor_before))
+            foreground_before=controller.u.GetForegroundWindow()
+            controller.background_input((rect[0]+x+100,rect[1]+y+20))
+            controller.pause(.4)
+            controller.background_input((rect[0]+x+80,rect[1]+y+40+2*36+18))
+            controller.pause(.4)
+            assert selections and selections[-1]=='大單流入','Native background click did not select target'
+            cursor_after=W.POINT();controller.u.GetCursorPos(ctypes.byref(cursor_after))
+            assert (cursor_before.x,cursor_before.y)==(cursor_after.x,cursor_after.y)
+            assert controller.u.GetForegroundWindow()==foreground_before,'Background input stole focus'
+            controller.background_input((rect[0]+x+100,rect[1]+y+20));controller.pause(.3)
+            controller.background_input((rect[0]+x+80,rect[1]+y+40+18));controller.pause(.3)
             stop.set()
             try:controller.click((rect[0]+50,rect[1]+50))
             except AutomationStopped:pass
