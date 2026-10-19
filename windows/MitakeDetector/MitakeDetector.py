@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.43'
+VERSION = '0.3.44'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -292,6 +292,9 @@ class App(AutoUI):
         sb = ttk.Scrollbar(table_frame, orient='vertical', command=self.tree.yview)
         self.tree.configure(yscrollcommand=sb.set)
         self.tree.pack(side='left', fill='both', expand=True); sb.pack(side='right', fill='y')
+        horizontal=ttk.Scrollbar(table_frame,orient='horizontal',command=self.tree.xview)
+        self.tree.configure(xscrollcommand=horizontal.set)
+        horizontal.pack(side='bottom',fill='x',before=self.tree)
         log_frame=ttk.Frame(root);log_frame.pack(fill='x',padx=18,pady=8)
         self.log=tk.Text(log_frame,height=9,wrap='word',bg='#0a1322',fg='#a6b8d2',font=('Microsoft JhengHei',10),state='disabled')
         log_scroll=ttk.Scrollbar(log_frame,orient='vertical',command=self.log.yview)
@@ -305,6 +308,15 @@ class App(AutoUI):
         self.update_bar=ttk.Progressbar(foot,mode='determinate',maximum=100,length=150)
         ttk.Label(foot, textvariable=self.update_status).pack(side='left',padx=8)
         ttk.Label(foot, text='依畫面逐段觀察 · 保持三竹可見 · 不會自動下單').pack(side='right')
+        from display_scale import DisplayScale,SCALES
+        zoom=ttk.Frame(foot);zoom.pack(side='left',padx=12)
+        ttk.Label(zoom,text='介面大小').pack(side='left')
+        self.display_scale_var=tk.StringVar(value='150%')
+        self.display_scale_box=ttk.Combobox(zoom,textvariable=self.display_scale_var,values=[f'{n}%' for n in SCALES],state='readonly',width=6)
+        self.display_scale_box.pack(side='left',padx=4)
+        self.display_scale=DisplayScale(self,BASE/'display-settings.json')
+        self.display_scale_box.bind('<<ComboboxSelected>>',lambda event:self.display_scale.apply(self.display_scale_var.get()))
+        self.display_scale.apply(self.display_scale.initial,save=False)
         from version_history import record_launch
         try:record_launch(BASE,VERSION)
         except sqlite3.Error as exc:self.say('版本啟用紀錄寫入失敗：'+str(exc))

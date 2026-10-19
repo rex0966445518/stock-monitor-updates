@@ -124,7 +124,7 @@ class AutoUI:
         self.numeric_priority=True
         self.auto_active=True
         stop=self.stop_event
-        self.root.iconify()
+        # Keep the main dashboard visible on the user's secondary display.
         self.show_task_progress(target,'準備自動定位選單與欄位…')
         self.announce_task('開始執行掃描' if start_after else '開始自動設定')
         def job():
@@ -615,7 +615,7 @@ class AutoUI:
         self.auto_active=True
         self.events.put((token,'auto_phase','掃描中｜前次進度已封存，正在啟動今日新掃描' if new_day else '掃描中｜正在啟動或接續前次進度'))
         stop=self.stop_event;target=self.auto_hwnd
-        self.root.iconify()
+        # Keep the main dashboard visible on the user's secondary display.
         self.show_task_progress(target,'接續前次斷點，正在核對畫面…' if saved else '前次進度已封存，開始今日第1輪…' if new_day else '準備開始自動輪切…')
         if announce:self.announce_task('開始測試輪切' if test_only else ('接續前次掃描' if saved else '開始執行掃描'))
         def job():
