@@ -15,7 +15,7 @@ import com.rex.twboardingscanner.domain.GPatternConfig
  * G1/G2 and entry filters are shown in the normal radar checkbox dialog.
  */
 internal object GPatternEditor {
-    class Controls(private val c:Context, parent:LinearLayout, initial:GPatternConfig) {
+    class Controls(private val c:Context, private val parent:LinearLayout, initial:GPatternConfig) {
         private fun tick(text:String,checked:Boolean,id:String)=CheckBox(c).apply{
             this.text=text;isChecked=checked;tag=id;textSize=14f;minHeight=NeonUi.dp(c,42)
         }.also{parent.addView(it)}
