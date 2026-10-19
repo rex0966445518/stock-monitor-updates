@@ -25,6 +25,7 @@ class ChipKSevenPageStore(context: Context) {
         val readyIndex: Int,
         val readyAt: Long,
         val seenAt: Long,
+        val lastPulseAt: Long,
         val pages: List<PageState>,
         val error: String
     ) {
@@ -42,7 +43,7 @@ class ChipKSevenPageStore(context: Context) {
         prefs.edit().clear().putString("id", id).putString("code", code)
             .putBoolean("active", true).putString("state", "running")
             .putInt("index", 0).putInt("ready_index", -1).putLong("ready_at", 0L)
-            .putLong("seen_at", 0L).commit()
+            .putLong("seen_at", 0L).putLong("pulse_at", System.currentTimeMillis()).commit()
         pruneOldRuns()
         return snapshot()!!.also { writeReport(it) }
     }
@@ -65,7 +66,11 @@ class ChipKSevenPageStore(context: Context) {
             prefs.getString("state", "stopped").orEmpty(),
             prefs.getInt("index", 0), prefs.getInt("ready_index", -1),
             prefs.getLong("ready_at", 0L), prefs.getLong("seen_at", 0L),
-            pages, prefs.getString("error", "").orEmpty())
+            prefs.getLong("pulse_at", 0L), pages, prefs.getString("error", "").orEmpty())
+    }
+
+    @Synchronized fun pulse() {
+        if (snapshot()?.active == true) prefs.edit().putLong("pulse_at", System.currentTimeMillis()).apply()
     }
 
     @Synchronized fun requestNavigation(index: Int) {
@@ -188,7 +193,8 @@ class ChipKSevenPageStore(context: Context) {
     }
 
     @Synchronized private fun pruneOldRuns() {
-        root.listFiles()?.filter { it.isDirectory }?.sortedByDescending { it.name }
+        root.listFiles()?.filter { it.isDirectory }
+            ?.sortedByDescending { it.name.substringAfterLast("_").toLongOrNull() ?: 0L }
             ?.drop(12)?.forEach { it.deleteRecursively() }
     }
 }
