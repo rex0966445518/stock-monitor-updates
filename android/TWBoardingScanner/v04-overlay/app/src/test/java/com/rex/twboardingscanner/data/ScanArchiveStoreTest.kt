@@ -39,6 +39,7 @@ class ScanArchiveStoreTest {
             RadarType.D_MAIN_FORCE->ScoringEngine().evaluateD(snap,DPattern.DEFAULT_ENABLED)
             RadarType.E_DIF_TOUCH->ScoringEngine().evaluateE(snap,setOf("price","volume"))
             RadarType.F_VOLUME_CONTRACTION->ScoringEngine().evaluateF(snap,setOf("price","volume"))
+            RadarType.G_MA5_WAVE->ScoringEngine().evaluateG(snap,GPattern.REQUIRED_IDS)
         }
     }
     private fun rules()=RadarType.entries.associateWith{setOf("price","volume")}
