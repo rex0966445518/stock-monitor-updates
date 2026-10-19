@@ -52,7 +52,7 @@ class AppUpdateActivity:AppCompatActivity(){
     }
     override fun onPause(){visible=false;handler.removeCallbacks(polling);super.onPause()}
     override fun onSaveInstanceState(outState:Bundle){outState.putBoolean("autoInstall",autoInstall);outState.putBoolean("awaitingPermission",awaitingPermission);super.onSaveInstanceState(outState)}
-    private fun isNewer()=(store.spec()?.versionCode?:0)>AppUpdateInstaller.code(AppUpdateInstaller.installed(this))
+    private fun isNewer()=store.spec()?.let{AppUpdateInstaller.isNewer(it,AppUpdateInstaller.installed(this))}==true
     private fun startUpdate(){
         autoInstall=true
         runCatching{AppUpdateWorker.start(this)}.onFailure{autoInstall=false;Toast.makeText(this,"無法開始更新，請重試",Toast.LENGTH_LONG).show()}
@@ -60,7 +60,7 @@ class AppUpdateActivity:AppCompatActivity(){
     }
     internal fun render(){
         val state=store.snapshot();val s=store.spec();val status=state.optString("status")
-        val installed=AppUpdateInstaller.installed(this);val newer=s!=null&&s.versionCode>AppUpdateInstaller.code(installed)
+        val installed=AppUpdateInstaller.installed(this);val newer=s!=null&&AppUpdateInstaller.isNewer(s,installed)
         val ready=status=="READY"&&newer;val current=status=="CURRENT"||(status=="READY"&&!newer)
         val busy=status in AppUpdateStore.busy
         headline.text=when{ready->"更新包準備完成";current->"已是最新版本";status=="ERROR"->"更新未完成";status=="PAUSED"->"已暫停更新";status=="DOWNLOADING"->"正在下載更新";status=="VERIFYING"->"正在驗證更新包";busy->"檢查最新版…";else->"一鍵更新"}
