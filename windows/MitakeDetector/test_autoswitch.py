@@ -187,17 +187,23 @@ class DashboardFocusTests(unittest.TestCase):
             PostMessageW=lambda *args:self.messages.append(args) or True)
         return c
 
-    def test_dashboard_keeps_scan_alive_and_inputs_are_targeted(self):
-        c=self.controller()
-        c.check();c.click((10,20));c.scroll((10,20),-120)
-        self.assertEqual([m[1] for m in self.messages],[0x200,0x201,0x202,0x20a])
-        self.assertTrue(all(m[0]==1 for m in self.messages))
+    def test_dashboard_keeps_scan_alive_without_forcing_focus_during_ocr(self):
+        c=self.controller();c.check();c.pause(.01)
+        self.assertFalse(c.stop.is_set())
         c.stop.set()
-        with self.assertRaises(AutomationStopped):c.click((10,20))
+        with self.assertRaises(AutomationStopped):c.check()
 
     def test_other_apps_and_occluded_target_still_block_input(self):
         c=self.controller(3)
         with self.assertRaises(AutomationStopped):c.check()
         c=self.controller();c.u.WindowFromPoint=lambda point:3
-        with self.assertRaises(AutomationStopped):c.scroll((10,20),-120)
-        self.assertEqual(self.messages,[])
+        with self.assertRaises(AutomationStopped):c.point((10,20))
+
+    def test_input_temporarily_activates_target_before_wheel(self):
+        c=self.controller();active=[2];c.u.GetForegroundWindow=lambda:active[0]
+        c.activate=lambda:active.__setitem__(0,1)
+        c.u.SetCursorPos=lambda x,y:True
+        c.u.mouse_event=lambda *args:self.messages.append(args)
+        c.scroll((10,20),-120)
+        self.assertEqual(active[0],1)
+        self.assertEqual(self.messages[0][0],0x0800)

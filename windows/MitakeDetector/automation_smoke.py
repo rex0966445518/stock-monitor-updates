@@ -136,19 +136,6 @@ def run_automation_smoke(root,app):
             for _ in range(2):
                 switcher.switch('大單流入')
                 switcher.switch('漲幅排行')
-            # Native WM mouse messages must operate the target without moving cursor.
-            cursor_before=W.POINT();controller.u.GetCursorPos(ctypes.byref(cursor_before))
-            foreground_before=controller.u.GetForegroundWindow()
-            controller.background_input((rect[0]+x+100,rect[1]+y+20))
-            controller.pause(.4)
-            controller.background_input((rect[0]+x+80,rect[1]+y+40+2*36+18))
-            controller.pause(.4)
-            assert selections and selections[-1]=='大單流入','Native background click did not select target'
-            cursor_after=W.POINT();controller.u.GetCursorPos(ctypes.byref(cursor_after))
-            assert (cursor_before.x,cursor_before.y)==(cursor_after.x,cursor_after.y)
-            assert controller.u.GetForegroundWindow()==foreground_before,'Background input stole focus'
-            controller.background_input((rect[0]+x+100,rect[1]+y+20));controller.pause(.3)
-            controller.background_input((rect[0]+x+80,rect[1]+y+40+18));controller.pause(.3)
             stop.set()
             try:controller.click((rect[0]+50,rect[1]+50))
             except AutomationStopped:pass
