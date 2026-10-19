@@ -80,7 +80,7 @@ object GPattern{
         ScanCondition(LOTS,"G 基礎：成交量 ≥ 指定張數",true){it.gPattern.volumePass},
         ScanCondition(EVENT_VOLUME,"G1 大陽線成交量 ≥ 先前 N 日均量指定倍數",true){it.gPattern.eventVolumePass},
         ScanCondition(MA_RISE,"G2 5 日均線連續 N 日上揚",true){it.gPattern.maRisePass},
-        ScanCondition(DIF_RISE,"G2 DIF 高於前一交易日",true){if(it.s.bars.size<35)null else it.s.difRising},
+        ScanCondition(DIF_RISE,"G2 DIF 高於前一交易日",true){it.macdDIFRising},
         ScanCondition(RSI_MIN,"G2 RSI(14) ≥ 指定門檻",true){it.s.rsi?.let{r->r>=it.s.gConfig.minRsi}}
     )
     class Evidence(private val bars:List<DailyBar>,val config:GPatternConfig){

@@ -50,7 +50,7 @@ object BacktestSettingsDiff {
                 if(a!=null&&b!=null&&a!=b)change(SettingChangeKind.CHANGED,"$title · $a → $b")
             }
         }
-        sets("ABCDEF 啟用",strings(previous.optJSONArray("enabledRadars")),strings(current.optJSONArray("enabledRadars")))
+        sets("ABCDEFG 啟用",strings(previous.optJSONArray("enabledRadars")),strings(current.optJSONArray("enabledRadars")))
         value("F 縮量上漲門檻",FPatternConfig.read(previous.optJSONObject("fConfig")).toString(),FPatternConfig.read(current.optJSONObject("fConfig")).toString())
         value("G 大陽線／5MA及持股門檻",GPatternConfig.read(previous.optJSONObject("gConfig")).toString(),GPatternConfig.read(current.optJSONObject("gConfig")).toString())
         value("B 深跌反轉門檻",BPatternConfig.read(previous.optJSONObject("bConfig")).describe(),BPatternConfig.read(current.optJSONObject("bConfig")).describe())

@@ -48,7 +48,7 @@ class FullMarketScanRunner(
         val enabled=config.getJSONArray("enabledRadars").let{a->
             (0 until a.length()).map{RadarType.valueOf(a.getString(it))}.toSet()
         }
-        require(enabled.isNotEmpty()){"沒有啟用任何 ABCDEF 入場條件"}
+        require(enabled.isNotEmpty()){"沒有啟用任何 ABCDEFG 入場條件"}
         val rules=config.getJSONObject("rules").let{obj->
             RadarType.entries.associateWith{type->
                 obj.optJSONArray(type.name)?.let{a->(0 until a.length()).map{a.getString(it)}.toSet()}?:emptySet()

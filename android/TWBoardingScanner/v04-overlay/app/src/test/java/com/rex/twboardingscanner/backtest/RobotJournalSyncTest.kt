@@ -79,7 +79,8 @@ class RobotJournalSyncTest {
         assertEquals(0L,saved.getLong("tested"))
     }
     @Test fun archivedAbcdChecksAppearInMenusAndStayRequiredDuringExploration(){
-        val counts=listOf(12,9,5,9,2,1)
+        // Archived A–F selections predate G: its original required set is empty.
+        val counts=listOf(12,9,5,9,2,1,0)
         val archived=archive().copy(rules=RadarType.entries.associateWith{type->
             ScanConditions.forRadar(type).take(counts[type.ordinal]).map{it.id}.toSet()
         },enabledRadars=RadarType.entries.toSet())

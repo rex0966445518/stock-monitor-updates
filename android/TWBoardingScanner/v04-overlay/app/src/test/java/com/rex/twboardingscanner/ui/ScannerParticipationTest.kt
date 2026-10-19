@@ -17,7 +17,7 @@ class ScannerParticipationTest {
     private val paper=BtSettings(LocalDate.of(2026,10,1),LocalDate.of(2026,10,30))
         .copy(enabledRadars=RadarType.entries.toSet(),sectors=setOf(sector))
     @Test fun all64SwitchCombinationsOnlyInvokeSelectedEnginesWithPausedPaperStrategy(){
-        for(mask in 0 until 64){
+        for(mask in 0 until (1 shl RadarType.entries.size)){
             val selected=RadarType.entries.filterIndexed{i,_->mask and (1 shl i)!=0}.toSet()
             val calls=mutableListOf<RadarType>()
             ScanParticipation(selected,setOf(sector),false,paper).evaluate(sector){calls.add(it);it}
@@ -33,9 +33,9 @@ class ScannerParticipationTest {
     @Test fun runningPaperResultsNeverLeakIntoEScannerResults(){
         val routing=ScanParticipation(setOf(RadarType.E_DIF_TOUCH),setOf(sector),true,paper)
         val all=routing.evaluate(sector){result(it)}
-        assertEquals(6,all.size)
+        assertEquals(7,all.size)
         assertEquals(listOf(RadarType.E_DIF_TOUCH),routing.mainResults(all).map{it.radarType})
-        assertEquals(6,routing.paperResults(all).size)
+        assertEquals(7,routing.paperResults(all).size)
         assertTrue(routing.evaluate(StockSector.UNKNOWN){it}.isEmpty())
     }
     @Test fun mainScreenFiltersStaleResultsAndInvalidatesRunningScan(){

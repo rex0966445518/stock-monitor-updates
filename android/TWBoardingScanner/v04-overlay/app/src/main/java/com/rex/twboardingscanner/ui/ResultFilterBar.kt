@@ -49,9 +49,8 @@ class ResultFilterBar @JvmOverloads constructor(context: Context, attrs: Attribu
         addView(NeonUi.gap(context, 3))
         addView(NeonUi.row(context, listOf(buttons[6],buttons[3],buttons[7])))
         addView(NeonUi.gap(context, 3))
-        addView(NeonUi.row(context,listOf(buttons[8],buttons[4],buttons[5])))
-        addView(NeonUi.gap(context, 3))
-        addView(NeonUi.row(context,listOf(buttons[9])))
+        // Keep G on the existing third row so the results bar never covers the list.
+        addView(NeonUi.row(context,listOf(buttons[8],buttons[9],buttons[4],buttons[5])))
         update(List(10) { 0 }, 6)
     }
     fun update(counts: List<Int>, selected: Int) {

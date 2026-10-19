@@ -175,10 +175,10 @@ class ScanArchiveStoreTest {
             val folder=db.addCompleteScan("2026-10-09",t,settings(t),all,all)
             val restored=db.saved(folder.id)!!
             assertEquals(all,restored.main)
-            assertEquals(12000,restored.main.size)
+            assertEquals(2000*RadarType.entries.size,restored.main.size)
             assertSame(restored.main[0],restored.paper[0])
             assertEquals(2000,restored.main.map{it.snapshot.bars}.distinct().size)
-            assertTrue(restored.main.chunked(6).all{group->group.all{it.snapshot.bars===group[0].snapshot.bars}})
+            assertTrue(restored.main.chunked(RadarType.entries.size).all{group->group.all{it.snapshot.bars===group[0].snapshot.bars}})
         }
     }
     @Test fun everyScanHasItsOwnFolderWithFrozenConditionsDiffCountsAndEstimatedFunding(){

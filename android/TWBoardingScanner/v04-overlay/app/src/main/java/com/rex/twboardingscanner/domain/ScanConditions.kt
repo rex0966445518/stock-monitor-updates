@@ -151,6 +151,8 @@ class RuleMetrics(val s: StockSnapshot) {
     private val ma20 = avg(20)
     private val cachedMacd by lazy(LazyThreadSafetyMode.NONE){TechnicalCalculator().macd(closes)}
     val macdAboveZero:Boolean? get() = if(closes.any{!it.isFinite()||it<=0})null else cachedMacd?.let{it.signal>0.0}
+    // Use the same close-series MACD for full display and rule-only backtests.
+    val macdDIFRising:Boolean? get() = if(closes.size<35||closes.any{!it.isFinite()||it<=0})null else cachedMacd?.difRising
     val rsi30To50:Boolean? get() {
         if(closes.size<16||closes.any{!it.isFinite()||it<=0})return null
         val values=RsiGoldenCross.values(closes,14)
