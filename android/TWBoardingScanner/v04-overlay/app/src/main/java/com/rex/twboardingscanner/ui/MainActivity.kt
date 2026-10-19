@@ -212,6 +212,7 @@ class MainActivity: AppCompatActivity() {
         }
         b.logButton.text="掃描資料夾"
         b.logButton.setOnClickListener { startActivity(android.content.Intent(this,ScanArchiveActivity::class.java)) }
+        b.chipkGeminiButton.setOnClickListener { startActivity(android.content.Intent(this,ChipKGeminiActivity::class.java)) }
         b.searchButton.setOnClickListener { StockToolsActivity.open(this,"SEARCH") }
         b.exitRulesButton.setOnClickListener {
             val store=com.rex.twboardingscanner.data.ExitRuleStore(this)

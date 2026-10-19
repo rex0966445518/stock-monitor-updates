@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">AI-離職神器</string>
-    <string name="chipk_search_description">只在點擊股票卡片後，讀取籌碼K線的搜尋欄與圖表按鈕，搜尋指定股號並切換日K；不儲存或上傳畫面內容，不操作交易下單。</string>
+    <string name="chipk_search_description">經你啟用後，本輔助只在籌碼K線 App 內處理股號搜尋與指定的七個資訊頁籤。截圖功能另須每次透過 Android 螢幕擷取授權；畫面只保存在本機，不自動上傳、不登入帳號、不操作交易下單。</string>
 </resources>
