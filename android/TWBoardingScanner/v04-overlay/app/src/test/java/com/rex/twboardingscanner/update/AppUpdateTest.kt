@@ -139,6 +139,8 @@ class AppUpdateTest {
         val store=AppUpdateStore(app);val id=store.begin();store.setSpec(id,spec());store.status(id,"DOWNLOADING","接續下載",20)
         val ctl=Robolectric.buildActivity(AppUpdateActivity::class.java).setup();val a=ctl.get()
         assertNotNull(find(a.window.decorView){it is TextView&&it.text.contains("接續下載")})
+        assertNotNull(find(a.window.decorView){it.tag=="update-direct-apk"})
+        assertNotNull(find(a.window.decorView){it is TextView&&it.text.contains("代碼")})
         assertFalse(find(a.window.decorView){it.tag=="update-primary"}!!.isEnabled)
         capture(a.window.decorView,"app-update-progress-360")
         store.status(id,"ERROR","下載中斷，請重試");a.render()
