@@ -17,6 +17,7 @@ internal class RadarGlyph(private val radar:RadarType):Drawable(){
             RadarType.D_MAIN_FORCE->{paint.style=Paint.Style.STROKE;c.drawCircle(12f,6f,3f,paint);c.drawArc(5f,12f,19f,26f,180f,180f,false,paint);line(3f,10f,3f,18f);line(21f,10f,21f,18f)}
             RadarType.E_DIF_TOUCH->{line(3f,19f,8f,16f,12f,10f,17f,6f,21f,4f);line(3f,10f,8f,10f,12f,9f,17f,8f,21f,7f)}
             RadarType.F_VOLUME_CONTRACTION->{line(3f,11f,9f,8f,14f,9f,21f,3f);line(17f,3f,21f,3f,21f,7f);line(5f,15f,5f,21f);line(12f,17f,12f,21f);line(19f,19f,19f,21f)}
+            RadarType.G_MA5_WAVE->{line(2f,16f,7f,7f,11f,12f,15f,8f,22f,3f);line(2f,20f,22f,20f)}
         }
         c.restore()
     }

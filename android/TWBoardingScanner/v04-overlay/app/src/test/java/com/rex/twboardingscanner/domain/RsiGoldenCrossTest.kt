@@ -37,7 +37,7 @@ class RsiGoldenCrossTest{
         assertTrue(evidence.passes)
         val stock=MarketStock("2330","測試",Market.TWSE,StockSector.SEMICONDUCTOR,68.6,69.6,67.6,68.6,0.0,1000,null,null)
         val snapshot=TechnicalCalculator().build(stock,bars())
-        for(type in RadarType.entries){
+        for(type in RadarType.entries.take(6)){
             val rule=ScanConditions.forRadar(type).single{it.id==RsiGoldenCross.ID}
             assertFalse(rule.defaultEnabled)
             assertEquals(true,rule.test(RuleMetrics(snapshot)))
@@ -46,7 +46,7 @@ class RsiGoldenCrossTest{
         val result=ScoringEngine().evaluateA(snapshot,setOf(RsiGoldenCross.ID))
         assertNotEquals(SignalLight.NONE,result.light)
         assertTrue(result.dEvidence!!.contains("RSI(5)"))
-        val rules=RadarType.entries.associateWith{setOf(RsiGoldenCross.ID)}
+        val rules=RadarType.entries.associateWith{if(it==RadarType.G_MA5_WAVE) emptySet() else setOf(RsiGoldenCross.ID)}
         assertEquals(rules,BtRobotSpace.rules(BtRobotSpace.key(rules)))
         assertEquals(RadarType.entries.take(5).map{it to RsiGoldenCross.ID},BtRobotSpace.allSlots.drop(BtRobotSpace.v5Slots.size+BtRobotSpace.eSlots.size).take(5))
         assertEquals(106,BtRobotSpace.v5Slots.size)
@@ -54,7 +54,7 @@ class RsiGoldenCrossTest{
     @Test fun RobotCacheAndReferenceKeepAllFiveCrossResultsAndJournalChecks(){
         val input=bars()+bars().last().copy(time=day.plusDays(1).atTime(9,0).atZone(RuleMetrics.TAIPEI).toInstant().toEpochMilli(),close=68.8)
         val series=listOf(BtSeries("2330","測試",Market.TWSE,input))
-        val rules=RadarType.entries.associateWith{setOf(RsiGoldenCross.ID)}
+        val rules=RadarType.entries.associateWith{if(it==RadarType.G_MA5_WAVE) emptySet() else setOf(RsiGoldenCross.ID)}
         val settings=BtRobotSpace.settings(rules).copy(start=day,end=day.plusDays(1),enabledRadars=RadarType.entries.toSet(),stockScope=StockScope.ROBOT)
         val ref=BacktestEngine.prepare(series,settings)
         assertEquals("C/D",ref.signals.getValue(day).single().radar)

@@ -30,10 +30,11 @@ class RadarOptionsAuditTest {
         RadarType.C_LONG_RED_VOLUME to setOf("red","gain","body","burst","closeHigh"),
         RadarType.D_MAIN_FORCE to setOf(DPattern.LIMIT,DPattern.GREEN,DPattern.GAP,DPattern.VOLUME),
         RadarType.E_DIF_TOUCH to setOf(EPattern.EVENT,EPattern.CROSS),
-        RadarType.F_VOLUME_CONTRACTION to setOf(FPattern.EVENT,"f_average","f_dif")
-    ).mapValues{it.value+ScanConditions.MOMENTUM_IDS}
+        RadarType.F_VOLUME_CONTRACTION to setOf(FPattern.EVENT,"f_average","f_dif"),
+        RadarType.G_MA5_WAVE to (GPattern.REQUIRED_IDS+setOf(GPattern.PRICE,GPattern.LOTS))
+    ).mapValues{(type,ids)->if(type==RadarType.G_MA5_WAVE)ids else ids+ScanConditions.MOMENTUM_IDS}
     @Test fun allSixFamiliesExposeEveryRuleAndSaveCoreSelectionsInScannerAndBacktest(){
-        assertEquals(listOf("準備起漲","深跌反轉","突發爆量","主力進場","DIF金叉","縮量上漲"),RadarType.entries.map{it.displayName})
+        assertEquals(listOf("準備起漲","深跌反轉","突發爆量","主力進場","DIF金叉","縮量上漲","大陽線・5日線波段"),RadarType.entries.map{it.displayName})
         val main=Robolectric.buildActivity(MainActivity::class.java).setup()
         val bt=Robolectric.buildActivity(BacktestActivity::class.java).setup()
         for(type in RadarType.entries){

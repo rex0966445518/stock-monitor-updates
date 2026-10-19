@@ -34,7 +34,7 @@ class MomentumAndMa5ExitTest {
         assertEquals(false,metrics(falling+100.0+101.0).rsi30To50)
         assertEquals(false,metrics(List(40){100.0}).rsi30To50)
         assertNull(metrics(List(15){100.0}).rsi30To50)
-        for(type in RadarType.entries){
+        for(type in RadarType.entries.take(6)){
             val rules=ScanConditions.forRadar(type)
             assertEquals(2,rules.count{it.id in ScanConditions.MOMENTUM_IDS})
             assertTrue(rules.filter{it.id in ScanConditions.MOMENTUM_IDS}.all{!it.defaultEnabled})
@@ -58,7 +58,7 @@ class MomentumAndMa5ExitTest {
         val prices=List(60){200.0-it}+145.0
         val s=metrics(prices).s
         val engine=ScoringEngine()
-        for(type in RadarType.entries){
+        for(type in RadarType.entries.take(6)){
             fun evaluate(ids:Set<String>)=when(type){
                 RadarType.A_EARLY_BREAKOUT->engine.evaluateA(s,ids)
                 RadarType.B_DEEP_REVERSAL->engine.evaluateB(s,ids)
@@ -66,13 +66,14 @@ class MomentumAndMa5ExitTest {
                 RadarType.D_MAIN_FORCE->engine.evaluateD(s,ids)
                 RadarType.E_DIF_TOUCH->engine.evaluateE(s,ids)
                 RadarType.F_VOLUME_CONTRACTION->engine.evaluateF(s,ids)
+                RadarType.G_MA5_WAVE->engine.evaluateG(s,ids)
             }
             assertNotEquals(SignalLight.NONE,evaluate(setOf("price")).light)
             assertEquals(SignalLight.NONE,evaluate(setOf("price",ScanConditions.MACD_ABOVE_ZERO)).light)
         }
         val series=listOf(BtSeries("2330","測試",Market.TWSE,bars(prices)))
         for(ids in listOf(setOf("price"),ScanConditions.MOMENTUM_IDS)){
-            val settings=BtRobotSpace.settings(RadarType.entries.associateWith{ids}).copy(start=day.minusDays(2),end=day,enabledRadars=RadarType.entries.toSet())
+            val settings=BtRobotSpace.settings(RadarType.entries.associateWith{if(it==RadarType.G_MA5_WAVE)emptySet() else ids}).copy(start=day.minusDays(2),end=day,enabledRadars=RadarType.entries.toSet())
             assertEquals(BacktestEngine.prepare(series,settings).signals,BtConditionIndex.build(series,settings).prepare(settings).signals)
         }
     }
@@ -96,7 +97,7 @@ class MomentumAndMa5ExitTest {
         assertEquals(12,BtRobotSpace.v7Slots.size-old.size)
         old.forEachIndexed{i,pair->assertTrue(pair.second in BtRobotSpace.rules(java.math.BigInteger.ONE.shiftLeft(i).toString(16)).getValue(pair.first))}
         assertEquals(java.math.BigInteger.ONE.shiftLeft(old.size),BtRobotSpace.total("0",includeMomentum=false))
-        val settings=BtRobotSpace.settings(RadarType.entries.associateWith{ScanConditions.MOMENTUM_IDS})
+        val settings=BtRobotSpace.settings(RadarType.entries.associateWith{if(it==RadarType.G_MA5_WAVE)emptySet() else ScanConditions.MOMENTUM_IDS})
         assertEquals(settings.rules,BtRobotSpace.rules(BtRobotSpace.key(settings.rules)))
     }
 }

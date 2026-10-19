@@ -51,8 +51,8 @@ class FPatternTest {
     @Test fun allSixtyFourSwitchCombinationsMatchDirectAndCachedDetection(){
         val b=bars(List(90){100.0+it},List(90){if(it%2==0)2000000L else 1000000L})
         val series=listOf(BtSeries("2330","測試",Market.TWSE,b))
-        val rules=RadarType.entries.associateWith{type->setOf(if(type==f)FPattern.EVENT else "price")}
-        val base=BtRobotSpace.settings(rules).copy(start=start.plusDays(60),end=start.plusDays(89),enabledRadars=RadarType.entries.toSet())
+        val rules=RadarType.entries.associateWith{type->if(type==RadarType.G_MA5_WAVE)emptySet() else setOf(if(type==f)FPattern.EVENT else "price")}
+        val base=BtRobotSpace.settings(rules).copy(start=start.plusDays(60),end=start.plusDays(89),enabledRadars=RadarType.entries.take(6).toSet())
         val cached=BtConditionIndex.build(series,base)
         for(mask in 0..63){
             val enabled=RadarType.entries.filterIndexed{i,_->mask and (1 shl i)!=0}.toSet()

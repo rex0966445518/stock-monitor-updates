@@ -24,6 +24,7 @@ class BtConditionIndex private constructor(
     fun prepare(s:BtSettings,cancel:()->Boolean={false}):BtPrepared {
         val selected=RadarType.entries.map{type->
             val ids=if(type in s.enabledRadars)s.rules[type].orEmpty() else emptySet()
+            if(type==RadarType.G_MA5_WAVE && ids.isNotEmpty() && !ids.containsAll(GPattern.REQUIRED_IDS))return@map 0L
             val options=ScanConditions.forRadar(type)
             require(ids.all{id->options.any{it.id==id}})
             options.foldIndexed(0L){i,mask,rule->if(rule.id in ids)mask or (1L shl i)else mask}
@@ -70,10 +71,10 @@ class BtConditionIndex private constructor(
         fun fingerprint(digest:String,settings:BtSettings,flowRevision:String="none")=
             "$digest:${settings.start}:${settings.end}:${ScanConditions.VERSION}:${APattern.VERSION}:$flowRevision:"+
             settings.enabledRadars.sortedBy{it.ordinal}.joinToString(","){it.name}+":"+
-            settings.dConfig.json().toString()+":"+settings.eConfig.json().toString()+":"+settings.fConfig.json().toString()+":"+settings.bConfig.json().toString()+":"+BtRobotSpace.allSlots.joinToString(","){"${it.first.name}/${it.second}"}
+            settings.dConfig.json().toString()+":"+settings.eConfig.json().toString()+":"+settings.fConfig.json().toString()+":"+settings.gConfig.json().toString()+":"+settings.bConfig.json().toString()+":"+BtRobotSpace.allSlots.joinToString(","){"${it.first.name}/${it.second}"}
         fun read(file:File,series:List<BtSeries>,fingerprint:String):BtConditionIndex=
             DataInputStream(BufferedInputStream(GZIPInputStream(file.inputStream()))).use{input->
-                require(input.readUTF()=="BTINDEX6"&&input.readUTF()==fingerprint){"歷史 ABCDEF 條件快取或版本不一致"}
+                require(input.readUTF()=="BTINDEX6"&&input.readUTF()==fingerprint){"歷史 ABCDEFG 條件快取或版本不一致"}
                 val count=input.readInt();require(count in 0..1000000)
                 val codes=series.map{it.code}.toSet()
                 val options=RadarType.entries.map{ScanConditions.forRadar(it)}
@@ -147,7 +148,7 @@ class BtConditionIndex private constructor(
                                 tradeSideVolume=flowFor(s.code,day))
                             RuleMetrics(calc.buildForRules(stock,known).copy(
                                 timestamp=day.atTime(13,30).atZone(RuleMetrics.TAIPEI).toInstant().toEpochMilli(),
-                                dConfig=settings.dConfig,eConfig=settings.eConfig,fConfig=settings.fConfig,bConfig=settings.bConfig,marketIndexCloses=benchmark))
+                                dConfig=settings.dConfig,eConfig=settings.eConfig,fConfig=settings.fConfig,bConfig=settings.bConfig,gConfig=settings.gConfig,marketIndexCloses=benchmark))
                         }
                         dates[i]=RuleMetrics.tradingDate(m.last!!.time)
                         options[i].forEachIndexed{bit,condition->

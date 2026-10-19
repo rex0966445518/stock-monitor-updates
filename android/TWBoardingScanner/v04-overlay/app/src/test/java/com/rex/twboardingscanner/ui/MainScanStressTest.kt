@@ -48,7 +48,7 @@ class MainScanStressTest {
         assertFalse(field("isScanning").getBoolean(host))
         @Suppress("UNCHECKED_CAST")
         val results=field("latest").get(host) as List<SignalResult>
-        assertEquals(12000,results.size)
+        assertEquals(2000*RadarType.entries.size,results.size)
         if(java.time.LocalTime.now(RuleMetrics.TAIPEI)>=java.time.LocalTime.of(13,33))assertEquals(2000,auctionCalls.get())
         ScanArchiveStore(app).use{db->assertEquals(results,db.latestSaved()!!.main)}
         val content=host.findViewById<android.view.View>(android.R.id.content)

@@ -9,10 +9,11 @@ import android.widget.LinearLayout
 import com.rex.twboardingscanner.domain.*
 
 /** Dialog-local values: no live settings change until the containing form is saved. */
-internal class RuleNumberFields(private val c:Context,d:DPatternConfig,f:FPatternConfig,b:BPatternConfig=BPatternConfig.DEFAULT){
+internal class RuleNumberFields(private val c:Context,d:DPatternConfig,f:FPatternConfig,b:BPatternConfig=BPatternConfig.DEFAULT,g:GPatternConfig=GPatternConfig.DEFAULT){
     private val values=linkedMapOf<String,String>()
     private val inputs=mutableMapOf<String,MutableList<EditText>>()
-    init{setD(d);setF(f);setB(b)}
+    init{setD(d);setF(f);setB(b);setG(g)}
+    private var gBase:GPatternConfig=g
     private fun put(key:String,value:Any){
         val raw=value.toString();values[key]=raw
         inputs[key].orEmpty().forEach{if(it.text.toString()!=raw)it.setText(raw)}
@@ -21,6 +22,22 @@ internal class RuleNumberFields(private val c:Context,d:DPatternConfig,f:FPatter
     fun readB()=BPatternConfig(int("b-depthDays"),decimal("b-depthPct"),int("b-stopDays"),int("b-supportDays"),int("b-momentumDays"),int("b-eventDays"),int("b-rsiLookback"),decimal("b-rsiThreshold"),int("b-breakoutDays"),int("b-volumeDays"),decimal("b-volumeMultiple")).validated()
     fun setD(v:DPatternConfig){put("d-lookback",v.lookback);put("d-limit",v.minimumLimitHits);put("d-green",v.bullishBars);put("d-volumeDays",v.volumeDays);put("d-base",v.volumeBaseDays);put("d-multiple",v.volumeMultiple)}
     fun setF(v:FPatternConfig){put("f-days",v.days);put("f-pct",v.volumePct);put("f-averageDays",v.averageDays);put("f-averagePct",v.averagePct);put("f-lots",v.minLots);put("f-ma",v.maDays);put("f-gainDays",v.gainDays);put("f-gain",v.maxGainPct)}
+    fun setG(v:GPatternConfig){
+        gBase=v
+        put("g-eventDays",v.eventDays);put("g-eventCount",v.eventCount);put("g-eventGain",v.eventGainPct)
+        put("g-pullbackDays",v.pullbackDays);put("g-touchAbove",v.touchAbovePct);put("g-touchBelow",v.touchBelowPct)
+        put("g-maxAbove",v.maxAbovePct);put("g-volumeDays",v.volumeDays);put("g-volumeMultiple",v.volumeMultiple)
+        put("g-maRiseDays",v.maRiseDays);put("g-rsi",v.minRsi);put("g-price",v.minPrice);put("g-lots",v.minLots)
+    }
+    fun readG():GPatternConfig=gBase.copy(
+        eventDays=int("g-eventDays"),eventCount=int("g-eventCount"),eventGainPct=decimal("g-eventGain"),
+        pullbackDays=int("g-pullbackDays"),touchAbovePct=decimal("g-touchAbove"),
+        touchBelowPct=decimal("g-touchBelow"),maxAbovePct=decimal("g-maxAbove"),
+        volumeDays=int("g-volumeDays"),volumeMultiple=decimal("g-volumeMultiple"),
+        maRiseDays=int("g-maRiseDays"),minRsi=decimal("g-rsi"),
+        minPrice=decimal("g-price"),minLots=int("g-lots")
+    ).validated()
+    fun editG(){runCatching{readG()}.onSuccess{GPatternEditor.show(c,it,::setG)}.onFailure{android.widget.Toast.makeText(c,it.message,android.widget.Toast.LENGTH_LONG).show()}}
     fun editD(){runCatching{readD()}.onSuccess{DPatternEditor.show(c,it,::setD)}.onFailure{android.widget.Toast.makeText(c,it.message,android.widget.Toast.LENGTH_LONG).show()}}
     fun editF(){runCatching{readF()}.onSuccess{FPatternEditor.show(c,it,::setF)}.onFailure{android.widget.Toast.makeText(c,it.message,android.widget.Toast.LENGTH_LONG).show()}}
     private fun number(key:String):String=values.getValue(key).trim().also{require(it.isNotEmpty()){ "數字欄位不可留白；請填數值或取消此次修改" }}
@@ -58,6 +75,15 @@ internal class RuleNumberFields(private val c:Context,d:DPatternConfig,f:FPatter
             DPattern.GREEN->{field("最近交易日（與漲停／缺口共用）","d-lookback");field("連續陽線根數（2～觀察日數）","d-green")}
             DPattern.GAP->field("最近交易日（與漲停／連陽共用）","d-lookback")
             DPattern.VOLUME->{field("最近連續放量日數（1～10）","d-volumeDays");field("放量前均量天數（5～120）","d-base");field("每日至少均量倍數（1～20）","d-multiple",true)}
+        }
+        if(type==RadarType.G_MA5_WAVE)when(id){
+            GPattern.EVENT->{field("近期交易日（2～120）","g-eventDays");field("至少大陽線次數","g-eventCount");field("大陽線漲幅 ≥（%）","g-eventGain",true)}
+            GPattern.PULLBACK->{field("大陽線後回踩交易日數","g-pullbackDays");field("低點最多高於5MA（%）","g-touchAbove",true);field("低點可跌破5MA（%）","g-touchBelow",true);field("收盤最多高於5MA（%）","g-maxAbove",true)}
+            GPattern.EVENT_VOLUME->{field("事件前均量交易日","g-volumeDays");field("大陽線當日量比 ≥","g-volumeMultiple",true)}
+            GPattern.MA_RISE->field("5MA連續上升日數","g-maRiseDays")
+            GPattern.RSI_MIN->field("RSI最低門檻","g-rsi",true)
+            GPattern.PRICE->field("最低股價（元）","g-price",true)
+            GPattern.LOTS->field("最低成交量（張）","g-lots")
         }
         if(type==RadarType.F_VOLUME_CONTRACTION)when(id){
             FPattern.EVENT->{field("連續符合交易日（1～60）","f-days");field("每日量 ≤ 前日量（%，0～100之間）","f-pct",true)}

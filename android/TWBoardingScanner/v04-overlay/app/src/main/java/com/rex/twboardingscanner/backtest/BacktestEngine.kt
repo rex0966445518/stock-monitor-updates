@@ -18,7 +18,8 @@ data class BtSettings(val start:LocalDate,val end:LocalDate,val capital:Double=3
     val eConfig:EPatternConfig=EPatternConfig.DEFAULT,
     val fConfig:FPatternConfig=FPatternConfig.DEFAULT,
     val exclusions:Map<RadarType,Set<String>> = ExclusionConditions.empty(),
-    val bConfig:BPatternConfig=BPatternConfig.DEFAULT,val robotBaseline:Boolean=false){
+    val bConfig:BPatternConfig=BPatternConfig.DEFAULT,val robotBaseline:Boolean=false,
+    val gConfig:GPatternConfig=GPatternConfig.DEFAULT){
     fun validateTrading(){
         require(!robotBaseline||(enabledRadars.isNotEmpty()&&rules.values.all{it.isEmpty()}&&exclusions.values.all{it.isEmpty()})){"空白基準不得含選股條件"}
         require(marketGuardVersion in 0..MarketCrashGuard.VERSION){"大盤保護版本不相容"}
@@ -30,13 +31,14 @@ data class BtSettings(val start:LocalDate,val end:LocalDate,val capital:Double=3
         else require(maxHoldingStocks==null&&targetNetPct==3.0){"舊策略必須保留原持倉及獲利規則"}
         require(targetNetPct.isFinite()&&targetNetPct in 0.01..1000.0){"獲利賣出請填 0.01～1000%"}
         require(enabledRadars.all{it in RadarType.entries}){"啟用區域不存在"}
-        dConfig.validated();eConfig.validated();fConfig.validated();bConfig.validated();ExclusionConditions.validate(exclusions)
+        dConfig.validated();eConfig.validated();fConfig.validated();bConfig.validated();gConfig.validated();ExclusionConditions.validate(exclusions)
     }
 }
 data class BtSeries(val code:String,val name:String,val market:Market,val bars:List<DailyBar>,val dividends:Map<LocalDate,Double> = emptyMap())
 data class BtSignal(val code:String,val radar:String,val dataDate:LocalDate?=null,val dEvidence:String="")
 data class BtTrade(val date:LocalDate,val signalDate:LocalDate,val code:String,val name:String,val radar:String,val side:String,val price:Double,val fee:Double,val tax:Double,val pnl:Double,val reason:String,val shares:Int=1000,val time:String="",val timeKind:String="",val lotId:String="",val target:Double=0.0,val dataDate:LocalDate=signalDate,val dayClose:Double?=null,val previousClose:Double?=null)
-data class BtHolding(val code:String,val name:String,val radar:String,val entry:Double,val cost:Double,val entryDate:LocalDate,val signalDate:LocalDate,var mark:Double,var markDate:LocalDate,val lotId:String,val target:Double,val dataDate:LocalDate,var trendHoldActivated:Boolean=false)
+data class BtHolding(val code:String,val name:String,val radar:String,val entry:Double,var cost:Double,val entryDate:LocalDate,val signalDate:LocalDate,var mark:Double,var markDate:LocalDate,val lotId:String,val target:Double,val dataDate:LocalDate,var trendHoldActivated:Boolean=false,
+    var shares:Int=1000,var g3Reduced:Int=0,var g4Reduced:Int=0)
 data class BtDay(val date:LocalDate,val equity:Double,val selected:Int=0,val buys:Int=0,val sells:Int=0,val skipped:Int=0,
     val realized:Double?=null,val holdingCost:Double?=null,val holdingValue:Double?=null,val holdingLots:Int?=null,
     val cash:Double?=null,val dividendAccrued:Double?=null,val dayProfit:Double?=null,val staleLots:Int?=null,val rebateAccrued:Double?=null,val rebateChange:Double?=null,val marketGuard:MarketGuardDecision?=null)
@@ -51,13 +53,13 @@ data class BtRun(val capital:Double,var cash:Double=capital,var dividendAccrued:
     val skippedCount:Int get()=skipped.size+omittedSkipped
     fun addSkipped(value:BtSkipped){if(skipped.size<skippedDetailLimit)skipped.add(value) else omittedSkipped++}
     val rebateAccrued:Double get()=rebateMonths.values.sumOf{it.amount}
-    val equity:Double get()=cash+dividendAccrued+rebateAccrued+holdings.sumOf{PaperEngine.netSell(it.mark)}
+    val equity:Double get()=cash+dividendAccrued+rebateAccrued+holdings.sumOf{PaperEngine.netSell(it.mark,it.shares)}
     val profit:Double get()=equity-capital
     val closed:List<BtTrade> get()=trades.filter{it.side=="SELL"}
     val buys:Int get()=trades.count{it.side=="BUY"}
     val winRate:Double? get()=closed.takeIf{it.isNotEmpty()}?.let{c->c.count{it.pnl>0}*100.0/c.size}
     val realized:Double get()=closed.sumOf{it.pnl}
-    val unrealized:Double get()=holdings.sumOf{PaperEngine.netSell(it.mark)-it.cost}
+    val unrealized:Double get()=holdings.sumOf{PaperEngine.netSell(it.mark,it.shares)-it.cost}
     val drawdown:Double get(){var peak=capital;var dd=0.0;curve.forEach{peak=max(peak,it.equity);dd=max(dd,(peak-it.equity)/peak*100)};return dd}
 }
 data class BtPrepared(val series:List<BtSeries>,val signals:Map<LocalDate,List<BtSignal>>,val days:List<LocalDate>,val pendingChecks:Int=0,val marketGuards:Map<LocalDate,MarketGuardDecision> = emptyMap())
@@ -87,6 +89,7 @@ object BacktestEngine {
                 val dailyMetrics=mutableMapOf<Int,RuleMetrics>()
                 options.forEach radarLoop@{(type,conditions)->
                     val ids=settings.rules.getValue(type)
+                    if(type==RadarType.G_MA5_WAVE&&!ids.containsAll(GPattern.REQUIRED_IDS))return@radarLoop
                     // Match live scanner timing: A/B exclude today's candle; C includes it.
                     val end=if(type==RadarType.C_LONG_RED_VOLUME||type==RadarType.D_MAIN_FORCE)j+1 else j
                     if(end<60)return@radarLoop
@@ -96,7 +99,7 @@ object BacktestEngine {
                             tradeSideVolume=flowFor(s.code,day))
                         val snap=calculator.buildForRules(stock,known).copy(
                             timestamp=day.atTime(13,30).atZone(RuleMetrics.TAIPEI).toInstant().toEpochMilli(),
-                            dConfig=settings.dConfig,eConfig=settings.eConfig,fConfig=settings.fConfig,bConfig=settings.bConfig,marketIndexCloses=benchmark)
+                            dConfig=settings.dConfig,eConfig=settings.eConfig,fConfig=settings.fConfig,bConfig=settings.bConfig,gConfig=settings.gConfig,marketIndexCloses=benchmark)
                         RuleMetrics(snap)
                     }
                     val checks=conditions.map{it.test(metrics)}
@@ -107,6 +110,7 @@ object BacktestEngine {
                         if(type==RadarType.A_EARLY_BREAKOUT&&ids.any{it in APattern.IDS})dDetails+=metrics.aPattern.format()+"\n"
                         if(type==RadarType.D_MAIN_FORCE)dDetails+=metrics.dPattern.format()+"\n"
                         if(type==RadarType.F_VOLUME_CONTRACTION)dDetails+=metrics.fPattern.format()+"\n"
+                         if(type==RadarType.G_MA5_WAVE)dDetails+=metrics.gPattern.format()+"\n"
                         if(type==RadarType.E_DIF_TOUCH)dDetails+=metrics.ePattern?.format().orEmpty()+"\n"
                     }
                 }
@@ -169,12 +173,12 @@ object BacktestEngine {
         val tradesBefore=b.trades.size;val skippedBefore=b.skippedCount
         val usedShares=mutableMapOf<String,Long>()
         // Only holdings brought into this day earn the ex-dividend accrual.
-        b.holdings.filter{it.entryDate<day}.forEach{p->b.dividendAccrued+=(meta[p.code]?.dividends?.get(day)?:0.0)*1000}
+        b.holdings.filter{it.entryDate<day}.forEach{p->b.dividendAccrued+=(meta[p.code]?.dividends?.get(day)?:0.0)*p.shares}
         // Old lots are processed before today's closing buys. Today's high cannot sell today's new lot.
         b.holdings.toList().forEach{p->
             if(day<=p.entryDate)return@forEach
             val bar=bars[p.code]?.get(day)?:return@forEach
-            if(bar.volumeShares-(usedShares[p.code]?:0)<1000)return@forEach
+            if(bar.volumeShares-(usedShares[p.code]?:0)<p.shares)return@forEach
             val completeBars=if(settings.holdProfitUntilMa5Break)
                 meta[p.code]?.bars.orEmpty().filter{date(it)<day} else emptyList()
             val dailyTrend=if(settings.holdProfitUntilMa5Break)ProfitTrendHold.fromCompleted(completeBars) else null
@@ -182,17 +186,65 @@ object BacktestEngine {
                 val known=meta[p.code]?.bars.orEmpty().filter{date(it)<day}.sortedBy{it.time}.distinctBy(::date)
                 val signal=known.lastOrNull()
                 if(signal!=null&&date(signal)>=p.entryDate) {
-                    val pnlPct=(PaperEngine.netSell(signal.close)/p.cost-1)*100
+                    val pnlPct=(PaperEngine.netSell(signal.close,p.shares)/p.cost-1)*100
                     val matched=ExitRules.match(settings.exitRules,p.entryDate,date(signal),pnlPct,known)
                     if(matched!=null&&bar.open.isFinite()&&bar.open>0) {
-                        val px=PaperEngine.execution(bar.open,false);val amount=px*1000
+                        val px=PaperEngine.execution(bar.open,false);val amount=px*p.shares
                         val fee=PaperEngine.fee(amount);val tax=PaperEngine.tax(amount);val net=amount-fee-tax
-                        b.cash+=net;b.holdings.remove(p);usedShares[p.code]=(usedShares[p.code]?:0)+1000
+                        val oldShares=p.shares
+                        b.cash+=net;b.holdings.remove(p);usedShares[p.code]=(usedShares[p.code]?:0)+oldShares
                         val reason="下車條件 ${matched+1}：${settings.exitRules[matched].description()}；訊號 ${date(signal)}，淨損益 ${btPercent(pnlPct)}%"
-                        b.trades.add(BtTrade(day,p.signalDate,p.code,p.name,p.radar,"SELL",px,fee,tax,net-p.cost,reason,time="09:00",timeKind="前一完整日線判斷；下一可交易日開盤價模擬",lotId=p.lotId,target=0.0,dataDate=date(signal),dayClose=bar.close,previousClose=previous[p.code]?.get(day)))
+                        b.trades.add(BtTrade(day,p.signalDate,p.code,p.name,p.radar,"SELL",px,fee,tax,net-p.cost,reason,time="09:00",timeKind="前一完整日線判斷；下一可交易日開盤價模擬",shares=oldShares,lotId=p.lotId,target=0.0,dataDate=date(signal),dayClose=bar.close,previousClose=previous[p.code]?.get(day)))
                         return@forEach
                     }
                 }
+            }
+            if("G" in p.radar.split("/")){
+                // G exits are based on prior completed daily bars and today's open.
+                // Partial 500-share sells are idealized odd-lot backtest fills.
+                val completed=meta[p.code]?.bars.orEmpty().filter{date(it)<day}.sortedBy{it.time}.distinctBy(::date)
+                val signal=GExitEngine.decide(completed,settings.gConfig,p.entry,p.shares,p.g3Reduced,p.g4Reduced)
+                if(signal!=null&&bar.open.isFinite()&&bar.open>0){
+                    val action=signal.action
+                    val remainingVolume=bar.volumeShares-(usedShares[p.code]?:0L)
+                    if(action in setOf(GAction.STOP,GAction.G5_EXIT,GAction.G4_REDUCE,GAction.G3_REDUCE)){
+                        val pct=if(action==GAction.G3_REDUCE)settings.gConfig.g3SellPct else settings.gConfig.g4SellPct
+                        val quantity=if(action in setOf(GAction.STOP,GAction.G5_EXIT))p.shares
+                            else kotlin.math.floor(p.shares*pct/100.0).toInt().coerceIn(1,p.shares)
+                        if(remainingVolume>=quantity){
+                            val px=PaperEngine.execution(bar.open,false)
+                            val amount=px*quantity;val fee=PaperEngine.fee(amount);val tax=PaperEngine.tax(amount);val net=amount-fee-tax
+                            val basis=p.cost*quantity/p.shares
+                            b.cash+=net;usedShares[p.code]=(usedShares[p.code]?:0L)+quantity
+                            val closed=quantity==p.shares
+                            p.shares-=quantity;p.cost-=basis
+                            if(action==GAction.G3_REDUCE)p.g3Reduced+=quantity
+                            if(action==GAction.G4_REDUCE)p.g4Reduced+=quantity
+                            if(closed)b.holdings.remove(p)
+                            b.trades.add(BtTrade(day,p.signalDate,p.code,p.name,p.radar,"SELL",px,fee,tax,net-basis,
+                                signal.detail+"（${quantity}股；訊號 ${signal.signalDate}；隔日開盤模擬）",
+                                shares=quantity,time="09:00",timeKind="完整日K判斷；次日開盤模擬，零股價格未單獨取得",
+                                lotId=p.lotId,dataDate=signal.signalDate,dayClose=bar.close,previousClose=previous[p.code]?.get(day)))
+                        }
+                    }else{
+                        val quantity=if(action==GAction.G3_REBUY)p.g3Reduced else p.g4Reduced
+                        if(quantity>0 && remainingVolume>=quantity && (guard==null||guard.canBuy)){
+                            val px=PaperEngine.execution(bar.open,true)
+                            val amount=px*quantity;val fee=PaperEngine.fee(amount);val cost=amount+fee
+                            if(cost<=b.cash){
+                                b.cash-=cost;usedShares[p.code]=(usedShares[p.code]?:0L)+quantity
+                                p.shares+=quantity;p.cost+=cost
+                                if(action==GAction.G3_REBUY)p.g3Reduced=0 else p.g4Reduced=0
+                                b.trades.add(BtTrade(day,p.signalDate,p.code,p.name,p.radar,"BUY",px,fee,0.0,0.0,
+                                    signal.detail+"（回補 ${quantity}股；訊號 ${signal.signalDate}）",
+                                    shares=quantity,time="09:00",timeKind="完整日K判斷；次日開盤模擬，零股價格未單獨取得",
+                                    lotId=p.lotId,dataDate=signal.signalDate,dayClose=bar.close,previousClose=previous[p.code]?.get(day)))
+                            }
+                        }
+                    }
+                }
+                // Never apply non-G 3% profit/5-day exit to a G-managed holding.
+                return@forEach
             }
             // An armed lot ignores the normal target and five-day break-even exits.
             // A close below MA5 must be confirmed YESTERDAY; simulate the NEXT open.
@@ -271,7 +323,7 @@ object BacktestEngine {
         val admitted=signals.map{it.code}.distinct().count{code->settings.stockPolicy.decision(code,bars[code]?.get(day)?.close?:Double.NaN,settings.stockScope)==StockDecision.ALLOW}
         b.curve.add(BtDay(day,b.equity,admitted,today.count{it.side=="BUY"},today.count{it.side=="SELL"},b.skippedCount-skippedBefore,
             realized=today.filter{it.side=="SELL"}.sumOf{it.pnl},holdingCost=b.holdings.sumOf{it.cost},
-            holdingValue=b.holdings.sumOf{PaperEngine.netSell(it.mark)},holdingLots=b.holdings.size,cash=b.cash,
+            holdingValue=b.holdings.sumOf{PaperEngine.netSell(it.mark,it.shares)},holdingLots=b.holdings.size,cash=b.cash,
             dividendAccrued=b.dividendAccrued,dayProfit=b.equity-previousEquity,staleLots=b.holdings.count{it.markDate<day},rebateAccrued=b.rebateAccrued,rebateChange=b.rebateAccrued-previousRebate,marketGuard=guard))
     }
 }

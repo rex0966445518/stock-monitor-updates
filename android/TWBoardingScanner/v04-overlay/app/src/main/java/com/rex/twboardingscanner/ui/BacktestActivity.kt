@@ -46,6 +46,7 @@ class BacktestActivity:AppCompatActivity(){
     private var btEConfig:EPatternConfig = EPatternConfig.DEFAULT
     private var btBConfig:BPatternConfig=BPatternConfig.DEFAULT
     private var btFConfig:FPatternConfig = FPatternConfig.DEFAULT
+    private var btGConfig:GPatternConfig = GPatternConfig.DEFAULT
     private val radarModeButtons=mutableMapOf<RadarType,com.google.android.material.button.MaterialButton>()
     private fun updateRadarModes(){
         radarModeButtons.forEach{(type,button)->
@@ -71,7 +72,7 @@ class BacktestActivity:AppCompatActivity(){
         val config=store.configuration()
         val saved=runCatching{BtSettingsCodec.decode(config!!)}.getOrElse{BtSettingsCodec.capture(this,start,end,3000000.0,"")}
         btRules=saved.rules;btSectors=saved.sectors;exitRules=saved.exitRules
-        btEnabled=saved.enabledRadars;btDConfig=saved.dConfig;btEConfig=saved.eConfig;btFConfig=saved.fConfig;btBConfig=saved.bConfig;btExclusions=saved.exclusions
+        btEnabled=saved.enabledRadars;btDConfig=saved.dConfig;btEConfig=saved.eConfig;btFConfig=saved.fConfig;btBConfig=saved.bConfig;btGConfig=saved.gConfig;btExclusions=saved.exclusions
         lastLimit=saved.maxHoldingStocks?:25;lastTarget=saved.targetNetPct
         start=runCatching{LocalDate.parse(config?.getString("start"))}.getOrDefault(start);end=runCatching{LocalDate.parse(config?.getString("end"))}.getOrDefault(end)
         val root=NeonUi.vertical(this).apply{setPadding(dp(16),dp(16),dp(16),dp(28))}
@@ -194,7 +195,7 @@ class BacktestActivity:AppCompatActivity(){
         val trading=readTrading(true)?:return
         if(raw.split(Regex("[,，\\s]+" )).filter{it.isNotBlank()}.any{!it.matches(Regex("[1-9][0-9]{3}"))}){codes.error="請輸入四碼股票代號，以逗號分隔";NeonUi.reveal(codes);return}
         val id=UUID.randomUUID().toString();val s=BtSettingsCodec.capture(this,start,end,cash,raw).copy(rules=btRules.mapValues{it.value.toSet()},sectors=btSectors.toSet(),
-            enabledRadars=btEnabled,dConfig=btDConfig,eConfig=btEConfig,fConfig=btFConfig,bConfig=btBConfig,exclusions=btExclusions,maxHoldingStocks=trading.first,targetNetPct=trading.second,exitRules=exitRules,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
+            enabledRadars=btEnabled,dConfig=btDConfig,eConfig=btEConfig,fConfig=btFConfig,bConfig=btBConfig,gConfig=btGConfig,exclusions=btExclusions,maxHoldingStocks=trading.first,targetNetPct=trading.second,exitRules=exitRules,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
         if(s.sectors.isEmpty()){Toast.makeText(this,"請至少選擇一個產業類型",Toast.LENGTH_LONG).show();return}
         if(s.enabledRadars.none{ s.rules[it].orEmpty().isNotEmpty() }){
             Toast.makeText(this,"請至少亮起一區且該區有勾選條件",Toast.LENGTH_LONG).show();return
@@ -221,7 +222,7 @@ class BacktestActivity:AppCompatActivity(){
     private fun draft():BtSettings {
         readTrading(false)
         return BtSettingsCodec.capture(this,start,end,capital.text.toString().toDoubleOrNull()?.takeIf{it.isFinite()&&it>0}?:3000000.0,codes.text.toString().trim()).copy(rules=btRules.mapValues{it.value.toSet()},sectors=btSectors.toSet(),
-            enabledRadars=btEnabled,dConfig=btDConfig,eConfig=btEConfig,fConfig=btFConfig,bConfig=btBConfig,exclusions=btExclusions,maxHoldingStocks=lastLimit,targetNetPct=lastTarget,exitRules=exitRules,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
+            enabledRadars=btEnabled,dConfig=btDConfig,eConfig=btEConfig,fConfig=btFConfig,bConfig=btBConfig,gConfig=btGConfig,exclusions=btExclusions,maxHoldingStocks=lastLimit,targetNetPct=lastTarget,exitRules=exitRules,holdProfitUntilMa5Break=trendHoldCheck.isChecked)
     }
     private fun refreshRuleButtons(){ruleButtons.forEach{(type,button)->button.text="${type.label}\n設定條件\n已選 ${btRules[type].orEmpty().size} 項";button.textSize=11f;button.setPadding(dp(4),dp(8),dp(4),dp(8))}}
     internal fun applyRules(type:RadarType,selected:Set<String>){
@@ -230,7 +231,7 @@ class BacktestActivity:AppCompatActivity(){
     }
     private fun editRules(type:RadarType){
         val options=ScanConditions.forEditor(type);val selected=btRules[type].orEmpty()
-        val numbers=RuleNumberFields(this,btDConfig,btFConfig,btBConfig)
+        val numbers=RuleNumberFields(this,btDConfig,btFConfig,btBConfig,btGConfig)
         val content=NeonUi.vertical(this).apply{setPadding(dp(14),dp(10),dp(14),dp(10))}
         if(type==RadarType.D_MAIN_FORCE)content.addView(NeonUi.button(this,"D 數值門檻 · 可調整觀察日、連陽、漲停與量比",NeonUi.mint){
             numbers.editD()
@@ -261,9 +262,16 @@ class BacktestActivity:AppCompatActivity(){
         }.apply{tag="backtest-d-copy-a"})
         if(type==RadarType.A_EARLY_BREAKOUT){val presets=NeonUi.vertical(this);AVideoPresets.add(this,presets){ids->options.forEachIndexed{i,rule->boxes[i].isChecked=rule.id in ids}};content.addView(presets,0)}
         if(type==RadarType.B_DEEP_REVERSAL){val presets=NeonUi.vertical(this);BReversalPresets.add(this,presets){ids->options.forEachIndexed{i,rule->boxes[i].isChecked=rule.id in ids}};content.addView(presets,0)}
+        val gManagement=if(type==RadarType.G_MA5_WAVE)GPatternEditor.add(this,content,btGConfig) else null
         val readExclusions=ExclusionEditor.fields(this,content,type,btExclusions.getValue(type))
         content.addView(NeonUi.row(this,listOf(NeonUi.button(this,"全不選"){boxes.forEach{it.isChecked=false}},NeonUi.button(this,"恢復基本條件"){boxes.forEachIndexed{i,box->box.isChecked=options[i].defaultEnabled}})))
-        showSelectionDialog("${type.label} · 回測條件",content){val d=numbers.readD();val f=numbers.readF();btDConfig=d;btFConfig=f;btBConfig=numbers.readB();btExclusions=btExclusions+mapOf(type to readExclusions());applyRules(type,options.filterIndexed{i,_->boxes[i].isChecked}.map{it.id}.toSet())}
+        showSelectionDialog("${type.label} · 回測條件",content){
+            val selectedG=options.filterIndexed{i,_->boxes[i].isChecked}.map{it.id}.toSet()
+            require(type!=RadarType.G_MA5_WAVE||selectedG.isEmpty()||selectedG.containsAll(GPattern.REQUIRED_IDS)){"G 入場請同時勾選 G1 大陽線與 G2 回踩"}
+            val d=numbers.readD();val f=numbers.readF();val g=gManagement?.read(numbers.readG())?:btGConfig
+            btDConfig=d;btFConfig=f;btBConfig=numbers.readB();btGConfig=g
+            btExclusions=btExclusions+mapOf(type to readExclusions());applyRules(type,selectedG)
+        }
     }
     private fun refreshSectorButton(){
         val names=btSectors.sortedBy{it.ordinal}.map{it.label}

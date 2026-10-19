@@ -25,6 +25,7 @@ class ExclusionAndRiskExitTest{
         RadarType.D_MAIN_FORCE->ScoringEngine().evaluateD(s,setOf("price"),excluded)
         RadarType.E_DIF_TOUCH->ScoringEngine().evaluateE(s,setOf("price"),excluded)
         RadarType.F_VOLUME_CONTRACTION->ScoringEngine().evaluateF(s,setOf("price"),excluded)
+        RadarType.G_MA5_WAVE->ScoringEngine().evaluateG(s,GPattern.REQUIRED_IDS,excluded)
     }
     @Test fun bothFreshBearishEventsMustOccurOnTheSameDay(){
         assertTrue(BearishTurn.Evidence(.01,-.01,70.0,69.9).passes)
@@ -38,7 +39,7 @@ class ExclusionAndRiskExitTest{
     }
     @Test fun uncheckedDoesNotBlockButCheckedVetoRemovesExistingHitInEveryRadarAndPaper(){
         val s=snapshot()
-        for(type in RadarType.entries){
+        for(type in RadarType.entries.take(6)){
             val allowed=evaluate(type,s,emptySet());val veto=evaluate(type,s,setOf(BearishTurn.ID))
             assertNotEquals(SignalLight.NONE,allowed.light)
             assertEquals(SignalLight.NONE,veto.light)
@@ -54,7 +55,7 @@ class ExclusionAndRiskExitTest{
     }
     @Test fun exclusionCacheAndJournalBackupPreserveBothVetoAndIndependentRiskExit(){
         val series=listOf(BtSeries("2330","測試",Market.TWSE,bars()))
-        val rules=RadarType.entries.associateWith{setOf("price")}
+        val rules=RadarType.entries.associateWith{if(it==RadarType.G_MA5_WAVE)emptySet() else setOf("price")}
         val settings=BtRobotSpace.settings(rules).copy(start=day,end=day.plusDays(1),enabledRadars=RadarType.entries.toSet(),stockScope=StockScope.ROBOT,
             exclusions=RadarType.entries.associateWith{setOf(BearishTurn.ID)},exitRules=listOf(ExitRule(bearishExit=true)),marketGuardVersion=MarketCrashGuard.VERSION)
         val ref=BacktestEngine.prepare(series,settings)

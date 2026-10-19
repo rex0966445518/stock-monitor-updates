@@ -28,9 +28,10 @@ object BtRobotSpace {
     val eSlots=ScanConditions.forRadar(RadarType.E_DIF_TOUCH).filterNot{it.id in ScanConditions.MOMENTUM_IDS||it.id==RsiGoldenCross.ID}.map{RadarType.E_DIF_TOUCH to it.id}
     val rsiSlots=RadarType.entries.take(5).map{it to RsiGoldenCross.ID}
     val v6Slots=v5Slots+eSlots+rsiSlots+ScanConditions.forRadar(RadarType.F_VOLUME_CONTRACTION).filterNot{it.id in ScanConditions.MOMENTUM_IDS}.map{RadarType.F_VOLUME_CONTRACTION to it.id}
-    val v7Slots=v6Slots+RadarType.entries.flatMap{type->ScanConditions.MOMENTUM_IDS.map{type to it}}
+    // Preserve the v7 A–F bit layout: G never occupies historical saved-key positions.
+    val v7Slots=v6Slots+RadarType.entries.take(6).flatMap{type->ScanConditions.MOMENTUM_IDS.map{type to it}}
     val v8Slots=v7Slots+BPattern.IDS.map{RadarType.B_DEEP_REVERSAL to it}
-    val allSlots=v8Slots+APattern.IDS.map{RadarType.A_EARLY_BREAKOUT to it}
+    val allSlots=v8Slots+APattern.IDS.map{RadarType.A_EARLY_BREAKOUT to it}+GPattern.rules().map{RadarType.G_MA5_WAVE to it.id}
     val total:BigInteger=BigInteger.ONE.shiftLeft(allSlots.size)
     val legacyTotal:BigInteger=BigInteger.ONE.shiftLeft(legacySlots.size)
     fun key(rules:Map<RadarType,Set<String>>):String=allSlots.foldIndexed(BigInteger.ZERO){i,n,(type,id)->if(id in rules[type].orEmpty())n.setBit(i)else n}.toString(16)
