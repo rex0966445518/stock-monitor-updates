@@ -50,6 +50,8 @@ def run_smoke_test(report):
         app.show_research_details('2330')
         assert '集保週資料0/3期' in app.research_details.get('1.0','end')
         research.destroy()
+        validation=app.show_validation_audit();root.update_idletasks()
+        assert validation.winfo_exists();validation.destroy()
 
 
         root.update_idletasks()
@@ -152,6 +154,11 @@ def run_smoke_test(report):
         app.mode='CI smoke / synthetic data'
         app.render([Quote('9001','SMOKE',100,2,1500,1,now)],0,0,dict(DEFAULT),persist=True)
         assert (BASE/'observations.sqlite3').is_file()
+        from scan_archive import ScanArchive
+        assert ScanArchive(BASE/'observations.sqlite3').summary()
+        archive=app.show_scan_archive();root.update_idletasks()
+        assert '讀值筆數' in app.archive_output.get('1.0','end')
+        archive.destroy()
         # Verify the actual GUI has only the everyday action buttons.
         actions=[child.cget('text') for child in app.main_actions.winfo_children() if child.winfo_class()=='TButton']
         assert actions==['開始／繼續（F8）','暫停（F8）','重新開始','掃描設定','一鍵更新'],actions

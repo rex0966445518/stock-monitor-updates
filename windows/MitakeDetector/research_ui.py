@@ -11,13 +11,23 @@ class ResearchUI:
         self.research_reports={}
         self.research_status=self.tk.StringVar(value='籌碼研究待取得；不是盤中買入確認')
         self.research_service=ResearchService(BASE,lambda kind,payload:self.events.put((None,kind,payload)))
+        self.research_service.enabled=self.config.get('research_enabled',True)
+        if '--smoke-test' not in sys.argv and self.research_service.enabled:
+            self.root.after(3000,lambda:self.research_service.request(self.research_service.watch))
     def research_codes(self):
+        tree=getattr(self,'tree',None)
+        if tree is not None and tree.winfo_exists():
+            return [str(tree.item(item,'values')[0]) for item in tree.get_children()]
         return list(dict.fromkeys(q.code for q,_,_,_ in getattr(self,'display_rows',[])))
     def schedule_research(self):
         if '--smoke-test' in sys.argv:return
         self.research_service.request(self.research_codes())
     def research_event(self,kind,payload):
         if kind=='research_status':self.research_status.set(payload)
+        elif kind=='research_replay':
+            self.research_status.set('本地重播：'+str(payload))
+            widget=getattr(self,'archive_output',None)
+            if widget is not None and widget.winfo_exists():widget.insert('end',json.dumps(payload,ensure_ascii=False,indent=2)+'\n');widget.see('end')
         elif kind=='research_results':
             self.research_reports.update(payload)
             if hasattr(self,'tree'):self.draw_results()
@@ -44,7 +54,9 @@ class ResearchUI:
                '最近交易日均價：'+('—' if r['day_vwap'] is None else f"{r['day_vwap']:.2f}（全日成交金額／股數，非主力成本、非即時VWAP）"),
                '相對大盤近5交易日變化：'+('—' if r['relative'] is None else f"{r['relative']:+.2f}百分點"),
                '初始實驗規則：3期大額占比連增且小額占比下降；外資或投信5日淨買且至少3日買超。日線放量突破後，另待量縮回測及重新走高。未驗證勝率。',
-               '週資料未滿3期時持續累積；可匯入官方歷史CSV。重大訊息沒有列出，不代表已排除全部風險。']
+               '歷史週資料自動依官網日期補抓；不足時不推定連續增持。重大訊息沒有列出，不代表排除全部風險。',
+               '自動驗證：'+r.get('validation',{}).get('status','尚未開始'),
+               '目前日線突破量倍數：'+str(r.get('validation',{}).get('active',1.5))+'；自動優化僅適用日線研究量倍數，不修改盤中六項條件或進場檢核。']
         for notice in r['news']:lines.append('公告 '+notice['day']+' '+notice.get('title',''))
         for kind in ['weeks','insti']:
             lines.append(('集保期數明細' if kind=='weeks' else '法人日資料明細')+'：')
@@ -57,7 +69,9 @@ class ResearchUI:
         enabled=self.tk.BooleanVar(value=self.config.get('research_enabled',True))
         def toggle():
             self.config['research_enabled']=enabled.get();self.save()
-        self.ttk.Checkbutton(top,text='掃描時自動背景追蹤（網路工作不阻塞OCR）',variable=enabled,command=toggle).pack(anchor='w',padx=12)
+            self.research_service.enabled=enabled.get()
+            if enabled.get():self.research_service.request(self.research_service.watch or self.research_codes())
+        self.ttk.Checkbutton(top,text='啟用自動研究（程式開啟時每6小時更新，最多保留100股；單次加入前20股）',variable=enabled,command=toggle).pack(anchor='w',padx=12)
         bar=self.ttk.Frame(top);bar.pack(fill='x',padx=12)
         code_var=self.tk.StringVar()
         self.ttk.Label(bar,text='股號').pack(side='left');self.ttk.Entry(bar,textvariable=code_var,width=8).pack(side='left',padx=5)
@@ -68,6 +82,7 @@ class ResearchUI:
         self.ttk.Button(bar,text='更新目前清單',command=lambda:self.research_service.request(self.research_codes(),force=True)).pack(side='left',padx=6)
         self.ttk.Button(bar,text='匯入歷史集保CSV',command=self.import_weekly_research).pack(side='left',padx=6)
         self.ttk.Button(bar,text='來源更新狀態',command=self.show_research_sources).pack(side='left',padx=6)
+        self.ttk.Button(bar,text='驗證／參數日誌',command=self.show_validation_audit).pack(side='left',padx=6)
         self.ttk.Label(top,textvariable=self.research_status,wraplength=1150).pack(fill='x',padx=12,pady=5)
         frame=self.ttk.Frame(top);frame.pack(fill='both',expand=True,padx=12)
         columns=('code','name','stage','date','weekly','insti','large','foreign','trust','missing')
@@ -107,3 +122,48 @@ class ResearchUI:
                 self.events.put((None,'research_status',f'已匯入{len(paths)}份集保資料；原始日期保留'))
             except Exception as exc:self.events.put((None,'research_status','匯入失敗：'+str(exc)))
         threading.Thread(target=job,daemon=True).start()
+
+    def show_validation_audit(self):
+        from research_validation import Validator
+        top=self.tk.Toplevel(self.root);top.title('自動驗證／參數版本紀錄');top.geometry('1000x700')
+        from tkinter.scrolledtext import ScrolledText
+        text=ScrolledText(top,wrap='word');text.pack(fill='both',expand=True)
+        text.insert('end','僅驗證日線突破量倍數1.5／2／2.5。時間分開的訓練、驗證、60日未重用測試；每期至少30訊號、10股、15日期。扣0.8百分點成本預留，非實際成交損益。未還原及追蹤股票選樣偏差仍存在；不是完整吸籌策略回測。\n')
+        for at,body in Validator(self.research_service.store.path).audit():text.insert('end',at+'\n'+json.dumps(json.loads(body),ensure_ascii=False,indent=2)+'\n')
+        text.configure(state='disabled');return top
+    def show_scan_archive(self):
+        from MitakeDetector import BASE
+        from scan_archive import ScanArchive,replay
+        from tkinter.scrolledtext import ScrolledText
+        import threading
+        top=self.tk.Toplevel(self.root);top.title('每日掃描資料庫／回放驗證');top.geometry('1000x740')
+        archive=ScanArchive(BASE/'observations.sqlite3')
+        self.ttk.Label(top,text='每次正式掃描自動保存全部成功解析的讀值（含不符條件及引擎略過值）、拒絕列數、排行、設定、時間與程式版本。未保留原圖或無法解析列的文字。更新／重新開始不刪歷史。',wraplength=950).pack(fill='x',padx=12,pady=8)
+        bar=self.ttk.Frame(top);bar.pack(fill='x',padx=12)
+        day=self.tk.StringVar(value=dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).date().isoformat())
+        self.ttk.Entry(bar,textvariable=day,width=14).pack(side='left')
+        def run():
+            selected=day.get().strip()
+            def job():
+                try:
+                    dt.date.fromisoformat(selected);batches=archive.batches(selected)
+                    result=replay(batches);result['day']=selected;result['batches']=len(batches)
+                    self.events.put((None,'research_replay',result))
+                except Exception as exc:self.events.put((None,'research_replay',{'error':str(exc)}))
+            threading.Thread(target=job,daemon=True).start()
+        self.ttk.Button(bar,text='重播指定日期',command=run).pack(side='left',padx=8)
+        def backup():
+            from tkinter import filedialog
+            target=filedialog.asksaveasfilename(defaultextension='.sqlite3',initialfile='Mitake-scan-backup.sqlite3')
+            if not target:return
+            if __import__('pathlib').Path(target).resolve()==archive.path.resolve():return
+            def job():
+                try:archive.backup(target);self.events.put((None,'research_replay',{'backup':'資料庫備份完成'}))
+                except Exception as exc:self.events.put((None,'research_replay',{'error':str(exc)}))
+            threading.Thread(target=job,daemon=True).start()
+        self.ttk.Button(bar,text='備份完整資料庫',command=backup).pack(side='left')
+        output=ScrolledText(top,wrap='word');self.archive_output=output;output.pack(fill='both',expand=True,padx=12,pady=8)
+        output.insert('end','本地位置：'+str(archive.path)+'\n日期｜掃描批次｜讀值筆數｜股票數｜符合觀測次數\n')
+        for row in archive.summary():output.insert('end','｜'.join(map(str,row))+'\n')
+        output.insert('end','重播以原批次到達順序、當時設定及當前引擎重建判定；使用300～330秒首筆後續觀測價，沒有資料就留缺。不是實際成交回測，亦不自動調整盤中參數。既有舊版observations及訊號紀錄保留；完整批次紀錄從本版開始。\n')
+        return top

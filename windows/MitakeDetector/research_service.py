@@ -14,9 +14,19 @@ class ResearchService:
     def __init__(self,base,emit,fetcher=src.fetch):
         self.store=ResearchStore(base/'research.sqlite3');self.cache=base/'research-cache';self.cache.mkdir(exist_ok=True)
         self.emit=emit;self.fetcher=fetcher;self.stop=threading.Event();self.condition=threading.Condition()
+        self.watch_path=base/'research-watch.json';self.enabled=True;self.watch=[]
+        try:self.watch=[c for c in json.loads(self.watch_path.read_text('utf-8')) if src.code(c)][:100]
+        except (OSError,ValueError,TypeError):pass
         self.pending={};self.seen={};self.inflight=set();self.fetched_at={};self.force=False;self.last_base=0;self.thread=None
     def request(self,codes,force=False):
         with self.condition:
+            codes=list(codes)[:20]
+            updated=list(dict.fromkeys(codes+self.watch))[:100]
+            if updated!=self.watch:
+                self.watch=updated
+                try:
+                    temporary=self.watch_path.with_suffix('.tmp');temporary.write_text(json.dumps(self.watch),'utf-8');temporary.replace(self.watch_path)
+                except OSError as exc:self.emit('research_status','追蹤清單保存失敗：'+str(exc))
             for code in codes:
                 if code not in self.inflight and src.code(code) and (force or time.monotonic()-self.seen.get(code,-1e20)>600):self.pending[code]=None
             self.force=self.force or force
@@ -82,21 +92,41 @@ class ResearchService:
             revenue=self.store.facts('revenue',code)
             if not revenue:return
             market='TPEx' if 'tpex.org.tw' in revenue[-1]['source'] else 'TWSE'
-        today=dt.date.today()
-        for offset in range(3):
+        today=dt.date.today();statuses={k:status for k,_,status in self.store.statuses()}
+        for offset in range(18):
             if self.stop.is_set():break
             month_index=today.year*12+today.month-1-offset
             year,month=divmod(month_index,12);month+=1
             if market=='TWSE':url=f'https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date={year:04d}{month:02d}01&stockNo={code}&response=json'
             else:url=f'https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock?code={code}&date={year:04d}/{month:02d}/01&response=json'
-            self.dataset(f'history_{code}_{year:04d}{month:02d}',url,lambda text:src.monthly(json.loads(text),code,market),force)
+            key=f'history_{code}_{year:04d}{month:02d}'
+            # Completed historical months are immutable cache hits; failed months retry later.
+            if offset>=2 and statuses.get(key,'').startswith('已取得'):continue
+            self.emit('research_status',f'{code} 自動補抓18個月日線｜第{offset+1}/18月')
+            self.dataset(key,url,lambda text:src.monthly(json.loads(text),code,market),force)
             if self.stop.wait(.2):break
+    def weekly_history(self,code):
+        from tdcc_history import TDCC,URL
+        weeks=self.store.facts('weekly',code)
+        if len(weeks)>=3 and (dt.date.today()-dt.date.fromisoformat(weeks[-1]['day'])).days<=7:return
+        try:
+            for rows,url in TDCC().history(code,{r['day'] for r in weeks},self.stop):self.store.put(rows,url)
+            self.store.source_status('weekly_history_'+code,time.time(),'歷史三期已查詢')
+        except Exception as exc:self.emit('research_status',f'{code} 集保歷史更新失敗，保留已存資料：{exc}')
+    def validate(self):
+        from research_validation import Validator
+        histories={c:self.store.facts('price',c) for c in self.watch}
+        state=Validator(self.store.path).run(histories)
+        self.emit('research_status','自動驗證：'+state['status'])
     def run(self):
         while not self.stop.is_set():
             with self.condition:
                 if not self.pending:
                     self.condition.wait(10)
-                    if not self.pending:continue
+                    if not self.pending:
+                        if self.enabled and self.watch and time.monotonic()-self.last_base>21600:
+                            self.pending.update(dict.fromkeys(self.watch))
+                        else:continue
                 codes=list(self.pending)[:30]
                 for code in codes:self.pending.pop(code,None)
                 self.inflight.update(codes)
@@ -108,8 +138,13 @@ class ResearchService:
                     if self.stop.is_set():return
                     self.emit('research_status',f'籌碼研究 {index+1}/{len(codes)}｜{code} 歷史日線')
                     self.backfill(code,force)
+                    if self.stop.is_set():return
+                    self.weekly_history(code)
                     self.seen[code]=time.monotonic()
                     self.emit('research_results',{code:self.store.report(code)})
+                if not self.stop.is_set():
+                    self.validate()
+                    self.emit('research_results',{code:self.store.report(code) for code in codes})
             except Exception as exc:self.emit('research_status','籌碼研究暫停，可重試：'+str(exc))
             finally:
                 with self.condition:self.inflight.difference_update(codes)

@@ -11,7 +11,7 @@ from auto_ui import AutoUI
 from research_ui import ResearchUI
 from pathlib import Path
 
-VERSION = '0.3.55'
+VERSION = '0.3.56'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -96,7 +96,7 @@ class Engine:
         self.session_day = None
         self.guard_holds = {}
 
-    def process(self, quotes, config):
+    def process(self, quotes, config, now=None):
         rows, alerts = [], []
         for q in quotes:
             day = dt.datetime.fromtimestamp(q.ts).date()
@@ -153,7 +153,7 @@ class Engine:
             if stale: reasons.append('60秒讀值未變，請檢查畫面')
             if config.get('guard_enabled',False):
                 from entry_guard import evaluate
-                failures,weak=evaluate(list(hist),prior_high,self.guard_holds,config,time.time())
+                failures,weak=evaluate(list(hist),prior_high,self.guard_holds,config,time.time() if now is None else now)
                 if failures:reasons.append(('已轉弱｜' if weak else '')+'進場檢核未通過：'+'、'.join(failures))
             hit = not reasons
             reason = ('轉強候選｜漲幅'+f'{q.gain:+.2f}%'+('｜進場檢核通過（觀測高點）' if config.get('guard_enabled') else '｜觀測突破兩次守穩' if config['use_breakout'] else '')+('｜量速'+f'{ratio:.2f}倍' if config['use_accel'] and ratio is not None else '')) if hit else '；'.join(reasons)
@@ -258,7 +258,7 @@ class App(AutoUI,ResearchUI):
             ttk.Button(bar, text=label, command=action).pack(side='left', padx=4)
         advanced = ttk.Menubutton(bar, text='進階工具 ▾')
         menu = tk.Menu(advanced, tearoff=False)
-        for label, action in [('重新自動定位', self.auto_setup), ('清除股名記憶', self.clear_stock_names), ('手動框選排行榜', self.select_region), ('手動校正欄位', self.calibrate), ('圖片辨識測試', self.image_test), ('合成資料示範', self.demo), ('辨識元件檢查', self.install), ('資料資料夾', self.open_folder), ('OCR學習紀錄', self.show_ocr_learning), ('中斷診斷', self.show_scan_diagnostics), ('版本日誌', self.show_version_history), ('訊號驗證紀錄', self.show_signal_reviews), ('進場檢核設定', self.show_guard_settings), ('籌碼觀察／研究', self.show_research), ('使用說明', self.help)]:
+        for label, action in [('重新自動定位', self.auto_setup), ('清除股名記憶', self.clear_stock_names), ('手動框選排行榜', self.select_region), ('手動校正欄位', self.calibrate), ('圖片辨識測試', self.image_test), ('合成資料示範', self.demo), ('辨識元件檢查', self.install), ('資料資料夾', self.open_folder), ('OCR學習紀錄', self.show_ocr_learning), ('中斷診斷', self.show_scan_diagnostics), ('版本日誌', self.show_version_history), ('訊號驗證紀錄', self.show_signal_reviews), ('進場檢核設定', self.show_guard_settings), ('籌碼觀察／研究', self.show_research), ('每日紀錄／重播驗證', self.show_scan_archive), ('使用說明', self.help)]:
             menu.add_command(label=label, command=action)
         advanced.configure(menu=menu); advanced.pack(side='left', padx=4)
         self.main_actions=bar
@@ -630,6 +630,7 @@ class App(AutoUI,ResearchUI):
 
     def render(self, quotes, rejected, elapsed, cfg, persist):
         from tkinter import messagebox
+        captured_quotes=[dataclasses.replace(q) for q in quotes] if persist else []
         engine = self.auto_engines.setdefault(cfg['source_rank'], Engine()) if cfg.get('source_rank') else self.engine
         rows, alerts = engine.process(quotes, cfg)
         self.price_history.update(quotes,cfg.get('scan_cycle'))
@@ -668,7 +669,12 @@ class App(AutoUI,ResearchUI):
         self.status.set(f'{self.mode}｜本輪讀取 {len(quotes)} 檔｜略過 {rejected} 列｜辨識耗時 {elapsed:.1f} 秒｜本機掃描時間 {dt.datetime.now():%H:%M:%S}')
         if persist:
             try:
-                with sqlite3.connect(BASE / 'observations.sqlite3') as conn:
+                from scan_archive import ScanArchive
+                ScanArchive(BASE/'observations.sqlite3').append(captured_quotes,rows,cfg,VERSION,rejected,elapsed)
+            except (sqlite3.Error,OSError,ValueError) as exc:self.say('完整掃描紀錄寫入失敗：'+str(exc))
+            try:
+                from contextlib import closing
+                with closing(sqlite3.connect(BASE / 'observations.sqlite3')) as conn,conn:
                     conn.execute('CREATE TABLE IF NOT EXISTS observations (mode,ts,code,name,price,gain,volume,turnover,ratio,state,config)')
                     conn.execute('CREATE TABLE IF NOT EXISTS alerts (ts,code,name,reason,config)')
                     conn.executemany('INSERT INTO observations VALUES (?,?,?,?,?,?,?,?,?,?,?)', batch)

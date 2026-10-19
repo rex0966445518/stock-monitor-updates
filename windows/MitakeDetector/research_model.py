@@ -3,6 +3,8 @@ from contextlib import closing
 import datetime as dt
 import json
 import sqlite3
+import hashlib
+import time
 
 
 class ResearchStore:
@@ -11,6 +13,7 @@ class ResearchStore:
         c=sqlite3.connect(self.path,timeout=5)
         c.execute('CREATE TABLE IF NOT EXISTS research_facts(kind TEXT,code TEXT,day TEXT,body TEXT,source TEXT,PRIMARY KEY(kind,code,day))')
         c.execute('CREATE TABLE IF NOT EXISTS research_sources(source TEXT PRIMARY KEY,updated REAL,status TEXT)')
+        c.execute('CREATE TABLE IF NOT EXISTS research_revisions(kind TEXT,code TEXT,day TEXT,digest TEXT,body TEXT,source TEXT,observed REAL,PRIMARY KEY(kind,code,day,digest,source))')
         return c
     def put(self,rows,source):
         with closing(self.connect()) as c,c:
@@ -19,7 +22,10 @@ class ResearchStore:
                 # Monthly backfills must not erase the known security name.
                 previous=c.execute('SELECT body FROM research_facts WHERE kind=? AND code=? AND day=?',(kind,code,day)).fetchone()
                 if previous:body=dict(json.loads(previous[0]),**body)
-                c.execute('INSERT OR REPLACE INTO research_facts VALUES (?,?,?,?,?)',(kind,code,day,json.dumps(body,ensure_ascii=False),source))
+                encoded=json.dumps(body,ensure_ascii=False,sort_keys=True,allow_nan=False)
+                digest=hashlib.sha256(encoded.encode()).hexdigest()
+                c.execute('INSERT OR IGNORE INTO research_revisions VALUES (?,?,?,?,?,?,?)',(kind,code,day,digest,encoded,source,time.time()))
+                c.execute('INSERT OR REPLACE INTO research_facts VALUES (?,?,?,?,?)',(kind,code,day,encoded,source))
     def source_status(self,source,updated,status):
         with closing(self.connect()) as c,c:c.execute('INSERT OR REPLACE INTO research_sources VALUES (?,?,?)',(source,updated,status))
     def statuses(self):
@@ -30,10 +36,14 @@ class ResearchStore:
     def known_codes(self):
         with closing(self.connect()) as c:return [r[0] for r in c.execute("SELECT DISTINCT code FROM research_facts WHERE kind='price'")]
     def report(self,code,today=None):
-        return evaluate(code,self.facts('weekly',code),self.facts('insti',code),self.facts('price',code),self.facts('revenue',code),self.facts('news',code),self.facts('index','TWSE'),self.facts('index','TPEx'),today)
+        from research_validation import Validator
+        validation=Validator(self.path).state()
+        result=evaluate(code,self.facts('weekly',code),self.facts('insti',code),self.facts('price',code),self.facts('revenue',code),self.facts('news',code),self.facts('index','TWSE'),self.facts('index','TPEx'),today,validation['active'])
+        result['validation']=validation
+        return result
 
 
-def evaluate(code,weeks,inst,prices,revenues,news,tw_index=(),otc_index=(),today=None):
+def evaluate(code,weeks,inst,prices,revenues,news,tw_index=(),otc_index=(),today=None,volume_multiple=1.5):
     today=today or dt.date.today()
     weeks=weeks[-3:];inst=inst[-5:];prices=prices[-60:]
     missing=[];warnings=[];evidence=[]
@@ -65,13 +75,13 @@ def evaluate(code,weeks,inst,prices,revenues,news,tw_index=(),otc_index=(),today
         ceiling=max(r['high'] for r in history)
         average=sum(r['volume'] for r in history)/20
         weak=last['close']<support
-        breakout=last['close']>ceiling and average>0 and last['volume']>=average*1.5
+        breakout=last['close']>ceiling and average>0 and last['volume']>=average*volume_multiple
         abnormal=any(abs(b['close']/a['close']-1)>.15 for a,b in zip(prices[-21:],prices[-20:]))
         if abnormal:missing.append('未還原日線有大幅跳空，須核對除權息等事件')
         # Chronological breakout -> smaller-volume retest -> renewed advance.
         for i in range(max(20,len(prices)-5),len(prices)-2):
             before=prices[i-20:i];b=prices[i];level=max(r['high'] for r in before)
-            if b['close']<=level or b['volume']<sum(r['volume'] for r in before)/20*1.5:continue
+            if b['close']<=level or b['volume']<sum(r['volume'] for r in before)/20*volume_multiple:continue
             for j in range(i+1,len(prices)-1):
                 retest=prices[j]
                 if any(r['close']<level for r in prices[i+1:]):continue

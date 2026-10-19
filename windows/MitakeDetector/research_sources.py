@@ -46,7 +46,7 @@ def code(value):
 def fetch(url):
     allowed={'opendata.tdcc.com.tw','openapi.twse.com.tw','www.twse.com.tw','www.tpex.org.tw'}
     if urlparse(url).scheme!='https' or urlparse(url).hostname not in allowed:raise ValueError('資料來源不在官方名單')
-    request=urllib.request.Request(url,headers={'User-Agent':'MitakeDetector public-data research/0.3.55','Accept':'application/json,text/csv'})
+    request=urllib.request.Request(url,headers={'User-Agent':'MitakeDetector public-data research/0.3.56','Accept':'application/json,text/csv'})
     with urllib.request.urlopen(request,timeout=10) as response:
         if urlparse(response.geturl()).hostname not in allowed:raise ValueError('來源重新導向至未知網站')
         raw=response.read(12*1024*1024+1)
