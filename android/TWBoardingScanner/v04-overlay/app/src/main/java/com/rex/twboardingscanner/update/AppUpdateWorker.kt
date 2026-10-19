@@ -31,7 +31,12 @@ class AppUpdateWorker(c:Context,p:WorkerParameters):Worker(c,p){
             store.status(id,"CHECKING","正在向 GitHub 檢查最新版…")
             val source=AppUpdateSource();val spec=source.latest();check(!cancel())
             store.setSpec(id,spec)
-            if(spec.versionCode<=AppUpdateInstaller.code(AppUpdateInstaller.installed(applicationContext))){
+            val installed=AppUpdateInstaller.installed(applicationContext)
+            if(!AppUpdateInstaller.isNewer(spec,installed)){
+                if(spec.versionCode<AppUpdateInstaller.code(installed)&&spec.versionName!=installed.versionName){
+                    store.status(id,"ERROR","手機 Android 版本碼 ${AppUpdateInstaller.code(installed)} 高於 GitHub 更新包 ${spec.versionCode}，不能降版；請等待更高版本碼的正式更新")
+                    return Result.failure()
+                }
                 store.status(id,"CURRENT","目前已是最新版本");return Result.success()
             }
             var last=0L
