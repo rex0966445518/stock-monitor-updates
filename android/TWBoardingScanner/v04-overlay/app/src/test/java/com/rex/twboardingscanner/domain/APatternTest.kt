@@ -51,7 +51,10 @@ class APatternTest {
     @Test fun newOptionsStayOnlyInAAndDoNotMoveSavedRobotKeys(){
         assertEquals(65,BtRobotSpace.legacySlots.size)
         assertEquals(BtRobotSpace.v8Slots,BtRobotSpace.allSlots.take(BtRobotSpace.v8Slots.size))
-        assertEquals(APattern.IDS.map{RadarType.A_EARLY_BREAKOUT to it},BtRobotSpace.allSlots.takeLast(APattern.IDS.size))
+        assertEquals(APattern.IDS.map{RadarType.A_EARLY_BREAKOUT to it},
+            BtRobotSpace.allSlots.drop(BtRobotSpace.v8Slots.size).take(APattern.IDS.size))
+        assertEquals(GPattern.rules().map{RadarType.G_MA5_WAVE to it.id},
+            BtRobotSpace.allSlots.takeLast(GPattern.rules().size))
         assertEquals(BtRobotSpace.allSlots.size,BtRobotSpace.allSlots.distinct().size)
         RadarType.entries.forEach{type->
             val ids=ScanConditions.forRadar(type).map{it.id}
