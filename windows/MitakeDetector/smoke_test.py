@@ -95,6 +95,10 @@ def run_smoke_test(report):
         try:assert set(app.read_stock_anchors(im,bounds))=={'2330','2317'}
         finally:app.read_auto_ocr=reader
         info.update(priority_numeric_seconds=time.perf_counter()-started,priority_name_queue=len(app.deferred_names))
+        app.name_eligible_codes=set()
+        app.learn_deferred_names()
+        assert not app.stock_names.names,'Below-threshold names must skip OCR'
+        app.name_eligible_codes={'2330','2317'}
         app.learn_deferred_names()
         assert app.stock_names.names,'Deferred names were never learned'
         app.numeric_priority=False
