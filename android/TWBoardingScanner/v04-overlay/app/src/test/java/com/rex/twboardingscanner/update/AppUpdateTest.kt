@@ -65,6 +65,26 @@ class AppUpdateTest {
         assertThrows(Exception::class.java){AppUpdateInstaller.checkIdentity(s,"other.app",100,"0.5.0",20,validSigners,validSigners)}
         assertThrows(Exception::class.java){AppUpdateInstaller.checkIdentity(s,AppUpdateSource.PACKAGE,99,"0.5.0",20,validSigners,validSigners)}
     }
+    @Test fun sameCodeNewerVersionNameIsAnUpdateButDowngradeRemainsBlocked(){
+        // Regression: installed v0.4.99 was mistakenly treated as up to date
+        // when public v0.5.0 reused the same integer versionCode.
+        assertTrue(AppUpdateInstaller.isNewer(103,"0.5.0",103,"0.4.99"))
+        assertTrue(AppUpdateInstaller.isNewer(104,"0.5.1",103,"0.4.99"))
+        assertFalse(AppUpdateInstaller.isNewer(103,"0.5.0",103,"0.5.0"))
+        assertFalse(AppUpdateInstaller.isNewer(103,"0.4.99",103,"0.5.0"))
+        assertFalse(AppUpdateInstaller.isNewer(103,"0.5.0",104,"0.4.99"))
+        assertFalse(AppUpdateInstaller.isNewer(103,"0.5.0",103,"beta-unknown"))
+        val s=spec()
+        val signers=setOf("same-certificate")
+        AppUpdateInstaller.checkIdentity(s,AppUpdateSource.PACKAGE,100,"0.5.0",100,signers,signers,"0.4.99")
+        assertThrows(Exception::class.java){
+            AppUpdateInstaller.checkIdentity(s,AppUpdateSource.PACKAGE,100,"0.5.0",100,signers,signers,"0.5.0")
+        }
+        assertThrows(Exception::class.java){
+            AppUpdateInstaller.checkIdentity(s,AppUpdateSource.PACKAGE,100,"0.5.0",100,signers,setOf("different-certificate"),"0.4.99")
+        }
+    }
+
     @Test fun githubMetadataRedirectWorksAndUntrustedRedirectIsRejected(){
         val responses=java.util.ArrayDeque<Reply>()
         responses.add(Reply(302,ByteArrayInputStream(byteArrayOf()),mapOf("Location" to "https://release-assets.githubusercontent.com/example")))
