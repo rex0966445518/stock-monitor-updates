@@ -8,16 +8,17 @@ import csv, dataclasses, datetime as dt, importlib.util, json, math, os
 import queue, random, re, sqlite3, subprocess, sys, threading, time, unicodedata
 from collections import deque
 from auto_ui import AutoUI
+from research_ui import ResearchUI
 from pathlib import Path
 
-VERSION = '0.3.54'
+VERSION = '0.3.55'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
 DEFAULT = dict(interval=5, min_price=50, min_volume=1000, min_gain=1,
                max_gain=8.5, min_turnover=0, use_turnover=False,
                use_accel=False, accel=1.5, use_breakout=True, cooldown=300,
-               guard_enabled=True,guard_warmup=180,guard_window=60,guard_hold=30,guard_max_gap=30,guard_max_age=15,guard_min_rise=.2,guard_max_pullback=1,
+               research_enabled=True,guard_enabled=True,guard_warmup=180,guard_window=60,guard_hold=30,guard_max_gap=30,guard_max_age=15,guard_min_rise=.2,guard_max_pullback=1,
                centers=[6, 22, 40, 57, 75, 92], region=None, auto_config=None, column_bounds=None, voice_enabled=True)
 
 @dataclasses.dataclass
@@ -208,7 +209,7 @@ def format_feedback(text):
     return text
 
 
-class App(AutoUI):
+class App(AutoUI,ResearchUI):
     def __init__(self, root):
         import tkinter as tk
         from tkinter import ttk
@@ -257,7 +258,7 @@ class App(AutoUI):
             ttk.Button(bar, text=label, command=action).pack(side='left', padx=4)
         advanced = ttk.Menubutton(bar, text='進階工具 ▾')
         menu = tk.Menu(advanced, tearoff=False)
-        for label, action in [('重新自動定位', self.auto_setup), ('清除股名記憶', self.clear_stock_names), ('手動框選排行榜', self.select_region), ('手動校正欄位', self.calibrate), ('圖片辨識測試', self.image_test), ('合成資料示範', self.demo), ('辨識元件檢查', self.install), ('資料資料夾', self.open_folder), ('OCR學習紀錄', self.show_ocr_learning), ('中斷診斷', self.show_scan_diagnostics), ('版本日誌', self.show_version_history), ('訊號驗證紀錄', self.show_signal_reviews), ('進場檢核設定', self.show_guard_settings), ('使用說明', self.help)]:
+        for label, action in [('重新自動定位', self.auto_setup), ('清除股名記憶', self.clear_stock_names), ('手動框選排行榜', self.select_region), ('手動校正欄位', self.calibrate), ('圖片辨識測試', self.image_test), ('合成資料示範', self.demo), ('辨識元件檢查', self.install), ('資料資料夾', self.open_folder), ('OCR學習紀錄', self.show_ocr_learning), ('中斷診斷', self.show_scan_diagnostics), ('版本日誌', self.show_version_history), ('訊號驗證紀錄', self.show_signal_reviews), ('進場檢核設定', self.show_guard_settings), ('籌碼觀察／研究', self.show_research), ('使用說明', self.help)]:
             menu.add_command(label=label, command=action)
         advanced.configure(menu=menu); advanced.pack(side='left', padx=4)
         self.main_actions=bar
@@ -346,6 +347,7 @@ class App(AutoUI):
         from version_history import record_launch
         try:record_launch(BASE,VERSION)
         except sqlite3.Error as exc:self.say('版本啟用紀錄寫入失敗：'+str(exc))
+        self.init_research()
         self.load_daily_table()
         root.protocol('WM_DELETE_WINDOW', self.close)
         self.init_f8()
@@ -620,6 +622,8 @@ class App(AutoUI):
             if hidden_result(q,cfg,filters) and not retained:continue
             if retained and not match['hit']:match['text']='保留候選｜'+match['text']
             values=[q.code,(q.name or '股名待補') if show_name else '',match['text'],f'{q.price:.2f}',f'{q.gain:+.2f}',f'{q.volume:,.0f}','—' if q.turnover is None else f'{q.turnover:.2f}','待累積' if ratio is None else f'{ratio:.2f}',reason]
+            research=getattr(self,'research_reports',{}).get(q.code)
+            if research:values[-1]+=f"｜盤後研究：{research['stage']}（收盤{research['asof']}／集保{research['weekly_asof']}）"
             values+=history.values(q.code)
             self.tree.insert('','end',values=values,tags=('hit',) if match['hit'] else ('near',) if match['label']=='接近候選' else ())
         self.name_eligible_codes=eligible
@@ -699,8 +703,12 @@ class App(AutoUI):
                 text+='\n符合目前設定的觀察條件，不代表一定漲停。'
                 self.candidate_notice=CandidateNotice(self.root,self.tk,self.ttk,text)
                 spoken='；'.join(f'{q.code} {q.name or "股名待補"}，全部條件符合' for q,_ in fresh[:3])
+                if cfg.get('guard_enabled'):
+                    spoken='；'.join(f'{q.code} {q.name or "股名待補"}，盤中檢核通過；籌碼研究'+getattr(self,'research_reports',{}).get(q.code,{}).get('stage','尚未取得，請另行核對') for q,_ in fresh[:3])
                 if len(fresh)>3:spoken+=f'；另有{len(fresh)-3}檔符合，請查看清單'
                 self.announce_task(spoken)
+
+        if persist and self.config.get('research_enabled',True):self.schedule_research()
 
     def poll(self):
         try:
@@ -721,6 +729,8 @@ class App(AutoUI):
                     finally:ready.set()
                     continue
                 if token is None:
+                    if kind.startswith('research_'):
+                        self.research_event(kind,payload);continue
                     if kind=='voice_error':self.say('語音提醒無法播放：'+str(payload))
                     else:self.handle_update(kind, payload)
                     continue
@@ -933,6 +943,8 @@ class App(AutoUI):
         text.insert('1.0', HELP); text.configure(state='disabled')
 
     def close(self):
+        service=getattr(self,'research_service',None)
+        if service:service.close()
         self.save_daily_table()
         self.restore_scan_cursor()
         if self.auto_active:self.save_scan_snapshot()

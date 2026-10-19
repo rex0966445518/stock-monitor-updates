@@ -42,6 +42,15 @@ def run_smoke_test(report):
         assert panel.winfo_exists();panel.destroy()
         review=app.show_signal_reviews();root.update_idletasks()
         assert review.winfo_exists();review.destroy()
+        app.research_reports={'2330':app.research_service.store.report('2330')}
+        research=app.show_research();root.update_idletasks()
+        items=app.research_tree.get_children()
+        assert items and app.research_tree.item(items[0],'values')[0]=='2330'
+        assert '資料不足' in app.research_tree.item(items[0],'values')[2]
+        app.show_research_details('2330')
+        assert '集保週資料0/3期' in app.research_details.get('1.0','end')
+        research.destroy()
+
 
         root.update_idletasks()
         assert app.status_label.cget('justify')=='left'
