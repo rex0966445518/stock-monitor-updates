@@ -17,6 +17,8 @@ class ScoringEngine {
         }
         vetoes.filter{it.selected&&it.state!=CheckState.PASS}.forEach{blockers+="排除區：${it.label}：${if(it.state==CheckState.FAIL)"已命中，移除" else "待查核"}"}
         if (active.isEmpty()) blockers += "請至少勾選一項條件"
+        if(type==RadarType.G_MA5_WAVE&&!selected.containsAll(GPattern.REQUIRED_IDS))
+            blockers += "G 入場至少須勾選 G1 大陽線與 G2 回踩，G3～G5 是持股管理"
         val score = if (active.isEmpty()) 0 else active.count { it.state == CheckState.PASS } * 100 / active.size
         val upgraded = type == RadarType.B_DEEP_REVERSAL && blockers.isEmpty() && metrics.technicalUpgrade
         val reasons = active.filter { it.state == CheckState.PASS }.map { it.label }.toMutableList()
@@ -27,6 +29,7 @@ class ScoringEngine {
             if(type==RadarType.C_LONG_RED_VOLUME)CSignalEvidence.format(metrics,selected) else null,
             if(type==RadarType.D_MAIN_FORCE)metrics.dPattern.format() else null,
             if(type==RadarType.F_VOLUME_CONTRACTION)metrics.fPattern.format() else null,
+            if(type==RadarType.G_MA5_WAVE)metrics.gPattern.format() else null,
             if(type==RadarType.E_DIF_TOUCH)metrics.ePattern?.format()?:"E 日K資料不足，待查核" else null,
             if(RsiGoldenCross.ID in selected)metrics.rsiGoldenCross?.format()?:"RSI(5/10) 資料不足，待查核" else null,
             if(BearishTurn.ID in excluded)metrics.bearishTurn?.format()?:"排除區證據不足，待查核" else null
@@ -39,5 +42,6 @@ class ScoringEngine {
     fun evaluateD(s: StockSnapshot, selected: Set<String> = defaults(RadarType.D_MAIN_FORCE),excluded:Set<String> = emptySet()) = evaluate(s,RadarType.D_MAIN_FORCE,selected,excluded)
     fun evaluateE(s: StockSnapshot, selected: Set<String> = defaults(RadarType.E_DIF_TOUCH),excluded:Set<String> = emptySet()) = evaluate(s,RadarType.E_DIF_TOUCH,selected,excluded)
     fun evaluateF(s: StockSnapshot, selected:Set<String> = defaults(RadarType.F_VOLUME_CONTRACTION), excluded:Set<String> = emptySet()) = evaluate(s,RadarType.F_VOLUME_CONTRACTION,selected,excluded)
+    fun evaluateG(s: StockSnapshot, selected:Set<String> = defaults(RadarType.G_MA5_WAVE), excluded:Set<String> = emptySet()) = evaluate(s,RadarType.G_MA5_WAVE,selected,excluded)
     private fun defaults(type: RadarType) = ScanConditions.forRadar(type).filter { it.defaultEnabled }.map { it.id }.toSet()
 }
