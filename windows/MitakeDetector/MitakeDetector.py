@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.46'
+VERSION = '0.3.47'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -224,6 +224,8 @@ class App(AutoUI):
         self.rank_rows = {}
         from price_history import PriceHistory
         self.price_history=PriceHistory()
+        from retained_candidates import RetainedCandidates
+        self.retained_candidates=RetainedCandidates()
         self.ocr = None
         self.update_busy = False
         self.update_status = tk.StringVar(value='')
@@ -505,6 +507,8 @@ class App(AutoUI):
     def reset(self, mode):
         from price_history import PriceHistory
         self.price_history=PriceHistory()
+        from retained_candidates import RetainedCandidates
+        self.retained_candidates=RetainedCandidates()
         self.generation += 1; self.mode = mode; self.engine = Engine(); self.records = []; self.rank_rows = {}
         self.stop_event = threading.Event()
         for item in self.tree.get_children(): self.tree.delete(item)
@@ -575,9 +579,11 @@ class App(AutoUI):
         filters={key:var.get() for key,var in getattr(self,'result_filters',{}).items()}
         eligible=set()
         for (q,ratio,reason,hit),match in ordered_candidates(getattr(self,'display_rows',[]),cfg):
-            show_name=name_eligible(match)
+            retained=q.code in getattr(getattr(self,'retained_candidates',None),'peak',{})
+            show_name=retained or name_eligible(match)
             if show_name:eligible.add(q.code)
-            if hidden_result(q,cfg,filters):continue
+            if hidden_result(q,cfg,filters) and not retained:continue
+            if retained and not match['hit']:match['text']='保留候選｜'+match['text']
             values=[q.code,(q.name or '股名待補') if show_name else '',match['text'],f'{q.price:.2f}',f'{q.gain:+.2f}',f'{q.volume:,.0f}','—' if q.turnover is None else f'{q.turnover:.2f}','待累積' if ratio is None else f'{ratio:.2f}',reason]
             values+=history.values(q.code)
             self.tree.insert('','end',values=values,tags=('hit',) if match['hit'] else ('near',) if match['label']=='接近候選' else ())
@@ -605,6 +611,7 @@ class App(AutoUI):
             display=list(latest.values())
             newest=max((q.ts for q,_,_,_ in display),default=0)
             display=[(q,ratio,reason if newest-q.ts<60 else '等待重新複查｜'+reason,hit and newest-q.ts<60) for q,ratio,reason,hit in display]
+        display=self.retained_candidates.merge(display,cfg)
         names=getattr(getattr(self,'stock_names',None),'names',{})
         for q,_,_,_ in display:
             if q.code in names:q.name=names[q.code]

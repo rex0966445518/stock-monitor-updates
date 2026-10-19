@@ -114,6 +114,18 @@ def run_smoke_test(report):
         assert app.tree.heading('history0','text')==app.price_history.headings()[0]
         assert len(app.display_scale.widths)==17
         app.price_history=PriceHistory()
+        from retained_candidates import RetainedCandidates
+        app.retained_candidates=RetainedCandidates()
+        retained_cfg=dict(DEFAULT,use_turnover=True,min_turnover=3,use_accel=True,use_breakout=True)
+        candidate=(Quote('9091','RETAIN',100,3,2000,4,1770000100),2,'等待觀測突破守穩',False)
+        app.display_cfg=retained_cfg
+        app.retained_candidates.merge([candidate],retained_cfg)
+        app.display_rows=app.retained_candidates.merge([],retained_cfg)
+        app.draw_results()
+        assert app.tree.item(app.tree.get_children()[0],'values')[0]=='9091'
+        assert '保留候選' in app.tree.item(app.tree.get_children()[0],'values')[2]
+        assert '等待重新複查' in app.tree.item(app.tree.get_children()[0],'values')[8]
+        app.retained_candidates=RetainedCandidates()
         now=dt.datetime.now().timestamp()
         app.mode='CI smoke / synthetic data'
         app.render([Quote('9001','SMOKE',100,2,1500,1,now)],0,0,dict(DEFAULT),persist=True)

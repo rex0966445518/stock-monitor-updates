@@ -285,3 +285,22 @@ class PriceHistoryTests(unittest.TestCase):
         h.update([],11);self.assertEqual(len(h.slots),8)
         h.update([Quote('2330','TEST',120,3,2000,1,base+86400)],1)
         self.assertEqual(len(h.slots),1)
+
+class RetainedCandidateTests(unittest.TestCase):
+    def test_qualify_disappear_decline_and_refresh(self):
+        from retained_candidates import RetainedCandidates
+        r=RetainedCandidates()
+        cfg=dict(DEFAULT,use_turnover=True,min_turnover=3,use_accel=True,use_breakout=True)
+        q=Quote('2330','TEST',100,3,2000,4,100)
+        row=(q,2,'等待觀測突破守穩',False)
+        r.merge([row],cfg)
+        self.assertEqual(r.peak['2330'],5)
+        missing=r.merge([],cfg)
+        self.assertEqual(len(missing),1)
+        self.assertIn('等待重新複查',missing[0][2]);self.assertFalse(missing[0][3])
+        lower=(Quote('2330','TEST',20,0,50,1,101),None,'股價不足',False)
+        self.assertEqual(r.merge([lower],cfg)[0],lower)
+        self.assertEqual(r.merge([],cfg)[0][0].price,20)
+        self.assertEqual(r.peak['2330'],5)
+        r.merge([(Quote('2317','OTHER',100,3,2000,4,101),None,'等待觀測突破守穩',False)],cfg)
+        self.assertNotIn('2317',r.peak)
