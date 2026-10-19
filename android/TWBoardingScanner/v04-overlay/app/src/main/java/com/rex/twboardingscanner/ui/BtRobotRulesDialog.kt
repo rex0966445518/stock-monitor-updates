@@ -12,8 +12,9 @@ internal object BtRobotRulesDialog {
              initialType:RadarType = RadarType.A_EARLY_BREAKOUT,
              dConfig:DPatternConfig=DPatternConfig.DEFAULT,fConfig:FPatternConfig=FPatternConfig.DEFAULT,
              onParameters:(DPatternConfig,FPatternConfig)->Unit={_,_->},
-             bConfig:BPatternConfig=BPatternConfig.DEFAULT,onBParameters:(BPatternConfig)->Unit={},onSave:(String,String)->Unit){
-        val numbers=RuleNumberFields(a,dConfig,fConfig,bConfig)
+             bConfig:BPatternConfig=BPatternConfig.DEFAULT,onBParameters:(BPatternConfig)->Unit={},
+             gConfig:GPatternConfig=GPatternConfig.DEFAULT,onGParameters:(GPatternConfig)->Unit={},onSave:(String,String)->Unit){
+        val numbers=RuleNumberFields(a,dConfig,fConfig,bConfig,gConfig)
         BtRobotSpace.validateConstraints(key,forbidden)
         val excluded=BtRobotSpace.rules(forbidden).mapValues{it.value.toMutableSet()}
         val selected=BtRobotSpace.rules(key).mapValues{it.value.toMutableSet()}
@@ -43,19 +44,22 @@ internal object BtRobotRulesDialog {
         }.apply{tag="robot-d-copy-a"})
         content.addView(body)
         populate(a,body,numbers,initialType,selected.getValue(initialType),excluded.getValue(initialType)){summary()}
-        content.addView(NeonUi.label(a,"ABCDEF 各自設定；僅主頁/機器人亮燈的類型才會分析。儲存後另建條件組合測試批次（不再使用持倉×淨利網格）；排除只是停用條件，並非反向篩選。",11f,NeonUi.amber))
+        content.addView(NeonUi.label(a,"ABCDEFG 各自設定；僅主頁/機器人亮燈的類型才會分析。儲存後另建條件組合測試批次（不再使用持倉×淨利網格）；排除只是停用條件，並非反向篩選。",11f,NeonUi.amber))
         content.addView(NeonUi.gap(a,10))
         val contentHeight=(a.resources.displayMetrics.heightPixels*0.60f).toInt()
         root.addView(ScrollView(a).apply{addView(content)},LinearLayout.LayoutParams(-1,contentHeight))
         root.addView(NeonUi.row(a,listOf(
-            NeonUi.button(a,"全部自由",NeonUi.amber){runCatching{val d=numbers.readD();val f=numbers.readF();val b=numbers.readB();onBParameters(b);onParameters(d,f);onSave("0","0")}.onSuccess{dialog.dismiss()}.onFailure{Toast.makeText(a,it.message,Toast.LENGTH_LONG).show()}},
+            NeonUi.button(a,"全部自由",NeonUi.amber){runCatching{val d=numbers.readD();val f=numbers.readF();val b=numbers.readB();val g=numbers.readG();onBParameters(b);onGParameters(g);onParameters(d,f);onSave("0","0")}.onSuccess{dialog.dismiss()}.onFailure{Toast.makeText(a,it.message,Toast.LENGTH_LONG).show()}},
             NeonUi.button(a,"取消",NeonUi.muted){dialog.dismiss()},
-            NeonUi.button(a,"儲存設定",NeonUi.mint){runCatching{val d=numbers.readD();val f=numbers.readF();val b=numbers.readB();onBParameters(b);onParameters(d,f);onSave(BtRobotSpace.key(selected),BtRobotSpace.key(excluded))}.onSuccess{dialog.dismiss()}.onFailure{Toast.makeText(a,it.message,Toast.LENGTH_LONG).show()}}.apply{tag="save-required-rules"}
+            NeonUi.button(a,"儲存設定",NeonUi.mint){runCatching{val d=numbers.readD();val f=numbers.readF();val b=numbers.readB();val g=numbers.readG();
+                require(selected.getValue(RadarType.G_MA5_WAVE).isEmpty()||selected.getValue(RadarType.G_MA5_WAVE).containsAll(GPattern.REQUIRED_IDS)){"G 入場固定必須同時有 G1/G2"}
+                onBParameters(b);onGParameters(g);onParameters(d,f);onSave(BtRobotSpace.key(selected),BtRobotSpace.key(excluded))}.onSuccess{dialog.dismiss()}.onFailure{Toast.makeText(a,it.message,Toast.LENGTH_LONG).show()}}.apply{tag="save-required-rules"}
         )),LinearLayout.LayoutParams(-1,NeonUi.dp(a,52)))
         dialog=MaterialAlertDialogBuilder(a).setBackground(NeonUi.panel(a,NeonUi.cyan)).setView(root).create();dialog.show()
     }
     private fun populate(a:AppCompatActivity,body:LinearLayout,numbers:RuleNumberFields,type:RadarType,selected:MutableSet<String>,excluded:MutableSet<String>,change:()->Unit){
         body.removeAllViews();body.addView(NeonUi.label(a,"${type.label} · 必選／排除",15f,NeonUi.cyan,true))
+        if(type==RadarType.G_MA5_WAVE)body.addView(NeonUi.label(a,"G1/G2 一起必選才有進場資格。G3～G5 另於「G 持股管理」設定，不參與機器人 AND 選股。",12f,NeonUi.amber))
         if(type==RadarType.A_EARLY_BREAKOUT)AVideoPresets.add(a,body){ids->
             selected.clear();selected.addAll(ids);excluded.clear();populate(a,body,numbers,type,selected,excluded,change);change()
         }
