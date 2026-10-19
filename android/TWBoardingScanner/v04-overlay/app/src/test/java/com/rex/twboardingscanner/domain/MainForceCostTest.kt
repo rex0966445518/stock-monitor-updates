@@ -46,14 +46,14 @@ class MainForceCostTest {
 
     @Test fun independentOptionalConditionIsPresentInAllFourAndUnknownBlocksOnlyWhenSelected(){
         val id=ScanConditions.MAIN_FORCE_COST_20
-        RadarType.entries.forEach{type->
+        RadarType.entries.take(6).forEach{type->
             val options=ScanConditions.forRadar(type)
             assertEquals(1,options.count{it.id==id})
             assertTrue(options.first{it.id==id}.extra)
             assertFalse(options.first{it.id==id}.defaultEnabled)
         }
         val unknown=TechnicalCalculator().build(stock,(0 until 19).map{candle(it,100.0)})
-        RadarType.entries.forEach{type->
+        RadarType.entries.take(6).forEach{type->
             val result=when(type){
                 RadarType.A_EARLY_BREAKOUT->ScoringEngine().evaluateA(unknown,setOf(id))
                 RadarType.B_DEEP_REVERSAL->ScoringEngine().evaluateB(unknown,setOf(id))
@@ -61,6 +61,7 @@ class MainForceCostTest {
                 RadarType.D_MAIN_FORCE->ScoringEngine().evaluateD(unknown,setOf(id))
                 RadarType.E_DIF_TOUCH->ScoringEngine().evaluateE(unknown,setOf(id))
                 RadarType.F_VOLUME_CONTRACTION->ScoringEngine().evaluateF(unknown,setOf(id))
+                RadarType.G_MA5_WAVE->ScoringEngine().evaluateG(unknown,GPattern.REQUIRED_IDS)
             }
             assertEquals(CheckState.PENDING,result.checks.single{it.id==id}.state)
             assertEquals(SignalLight.NONE,result.light)
@@ -82,7 +83,7 @@ class MainForceCostTest {
             BtRobotSpace.v5Slots.drop(oldLength))
         val unchanged=BtRobotSpace.rules(BigInteger.ONE.shiftLeft(101).toString(16))
         assertFalse(unchanged.values.any{ScanConditions.MAIN_FORCE_COST_20 in it})
-        val newOnly=RadarType.entries.associateWith{setOf(ScanConditions.MAIN_FORCE_COST_20)}
+        val newOnly=RadarType.entries.associateWith{if(it==RadarType.G_MA5_WAVE)emptySet() else setOf(ScanConditions.MAIN_FORCE_COST_20)}
         val encoded=BtRobotSpace.key(newOnly)
         assertEquals(newOnly,BtRobotSpace.rules(encoded))
         assertEquals(BigInteger.ONE.shiftLeft(102),BtRobotSpace.total("0","0",includeCost=false))
