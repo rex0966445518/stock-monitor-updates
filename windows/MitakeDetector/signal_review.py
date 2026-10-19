@@ -1,6 +1,7 @@
 """Forward observation of alerts; sampled returns are not execution/backtest results."""
 import json
 import sqlite3
+from contextlib import closing
 
 
 class SignalReview:
@@ -13,7 +14,7 @@ class SignalReview:
         return conn
 
     def observe(self,quotes,signals,cfg):
-        with self.connect() as conn:
+        with closing(self.connect()) as conn,conn:
             for q in quotes:
                 pending=conn.execute('SELECT id,ts,price FROM signal_checks WHERE code=? AND ts<? AND ts>=?',(q.code,q.ts,q.ts-360)).fetchall()
                 for signal_id,stamp,price in pending:
@@ -28,5 +29,5 @@ class SignalReview:
                 conn.execute('INSERT INTO signal_checks(ts,code,price,kind,config,reason) VALUES (?,?,?,?,?,?)',(q.ts,q.code,q.price,kind,json.dumps(cfg,ensure_ascii=False),reason))
 
     def rows(self):
-        with self.connect() as conn:
+        with closing(self.connect()) as conn,conn:
             return conn.execute('SELECT s.ts,s.code,s.kind,s.price,r.horizon,r.ts,r.price,r.change,s.reason FROM signal_checks s LEFT JOIN signal_returns r ON r.signal_id=s.id ORDER BY s.ts DESC,r.horizon LIMIT 500').fetchall()
