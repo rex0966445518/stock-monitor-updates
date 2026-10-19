@@ -265,7 +265,11 @@ class AutoUI:
 
     def scan_recovering_table(self,image,bounds):
         started=time.perf_counter()
-        try:return self._scan_recovering_table(image,bounds)
+        captured_at=image.info.get('captured_at',time.time())
+        try:
+            result=self._scan_recovering_table(image,bounds)
+            for q in result[0]:q.ts=captured_at
+            return result
         finally:self.last_table_seconds=time.perf_counter()-started
 
     def _scan_recovering_table(self,image,bounds):
@@ -761,6 +765,7 @@ class AutoUI:
                             extra,extra_bad=scan_numeric_batch(sheet,cfg['column_bounds'],self.read_auto_ocr,self.stock_names,
                                                               memory=self.get_ocr_learning(),defer_names=True)
                             extra=[q for q in extra if q.code in selected]
+                            for q in extra:q.ts=fresh.info.get('captured_at',q.ts)
                             c.check()
                             if extra and switcher.label_matches(name):
                                 self.events.put((token,'auto_quotes',(name,extra,extra_bad,time.monotonic()-begin,dict(current,source_reset=False))))

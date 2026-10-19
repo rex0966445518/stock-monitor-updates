@@ -212,8 +212,11 @@ class WindowsController:
         owner=self.u.WindowFromPoint(W.POINT(region['left']+region['width']//2,region['top']+region['height']//2))
         if not self.belongs(owner):raise AutomationStopped('讀取區域被遮住，已停止')
         with mss.mss() as cap:
+            captured_at=time.time()
             shot=cap.grab(region)
-            return Image.frombytes('RGB',shot.size,shot.rgb),region
+            image=Image.frombytes('RGB',shot.size,shot.rgb)
+            image.info['captured_at']=captured_at
+            return image,region
 
 
 class RankingSwitcher:

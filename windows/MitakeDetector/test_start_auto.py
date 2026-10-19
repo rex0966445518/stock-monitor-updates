@@ -401,3 +401,14 @@ class GuardEngineAcceptanceTests(unittest.TestCase):
         with patch('MitakeDetector.time.time',return_value=10220):
             rows,alerts=e.process([Quote('2330','TEST',100,3,5000,4,10220)],cfg)
         self.assertFalse(alerts);self.assertIn('已轉弱',rows[0][2])
+
+
+class CaptureTimeTests(unittest.TestCase):
+    def test_ocr_completion_does_not_refresh_old_capture(self):
+        from auto_ui import AutoUI
+        from PIL import Image
+        app=AutoUI();q=Quote('2330','TEST',100,3,2000,4,99999)
+        app._scan_recovering_table=lambda image,bounds:([q],0)
+        image=Image.new('RGB',(100,100));image.info['captured_at']=10000
+        rows,bad=app.scan_recovering_table(image,{})
+        self.assertEqual(rows[0].ts,10000)

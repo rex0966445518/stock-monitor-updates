@@ -517,9 +517,10 @@ class App(AutoUI):
         from rapidocr_onnxruntime import RapidOCR
         if self.ocr is None: self.ocr = RapidOCR(det_limit_type="max",det_limit_side_len=1600,intra_op_num_threads=2,inter_op_num_threads=1,use_cls=False)
         # OCR模型接受BGR；保留彩色，避免紅綠文字轉灰後消失。
+        captured_at=image.info.get('captured_at',time.time())
         image = image.convert('RGB').resize((image.width*2, image.height*2))
         result, _ = self.ocr(np.asarray(image)[:, :, ::-1].copy(),unclip_ratio=1.6)
-        return parse_ocr(result, image.width, centers, time.time())
+        return parse_ocr(result, image.width, centers, captured_at)
 
     def image_test(self):
         from tkinter import filedialog
