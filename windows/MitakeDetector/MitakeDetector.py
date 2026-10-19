@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.51'
+VERSION = '0.3.52'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -336,6 +336,7 @@ class App(AutoUI):
         from version_history import record_launch
         try:record_launch(BASE,VERSION)
         except sqlite3.Error as exc:self.say('版本啟用紀錄寫入失敗：'+str(exc))
+        self.load_daily_table()
         root.protocol('WM_DELETE_WINDOW', self.close)
         self.init_f8()
         root.after(150, self.poll)
@@ -345,10 +346,30 @@ class App(AutoUI):
         try:
             from resume_scan import ScanCheckpoint
             (BASE/'scan-checkpoint.json').unlink(missing_ok=True)
+            (BASE/'daily-table.json').unlink(missing_ok=True)
             self.scan_checkpoint=None
         except OSError as exc:self.say('無法清除進度：'+str(exc));return
         self.auto_engines={};self.rank_rows={};self.records=[]
         self.begin_observation()
+
+    def save_daily_table(self):
+        if not getattr(self,'display_rows',None) and not self.rank_rows:return
+        from resume_state import save_daily,snapshot
+        try:save_daily(BASE/'daily-table.json',snapshot(self))
+        except (ValueError,OSError) as exc:self.say('當日表格保存失敗：'+str(exc))
+
+    def load_daily_table(self):
+        from resume_state import load_daily
+        try:
+            data=load_daily(BASE/'daily-table.json')
+            if data is None:
+                from resume_scan import ScanCheckpoint
+                state=ScanCheckpoint(BASE/'scan-checkpoint.json').data
+                if state.get('day')==dt.date.today().isoformat():data=state.get('ui')
+            if data:
+                self.restore_scan_snapshot(data)
+                self.status.set('已還原今日表格｜舊資料待複查，按F8繼續掃描')
+        except (ValueError,TypeError,KeyError,OSError) as exc:self.say('當日表格還原失敗，原檔保留：'+str(exc))
 
     def save_scan_snapshot(self):
         store=getattr(self,'scan_checkpoint',None)
@@ -553,6 +574,7 @@ class App(AutoUI):
         tick()
 
     def stop(self):
+        self.save_daily_table()
         self.restore_scan_cursor()
         self.scan_phase.set('已暫停｜停止請求已送出，進度保留')
         self.phase_label.configure(fg='#ffb45e');self.scan_rate.stop()
@@ -802,6 +824,8 @@ class App(AutoUI):
                 return
             try:
                 from updater import launch_installer
+                self.save_daily_table()
+                self.save_scan_snapshot()
                 launch_installer(payload)
                 self.close()
             except OSError as exc:
@@ -851,6 +875,7 @@ class App(AutoUI):
         text.insert('1.0', HELP); text.configure(state='disabled')
 
     def close(self):
+        self.save_daily_table()
         self.restore_scan_cursor()
         if self.auto_active:self.save_scan_snapshot()
         voice=getattr(self,'task_voice',None)

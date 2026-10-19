@@ -93,3 +93,16 @@ class DayRolloverTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(),original);self.assertEqual(store.data,old)
             self.assertIsNone(store.archived_path)
             self.assertFalse(list((Path(folder)/'scan-history').glob('*.json')))
+
+class DailyTableTests(unittest.TestCase):
+    def test_atomic_today_only_roundtrip(self):
+        from resume_state import save_daily,load_daily
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'daily-table.json'
+            self.assertIsNone(load_daily(path))
+            data={'display_rows':[[{'code':'2330','price':100},None,'待複查',False]],'price_history':[{'prices':{'2330':[123,100]}}]}
+            save_daily(path,data,day='2026-10-19')
+            self.assertEqual(load_daily(path,day='2026-10-19'),data)
+            self.assertIsNone(load_daily(path,day='2026-10-20'))
+            save_daily(path,{'records':[1]},day='2026-10-19')
+            self.assertEqual(load_daily(path,day='2026-10-19'),{'records':[1]})

@@ -10,7 +10,7 @@ def snapshot(app):
         engines[rank]={'history':{code:[asdict(q) for q in rows] for code,rows in engine.history.items()},
                        **{key:getattr(engine,key) for key in ('last_alert','highs','pending','last_change')},
                        'session_day':engine.session_day.isoformat() if engine.session_day else None}
-    return dict(retained={code:[asdict(row[0]),*row[1:]] for code,row in getattr(getattr(app,'retained_candidates',None),'rows',{}).items()},retained_peak=getattr(getattr(app,'retained_candidates',None),'peak',{}),price_history=getattr(getattr(app,'price_history',None),'slots',[]),engines=engines,rows={rank:[[asdict(q),ratio,reason,hit] for q,ratio,reason,hit in rows] for rank,rows in app.rank_rows.items()},records=app.records)
+    return dict(display_rows=[[asdict(q),ratio,reason,hit] for q,ratio,reason,hit in getattr(app,'display_rows',[])],display_cfg=getattr(app,'display_cfg',{}),retained={code:[asdict(row[0]),*row[1:]] for code,row in getattr(getattr(app,'retained_candidates',None),'rows',{}).items()},retained_peak=getattr(getattr(app,'retained_candidates',None),'peak',{}),price_history=getattr(getattr(app,'price_history',None),'slots',[]),engines=engines,rows={rank:[[asdict(q),ratio,reason,hit] for q,ratio,reason,hit in rows] for rank,rows in app.rank_rows.items()},records=app.records)
 
 
 def restore(app,data):
@@ -34,6 +34,9 @@ def restore(app,data):
     for items in rows.values():
         for item in items:
             if item[0].code not in latest or item[0].ts>=latest[item[0].code][0].ts:latest[item[0].code]=item
+    for q,ratio,reason,hit in data.get('display_rows',[]):
+        quote=Quote(**q)
+        if quote.code not in latest:latest[quote.code]=(quote,ratio,'等待重新複查｜'+reason,False)
     for code,row in app.retained_candidates.rows.items():
         if code not in latest:latest[code]=row
     for item in app.tree.get_children():app.tree.delete(item)
@@ -41,4 +44,23 @@ def restore(app,data):
         if hasattr(app.tree,'heading'):app.tree.heading(f'history{i}',text=label)
     for q,ratio,reason,hit in latest.values():
         app.tree.insert('','end',values=[q.code,q.name,'待複查',f'{q.price:.2f}',f'{q.gain:+.2f}',f'{q.volume:,.0f}','—' if q.turnover is None else f'{q.turnover:.2f}','待累積' if ratio is None else f'{ratio:.2f}',reason]+app.price_history.values(q.code))
+    app.display_rows=list(latest.values())
+    app.display_cfg=data.get('display_cfg') or getattr(app,'config',{})
+    if hasattr(app,'draw_results'):app.draw_results()
     app.observation_summary.set(f'已還原 {len(latest)} 檔觀察資料｜等待接續複查，不將舊讀值當成新訊號')
+
+
+def save_daily(path,data,day=None):
+    import json
+    day=day or dt.date.today().isoformat()
+    temp=path.with_suffix('.tmp')
+    temp.write_text(json.dumps(dict(day=day,ui=data),ensure_ascii=False),'utf-8')
+    temp.replace(path)
+
+
+def load_daily(path,day=None):
+    import json
+    day=day or dt.date.today().isoformat()
+    if not path.exists():return None
+    data=json.loads(path.read_text('utf-8'))
+    return data.get('ui') if data.get('day')==day else None

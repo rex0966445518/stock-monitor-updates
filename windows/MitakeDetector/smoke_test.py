@@ -16,6 +16,12 @@ def run_smoke_test(report):
         from MitakeDetector import App,Quote,DEFAULT,VERSION,BASE
         from updater import validate_manifest
         root=tk.Tk();root.withdraw();app=App(root)
+        if (BASE/'daily-table.json').exists():
+            from resume_state import load_daily
+            if load_daily(BASE/'daily-table.json'):
+                assert app.tree.get_children(),'Startup failed to restore today table'
+        app.rank_rows={};app.auto_engines={};app.display_rows=[]
+
         assert root.title()=='漲停板探測器-雷允澤製 v'+VERSION
         assert any(str(w.cget('text'))=='漲停板探測器-雷允澤製 v'+VERSION for w in root.winfo_children() if w.winfo_class()=='Label')
         import tkinter.font as tkfont
@@ -213,6 +219,15 @@ def run_smoke_test(report):
                 assert len(app.tree.get_children())==2
                 screenshot=report.with_suffix('.png')
                 ImageGrab.grab(bbox=(root.winfo_rootx(),root.winfo_rooty(),root.winfo_rootx()+root.winfo_width(),root.winfo_rooty()+root.winfo_height())).save(screenshot)
+                app.save_daily_table()
+                from resume_state import load_daily
+                daily=load_daily(BASE/'daily-table.json')
+                assert daily and daily['display_rows']
+                expected=[app.tree.item(item,'values')[0] for item in app.tree.get_children()]
+                app.display_rows=[];app.rank_rows={};app.draw_results()
+                app.load_daily_table()
+                assert [app.tree.item(item,'values')[0] for item in app.tree.get_children()]==expected
+                assert all('複查' in str(app.tree.item(item,'values')) for item in app.tree.get_children())
                 info.update(automation=automation,ok=True,version=VERSION,frozen=bool(getattr(sys,'frozen',False)),ocr_rows=len(quotes),gui_rows=len(app.tree.get_children()),database=True,screenshot=str(screenshot))
             except Exception:
                 info.update(ok=False,error=traceback.format_exc())
