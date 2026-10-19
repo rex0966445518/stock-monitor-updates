@@ -197,8 +197,12 @@ class ChipKGeminiActivity : AppCompatActivity() {
         }
         val existing = batchStore.snapshot()
         if (existing?.active == true) {
-            Toast.makeText(this,"上一輪七頁擷取仍在執行；請先停止或等待完成",Toast.LENGTH_LONG).show()
-            return
+            if (System.currentTimeMillis() - existing.lastPulseAt > 60_000) {
+                batchStore.stop("舊截圖服務已中斷；重新開始需再次授權 Android 畫面擷取")
+            } else {
+                Toast.makeText(this,"上一輪七頁擷取仍在執行；請先停止或等待完成",Toast.LENGTH_LONG).show()
+                return
+            }
         }
         prefs.edit().putString("stock",code).putString("capture_mode","batch").apply()
         val manager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
