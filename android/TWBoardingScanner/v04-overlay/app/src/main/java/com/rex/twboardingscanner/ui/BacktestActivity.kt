@@ -125,7 +125,7 @@ class BacktestActivity:AppCompatActivity(){
         codes=NeonUi.field(EditText(this).apply{setText(config?.optString("codes")?:"");hint="全部股票，或 2330, 3661…";contentDescription="回測股票代號"})
         universe.addView(codes);universe.addView(label("留空掃描現存上市櫃；首次下載需較長時間。",11f))
         sectorButton=NeonUi.button(this,""){editSectors()};refreshSectorButton();universe.addView(sectorButton)
-        universe.addView(NeonUi.gap(this,12));universe.addView(label("① 啟用類別 · 參與回測",15f,NeonUi.ink,true))
+        universe.addView(NeonUi.gap(this,12));universe.addView(label("① 啟用類別 A～G · 參與回測",15f,NeonUi.ink,true))
         universe.addView(label("彩色＝已啟用；灰色＝已停用。點擊可切換。",11f))
         universe.addView(NeonUi.radarRows(this,RadarType.entries.map{type->
             NeonUi.button(this,"",NeonUi.cyan){
@@ -147,7 +147,7 @@ class BacktestActivity:AppCompatActivity(){
         universe.addView(NeonUi.button(this,"匯入主動買／賣成交量 CSV",NeonUi.cyan){
             startActivity(Intent(this,TradeSideVolumeImportActivity::class.java))
         }.apply{tag="backtest-flow-import"})
-        root.addView(universe);NeonUi.group(root,universe,universe,"03  股票與入場篩選","股票範圍、產業、ABCDEF 與管理名單","backtest-universe")
+        root.addView(universe);NeonUi.group(root,universe,universe,"03  股票與入場篩選","股票範圍、產業、ABCDEFG 與管理名單","backtest-universe")
         val watcher=object:android.text.TextWatcher{
             override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}
             override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){}

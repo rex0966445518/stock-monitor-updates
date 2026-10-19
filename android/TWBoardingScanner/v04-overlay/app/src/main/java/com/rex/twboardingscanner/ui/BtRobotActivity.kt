@@ -157,10 +157,10 @@ class BtRobotActivity:AppCompatActivity(){
         sweepCheck=CheckBox(this).apply{
             tag="robot-grid-mode";text="自動範圍測試 · 持倉 × 淨利"
             textSize=15f;setTextColor(NeonUi.cyan)
-            contentDescription="啟用固定 ABCDEF 條件的持倉、淨利下車全組合回測"
+            contentDescription="啟用固定 ABCDEFG 條件的持倉、淨利下車全組合回測"
         }
         c.addView(sweepCheck)
-        c.addView(label("固定目前 ABCDEF 勾選、產業、日期與本金。依下方範圍逐組測試，保留結果並自動結束。",11f))
+        c.addView(label("固定目前 ABCDEFG 勾選、產業、日期與本金。依下方範圍逐組測試，保留結果並自動結束。",11f))
         sweepFields=NeonUi.vertical(this).apply{tag="robot-grid-fields"}
         hFrom=rangeInput("robot-holding-from");hTo=rangeInput("robot-holding-to")
         pFrom=rangeInput("robot-profit-from");pTo=rangeInput("robot-profit-to")
@@ -267,7 +267,7 @@ class BtRobotActivity:AppCompatActivity(){
         }.apply{tag="robot-flow-import"})
         root.addView(NeonUi.gap(this,8))
         val options=panel(NeonUi.cyan).apply{tag="robot-condition-settings"}
-        options.addView(label("① 啟用類別 · 彩色已啟用／灰色已停用",12f,NeonUi.cyan))
+        options.addView(label("① 啟用類別 A～G · 彩色已啟用／灰色已停用",12f,NeonUi.cyan))
         options.addView(NeonUi.radarRows(this,RadarType.entries.map{type->
             NeonUi.button(this,"",NeonUi.cyan){
                 enabledRadars=if(type in enabledRadars)enabledRadars-type else enabledRadars+type
@@ -330,7 +330,7 @@ class BtRobotActivity:AppCompatActivity(){
         fixed.addView(trendHoldCheck)
         paramNotice=label("",11f).apply{tag="robot-parameter-notice"}
         fixed.addView(NeonUi.gap(this,8));fixed.addView(paramNotice)
-        fixed.addView(NeonUi.gap(this,6));fixed.addView(label("每次各買 1,000 股；超過 5 天可保本賣出，保留折讓金。測試日期、股票範圍、ABCDEF 與產業採用目前批次快照；可從回測日誌完整同步。",11f))
+        fixed.addView(NeonUi.gap(this,6));fixed.addView(label("每次各買 1,000 股；超過 5 天可保本賣出，保留折讓金。測試日期、股票範圍、ABCDEFG 與產業採用目前批次快照；可從回測日誌完整同步。",11f))
         fixed.addView(NeonUi.gap(this,10))
         fixed.addView(buildSweepPanel())
         val snapshot=store.session()?.let{BtSettingsCodec.decode(it.getJSONObject("settings"))}?:base()
@@ -386,7 +386,7 @@ class BtRobotActivity:AppCompatActivity(){
                     return@button
                 }
                 MaterialAlertDialogBuilder(this).setTitle("建立新的測試批次")
-                    .setMessage("會保留目前批次的全部結果，使用你選定的 ${chosenDates.start} → ${chosenDates.end} 歷史日期，以及目前 ABCDEF、產業、股號範圍、下車規則和輸入的資金／持倉／獲利設定。日期改變時重新取得該期間的歷史行情，不沿用舊區間資料。建立後按開始才測試。")
+                    .setMessage("會保留目前批次的全部結果，使用你選定的 ${chosenDates.start} → ${chosenDates.end} 歷史日期，以及目前 ABCDEFG、產業、股號範圍、下車規則和輸入的資金／持倉／獲利設定。日期改變時重新取得該期間的歷史行情，不沿用舊區間資料。建立後按開始才測試。")
                     .setNegativeButton("取消",null).setPositiveButton("建立"){_,_->
                         runTask("正在建立新的測試批次…"){
                             val previous=store.session()
@@ -549,7 +549,7 @@ class BtRobotActivity:AppCompatActivity(){
         sectorButton.isEnabled=!busy
         val effectiveSweep=desiredSweep
         spaceLabel.text=if(effectiveSweep!=null)
-            "持倉 ${effectiveSweep.holdingFrom}～${effectiveSweep.holdingTo} 檔 × 淨利 ${effectiveSweep.profitFrom}%～${effectiveSweep.profitTo}% · 共 ${effectiveSweep.total} 組。當前 ABCDEF 啟用區域固定，逐組測試直到全部完成."
+            "持倉 ${effectiveSweep.holdingFrom}～${effectiveSweep.holdingTo} 檔 × 淨利 ${effectiveSweep.profitFrom}%～${effectiveSweep.profitTo}% · 共 ${effectiveSweep.total} 組。當前 ABCDEFG 啟用區域固定，逐組測試直到全部完成."
         else "逐項測試 · 必選 $fixed／排除 $blocked · 啟用 ${activeRuleSet.sortedBy{it.ordinal}.joinToString(""){it.name.take(1)}} · 共 ${num(total)} 輪，全部留空選項測完即停止。"+
             if(s!=null&&!samePlan)"\n這是本次設定的輪數；按開始建立新批次，舊進度保留於歷史批次。" else ""
 
