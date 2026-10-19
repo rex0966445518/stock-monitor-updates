@@ -24,7 +24,7 @@ class BtConditionIndex private constructor(
     fun prepare(s:BtSettings,cancel:()->Boolean={false}):BtPrepared {
         val selected=RadarType.entries.map{type->
             val ids=if(type in s.enabledRadars)s.rules[type].orEmpty() else emptySet()
-            if(type==RadarType.G_MA5_WAVE && ids.isNotEmpty() && !ids.containsAll(GPattern.REQUIRED_IDS))error("G 入場必須勾選 G1 + G2")
+            if(type==RadarType.G_MA5_WAVE && ids.isNotEmpty() && !ids.containsAll(GPattern.REQUIRED_IDS))return@map 0L
             val options=ScanConditions.forRadar(type)
             require(ids.all{id->options.any{it.id==id}})
             options.foldIndexed(0L){i,mask,rule->if(rule.id in ids)mask or (1L shl i)else mask}
