@@ -13,6 +13,7 @@ import com.rex.twboardingscanner.domain.RadarType
 import com.rex.twboardingscanner.domain.DPatternConfig
 import com.rex.twboardingscanner.domain.BPatternConfig
 import com.rex.twboardingscanner.domain.FPatternConfig
+import com.rex.twboardingscanner.domain.GPatternConfig
 import com.rex.twboardingscanner.domain.EPatternConfig
 import com.rex.twboardingscanner.domain.ExclusionConditions
 import java.time.LocalDate
@@ -23,6 +24,7 @@ object BtSettingsCodec {
         val rules=com.rex.twboardingscanner.domain.RadarType.entries.associateWith { type ->
             val all=com.rex.twboardingscanner.domain.ScanConditions.forRadar(type)
             (prefs.getStringSet("rules_${com.rex.twboardingscanner.domain.ScanConditions.VERSION}_${type.name}",null)
+                ?:prefs.getStringSet("rules_${com.rex.twboardingscanner.domain.ScanConditions.PRE_G_VERSION}_${type.name}",null)
                 ?:prefs.getStringSet("rules_${com.rex.twboardingscanner.domain.ScanConditions.PRE_E_VERSION}_${type.name}",null)
                 ?:prefs.getStringSet("rules_${com.rex.twboardingscanner.domain.ScanConditions.PREVIOUS_VERSION}_${type.name}",null)
                 ?:prefs.getStringSet("rules_${com.rex.twboardingscanner.domain.ScanConditions.PREVIOUS_D_VERSION}_${type.name}",null)
@@ -38,7 +40,7 @@ object BtSettingsCodec {
             runCatching{RadarType.valueOf(it)}.getOrNull()
         }?.toSet()?:defaultActiveRadars()
         val dConfig=runCatching{DPatternConfig.read(JSONObject(prefs.getString("d_pattern_config",null)?:"{}"))}.getOrDefault(DPatternConfig.DEFAULT)
-        return BtSettings(start,end,capital,codes,rules.mapValues{it.value.toSet()},sectors.ifEmpty{allSectors}.toSet(),enabledRadars=enabled,bConfig=runCatching{BPatternConfig.read(prefs.getString("b_pattern_config",null)?.let{JSONObject(it)})}.getOrDefault(BPatternConfig.DEFAULT),dConfig=dConfig,fConfig=runCatching{FPatternConfig.read(JSONObject(prefs.getString("f_pattern_config",null)?:"{}"))}.getOrDefault(FPatternConfig.DEFAULT),eConfig=runCatching{EPatternConfig.read(JSONObject(prefs.getString("e_pattern_config",null)?:"{}"))}.getOrDefault(EPatternConfig.DEFAULT),exclusions=ExclusionConditions.read(prefs.getString("scan_exclusions",null)?.let{JSONObject(it)}),stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(c).read(),exitRules=com.rex.twboardingscanner.data.ExitRuleStore(c).read(com.rex.twboardingscanner.domain.StockScope.BACKTEST),marketGuardVersion=com.rex.twboardingscanner.domain.MarketCrashGuard.VERSION,holdProfitUntilMa5Break=com.rex.twboardingscanner.data.ExitRuleStore(c).readProfitTrendHold(com.rex.twboardingscanner.domain.StockScope.BACKTEST))
+        return BtSettings(start,end,capital,codes,rules.mapValues{it.value.toSet()},sectors.ifEmpty{allSectors}.toSet(),enabledRadars=enabled,bConfig=runCatching{BPatternConfig.read(prefs.getString("b_pattern_config",null)?.let{JSONObject(it)})}.getOrDefault(BPatternConfig.DEFAULT),dConfig=dConfig,fConfig=runCatching{FPatternConfig.read(JSONObject(prefs.getString("f_pattern_config",null)?:"{}"))}.getOrDefault(FPatternConfig.DEFAULT),gConfig=runCatching{GPatternConfig.read(JSONObject(prefs.getString("g_pattern_config",null)?:"{}"))}.getOrDefault(GPatternConfig.DEFAULT),eConfig=runCatching{EPatternConfig.read(JSONObject(prefs.getString("e_pattern_config",null)?:"{}"))}.getOrDefault(EPatternConfig.DEFAULT),exclusions=ExclusionConditions.read(prefs.getString("scan_exclusions",null)?.let{JSONObject(it)}),stockPolicy=com.rex.twboardingscanner.data.StockPolicyStore(c).read(),exitRules=com.rex.twboardingscanner.data.ExitRuleStore(c).read(com.rex.twboardingscanner.domain.StockScope.BACKTEST),marketGuardVersion=com.rex.twboardingscanner.domain.MarketCrashGuard.VERSION,holdProfitUntilMa5Break=com.rex.twboardingscanner.data.ExitRuleStore(c).readProfitTrendHold(com.rex.twboardingscanner.domain.StockScope.BACKTEST))
     }
     fun encode(s:BtSettings):JSONObject {
         s.validateTrading()
@@ -51,7 +53,7 @@ object BtSettingsCodec {
         .put("targetNetPct",s.targetNetPct).put("maxHoldingStocks",s.maxHoldingStocks?:JSONObject.NULL)
         .put("holdProfitUntilMa5Break",s.holdProfitUntilMa5Break).put("robotBaseline",s.robotBaseline)
         .put("enabledRadars",JSONArray(s.enabledRadars.map{it.name}.sorted()))
-        .put("dConfig",s.dConfig.json()).put("eConfig",s.eConfig.json()).put("fConfig",s.fConfig.json()).put("bConfig",s.bConfig.json()).put("exclusions",ExclusionConditions.json(s.exclusions))
+        .put("dConfig",s.dConfig.json()).put("eConfig",s.eConfig.json()).put("fConfig",s.fConfig.json()).put("gConfig",s.gConfig.json()).put("bConfig",s.bConfig.json()).put("exclusions",ExclusionConditions.json(s.exclusions))
         .put("holdingLimitBasis","不同股號計算檔數；同股不同日可加買一張；先賣後買；名額及資金競爭按股號排序")
         .put("rules",JSONObject().apply{s.rules.forEach{(type,ids)->put(type.name,JSONArray(ids.sorted()))}})
         .put("sectors",JSONArray(s.sectors.map{it.name}.sorted()))
@@ -64,7 +66,7 @@ object BtSettingsCodec {
         .put("costModel",JSONObject().put("buyFeeRate",0.001425).put("sellFeeRate",0.001425).put("minimumFee",20).put("sellTaxRate",0.003).put("slippageRate",0.001))
     }
     fun decode(o:JSONObject):BtSettings {
-        require(o.getInt("strategyVersion") in 2..4&&o.getString("rulesVersion") in setOf(com.rex.twboardingscanner.domain.ScanConditions.VERSION,com.rex.twboardingscanner.domain.ScanConditions.PRE_E_VERSION,com.rex.twboardingscanner.domain.ScanConditions.PREVIOUS_VERSION,com.rex.twboardingscanner.domain.ScanConditions.PREVIOUS_D_VERSION,com.rex.twboardingscanner.domain.ScanConditions.PRE_D_VERSION,com.rex.twboardingscanner.domain.ScanConditions.LEGACY_VERSION)){"回測條件版本已變更，請重新開始"}
+        require(o.getInt("strategyVersion") in 2..4&&o.getString("rulesVersion") in setOf(com.rex.twboardingscanner.domain.ScanConditions.VERSION,com.rex.twboardingscanner.domain.ScanConditions.PRE_G_VERSION,com.rex.twboardingscanner.domain.ScanConditions.PRE_E_VERSION,com.rex.twboardingscanner.domain.ScanConditions.PREVIOUS_VERSION,com.rex.twboardingscanner.domain.ScanConditions.PREVIOUS_D_VERSION,com.rex.twboardingscanner.domain.ScanConditions.PRE_D_VERSION,com.rex.twboardingscanner.domain.ScanConditions.LEGACY_VERSION)){"回測條件版本已變更，請重新開始"}
         val rules=com.rex.twboardingscanner.domain.RadarType.entries.associateWith{type->
             val a=o.getJSONObject("rules").optJSONArray(type.name)
             if(a==null)emptySet() else (0 until a.length()).map{a.getString(it)}.toSet()
@@ -83,7 +85,7 @@ object BtSettingsCodec {
                 val x=o.optJSONArray("enabledRadars")
                 if(x==null)defaultActiveRadars() else (0 until x.length()).map{RadarType.valueOf(x.getString(it))}.toSet()
             },
-            robotBaseline=o.optBoolean("robotBaseline",false),dConfig=DPatternConfig.read(o.optJSONObject("dConfig")),eConfig=EPatternConfig.read(o.optJSONObject("eConfig")),fConfig=FPatternConfig.read(o.optJSONObject("fConfig")),bConfig=BPatternConfig.read(o.optJSONObject("bConfig")),exclusions=ExclusionConditions.read(o.optJSONObject("exclusions"))).also{it.validateTrading()}
+            robotBaseline=o.optBoolean("robotBaseline",false),dConfig=DPatternConfig.read(o.optJSONObject("dConfig")),eConfig=EPatternConfig.read(o.optJSONObject("eConfig")),fConfig=FPatternConfig.read(o.optJSONObject("fConfig")),gConfig=GPatternConfig.read(o.optJSONObject("gConfig")),bConfig=BPatternConfig.read(o.optJSONObject("bConfig")),exclusions=ExclusionConditions.read(o.optJSONObject("exclusions"))).also{it.validateTrading()}
     }
 }
 
