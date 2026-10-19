@@ -8,7 +8,8 @@ import kotlin.math.*
 val TAIPEI: ZoneId = ZoneId.of("Asia/Taipei")
 data class PaperCandidate(val code:String,val name:String,val exchange:String,val radar:String,val score:Int,val observedAt:Long,val scanId:String="")
 data class PaperQuote(val code:String,val at:Long,val last:Double,val bid:Double,val ask:Double,val bidLots:Double,val askLots:Double,val volume:Long,val upper:Double,val lower:Double)
-data class PaperPosition(val code:String,val name:String,val exchange:String,val radar:String,val entry:Double,val cost:Double,val boughtAt:Long,var peak:Double,var mark:Double,var markAt:Long,var trendHoldActivated:Boolean=false,val scanId:String="")
+data class PaperPosition(val code:String,val name:String,val exchange:String,val radar:String,val entry:Double,var cost:Double,val boughtAt:Long,var peak:Double,var mark:Double,var markAt:Long,var trendHoldActivated:Boolean=false,val scanId:String="",
+    var shares:Int=1000,var g3Reduced:Int=0,var g4Reduced:Int=0,var gActionDate:String="")
 data class PaperTrade(val code:String,val name:String,val radar:String,val side:String,val at:Long,val quoteAt:Long,val price:Double,val fee:Double,val tax:Double,val realized:Double,val reason:String,val shares:Int=1000,val scanId:String="")
 data class ScanProfit(val realized:Double,val unrealized:Double,val buys:Int,val markAt:Long?) { val total:Double get()=realized+unrealized }
 data class PaperDay(val date:String,var equity:Double,var at:Long)
@@ -28,10 +29,11 @@ object PaperEngine {
     fun fresh(q:PaperQuote,now:Long)=q.last.isFinite() && q.last>0 && now-q.at in 0..90_000 && local(q.at).toLocalDate()==local(now).toLocalDate() && session(q.at)
     fun fee(value:Double)=max(20.0,ceil(value*FEE_RATE))
     fun tax(value:Double)=ceil(value*TAX_RATE)
-    fun netSell(price:Double)=price*1000-fee(price*1000)-tax(price*1000)
-    fun equity(b:PaperBook)=b.cash+b.positions.sumOf { netSell(it.mark) }
+    fun netSell(price:Double)=netSell(price,1000)
+    fun netSell(price:Double,shares:Int):Double{val amount=price*shares;return amount-fee(amount)-tax(amount)}
+    fun equity(b:PaperBook)=b.cash+b.positions.sumOf { netSell(it.mark,it.shares) }
     fun realized(b:PaperBook)=b.trades.filter {it.side=="SELL"}.sumOf {it.realized}
-    fun unrealized(b:PaperBook)=b.positions.sumOf {netSell(it.mark)-it.cost}
+    fun unrealized(b:PaperBook)=b.positions.sumOf {netSell(it.mark,it.shares)-it.cost}
     fun scanProfit(b:PaperBook,id:String):ScanProfit {
         require(id.isNotBlank())
         val trades=b.trades.filter{it.scanId==id}
@@ -70,7 +72,7 @@ object PaperEngine {
             val dailyTrend=if(trendEnabled)com.rex.twboardingscanner.domain.ProfitTrendHold.fromCompleted(known) else null
             val aged=java.time.temporal.ChronoUnit.DAYS.between(local(p.boughtAt).toLocalDate(),tradeDay)>5
             val liveSellPrice=if(q.bid>0&&q.bidLots>=1)execution(q.bid,false) else Double.NaN
-            val liveNet=if(liveSellPrice.isFinite()&&liveSellPrice>0)netSell(liveSellPrice) else Double.NaN
+            val liveNet=if(liveSellPrice.isFinite()&&liveSellPrice>0)netSell(liveSellPrice,p.shares) else Double.NaN
             val netThreshold=if(aged)1.0 else 1.0+(strategy?.targetNetPct?:6.0)/100.0
             val reached=strategy!=null&&tradeDay>local(p.boughtAt).toLocalDate()&&
                 liveNet.isFinite()&&liveNet+1e-8>=p.cost*netThreshold
@@ -78,6 +80,53 @@ object PaperEngine {
                 liveNet.isFinite()&&liveNet+1e-8>=p.cost*(1.0+strategy.targetNetPct/100.0)
             if(trendEnabled&&exitIndex==null&&!p.trendHoldActivated&&fullTargetReached&&dailyTrend?.canHoldOnTarget==true)
                 p.trendHoldActivated=true
+            if("G" in p.radar.split("/")&&strategy!=null){
+                // Use yesterday's completed day bar to avoid intraday look-ahead.
+                // Paper mode is not brokerage execution. Bid/ask odd-lot fills are
+                // estimated from the regular-lot quote, never guaranteed.
+                val g= com.rex.twboardingscanner.domain.GExitEngine.decide(
+                    known,strategy.gConfig,p.entry,p.shares,p.g3Reduced,p.g4Reduced)
+                if(g!=null&&p.gActionDate!=tradeDay.toString()){
+                    val action=g.action
+                    val selling=action in setOf(
+                        com.rex.twboardingscanner.domain.GAction.STOP,
+                        com.rex.twboardingscanner.domain.GAction.G5_EXIT,
+                        com.rex.twboardingscanner.domain.GAction.G3_REDUCE,
+                        com.rex.twboardingscanner.domain.GAction.G4_REDUCE)
+                    if(selling){
+                        val pct=if(action==com.rex.twboardingscanner.domain.GAction.G3_REDUCE)strategy.gConfig.g3SellPct else strategy.gConfig.g4SellPct
+                        val shares=if(action==com.rex.twboardingscanner.domain.GAction.STOP||action==com.rex.twboardingscanner.domain.GAction.G5_EXIT)p.shares
+                            else floor(p.shares*pct/100).toInt().coerceIn(1,p.shares)
+                        if(q.bid>0&&q.bidLots*1000>=shares){
+                            val px=execution(q.bid,false)
+                            if(px.isFinite()&&px>0&&px>=q.lower&&px<=q.upper){
+                                val amount=px*shares;val f=fee(amount);val tax=tax(amount);val net=amount-f-tax
+                                val basis=p.cost*shares/p.shares
+                                b.cash+=net;p.shares-=shares;p.cost-=basis;p.gActionDate=tradeDay.toString()
+                                if(action==com.rex.twboardingscanner.domain.GAction.G3_REDUCE)p.g3Reduced+=shares
+                                if(action==com.rex.twboardingscanner.domain.GAction.G4_REDUCE)p.g4Reduced+=shares
+                                if(p.shares==0)b.positions.remove(p)
+                                b.trades.add(PaperTrade(p.code,p.name,p.radar,"SELL",now,q.at,px,f,tax,net-basis,
+                                    g.detail+"；${shares}股；零股價格以整股報價估算",shares=shares,scanId=p.scanId));sells++
+                            }
+                        }else skipped++
+                    }else{
+                        val shares=if(action==com.rex.twboardingscanner.domain.GAction.G3_REBUY)p.g3Reduced else p.g4Reduced
+                        if(shares>0&&(marketGuard==null||marketGuard.canBuy)&&q.ask>0&&q.askLots*1000>=shares){
+                            val px=execution(q.ask,true)
+                            val amount=px*shares;val f=fee(amount);val cost=amount+f
+                            if(px>=q.lower&&px<=q.upper&&cost<=b.cash){
+                                b.cash-=cost;p.shares+=shares;p.cost+=cost;p.gActionDate=tradeDay.toString()
+                                if(action==com.rex.twboardingscanner.domain.GAction.G3_REBUY)p.g3Reduced=0 else p.g4Reduced=0
+                                b.trades.add(PaperTrade(p.code,p.name,p.radar,"BUY",now,q.at,px,f,0.0,0.0,
+                                    g.detail+"；回補 ${shares}股；零股價格以整股報價估算",shares=shares,scanId=p.scanId));buys++
+                            }
+                        }else skipped++
+                    }
+                }
+                // No generic exit targets can short-circuit G's separate management logic.
+                return@forEach
+            }
             val reason=when {
                 exitIndex!=null->"下車條件 ${exitIndex+1}：${activeExitRules[exitIndex].description()}；訊號 ${com.rex.twboardingscanner.domain.RuleMetrics.tradingDate(signal!!.time)}"
                 trendEnabled&&p.trendHoldActivated&&dailyTrend?.closedBelowMa5==true->
@@ -93,9 +142,10 @@ object PaperEngine {
             } ?:return@forEach
             val px=execution(q.bid,false)
             if(!px.isFinite()||q.bid<=0||q.bidLots<1||px<q.lower||px>q.upper){skipped++;return@forEach}
-            val amount=px*1000;val f=fee(amount);val tax=tax(amount);val net=amount-f-tax
+            val amount=px*p.shares;val f=fee(amount);val tax=tax(amount);val net=amount-f-tax
+            val shares=p.shares
             b.cash+=net;b.positions.remove(p)
-            b.trades.add(PaperTrade(p.code,p.name,p.radar,"SELL",now,q.at,px,f,tax,net-p.cost,reason,scanId=p.scanId));sells++
+            b.trades.add(PaperTrade(p.code,p.name,p.radar,"SELL",now,q.at,px,f,tax,net-p.cost,reason,shares=shares,scanId=p.scanId));sells++
         }
         if(!flatten&&mayEnter&&(marketGuard==null||marketGuard.canBuy)) b.candidates.sortedWith(compareByDescending<PaperCandidate>{it.score}.thenBy{it.code}).distinctBy{it.code}.forEach {c->
             if(b.positions.map{it.code}.distinct().size>=maxHoldings)return@forEach
