@@ -62,6 +62,7 @@ class FullMarketScanRunner(
         val dConfig=DPatternConfig.read(config.optJSONObject("dConfig"))
         val eConfig=EPatternConfig.read(config.optJSONObject("eConfig"))
         val fConfig=FPatternConfig.read(config.optJSONObject("fConfig"))
+        val gConfig=GPatternConfig.read(config.optJSONObject("gConfig"))
         val bConfig=BPatternConfig.read(config.optJSONObject("bConfig"))
         val flowRevision=config.getString("flowRevision")
         val paperSettings=if(config.optBoolean("paperEnabled")&&!config.isNull("paperStrategy"))
@@ -124,7 +125,7 @@ class FullMarketScanRunner(
                                 val dated=calc.barsForRadar(bars,type,date)
                                 if(dated.isEmpty())null else {
                                     val snapshot=calc.build(s,dated).copy(
-                                        dConfig=dConfig,eConfig=eConfig,fConfig=fConfig,bConfig=bConfig,
+                                        dConfig=dConfig,eConfig=eConfig,fConfig=fConfig,bConfig=bConfig,gConfig=gConfig,
                                         marketIndexCloses=indexHistory)
                                     when(type){
                                         RadarType.A_EARLY_BREAKOUT->scoring.evaluateA(snapshot,rules.getValue(type),exclusions.getValue(type))
@@ -133,6 +134,7 @@ class FullMarketScanRunner(
                                         RadarType.D_MAIN_FORCE->scoring.evaluateD(snapshot,rules.getValue(type),exclusions.getValue(type))
                                         RadarType.E_DIF_TOUCH->scoring.evaluateE(snapshot,rules.getValue(type),exclusions.getValue(type))
                                         RadarType.F_VOLUME_CONTRACTION->scoring.evaluateF(snapshot,rules.getValue(type),exclusions.getValue(type))
+                                         RadarType.G_MA5_WAVE->scoring.evaluateG(snapshot,rules.getValue(type),exclusions.getValue(type))
                                     }
                                 }
                             }
