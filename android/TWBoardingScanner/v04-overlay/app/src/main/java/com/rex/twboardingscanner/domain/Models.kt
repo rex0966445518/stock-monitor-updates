@@ -2,7 +2,8 @@ package com.rex.twboardingscanner.domain
 
 enum class RadarType(val displayName:String) {
     A_EARLY_BREAKOUT("準備起漲"), B_DEEP_REVERSAL("深跌反轉"), C_LONG_RED_VOLUME("突發爆量"),
-    D_MAIN_FORCE("主力進場"), E_DIF_TOUCH("DIF金叉"), F_VOLUME_CONTRACTION("縮量上漲");
+    D_MAIN_FORCE("主力進場"), E_DIF_TOUCH("DIF金叉"), F_VOLUME_CONTRACTION("縮量上漲"),
+    G_MA5_WAVE("大陽線・5日線波段");
     val label:String get()="${name.take(1)} $displayName"
     companion object {
         fun displayStored(value:String):String = value.split("/").joinToString(" / "){part->
@@ -165,6 +166,7 @@ data class StockSnapshot(
     val dConfig:DPatternConfig=DPatternConfig.DEFAULT,
     val eConfig:EPatternConfig=EPatternConfig.DEFAULT,
     val fConfig:FPatternConfig=FPatternConfig.DEFAULT,
+    val gConfig:GPatternConfig=GPatternConfig.DEFAULT,
     val marketIndexCloses:Map<java.time.LocalDate,Double>?=null,
     val bConfig:BPatternConfig=BPatternConfig.DEFAULT
 )
