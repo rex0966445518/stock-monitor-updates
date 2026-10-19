@@ -67,7 +67,8 @@ class DisplayScale:
                     info=widget.pack_info()
                     base={}
                     for key in ('padx','pady'):
-                        numbers=tuple(int(v) for v in self.root.tk.splitlist(info[key]))
+                        raw=info[key]
+                        numbers=tuple(int(v) for v in (raw if isinstance(raw,(tuple,list)) else self.root.tk.splitlist(str(raw))))
                         base[key]=numbers
                     self.padding[widget]=base
                 widget.pack_configure(**{k:tuple(round(v*factor) for v in values) for k,values in self.padding[widget].items()})
