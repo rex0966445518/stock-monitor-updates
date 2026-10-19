@@ -118,6 +118,7 @@ class MainActivity: AppCompatActivity() {
     private var eConfig:com.rex.twboardingscanner.domain.EPatternConfig=com.rex.twboardingscanner.domain.EPatternConfig.DEFAULT
     private var bConfig:com.rex.twboardingscanner.domain.BPatternConfig=com.rex.twboardingscanner.domain.BPatternConfig.DEFAULT
     private var fConfig:com.rex.twboardingscanner.domain.FPatternConfig=com.rex.twboardingscanner.domain.FPatternConfig.DEFAULT
+    private var gConfig:com.rex.twboardingscanner.domain.GPatternConfig=com.rex.twboardingscanner.domain.GPatternConfig.DEFAULT
     private val radarSwitches=mutableMapOf<RadarType,com.google.android.material.button.MaterialButton>()
     private fun refreshRadarSwitches(){
         radarSwitches.forEach{(type,button)->
@@ -175,7 +176,8 @@ class MainActivity: AppCompatActivity() {
         val editorIndex=b.settingsPanel.indexOfChild(originalRow)
         val editors=listOf(b.conditionAButton,b.conditionBButton,b.conditionCButton,b.conditionDButton,
             NeonUi.button(this,"E DIF金叉"){showRadarConditions(RadarType.E_DIF_TOUCH)}.apply{tag="scanner-e-conditions"},
-            NeonUi.button(this,"F 縮量上漲"){showRadarConditions(RadarType.F_VOLUME_CONTRACTION)}.apply{tag="scanner-f-conditions"})
+            NeonUi.button(this,"F 縮量上漲"){showRadarConditions(RadarType.F_VOLUME_CONTRACTION)}.apply{tag="scanner-f-conditions"},
+            NeonUi.button(this,"G 大陽線波段"){showRadarConditions(RadarType.G_MA5_WAVE)}.apply{tag="scanner-g-conditions"})
         editors.forEachIndexed{i,button->
             (button.parent as? ViewGroup)?.removeView(button)
             button.text="${RadarType.entries[i].label}\n設定條件"
@@ -205,7 +207,7 @@ class MainActivity: AppCompatActivity() {
         refreshRadarSwitches()
         b.scanConditionButton.setOnClickListener { showScanConditionsDialog() }
         posterExport=PosterExport(this)
-        b.refreshButton.text="導出 ABCDEF 海報"
+        b.refreshButton.text="導出 ABCDEFG 海報"
         b.refreshButton.setOnClickListener {
             val snapshot=admitted()
             posterExport.generate(isScanning,ScanPoster.collect(snapshot),b.scanProgress.progress,b.scanProgress.max)
@@ -267,7 +269,7 @@ class MainActivity: AppCompatActivity() {
                     latest=saved.main;latestPaper=saved.paper
                     latestScanDate=saved.date;latestScanAt=saved.created;latestFolderId=saved.id
                     resultRadars=saved.radars;resultSectors=saved.sectors;resultPolicy=saved.policy
-                    selectedTab=if(prefs.getString("resultFolder","")==saved.id)prefs.getInt("resultTab",6).coerceIn(0,8) else 6
+                    selectedTab=if(prefs.getString("resultFolder","")==saved.id)prefs.getInt("resultTab",6).coerceIn(0,9) else 6
                     b.progressTitle.text="已還原上次掃描 · ${saved.date}"
                     b.scanProgress.max=saved.requested.coerceAtLeast(1)
                     b.scanProgress.progress=b.scanProgress.max
@@ -380,7 +382,7 @@ class MainActivity: AppCompatActivity() {
             return
         }
         if(radarEnabled.isEmpty()){
-            Toast.makeText(this,"請至少啟用 A～F 的一組條件",Toast.LENGTH_LONG).show()
+            Toast.makeText(this,"請至少啟用 A～G 的一組條件",Toast.LENGTH_LONG).show()
             return
         }
         val date=java.time.LocalDate.now(com.rex.twboardingscanner.domain.RuleMetrics.TAIPEI)
@@ -391,7 +393,7 @@ class MainActivity: AppCompatActivity() {
             date.toString(),created,radarSelections.mapValues{it.value.toSet()},
             enabledSectors.toSet(),com.rex.twboardingscanner.data.StockPolicyStore(this).read(),
             flowRevision,0,0,0,enabledRadars=radarEnabled.toSet(),
-            dConfig=dConfig,eConfig=eConfig,fConfig=fConfig,bConfig=bConfig,
+            dConfig=dConfig,eConfig=eConfig,fConfig=fConfig,bConfig=bConfig,gConfig=gConfig,
             exclusions=scanExclusions.mapValues{it.value.toSet()}
         ).put("paperEnabled",paper?.enabled==true)
          .put("paperStrategy",paper?.strategy?.let{com.rex.twboardingscanner.backtest.BtSettingsCodec.encode(it)}
@@ -511,6 +513,7 @@ class MainActivity: AppCompatActivity() {
         val scanEConfig=eConfig
         val scanBConfig=bConfig
         val scanFConfig=fConfig
+        val scanGConfig=gConfig
         val exclusionSnapshot=scanExclusions.mapValues{it.value.toSet()}
         val flowStore=com.rex.twboardingscanner.data.TradeSideVolumeStore(this)
         val flowRevision=flowStore.revision()
@@ -622,7 +625,7 @@ class MainActivity: AppCompatActivity() {
                                         val datedBars = calculator.barsForRadar(bars, type, scanDate)
                                         if (datedBars.isEmpty()) null else {
                                             val snap = calculator.build(stockToUse, datedBars)
-                                                .copy(dConfig=scanDConfig,eConfig=scanEConfig,fConfig=scanFConfig,bConfig=scanBConfig,marketIndexCloses=indexHistory)
+                                                .copy(dConfig=scanDConfig,eConfig=scanEConfig,fConfig=scanFConfig,bConfig=scanBConfig,gConfig=scanGConfig,marketIndexCloses=indexHistory)
                                             when(type) {
                                                 RadarType.A_EARLY_BREAKOUT -> engine.evaluateA(snap, scanRules.getValue(type),exclusionSnapshot.getValue(type))
                                                 RadarType.B_DEEP_REVERSAL -> engine.evaluateB(snap, scanRules.getValue(type),exclusionSnapshot.getValue(type))
@@ -630,6 +633,7 @@ class MainActivity: AppCompatActivity() {
                                                 RadarType.D_MAIN_FORCE -> engine.evaluateD(snap,scanRules.getValue(type),exclusionSnapshot.getValue(type))
                                                 RadarType.F_VOLUME_CONTRACTION -> engine.evaluateF(snap,scanRules.getValue(type),exclusionSnapshot.getValue(type))
                                                 RadarType.E_DIF_TOUCH -> engine.evaluateE(snap,scanRules.getValue(type),exclusionSnapshot.getValue(type))
+                                                 RadarType.G_MA5_WAVE -> engine.evaluateG(snap,scanRules.getValue(type),exclusionSnapshot.getValue(type))
                                             }
                                         }
                                     }
@@ -748,7 +752,7 @@ class MainActivity: AppCompatActivity() {
                 val snapshot=com.rex.twboardingscanner.data.ScanArchiveStore.snapshot(
                     scanDate.toString(),latestScanAt,scanRules,mainSectors,scanPolicy,
                     flowRevision,total,analyzed.get(),failed.get(),
-                    enabledRadars=scanEnabled,dConfig=scanDConfig,eConfig=scanEConfig,fConfig=scanFConfig,bConfig=scanBConfig,exclusions=exclusionSnapshot)
+                    enabledRadars=scanEnabled,dConfig=scanDConfig,eConfig=scanEConfig,fConfig=scanFConfig,bConfig=scanBConfig,gConfig=scanGConfig,exclusions=exclusionSnapshot)
                     .put("paperStrategy",paperSettings?.let{com.rex.twboardingscanner.backtest.BtSettingsCodec.encode(it)}?:org.json.JSONObject.NULL)
                 com.rex.twboardingscanner.data.ScanDiagnostics.phase(this,"保存完整掃描資料夾")
                 com.rex.twboardingscanner.data.ScanArchiveStore(this).use{store->
@@ -848,7 +852,7 @@ class MainActivity: AppCompatActivity() {
     }
     private fun render() {
         val source=admitted()
-        val groups=(0..8).map{ResultFilters.select(source,it)}
+        val groups=(0..9).map{ResultFilters.select(source,it)}
         b.resultFilters.update(groups.map{it.size},selectedTab)
         val selected=groups[selectedTab]
         adapter.submit(selected)
@@ -862,13 +866,13 @@ class MainActivity: AppCompatActivity() {
             else->"等待市場訊號"
         }
         val available=RadarType.entries.mapIndexedNotNull{i,type->
-            groups[if(type==RadarType.F_VOLUME_CONTRACTION)8 else if(type==RadarType.E_DIF_TOUCH)7 else i].size.takeIf{it>0}?.let{"${type.label} $it 筆"}
+            groups[when(type){RadarType.F_VOLUME_CONTRACTION->8;RadarType.E_DIF_TOUCH->7;RadarType.G_MA5_WAVE->9;else->i}].size.takeIf{it>0}?.let{"${type.label} $it 筆"}
         }.joinToString("、")
         (b.emptyState.getChildAt(1) as TextView).text=when{
-            isScanning->"已完成的股票會陸續出現在「全部入選」；可切換 A/B/C/D/E/F。"
+            isScanning->"已完成的股票會陸續出現在「全部入選」；可切換 A/B/C/D/E/F/G。"
             available.isNotBlank()->"目前已掃出 $available。請點「全部入選」直接查看，或切換有訊號的分類。"
             latestScanAt>0->"目前沒有符合已勾選條件的股票；可在條件與工具中調整。"
-            else->"請開始掃描；預設「全部入選」顯示 ABCDEF 所有通過的股票。"
+            else->"請開始掃描；預設「全部入選」顯示 ABCDEFG 所有通過的股票。"
         }
     }
 
@@ -894,12 +898,14 @@ class MainActivity: AppCompatActivity() {
         eConfig=runCatching{com.rex.twboardingscanner.domain.EPatternConfig.read(org.json.JSONObject(prefs.getString("e_pattern_config",null)?:"{}"))}.getOrDefault(com.rex.twboardingscanner.domain.EPatternConfig.DEFAULT)
         bConfig=runCatching{com.rex.twboardingscanner.domain.BPatternConfig.read(prefs.getString("b_pattern_config",null)?.let{org.json.JSONObject(it)})}.getOrDefault(com.rex.twboardingscanner.domain.BPatternConfig.DEFAULT)
         fConfig=runCatching{com.rex.twboardingscanner.domain.FPatternConfig.read(org.json.JSONObject(prefs.getString("f_pattern_config",null)?:"{}"))}.getOrDefault(com.rex.twboardingscanner.domain.FPatternConfig.DEFAULT)
+        gConfig=runCatching{com.rex.twboardingscanner.domain.GPatternConfig.read(org.json.JSONObject(prefs.getString("g_pattern_config",null)?:"{}"))}.getOrDefault(com.rex.twboardingscanner.domain.GPatternConfig.DEFAULT)
         dConfig=runCatching{DPatternConfig.read(org.json.JSONObject(prefs.getString("d_pattern_config",null)?:"{}"))}
             .getOrDefault(DPatternConfig.DEFAULT)
         refreshRadarSwitches()
         RadarType.entries.forEach { type ->
             val rules = ScanConditions.forEditor(type)
             val savedRules = prefs.getStringSet("rules_${ScanConditions.VERSION}_${type.name}", null)
+                ?:prefs.getStringSet("rules_${ScanConditions.PRE_G_VERSION}_${type.name}",null)
                 ?:prefs.getStringSet("rules_${ScanConditions.PRE_E_VERSION}_${type.name}",null)
                 ?:prefs.getStringSet("rules_${ScanConditions.PREVIOUS_VERSION}_${type.name}",null)
                 ?:prefs.getStringSet("rules_${ScanConditions.PREVIOUS_D_VERSION}_${type.name}",null)
@@ -913,6 +919,7 @@ class MainActivity: AppCompatActivity() {
             if(type==RadarType.D_MAIN_FORCE&&savedRules!=null&&savedRules.isNotEmpty()&&
                 // Only migrate v0.4.47 or older D settings. D2 users may have
                 // intentionally deselected one of the original five guards.
+                prefs.getStringSet("rules_${ScanConditions.PRE_G_VERSION}_${type.name}",null)==null&&
                 prefs.getStringSet("rules_${ScanConditions.PRE_E_VERSION}_${type.name}",null)==null&&
                 prefs.getStringSet("rules_${ScanConditions.PREVIOUS_VERSION}_${type.name}",null)==null&&
                 prefs.getStringSet("rules_${ScanConditions.VERSION}_${type.name}",null)==null&&
@@ -929,7 +936,7 @@ class MainActivity: AppCompatActivity() {
         prefs.edit()
             .putStringSet("enabled_sectors", enabledSectors.map { it.name }.toSet())
             .putStringSet("enabled_radars",radarEnabled.map{it.name}.toSet())
-            .putString("d_pattern_config",dConfig.json().toString()).putString("e_pattern_config",eConfig.json().toString()).putString("f_pattern_config",fConfig.json().toString()).putString("b_pattern_config",bConfig.json().toString()).putString("scan_exclusions",com.rex.twboardingscanner.domain.ExclusionConditions.json(scanExclusions).toString())
+            .putString("d_pattern_config",dConfig.json().toString()).putString("e_pattern_config",eConfig.json().toString()).putString("f_pattern_config",fConfig.json().toString()).putString("g_pattern_config",gConfig.json().toString()).putString("b_pattern_config",bConfig.json().toString()).putString("scan_exclusions",com.rex.twboardingscanner.domain.ExclusionConditions.json(scanExclusions).toString())
             .apply()
     }
 
@@ -1011,13 +1018,13 @@ class MainActivity: AppCompatActivity() {
 
     private fun showRadarConditions(type: RadarType) {
         val title = "${type.label} · 掃描條件"
-        val numbers=RuleNumberFields(this,dConfig,fConfig,bConfig)
+        val numbers=RuleNumberFields(this,dConfig,fConfig,bConfig,gConfig)
         val rules = ScanConditions.forEditor(type)
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(8), dp(16), dp(8))
         }
-        box.addView(NeonUi.label(this,"勾選的條件須全部符合；未勾選不限制。",13f,NeonUi.ink))
+        box.addView(NeonUi.label(this,if(type==RadarType.G_MA5_WAVE)"G1/G2 是必要進場條件；其他入場勾選為額外過濾，G3～G5 是持股管理，不會一起作為 AND 篩選。" else "勾選的條件須全部符合；未勾選不限制。",13f,NeonUi.ink))
         if(type==RadarType.E_DIF_TOUCH)box.addView(NeonUi.label(this,"要只找剛金叉：勾選『DIF金叉』，並於參數設定開啟『納入剛向上交叉』；仍須符合線距門檻。",12f,NeonUi.amber))
         box.addView(NeonUi.button(this,"查看完整判斷說明",NeonUi.muted){
             MaterialAlertDialogBuilder(this).setTitle("條件判斷說明").setMessage("勾選條件全部滿足才入選；未勾選不限制。B預設為早期起轉組合，其餘基本條件預設全選，額外查核預設關閉；E 預設僅勾 DIF 向上接觸，不強制 A 股價／量能。\nA/B/E/F 排除台灣當日日線；C/D 使用最新日 K。E 的 MACD 為 EMA9 訊號線，預設線距≤收盤價0.3%，DIF須上升且前日位於訊號線下方或相等；可調線距及是否納入剛向上交叉。\nB新增可調深跌／不破底／MACD連升／RSI回升／放量突破及任一反轉事件；早期與突破確認兩套預設可套用。舊已保存勾選不自動改寫；B通過後若RSI>50且收盤>20日線另標示技術升級；不辨識W底形狀。\n額外資料不足標示待查核，勾選後會阻擋入選。5日／10日線碰觸以差距1%內且前一日差距較大定義；主動買賣比需提供來源可靠的內外盤成交量CSV，不能使用五檔委買委賣掛單量。HiStock 財報會查核技術候選股，快取24小時；HTTP403/429、格式變更、資料過期均待查核。逐日法人尚未接入。分數為所選條件通過率，不是公司評級。\n財務條件共用於ABCDEF、可各自勾選；EPS為正不代表現金流為正。產業EPS範圍不是通用及格線，未設成硬門檻。\n現金流使用原站最新列示期間，不跨季加總；金融業現金流需另行解讀。營業利益率為正不能排除一次性業外收益。\n風險估算：前20日最低價為支撐，支撐下1%為失效價，前60日最高價為壓力；(壓力−現價)/(現價−失效價)≥2。\n漲停估算：前收盤×1.1，按台股跳動單位向下取整；非交易所公告漲停價。\nC 為觀察訊號，尚無回測證明隔天一定續漲。\n估算主力成本為近20日的日K典型價（高＋低＋收）／3依成交股數加權；非券商揭露的真正大戶持股均價，也不保證股價反彈。當日資料若未收盤，估值可在收盤後改變；不足20根有效日K則顯示待查核。").setPositiveButton("關閉",null).show()
@@ -1060,6 +1067,7 @@ class MainActivity: AppCompatActivity() {
             box.addView(cb);numbers.add(box,type,rule.id)
             rule.id to cb
         }.toMap()
+        val gManagement=if(type==RadarType.G_MA5_WAVE)GPatternEditor.add(this,box,gConfig) else null
         val readExclusions=ExclusionEditor.fields(this,box,type,scanExclusions.getValue(type))
         if(type==RadarType.D_MAIN_FORCE)box.addView(NeonUi.button(this,
             "同步 A 已勾選選項至 D（不變更原 D 六項）",NeonUi.cyan){
@@ -1084,11 +1092,12 @@ class MainActivity: AppCompatActivity() {
             }
             dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val selected = checks.filterValues { it.isChecked }.keys.toSet()
-                if (selected.isEmpty()) {
-                    Toast.makeText(this, "請至少勾選一項條件", Toast.LENGTH_SHORT).show()
+                if (selected.isEmpty()||(type==RadarType.G_MA5_WAVE&&!selected.containsAll(com.rex.twboardingscanner.domain.GPattern.REQUIRED_IDS))) {
+                    Toast.makeText(this, if(type==RadarType.G_MA5_WAVE)"G 必須同時勾選 G1 大陽線及 G2 回踩" else "請至少勾選一項條件", Toast.LENGTH_SHORT).show()
                 } else {
                     val configs=runCatching{Triple(numbers.readD(),numbers.readF(),numbers.readB())}.getOrElse{Toast.makeText(this,it.message,Toast.LENGTH_LONG).show();return@setOnClickListener}
-                    dConfig=configs.first;fConfig=configs.second;bConfig=configs.third
+                    val nextG=runCatching{gManagement?.read(numbers.readG())?:gConfig}.getOrElse{Toast.makeText(this,it.message,Toast.LENGTH_LONG).show();return@setOnClickListener}
+                    dConfig=configs.first;fConfig=configs.second;bConfig=configs.third;gConfig=nextG
                     scanExclusions=scanExclusions+mapOf(type to readExclusions());saveScanSettings()
                     radarSelections[type] = selected
                     prefs.edit().putStringSet("rules_${ScanConditions.VERSION}_${type.name}", selected).apply()
