@@ -47,6 +47,7 @@ class ChipKCaptureService : Service() {
     private var begunAt = 0L
     private var pageStartedAt = 0L
     private var observedIndex = -1
+    private var lastPulseAt = 0L
     private var pageCaptureAttempts = 0
     private var finished = false
     private var batch = false
@@ -172,6 +173,7 @@ class ChipKCaptureService : Service() {
             return
         }
         val now = System.currentTimeMillis()
+        if (now - lastPulseAt >= 5_000) { batchStore.pulse(); lastPulseAt = now }
         val index = session.index
         val page = ChipKPage.at(index) ?: return
         if (index != observedIndex) {
