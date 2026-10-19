@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.52'
+VERSION = '0.3.53'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -226,6 +226,7 @@ class App(AutoUI):
         self.price_history=PriceHistory()
         from retained_candidates import RetainedCandidates
         self.retained_candidates=RetainedCandidates()
+        self.near_alert_times={}
         self.ocr = None
         self.update_busy = False
         self.update_status = tk.StringVar(value='')
@@ -530,6 +531,7 @@ class App(AutoUI):
         self.price_history=PriceHistory()
         from retained_candidates import RetainedCandidates
         self.retained_candidates=RetainedCandidates()
+        self.near_alert_times={}
         self.generation += 1; self.mode = mode; self.engine = Engine(); self.records = []; self.rank_rows = {}
         self.stop_event = threading.Event()
         for item in self.tree.get_children(): self.tree.delete(item)
@@ -659,6 +661,11 @@ class App(AutoUI):
             except sqlite3.Error as exc: self.say('資料寫入失敗：' + str(exc))
         for q, reason in alerts:
             self.say(f'【{self.mode}】{q.code} {q.name} {q.price:.2f} / {q.gain:+.2f}%：{reason}')
+        from near_alerts import near_alerts,voice_text
+        near=near_alerts(rows,cfg,self.near_alert_times)
+        if near:
+            self.say('接近上車條件 5/6：'+'、'.join(f'{q.name or "股名待辨識"} {q.code}' for q in near))
+            self.announce_task(voice_text(near))
         if alerts:
             self.root.bell()
             from task_progress import CandidateNotice,fresh_candidate_alerts

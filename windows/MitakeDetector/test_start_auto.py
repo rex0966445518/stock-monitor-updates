@@ -319,3 +319,18 @@ class LiveConditionOrderTests(unittest.TestCase):
         self.assertEqual([row[0].code for row,m in ordered_candidates([a,b],cfg)],['1111','2222'])
         b=(Quote('2222','B',100,3,2000,4,101),2,'等待觀測突破守穩',False)
         self.assertEqual([row[0].code for row,m in ordered_candidates([a,b],cfg)],['2222','1111'])
+
+
+class NearVoiceTests(unittest.TestCase):
+    def test_five_conditions_only_and_shared_cooldown(self):
+        from near_alerts import near_alerts,voice_text
+        cfg=dict(DEFAULT,use_turnover=True,min_turnover=3,use_accel=True,use_breakout=True)
+        q=Quote('2330','台積電',100,3,2000,4,100)
+        row=(q,2,'等待觀測突破守穩',False);last={}
+        alerts=near_alerts([row],cfg,last)
+        self.assertEqual(alerts,[q]);self.assertIn('台積電，股號 2330，已接近上車條件',voice_text(alerts))
+        self.assertEqual(near_alerts([row],cfg,last),[])
+        self.assertEqual(near_alerts([(q,None,row[2],False)],cfg,{}),[])
+        self.assertEqual(near_alerts([(q,2,'等待重新複查',False)],cfg,{}),[])
+        self.assertEqual(near_alerts([(q,2,'轉強候選',True)],cfg,{}),[])
+        q.ts+=cfg['cooldown'];self.assertEqual(near_alerts([row],cfg,last),[q])

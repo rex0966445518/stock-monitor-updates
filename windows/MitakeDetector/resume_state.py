@@ -10,7 +10,7 @@ def snapshot(app):
         engines[rank]={'history':{code:[asdict(q) for q in rows] for code,rows in engine.history.items()},
                        **{key:getattr(engine,key) for key in ('last_alert','highs','pending','last_change')},
                        'session_day':engine.session_day.isoformat() if engine.session_day else None}
-    return dict(display_rows=[[asdict(q),ratio,reason,hit] for q,ratio,reason,hit in getattr(app,'display_rows',[])],display_cfg=getattr(app,'display_cfg',{}),retained={code:[asdict(row[0]),*row[1:]] for code,row in getattr(getattr(app,'retained_candidates',None),'rows',{}).items()},retained_peak=getattr(getattr(app,'retained_candidates',None),'peak',{}),price_history=getattr(getattr(app,'price_history',None),'slots',[]),engines=engines,rows={rank:[[asdict(q),ratio,reason,hit] for q,ratio,reason,hit in rows] for rank,rows in app.rank_rows.items()},records=app.records)
+    return dict(near_alert_times=getattr(app,'near_alert_times',{}),display_rows=[[asdict(q),ratio,reason,hit] for q,ratio,reason,hit in getattr(app,'display_rows',[])],display_cfg=getattr(app,'display_cfg',{}),retained={code:[asdict(row[0]),*row[1:]] for code,row in getattr(getattr(app,'retained_candidates',None),'rows',{}).items()},retained_peak=getattr(getattr(app,'retained_candidates',None),'peak',{}),price_history=getattr(getattr(app,'price_history',None),'slots',[]),engines=engines,rows={rank:[[asdict(q),ratio,reason,hit] for q,ratio,reason,hit in rows] for rank,rows in app.rank_rows.items()},records=app.records)
 
 
 def restore(app,data):
@@ -21,6 +21,7 @@ def restore(app,data):
     app.retained_candidates=RetainedCandidates()
     app.retained_candidates.rows={code:(Quote(**row[0]),row[1],'等待重新複查｜'+row[2],False) for code,row in data.get('retained',{}).items()}
     app.retained_candidates.peak=data.get('retained_peak',{})
+    app.near_alert_times=data.get('near_alert_times',{})
     engines={}
     for rank,state in data.get('engines',{}).items():
         engine=Engine()
