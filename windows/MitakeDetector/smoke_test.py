@@ -17,6 +17,7 @@ def run_smoke_test(report):
         from updater import validate_manifest
         root=tk.Tk();root.withdraw();app=App(root)
         assert root.title()=='漲停板探測器-雷允澤製 v'+VERSION
+        assert any(str(w.cget('text'))=='漲停板探測器-雷允澤製 v'+VERSION for w in root.winfo_children() if w.winfo_class()=='Label')
         import tkinter.font as tkfont
         from tkinter import ttk
         scale=app.display_scale.percent

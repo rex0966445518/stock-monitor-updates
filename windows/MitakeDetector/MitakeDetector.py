@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.48'
+VERSION = '0.3.49'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -243,7 +243,7 @@ class App(AutoUI):
         style.map('TCombobox',fieldbackground=[('readonly','#e6edf7')],foreground=[('readonly','#101827')])
         style.configure('Treeview', background='#101a2c', fieldbackground='#101a2c', foreground='#e4eaf5', rowheight=30)
         style.map('Treeview', background=[('selected', '#7b253c')])
-        tk.Label(root, text='漲停板探測器-雷允澤製', fg='#ff5879', bg='#0b1020', font=('Microsoft JhengHei', 22, 'bold')).pack(anchor='w', padx=20, pady=(15, 3))
+        tk.Label(root, text='漲停板探測器-雷允澤製 v'+VERSION, fg='#ff5879', bg='#0b1020', font=('Microsoft JhengHei', 22, 'bold')).pack(anchor='w', padx=20, pady=(15, 3))
         tk.Label(root, text='觀察轉強候選股 · 持續複查量價與突破守穩 · 訊號不代表一定漲停', fg='#9caeca', bg='#0b1020').pack(anchor='w', padx=20)
         bar = ttk.Frame(root); bar.pack(fill='x', padx=15, pady=12)
         for label, action in [('開始／繼續（F8）', self.begin_observation), ('暫停（F8）', self.stop), ('重新開始', self.restart_observation), ('掃描設定', self.configure_auto), ('一鍵更新', self.check_update)]:
