@@ -35,6 +35,7 @@ internal object NeonUi {
         com.rex.twboardingscanner.domain.RadarType.D_MAIN_FORCE->Color.rgb(128,175,255)
         com.rex.twboardingscanner.domain.RadarType.E_DIF_TOUCH->Color.rgb(232,154,186)
         com.rex.twboardingscanner.domain.RadarType.F_VOLUME_CONTRACTION->Color.rgb(130,203,168)
+        com.rex.twboardingscanner.domain.RadarType.G_MA5_WAVE->Color.rgb(243,124,131)
     }
     private fun labelAccent(value:CharSequence):Int? = com.rex.twboardingscanner.domain.RadarType.entries
         .firstOrNull{value.length>1 && value[0]==it.name[0] && value[1]==' '}?.let{radarColor(it)}
