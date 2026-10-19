@@ -175,6 +175,12 @@ def run_smoke_test(report):
                           (Quote('9081','GOOD',100,3,2000,4,now),2,'轉強候選',True)]
         app.draw_results()
         assert len(app.tree.get_children())==2
+        app.display_rows.append((Quote('9082','FOUR',100,3,2000,4,now),None,'等待觀測突破守穩',False))
+        app.draw_results()
+        four=next(item for item in app.tree.get_children() if app.tree.item(item,'values')[0]=='9082')
+        assert app.tree.item(four,'values')[1]==''
+        assert '9082' not in app.name_eligible_codes
+        app.display_rows.pop();app.draw_results()
         assert app.tree.item(app.tree.get_children()[-1],'values')[1]==''
         app.result_filters['price'].set(True);app.change_result_filters()
         assert len(app.tree.get_children())==1

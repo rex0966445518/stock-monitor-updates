@@ -32,7 +32,7 @@ def ordered_candidates(rows,cfg):
 
 
 def name_eligible(match):
-    return match['count'] >= min(4,match['total'])
+    return match['count'] >= min(5,match['total'])
 
 
 def hidden_result(q,cfg,filters):

@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.47'
+VERSION = '0.3.48'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -580,7 +580,7 @@ class App(AutoUI):
         eligible=set()
         for (q,ratio,reason,hit),match in ordered_candidates(getattr(self,'display_rows',[]),cfg):
             retained=q.code in getattr(getattr(self,'retained_candidates',None),'peak',{})
-            show_name=retained or name_eligible(match)
+            show_name=name_eligible(match)
             if show_name:eligible.add(q.code)
             if hidden_result(q,cfg,filters) and not retained:continue
             if retained and not match['hit']:match['text']='保留候選｜'+match['text']

@@ -259,7 +259,11 @@ class ResultFilterTests(unittest.TestCase):
         row=(q,None,'等待觀測突破守穩',False)
         self.assertFalse(name_eligible(assess(row,cfg)))
         q.turnover=4
-        self.assertTrue(name_eligible(assess(row,cfg)))
+        self.assertFalse(name_eligible(assess(row,cfg)))  # 4/6: skip name OCR
+        self.assertTrue(name_eligible(assess((q,2,'等待觀測突破守穩',False),cfg)))  # 5/6
+        self.assertTrue(name_eligible(assess((q,2,'轉強候選',True),cfg)))  # 6/6
+        self.assertTrue(name_eligible(dict(count=4,total=4)))
+        self.assertFalse(name_eligible(dict(count=3,total=4)))
         for key in ['price','gain','turnover']:self.assertFalse(hidden_result(q,cfg,{key:True}))
         q.price=20;q.gain=12;q.turnover=None
         for key in ['price','gain','turnover']:self.assertTrue(hidden_result(q,cfg,{key:True}))
