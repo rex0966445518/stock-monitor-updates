@@ -712,7 +712,7 @@ class AutoUI:
                         def observed(quotes,bad):
                             if not switcher.label_matches(name):raise RuntimeError('本段股票類目改變，未接收本段資料')
                             c.check()
-                            current=dict(cfg,source_rank=name,source_partial=True,source_reset=first_batch[0])
+                            current=dict(cfg,source_rank=name,source_partial=True,source_reset=first_batch[0],scan_cycle=cycle)
                             first_batch[0]=False
                             counted.update(q.code for q in quotes);counts()
                             self.events.put((token,'auto_quotes',(name,quotes,bad,time.monotonic()-begin,current)))

@@ -10,11 +10,13 @@ def snapshot(app):
         engines[rank]={'history':{code:[asdict(q) for q in rows] for code,rows in engine.history.items()},
                        **{key:getattr(engine,key) for key in ('last_alert','highs','pending','last_change')},
                        'session_day':engine.session_day.isoformat() if engine.session_day else None}
-    return dict(engines=engines,rows={rank:[[asdict(q),ratio,reason,hit] for q,ratio,reason,hit in rows] for rank,rows in app.rank_rows.items()},records=app.records)
+    return dict(price_history=getattr(getattr(app,'price_history',None),'slots',[]),engines=engines,rows={rank:[[asdict(q),ratio,reason,hit] for q,ratio,reason,hit in rows] for rank,rows in app.rank_rows.items()},records=app.records)
 
 
 def restore(app,data):
     from MitakeDetector import Engine,Quote
+    from price_history import PriceHistory
+    app.price_history=PriceHistory(data.get('price_history',[]))
     engines={}
     for rank,state in data.get('engines',{}).items():
         engine=Engine()
@@ -29,6 +31,8 @@ def restore(app,data):
         for item in items:
             if item[0].code not in latest or item[0].ts>=latest[item[0].code][0].ts:latest[item[0].code]=item
     for item in app.tree.get_children():app.tree.delete(item)
+    for i,label in enumerate(app.price_history.headings()):
+        if hasattr(app.tree,'heading'):app.tree.heading(f'history{i}',text=label)
     for q,ratio,reason,hit in latest.values():
-        app.tree.insert('','end',values=[q.code,q.name,'待複查',f'{q.price:.2f}',f'{q.gain:+.2f}',f'{q.volume:,.0f}','—' if q.turnover is None else f'{q.turnover:.2f}','待累積' if ratio is None else f'{ratio:.2f}',reason])
+        app.tree.insert('','end',values=[q.code,q.name,'待複查',f'{q.price:.2f}',f'{q.gain:+.2f}',f'{q.volume:,.0f}','—' if q.turnover is None else f'{q.turnover:.2f}','待累積' if ratio is None else f'{ratio:.2f}',reason]+app.price_history.values(q.code))
     app.observation_summary.set(f'已還原 {len(latest)} 檔觀察資料｜等待接續複查，不將舊讀值當成新訊號')

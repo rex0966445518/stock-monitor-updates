@@ -10,7 +10,7 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.45'
+VERSION = '0.3.46'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -222,6 +222,8 @@ class App(AutoUI):
         self.auto_active = False
         self.auto_engines = {}
         self.rank_rows = {}
+        from price_history import PriceHistory
+        self.price_history=PriceHistory()
         self.ocr = None
         self.update_busy = False
         self.update_status = tk.StringVar(value='')
@@ -291,10 +293,14 @@ class App(AutoUI):
             self.result_filters[key]=var
             ttk.Checkbutton(filters,text=label,variable=var,command=self.change_result_filters).pack(side='left',padx=5)
         table_frame = ttk.Frame(root); table_frame.pack(fill='both', expand=True, padx=18)
-        cols = ['code','name','match','price','gain','volume','turnover','ratio','state']
+        cols = ['code','name','match','price','gain','volume','turnover','ratio','state']+[f'history{i}' for i in range(8)]
         self.tree = ttk.Treeview(table_frame, columns=cols, show='headings')
         for key, label, width in zip(cols, LABELS[:2] + ['符合條件'] + LABELS[2:] + ['5分量速比', '觀察原因／尚缺條件'], [75,100,125,90,75,100,85,100,380]):
             self.tree.heading(key, text=label); self.tree.column(key, width=width, stretch=key == 'state')
+        for i in range(8):
+            self.tree.heading(f'history{i}',text=f'待掃描 {i+1}')
+            self.tree.column(f'history{i}',width=100,anchor='e',stretch=False)
+        self.tree.configure(displaycolumns=cols[:4]+cols[9:]+cols[4:9])
         self.tree.tag_configure('hit', foreground='#fff1a8',background='#703026',font=('Microsoft JhengHei',10,'bold'))
         self.tree.tag_configure('near',foreground='#ffd36a',background='#222b3d')
         sb = ttk.Scrollbar(table_frame, orient='vertical', command=self.tree.yview)
@@ -497,6 +503,8 @@ class App(AutoUI):
         self.worker_thread = threading.Thread(target=job, daemon=True); self.worker_thread.start()
 
     def reset(self, mode):
+        from price_history import PriceHistory
+        self.price_history=PriceHistory()
         self.generation += 1; self.mode = mode; self.engine = Engine(); self.records = []; self.rank_rows = {}
         self.stop_event = threading.Event()
         for item in self.tree.get_children(): self.tree.delete(item)
@@ -559,6 +567,9 @@ class App(AutoUI):
 
     def draw_results(self):
         from candidate_ranking import ordered_candidates,name_eligible,hidden_result
+        from price_history import PriceHistory
+        history=getattr(self,'price_history',None) or PriceHistory()
+        for i,label in enumerate(history.headings()):self.tree.heading(f'history{i}',text=label)
         for item in self.tree.get_children():self.tree.delete(item)
         cfg=getattr(self,'display_cfg',self.config)
         filters={key:var.get() for key,var in getattr(self,'result_filters',{}).items()}
@@ -568,6 +579,7 @@ class App(AutoUI):
             if show_name:eligible.add(q.code)
             if hidden_result(q,cfg,filters):continue
             values=[q.code,(q.name or '股名待補') if show_name else '',match['text'],f'{q.price:.2f}',f'{q.gain:+.2f}',f'{q.volume:,.0f}','—' if q.turnover is None else f'{q.turnover:.2f}','待累積' if ratio is None else f'{ratio:.2f}',reason]
+            values+=history.values(q.code)
             self.tree.insert('','end',values=values,tags=('hit',) if match['hit'] else ('near',) if match['label']=='接近候選' else ())
         self.name_eligible_codes=eligible
 
@@ -575,6 +587,7 @@ class App(AutoUI):
         from tkinter import messagebox
         engine = self.auto_engines.setdefault(cfg['source_rank'], Engine()) if cfg.get('source_rank') else self.engine
         rows, alerts = engine.process(quotes, cfg)
+        self.price_history.update(quotes,cfg.get('scan_cycle'))
         for item in self.tree.get_children(): self.tree.delete(item)
         batch = []
         display=rows

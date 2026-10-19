@@ -265,3 +265,23 @@ class ResultFilterTests(unittest.TestCase):
         for key in ['price','gain','turnover']:self.assertTrue(hidden_result(q,cfg,{key:True}))
         self.assertFalse(hidden_result(q,dict(cfg,use_turnover=False),{'turnover':True}))
         self.assertFalse(hidden_result(q,cfg,{}))
+
+class PriceHistoryTests(unittest.TestCase):
+    def test_rounds_missing_restore_and_new_day(self):
+        from price_history import PriceHistory
+        import json
+        h=PriceHistory();base=1770000000
+        for cycle in range(1,11):h.update([Quote('2330','TEST',100+cycle,3,2000,1,base+cycle*10)],cycle)
+        self.assertEqual(len(h.slots),8)
+        self.assertEqual(h.values('2330'),[f'{v:.2f}' for v in range(110,102,-1)])
+        first=h.headings()[0]
+        h.update([Quote('2330','TEST',112,3,2000,1,base+105)],10)
+        self.assertEqual(len(h.slots),8);self.assertEqual(h.headings()[0],first)
+        h.update([Quote('2317','TEST',200,3,2000,1,base+106)],10)
+        self.assertEqual(h.values('2317'),['200.00']+['—']*7)
+        self.assertEqual(PriceHistory(json.loads(json.dumps(h.slots))).values('2330'),h.values('2330'))
+        h.update([Quote('2330','TEST',99,3,2000,1,base+100)],10)
+        self.assertEqual(h.values('2330')[0],'112.00')
+        h.update([],11);self.assertEqual(len(h.slots),8)
+        h.update([Quote('2330','TEST',120,3,2000,1,base+86400)],1)
+        self.assertEqual(len(h.slots),1)

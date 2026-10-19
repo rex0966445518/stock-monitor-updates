@@ -102,6 +102,18 @@ def run_smoke_test(report):
         app.learn_deferred_names()
         assert app.stock_names.names,'Deferred names were never learned'
         app.numeric_priority=False
+        from price_history import PriceHistory
+        app.price_history=PriceHistory()
+        for cycle in range(1,10):
+            app.price_history.update([Quote('9090','HISTORY',100+cycle,3,2000,1,1770000000+cycle*10)],cycle)
+        app.display_cfg=dict(DEFAULT)
+        app.display_rows=[(Quote('9090','HISTORY',109,3,2000,1,1770000090),None,'待複查',False)]
+        app.draw_results()
+        values=app.tree.item(app.tree.get_children()[0],'values')
+        assert len(values)==17 and values[9:]==tuple(f'{v:.2f}' for v in range(109,101,-1)),values
+        assert app.tree.heading('history0','text')==app.price_history.headings()[0]
+        assert len(app.display_scale.widths)==17
+        app.price_history=PriceHistory()
         now=dt.datetime.now().timestamp()
         app.mode='CI smoke / synthetic data'
         app.render([Quote('9001','SMOKE',100,2,1500,1,now)],0,0,dict(DEFAULT),persist=True)
