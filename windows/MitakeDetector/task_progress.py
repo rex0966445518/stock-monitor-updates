@@ -18,6 +18,7 @@ def goal_conditions(config):
     if config.get('use_turnover'):parts.append(f"換手率≥{config['min_turnover']:g}%")
     if config.get('use_accel'):parts.append(f"近5分量速比≥{config['accel']:g}倍（需累積觀測）")
     if config.get('use_breakout'):parts.append('觀測突破後連續兩次守穩')
+    if config.get('guard_enabled'):parts.append(f"必要進場檢核：暖機{config['guard_warmup']:g}秒、{config['guard_window']:g}秒方向窗、守穩{config['guard_hold']:g}秒、最大讀取間隔{config['guard_max_gap']:g}秒、漲幅≥{config['guard_min_rise']:g}%、觀測高點回落≤{config['guard_max_pullback']:g}%")
     return '｜'.join(parts)+'｜須有第二次有效讀值；候選不代表一定漲停'
 
 

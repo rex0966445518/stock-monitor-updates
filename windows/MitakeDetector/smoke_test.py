@@ -37,6 +37,12 @@ def run_smoke_test(report):
         assert tkfont.Font(root=root,font=app.log.cget('font')).actual('size')==10
         app.display_scale.apply(scale,save=True,resize=False)
         assert app.log.cget('wrap')=='word'
+        assert app.config['guard_enabled']
+        panel=app.show_guard_settings();root.update_idletasks()
+        assert panel.winfo_exists();panel.destroy()
+        review=app.show_signal_reviews();root.update_idletasks()
+        assert review.winfo_exists();review.destroy()
+
         root.update_idletasks()
         assert app.status_label.cget('justify')=='left'
         app.status.set('掃描已暫停\n原因：焦點離開三竹\n第22段，已讀39檔\n進度保留，按F8接續')
@@ -152,7 +158,7 @@ def run_smoke_test(report):
         assert app.tree.item(app.tree.get_children()[0],'values')[1]==''
         app.stock_names.names={}
         # Changing rankings must retain other observed stocks and deduplicate codes.
-        cfg=dict(DEFAULT,source_rank='漲幅排行',use_breakout=False)
+        cfg=dict(DEFAULT,guard_enabled=False,source_rank='漲幅排行',use_breakout=False)
         app.render([Quote('9001','SMOKE',100,2,1500,1,now+1)],0,0,cfg,persist=False)
         app.render([Quote('9001','SMOKE',100,2,1501,1,now+2)],0,0,cfg,persist=False)
         app.render([Quote('9002','SMOKE2',101,3,1600,1,now+3)],0,0,dict(cfg,source_rank='預估量增'),persist=False)
@@ -194,7 +200,7 @@ def run_smoke_test(report):
         assert json.loads((BASE/'settings.json').read_text('utf-8'))['result_filters']['price']
         app.result_filters['price'].set(False);app.change_result_filters()
         assert len(app.tree.get_children())==2
-        candidate_cfg=dict(DEFAULT,source_rank='候選排序測試',use_breakout=False)
+        candidate_cfg=dict(DEFAULT,guard_enabled=False,source_rank='候選排序測試',use_breakout=False)
         try:
             for offset,volume in [(20,1500),(21,1501)]:
                 app.render([Quote('9021','NEAR',100,3,950,1,now+offset),

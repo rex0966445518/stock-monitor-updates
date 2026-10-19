@@ -15,8 +15,10 @@ def assess(row,cfg):
         passed=hit or not any(t in reason for t in ['等待觀測突破守穩','等待重新複查','讀值跳動','量倒退','等待第二次讀值'])
         checks.append(('突破守穩',passed,float(passed)))
     count=sum(bool(passed) for _,passed,_ in checks);total=len(checks)
-    blocked=any(t in reason for t in ['等待重新複查','60秒讀值未變','讀值跳動','量倒退'])
+    blocked=any(t in reason for t in ['等待重新複查','等待接續複查','掃描讀值已過期','60秒讀值未變','讀值跳動','量倒退'])
     if blocked:label='待複查'
+    elif '已轉弱' in reason:label='已轉弱'
+    elif '進場檢核未通過' in reason:label='等待進場檢核'
     elif hit:label='★ 完全符合'
     elif count>=total-1:label='接近候選'
     else:label='觀察中'

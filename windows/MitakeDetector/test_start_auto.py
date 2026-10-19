@@ -161,7 +161,7 @@ class ScanGoalTests(unittest.TestCase):
             self.assertIn(stage,goal_title(stage))
     def test_only_enabled_conditions_described(self):
         from task_progress import goal_conditions
-        cfg=dict(DEFAULT,use_turnover=False,use_accel=False,use_breakout=False)
+        cfg=dict(DEFAULT,guard_enabled=False,use_turnover=False,use_accel=False,use_breakout=False)
         text=goal_conditions(cfg)
         self.assertIn('總量≥1000張',text)
         self.assertNotIn('換手率',text);self.assertNotIn('量速比',text);self.assertNotIn('守穩',text)
@@ -328,9 +328,76 @@ class NearVoiceTests(unittest.TestCase):
         q=Quote('2330','台積電',100,3,2000,4,100)
         row=(q,2,'等待觀測突破守穩',False);last={}
         alerts=near_alerts([row],cfg,last)
-        self.assertEqual(alerts,[q]);self.assertIn('台積電，股號 2330，已接近上車條件',voice_text(alerts))
+        self.assertEqual(alerts,[q]);self.assertIn('台積電，股號 2330，觀察候選',voice_text(alerts,[row],cfg))
         self.assertEqual(near_alerts([row],cfg,last),[])
         self.assertEqual(near_alerts([(q,None,row[2],False)],cfg,{}),[])
         self.assertEqual(near_alerts([(q,2,'等待重新複查',False)],cfg,{}),[])
         self.assertEqual(near_alerts([(q,2,'轉強候選',True)],cfg,{}),[])
         q.ts+=cfg['cooldown'];self.assertEqual(near_alerts([row],cfg,last),[q])
+
+class EntryGuardTests(unittest.TestCase):
+    def samples(self):
+        # Dense 3-minute observation: rising intervals dominate, breakout held.
+        return [Quote('2330','TEST',100+i*.05,3,2000+i*20,4,10000+i*10) for i in range(19)]
+    def test_dense_rise_and_time_hold_pass(self):
+        from entry_guard import evaluate
+        holds={};cfg=dict(DEFAULT)
+        samples=self.samples()
+        for i in range(1,len(samples)):
+            failures,weak=evaluate(samples[:i+1],samples[i-1].price,holds,cfg,samples[i].ts)
+        self.assertEqual(failures,[]);self.assertFalse(weak)
+    def test_two_fast_reads_warmup_and_stale_fail(self):
+        from entry_guard import evaluate
+        samples=self.samples()[:2]
+        failures,_=evaluate(samples,100,{},DEFAULT,samples[-1].ts+20)
+        self.assertIn('觀測暖機不足',failures)
+        self.assertIn('掃描讀值已過期',failures)
+        self.assertIn('觀測突破尚未持續守穩',failures)
+    def test_declining_large_volume_and_gap_fail(self):
+        from entry_guard import evaluate
+        samples=self.samples();samples[-1].price=98;samples[-1].volume+=10000
+        failures,weak=evaluate(samples,101,{},DEFAULT,samples[-1].ts)
+        self.assertTrue(weak)
+        self.assertIn('上漲區間量未大於下跌區間量',failures)
+        self.assertIn('距觀測高點回落過大',failures)
+        sparse=[samples[i] for i in [0,12,13,18]]
+        failures,_=evaluate(sparse,101,{},DEFAULT,sparse[-1].ts)
+        self.assertIn('觀測間隔過長',failures)
+    def test_engine_new_defaults_block_fast_confirmation_and_mark_weak(self):
+        from unittest.mock import patch
+        from MitakeDetector import Engine
+        e=Engine();cfg=dict(DEFAULT)
+        for i in range(3):
+            with patch('MitakeDetector.time.time',return_value=10000+i*5):
+                rows,alerts=e.process([Quote('2330','TEST',100+i*.1,3,2000+i*10,4,10000+i*5)],cfg)
+        self.assertFalse(alerts);self.assertIn('進場檢核未通過',rows[0][2])
+        self.assertFalse(rows[0][3])
+    def test_guard_warm_state_survives_snapshot(self):
+        from resume_state import snapshot,restore
+        from types import SimpleNamespace
+        from MitakeDetector import Engine
+        e=Engine();e.guard_holds={'2330':[100,1,2]}
+        class Tree:
+            def get_children(self):return []
+            def insert(self,*args,**kwargs):pass
+        app=SimpleNamespace(auto_engines={'rank':e},rank_rows={},records=[],tree=Tree(),observation_summary=SimpleNamespace(set=lambda text:None))
+        restore(app,snapshot(app))
+        self.assertEqual(app.auto_engines['rank'].guard_holds,e.guard_holds)
+
+
+class GuardEngineAcceptanceTests(unittest.TestCase):
+    def test_full_entry_alert_requires_actual_warmup(self):
+        from MitakeDetector import Engine
+        from unittest.mock import patch
+        cfg=dict(DEFAULT);e=Engine();hits=[]
+        for sec in range(0,211,10):
+            price=100+min(sec,180)*.01
+            with patch('MitakeDetector.time.time',return_value=10000+sec):
+                rows,alerts=e.process([Quote('2330','TEST',price,3,2000+sec*2,4,10000+sec)],cfg)
+            if sec<180:self.assertFalse(alerts)
+            hits.extend(alerts)
+        self.assertTrue(hits)
+        self.assertIn('進場檢核通過',hits[0][1])
+        with patch('MitakeDetector.time.time',return_value=10220):
+            rows,alerts=e.process([Quote('2330','TEST',100,3,5000,4,10220)],cfg)
+        self.assertFalse(alerts);self.assertIn('已轉弱',rows[0][2])

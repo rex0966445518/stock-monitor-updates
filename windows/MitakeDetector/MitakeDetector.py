@@ -10,13 +10,14 @@ from collections import deque
 from auto_ui import AutoUI
 from pathlib import Path
 
-VERSION = '0.3.53'
+VERSION = '0.3.54'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
 DEFAULT = dict(interval=5, min_price=50, min_volume=1000, min_gain=1,
                max_gain=8.5, min_turnover=0, use_turnover=False,
                use_accel=False, accel=1.5, use_breakout=True, cooldown=300,
+               guard_enabled=True,guard_warmup=180,guard_window=60,guard_hold=30,guard_max_gap=30,guard_max_age=15,guard_min_rise=.2,guard_max_pullback=1,
                centers=[6, 22, 40, 57, 75, 92], region=None, auto_config=None, column_bounds=None, voice_enabled=True)
 
 @dataclasses.dataclass
@@ -92,6 +93,7 @@ class Engine:
         self.pending = {}
         self.last_change = {}
         self.session_day = None
+        self.guard_holds = {}
 
     def process(self, quotes, config):
         rows, alerts = [], []
@@ -148,8 +150,12 @@ class Engine:
             if config['use_breakout'] and not breakout: reasons.append('等待觀測突破守穩')
             if not previous: reasons.append('等待第二次讀值')
             if stale: reasons.append('60秒讀值未變，請檢查畫面')
+            if config.get('guard_enabled',False):
+                from entry_guard import evaluate
+                failures,weak=evaluate(list(hist),prior_high,self.guard_holds,config,time.time())
+                if failures:reasons.append(('已轉弱｜' if weak else '')+'進場檢核未通過：'+'、'.join(failures))
             hit = not reasons
-            reason = ('轉強候選｜漲幅'+f'{q.gain:+.2f}%'+('｜觀測突破兩次守穩' if config['use_breakout'] else '')+('｜量速'+f'{ratio:.2f}倍' if config['use_accel'] and ratio is not None else '')) if hit else '；'.join(reasons)
+            reason = ('轉強候選｜漲幅'+f'{q.gain:+.2f}%'+('｜進場檢核通過（觀測高點）' if config.get('guard_enabled') else '｜觀測突破兩次守穩' if config['use_breakout'] else '')+('｜量速'+f'{ratio:.2f}倍' if config['use_accel'] and ratio is not None else '')) if hit else '；'.join(reasons)
             if hit and q.ts - self.last_alert.get(q.code, -1e20) >= config['cooldown']:
                 self.last_alert[q.code] = q.ts
                 alerts.append((q, reason))
@@ -176,7 +182,7 @@ HELP = '''漲停板探測器-雷允澤製 v0.3.31
 【觀察重點】
 目的是持續觀察轉強候選，不是保證預測漲停。
 六個讀取欄位：股號、股名、成交價、漲幅%、總量（張）、換手率%。
-預設股價>=50、總量>=1000張、漲幅1~8.5%，觀測突破後兩次讀值守穩。
+預設股價>=50、總量>=1000張、漲幅1~8.5%。另啟用必要進場檢核：暖機180秒、方向窗60秒、守穩30秒，最大讀取間隔30秒；設定在進階工具。高點是觀測高點，尚未取得完整當日高點。
 「觀測突破」僅依啟動後看到的最高價，不是完整當日高點。
 可選換手率門檻及5分鐘量速比；量速比需觀察10分鐘。
 量速比為近5分鐘每秒增量除以前5分鐘增量，不是預估量增或歷史同時段量比。
@@ -251,7 +257,7 @@ class App(AutoUI):
             ttk.Button(bar, text=label, command=action).pack(side='left', padx=4)
         advanced = ttk.Menubutton(bar, text='進階工具 ▾')
         menu = tk.Menu(advanced, tearoff=False)
-        for label, action in [('重新自動定位', self.auto_setup), ('清除股名記憶', self.clear_stock_names), ('手動框選排行榜', self.select_region), ('手動校正欄位', self.calibrate), ('圖片辨識測試', self.image_test), ('合成資料示範', self.demo), ('辨識元件檢查', self.install), ('資料資料夾', self.open_folder), ('OCR學習紀錄', self.show_ocr_learning), ('中斷診斷', self.show_scan_diagnostics), ('版本日誌', self.show_version_history), ('使用說明', self.help)]:
+        for label, action in [('重新自動定位', self.auto_setup), ('清除股名記憶', self.clear_stock_names), ('手動框選排行榜', self.select_region), ('手動校正欄位', self.calibrate), ('圖片辨識測試', self.image_test), ('合成資料示範', self.demo), ('辨識元件檢查', self.install), ('資料資料夾', self.open_folder), ('OCR學習紀錄', self.show_ocr_learning), ('中斷診斷', self.show_scan_diagnostics), ('版本日誌', self.show_version_history), ('訊號驗證紀錄', self.show_signal_reviews), ('進場檢核設定', self.show_guard_settings), ('使用說明', self.help)]:
             menu.add_command(label=label, command=action)
         advanced.configure(menu=menu); advanced.pack(side='left', padx=4)
         self.main_actions=bar
@@ -272,6 +278,9 @@ class App(AutoUI):
             if valkey:
                 self.vars[valkey] = tk.StringVar(value=str(self.config[valkey]))
                 ttk.Entry(opts, textvariable=self.vars[valkey], width=7).grid(row=1, column=idx*4+3)
+        self.vars['guard_enabled']=tk.BooleanVar(value=self.config['guard_enabled'])
+        for key in ['guard_warmup','guard_window','guard_hold','guard_max_gap','guard_min_rise','guard_max_pullback']:
+            self.vars[key]=tk.StringVar(value=str(self.config[key]))
         self.scan_phase=tk.StringVar(value='待機｜按 F8 開始連續掃描')
         self.phase_label=tk.Label(root,textvariable=self.scan_phase,bg='#12243a',fg='#68f5d1',font=('Microsoft JhengHei',14,'bold'),anchor='w',justify='left')
         self.phase_label.pack(fill='x',padx=20,pady=(7,0))
@@ -405,9 +414,10 @@ class App(AutoUI):
         try:
             cfg = dict(self.config)
             for key, var in self.vars.items():
-                cfg[key] = bool(var.get()) if key.startswith('use_') else float(var.get())
+                cfg[key] = bool(var.get()) if key.startswith('use_') or key=='guard_enabled' else float(var.get())
             if not all(math.isfinite(v) and v >= 0 for v in cfg.values() if isinstance(v, (float, int))): raise ValueError()
             if cfg['interval'] < 2 or cfg['cooldown'] < 10 or cfg['min_gain'] > cfg['max_gain']: raise ValueError()
+            if cfg.get('guard_enabled') and (min(cfg['guard_warmup'],cfg['guard_window'],cfg['guard_hold'],cfg['guard_max_gap'])<1 or cfg['guard_warmup']<cfg['guard_window']):raise ValueError()
             self.config = cfg; self.save()
             return dict(cfg)
         except (ValueError, OSError):
@@ -633,7 +643,7 @@ class App(AutoUI):
                     if q.code not in latest or q.ts>=latest[q.code][0].ts:
                         latest[q.code]=(q,ratio,f'{rank}｜{dt.datetime.fromtimestamp(q.ts):%H:%M:%S}｜'+reason,hit)
             display=list(latest.values())
-            newest=max((q.ts for q,_,_,_ in display),default=0)
+            newest=max(time.time(),max((q.ts for q,_,_,_ in display),default=0))
             display=[(q,ratio,reason if newest-q.ts<60 else '等待重新複查｜'+reason,hit and newest-q.ts<60) for q,ratio,reason,hit in display]
         display=self.retained_candidates.merge(display,cfg)
         names=getattr(getattr(self,'stock_names',None),'names',{})
@@ -663,9 +673,18 @@ class App(AutoUI):
             self.say(f'【{self.mode}】{q.code} {q.name} {q.price:.2f} / {q.gain:+.2f}%：{reason}')
         from near_alerts import near_alerts,voice_text
         near=near_alerts(rows,cfg,self.near_alert_times)
+        if persist:
+            try:
+                from signal_review import SignalReview
+                from candidate_ranking import assess
+                signals=[(q,'進場檢核通過',reason) for q,reason in alerts]
+                signals += [(q,'基礎觀察候選',reason) for q,ratio,reason,hit in rows if not hit and assess((q,ratio,reason,hit),cfg)['count']>=5]
+                valid=[q for q,ratio,reason,hit in rows if '讀值跳動' not in reason and '量倒退' not in reason]
+                SignalReview(BASE/'observations.sqlite3').observe(valid,signals,cfg)
+            except sqlite3.Error as exc:self.say('訊號驗證紀錄失敗：'+str(exc))
         if near:
-            self.say('接近上車條件 5/6：'+'、'.join(f'{q.name or "股名待辨識"} {q.code}' for q in near))
-            self.announce_task(voice_text(near))
+            self.say('觀察候選 5/6：'+'、'.join(f'{q.name or "股名待辨識"} {q.code}' for q in near))
+            self.announce_task(voice_text(near,rows,cfg))
         if alerts:
             self.root.bell()
             from task_progress import CandidateNotice,fresh_candidate_alerts
@@ -876,6 +895,37 @@ class App(AutoUI):
         text.insert('1.0',history_text(BASE));text.configure(state='disabled')
         return top
 
+    def show_guard_settings(self):
+        top=self.tk.Toplevel(self.root);top.title('進場檢核設定（實驗規則）');top.geometry('680x460')
+        self.ttk.Label(top,text='條件總數之外的必要檢核；高點為觀測高點，並非當日高點。\n漲跌區間量由快照估算，並非逐筆買賣量。規則尚未驗證勝率。',wraplength=640).pack(padx=14,pady=12)
+        self.ttk.Checkbutton(top,text='啟用必要進場檢核',variable=self.vars['guard_enabled']).pack(anchor='w',padx=14)
+        frame=self.ttk.Frame(top);frame.pack(fill='x',padx=14,pady=8)
+        for i,(key,label) in enumerate([('guard_warmup','觀測暖機秒'),('guard_window','方向觀察窗秒'),('guard_hold','突破連續守穩秒'),('guard_max_gap','最大讀取間隔秒'),('guard_min_rise','窗內漲幅至少%'),('guard_max_pullback','觀測高點回落上限%')]):
+            self.ttk.Label(frame,text=label).grid(row=i,column=0,sticky='w',padx=6,pady=5)
+            self.ttk.Entry(frame,textvariable=self.vars[key],width=12).grid(row=i,column=1,padx=6)
+        def save():
+            if self.settings() is not None:
+                self.say('進場檢核設定已保存；暫停後按重新開始套用。');top.destroy()
+        self.ttk.Button(top,text='儲存（重新開始後套用）',command=save).pack(pady=8)
+        return top
+
+    def show_signal_reviews(self):
+        from signal_review import SignalReview
+        top=self.tk.Toplevel(self.root);top.title('訊號後續觀測（非成交回測）');top.geometry('1100x650')
+        self.ttk.Label(top,text='記錄提醒後60／180／300秒附近的首筆觀測價格；超過30秒未讀到則留空。未扣交易成本，不代表可成交報酬。').pack(fill='x',padx=12,pady=8)
+        columns=('time','code','kind','price','horizon','readtime','later','change','reason')
+        tree=self.ttk.Treeview(top,columns=columns,show='headings')
+        for key,label in zip(columns,['提醒時間','股號','類型','當時價格','經過秒','後續讀取時間','後續價格','變化%','原因']):
+            tree.heading(key,text=label);tree.column(key,width=110,stretch=key=='reason')
+        vertical=self.ttk.Scrollbar(top,orient='vertical',command=tree.yview);vertical.pack(side='right',fill='y')
+        horizontal=self.ttk.Scrollbar(top,orient='horizontal',command=tree.xview);horizontal.pack(side='bottom',fill='x')
+        tree.configure(yscrollcommand=vertical.set,xscrollcommand=horizontal.set);tree.pack(fill='both',expand=True,padx=12,pady=8)
+        try:
+            for stamp,code,kind,price,horizon,later,value,change,reason in SignalReview(BASE/'observations.sqlite3').rows():
+                tree.insert('','end',values=[dt.datetime.fromtimestamp(stamp).strftime('%m/%d %H:%M:%S'),code,kind,f'{price:.2f}',horizon or '待觀測',dt.datetime.fromtimestamp(later).strftime('%H:%M:%S') if later else '—',f'{value:.2f}' if value is not None else '—',f'{change:+.2f}' if change is not None else '—',reason])
+        except sqlite3.Error as exc:self.say('驗證紀錄讀取失敗：'+str(exc))
+        return top
+
     def help(self):
         top = self.tk.Toplevel(self.root); top.title('使用說明與限制'); top.geometry('850x650')
         text = self.tk.Text(top, wrap='word', font=('Microsoft JhengHei', 11)); text.pack(fill='both', expand=True)
@@ -911,7 +961,7 @@ def self_test():
             quotes, rejected = parse_ocr(cells[:3]+cells[4:],100,DEFAULT['centers'],1)
             self.assertEqual(quotes,[]); self.assertEqual(rejected,1)
         def test_breakout_confirmation_and_cooldown(self):
-            e=Engine(); cfg=dict(DEFAULT)
+            e=Engine(); cfg=dict(DEFAULT,guard_enabled=False)
             t=dt.datetime(2026,10,16,9).timestamp()
             def run(price, sec): return e.process([Quote('2330','測試',price,2,1500+sec,None,t+sec)],cfg)
             self.assertFalse(run(100,0)[1]); self.assertFalse(run(101,5)[1])

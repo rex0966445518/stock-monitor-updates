@@ -8,7 +8,7 @@ def snapshot(app):
     engines={}
     for rank,engine in app.auto_engines.items():
         engines[rank]={'history':{code:[asdict(q) for q in rows] for code,rows in engine.history.items()},
-                       **{key:getattr(engine,key) for key in ('last_alert','highs','pending','last_change')},
+                       **{key:getattr(engine,key) for key in ('last_alert','highs','pending','last_change','guard_holds')},
                        'session_day':engine.session_day.isoformat() if engine.session_day else None}
     return dict(near_alert_times=getattr(app,'near_alert_times',{}),display_rows=[[asdict(q),ratio,reason,hit] for q,ratio,reason,hit in getattr(app,'display_rows',[])],display_cfg=getattr(app,'display_cfg',{}),retained={code:[asdict(row[0]),*row[1:]] for code,row in getattr(getattr(app,'retained_candidates',None),'rows',{}).items()},retained_peak=getattr(getattr(app,'retained_candidates',None),'peak',{}),price_history=getattr(getattr(app,'price_history',None),'slots',[]),engines=engines,rows={rank:[[asdict(q),ratio,reason,hit] for q,ratio,reason,hit in rows] for rank,rows in app.rank_rows.items()},records=app.records)
 
@@ -26,7 +26,7 @@ def restore(app,data):
     for rank,state in data.get('engines',{}).items():
         engine=Engine()
         engine.history={code:deque(Quote(**q) for q in rows) for code,rows in state['history'].items()}
-        for key in ('last_alert','highs','pending','last_change'):setattr(engine,key,state.get(key,{}))
+        for key in ('last_alert','highs','pending','last_change','guard_holds'):setattr(engine,key,state.get(key,{}))
         engine.session_day=dt.date.fromisoformat(state['session_day']) if state.get('session_day') else None
         engines[rank]=engine
     rows={rank:[(Quote(**q),ratio,'等待接續複查｜'+reason,False) for q,ratio,reason,hit in items] for rank,items in data.get('rows',{}).items()}

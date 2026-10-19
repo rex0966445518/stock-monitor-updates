@@ -50,7 +50,7 @@ class ResumeTests(unittest.TestCase):
             def insert(self,*args,**kwargs):pass
         class Value:
             def set(self,value):self.value=value
-        now=dt.datetime.now().timestamp();engine=Engine();cfg=dict(DEFAULT,use_breakout=False)
+        now=dt.datetime.now().timestamp();engine=Engine();cfg=dict(DEFAULT,guard_enabled=False,use_breakout=False)
         engine.process([Quote('2330','TEST',100,2,1500,1,now)],cfg)
         rows,_=engine.process([Quote('2330','TEST',101,3,1600,1,now+5)],cfg)
         app=SimpleNamespace(auto_engines={'漲幅排行':engine},rank_rows={'漲幅排行':rows},records=[['old']],tree=Tree(),observation_summary=Value())
@@ -106,3 +106,17 @@ class DailyTableTests(unittest.TestCase):
             self.assertIsNone(load_daily(path,day='2026-10-20'))
             save_daily(path,{'records':[1]},day='2026-10-19')
             self.assertEqual(load_daily(path,day='2026-10-19'),{'records':[1]})
+
+class ForwardSignalReviewTests(unittest.TestCase):
+    def test_real_observed_returns_and_missing_intervals(self):
+        from signal_review import SignalReview
+        with tempfile.TemporaryDirectory() as folder:
+            review=SignalReview(Path(folder)/'review.sqlite3');cfg=dict(DEFAULT)
+            q=Quote('2330','TEST',100,3,2000,4,10000)
+            review.observe([q],[(q,'基礎觀察候選','等待守穩')],cfg)
+            review.observe([Quote('2330','TEST',99,2,2100,4,10060)],[],cfg)
+            rows=review.rows();self.assertEqual(rows[0][4],60);self.assertAlmostEqual(rows[0][7],-1)
+            review.observe([Quote('2330','TEST',110,2,2200,4,10220)],[],cfg)
+            self.assertEqual(len(review.rows()),1)  # 180s horizon was missed by >30s.
+            review.observe([Quote('2330','TEST',102,2,2300,4,10300)],[],cfg)
+            self.assertEqual([r[4] for r in review.rows()],[60,300])
