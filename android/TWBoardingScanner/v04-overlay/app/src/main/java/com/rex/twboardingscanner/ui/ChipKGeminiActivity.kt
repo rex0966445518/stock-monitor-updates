@@ -10,6 +10,10 @@ import android.graphics.Color
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
+import android.os.Environment
+import android.content.ContentValues
+import android.provider.MediaStore
 import android.view.inputmethod.EditorInfo
 import android.provider.Settings
 import android.app.AlertDialog
@@ -158,6 +162,7 @@ class ChipKGeminiActivity : AppCompatActivity() {
         root.addView(sevenList)
         root.addView(button("更新 7 頁完成狀態／查看截圖") { showBatch() })
         root.addView(button("③ 分享已完成的多張截圖（手動選 Gemini）") { shareBatch() })
+        root.addView(button("備用：儲存七張到手機相簿（再由 Gemini 選取）") { exportBatchToGallery() })
         root.addView(button("停止七頁擷取並保留已完成圖片") {
             if(batchStore.snapshot()?.active==true)
                 startService(Intent(this, ChipKCaptureService::class.java).setAction(ChipKCaptureService.ACTION_CANCEL))
@@ -255,6 +260,59 @@ class ChipKGeminiActivity : AppCompatActivity() {
             preview.setImageBitmap(image)
             statusView.text = caption
         }
+    }
+
+    /** Manual user action only: store completed JPGs in Pictures for Gemini's image picker. */
+    private fun exportBatchToGallery() {
+        val current=batchStore.snapshot()
+        if(current==null || current.active) {
+            Toast.makeText(this,"請在七頁擷取完成或停止後再儲存相簿",Toast.LENGTH_LONG).show()
+            return
+        }
+        val files=batchStore.capturedFiles(current)
+        if(files.isEmpty()) {
+            Toast.makeText(this,"尚未有截圖可匯出",Toast.LENGTH_LONG).show()
+            return
+        }
+        if(Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            Toast.makeText(this,"此功能需要 Android 10 以上；目前仍可使用多圖分享",Toast.LENGTH_LONG).show()
+            return
+        }
+        val folder=Environment.DIRECTORY_PICTURES+"/AI-LiZhiShenQi-ChipK/"+current.id
+        var success=0
+        val errors=mutableListOf<String>()
+        for(file in files) {
+            var uri:Uri?=null
+            try {
+                val values=ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME,file.name)
+                    put(MediaStore.MediaColumns.MIME_TYPE,"image/jpeg")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH,folder)
+                    put(MediaStore.MediaColumns.IS_PENDING,1)
+                }
+                uri=contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,values)
+                    ?: error("無法新增圖片至相簿")
+                contentResolver.openOutputStream(uri)?.use { output ->
+                    file.inputStream().use { input -> input.copyTo(output) }
+                } ?: error("無法開啟相簿寫入")
+                contentResolver.update(uri,ContentValues().apply {
+                    put(MediaStore.MediaColumns.IS_PENDING,0)
+                },null,null)
+                success++
+            } catch(e:Exception) {
+                uri?.let { runCatching { contentResolver.delete(it,null,null) } }
+                errors.add(file.name + "：" + (e.message ?: "儲存失敗"))
+            }
+        }
+        statusView.text="已匯出 $success / ${files.size} 張至圖片相簿 $folder。" +
+            "現在可開啟 Google Gemini，點選新增圖片，從相簿選取並貼上分析指令。" +
+            if(errors.isEmpty()) "" else "\n失敗：" + errors.joinToString("、")
+        (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager)
+            .setPrimaryClip(ClipData.newPlainText("Gemini 七頁分析指令",
+                ChipKGeminiPrompt.forBatchStock(current.code,current.pages.joinToString("\n") {
+                    it.page.title + "：" + it.state + " / " + it.verification
+                })))
+        Toast.makeText(this,"圖片已儲存 $success / ${files.size} 張；分析指令已複製",Toast.LENGTH_LONG).show()
     }
 
     private fun shareBatch() {
