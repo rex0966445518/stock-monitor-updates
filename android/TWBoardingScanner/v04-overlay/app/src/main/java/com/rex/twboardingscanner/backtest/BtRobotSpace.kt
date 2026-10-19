@@ -30,7 +30,7 @@ object BtRobotSpace {
     val v6Slots=v5Slots+eSlots+rsiSlots+ScanConditions.forRadar(RadarType.F_VOLUME_CONTRACTION).filterNot{it.id in ScanConditions.MOMENTUM_IDS}.map{RadarType.F_VOLUME_CONTRACTION to it.id}
     val v7Slots=v6Slots+RadarType.entries.flatMap{type->ScanConditions.MOMENTUM_IDS.map{type to it}}
     val v8Slots=v7Slots+BPattern.IDS.map{RadarType.B_DEEP_REVERSAL to it}
-    val allSlots=v8Slots+APattern.IDS.map{RadarType.A_EARLY_BREAKOUT to it}
+    val allSlots=v8Slots+APattern.IDS.map{RadarType.A_EARLY_BREAKOUT to it}+GPattern.rules().map{RadarType.G_MA5_WAVE to it.id}
     val total:BigInteger=BigInteger.ONE.shiftLeft(allSlots.size)
     val legacyTotal:BigInteger=BigInteger.ONE.shiftLeft(legacySlots.size)
     fun key(rules:Map<RadarType,Set<String>>):String=allSlots.foldIndexed(BigInteger.ZERO){i,n,(type,id)->if(id in rules[type].orEmpty())n.setBit(i)else n}.toString(16)
