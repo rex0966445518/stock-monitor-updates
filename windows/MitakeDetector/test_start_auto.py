@@ -308,3 +308,14 @@ class RetainedCandidateTests(unittest.TestCase):
         self.assertEqual(r.peak['2330'],5)
         r.merge([(Quote('2317','OTHER',100,3,2000,4,101),None,'等待觀測突破守穩',False)],cfg)
         self.assertNotIn('2317',r.peak)
+
+
+class LiveConditionOrderTests(unittest.TestCase):
+    def test_new_batch_promotes_stock_immediately(self):
+        from candidate_ranking import ordered_candidates
+        cfg=dict(DEFAULT,use_turnover=True,min_turnover=3,use_accel=True,use_breakout=True)
+        a=(Quote('1111','A',100,3,2000,4,100),None,'等待觀測突破守穩',False)
+        b=(Quote('2222','B',100,3,2000,1,100),None,'等待觀測突破守穩',False)
+        self.assertEqual([row[0].code for row,m in ordered_candidates([a,b],cfg)],['1111','2222'])
+        b=(Quote('2222','B',100,3,2000,4,101),2,'等待觀測突破守穩',False)
+        self.assertEqual([row[0].code for row,m in ordered_candidates([a,b],cfg)],['2222','1111'])

@@ -24,7 +24,7 @@ def assess(row,cfg):
     if count==total and not hit and not blocked:missing.append('有效複查')
     return dict(count=count,total=total,hit=hit and not blocked,label=label,
                 text=f'{label} {count}/{total}',missing=missing,
-                key=(not (hit and not blocked),blocked,-count,-sum(c for _,_,c in checks),-q.gain,q.code))
+                key=(-count,not (hit and not blocked),blocked,-sum(c for _,_,c in checks),-q.gain,q.code))
 
 
 def ordered_candidates(rows,cfg):
