@@ -15,7 +15,8 @@ object ScanConditions {
     const val MACD_ABOVE_ZERO="macd_signal_above_zero"
     const val RSI_30_TO_50="rsi14_30_to_50_one_day"
     val MOMENTUM_IDS=setOf(MACD_ABOVE_ZERO,RSI_30_TO_50)
-    const val VERSION = "20261012-E1"
+    const val VERSION = "20261019-G1"
+    const val PRE_G_VERSION = "20261012-E1"
     const val PRE_E_VERSION="20261012-D3"
     const val PREVIOUS_VERSION="20261012-D2"
     const val PREVIOUS_D_VERSION="20261012-D1"
@@ -31,6 +32,7 @@ object ScanConditions {
     val NEW_IDS=setOf(MA5_TOUCH_MA10,ACTIVE_BUY_SELL_15)
     fun forEditor(type:RadarType)=forRadar(type).let{rules->if(type==RadarType.B_DEEP_REVERSAL)rules.sortedBy{if(it.defaultEnabled)0 else 1} else rules}
     fun forRadar(type: RadarType): List<ScanCondition> {
+        if(type==RadarType.G_MA5_WAVE)return GPattern.rules()
         if(type==RadarType.F_VOLUME_CONTRACTION)return FPattern.rules()+forRadar(RadarType.A_EARLY_BREAKOUT).filterNot{it.id in APattern.IDS}.map{it.copy(extra=true)}
 
         if(type==RadarType.E_DIF_TOUCH){
@@ -83,7 +85,7 @@ object ScanConditions {
                 ScanCondition("declineVolume", "近 10 日下跌日均量 < 前 10 日下跌日均量（兩段都須有下跌日）") { it.declineContracting },
                 ScanCondition("ma5", "收盤價 > 5 日均線") { it.aboveMa5 }
             )
-            RadarType.D_MAIN_FORCE, RadarType.E_DIF_TOUCH, RadarType.F_VOLUME_CONTRACTION -> emptyList()
+            RadarType.D_MAIN_FORCE, RadarType.E_DIF_TOUCH, RadarType.F_VOLUME_CONTRACTION, RadarType.G_MA5_WAVE -> emptyList()
             RadarType.C_LONG_RED_VOLUME -> listOf(
                 ScanCondition("red", "紅 K：收盤價 > 開盤價") { it.last?.let { b -> b.close > b.open } },
                 ScanCondition("gain", "相較前一日收盤價，上漲 ≥ 3%") { it.dayGain?.let { v -> v >= 3.0 - 1e-9 } },
@@ -138,6 +140,7 @@ class RuleMetrics(val s: StockSnapshot) {
     val aPattern by lazy(LazyThreadSafetyMode.NONE){APattern.inspect(bars)}
     val bPattern by lazy(LazyThreadSafetyMode.NONE){BPattern.inspect(bars,s.bConfig)}
     val fPattern by lazy(LazyThreadSafetyMode.NONE){FPattern.inspect(bars,s.fConfig)}
+    val gPattern by lazy(LazyThreadSafetyMode.NONE){GPattern.inspect(bars,s.gConfig)}
     val ePattern by lazy(LazyThreadSafetyMode.NONE){EPattern.inspect(bars.map{it.close},s.eConfig)}
     val dPattern by lazy(LazyThreadSafetyMode.NONE){DPattern.inspect(bars,s.dConfig,s.marketIndexCloses)}
     private val previous = bars.dropLast(1)
