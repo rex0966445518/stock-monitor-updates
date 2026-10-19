@@ -20,6 +20,7 @@ internal object ResultFilters {
             5 -> (r.checks+r.exclusionChecks).any { it.selected && it.state == CheckState.FAIL }
              6 -> r.light != SignalLight.NONE
             8 -> r.radarType==RadarType.F_VOLUME_CONTRACTION && r.light!=SignalLight.NONE
+            9 -> r.radarType==RadarType.G_MA5_WAVE && r.light!=SignalLight.NONE
             7 -> r.radarType==RadarType.E_DIF_TOUCH && r.light!=SignalLight.NONE
             else -> false
         }}.sortedByDescending { it.score }
@@ -27,8 +28,8 @@ internal object ResultFilters {
 
 class ResultFilterBar @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) : LinearLayout(context, attrs) {
     var onSelected: ((Int) -> Unit)? = null
-    private val titles = listOf("A 準備起漲", "B 深跌反轉", "C 突發爆量", "D 主力進場", "待查核", "未通過", "全部入選", "E DIF金叉", "F 縮量上漲")
-    private val accents = listOf(NeonUi.radarColor(RadarType.A_EARLY_BREAKOUT), NeonUi.radarColor(RadarType.B_DEEP_REVERSAL), NeonUi.radarColor(RadarType.C_LONG_RED_VOLUME), NeonUi.radarColor(RadarType.D_MAIN_FORCE), NeonUi.amber, NeonUi.muted, NeonUi.ink, NeonUi.radarColor(RadarType.E_DIF_TOUCH), NeonUi.radarColor(RadarType.F_VOLUME_CONTRACTION))
+    private val titles = listOf("A 準備起漲", "B 深跌反轉", "C 突發爆量", "D 主力進場", "待查核", "未通過", "全部入選", "E DIF金叉", "F 縮量上漲", "G 大陽線波段")
+    private val accents = listOf(NeonUi.radarColor(RadarType.A_EARLY_BREAKOUT), NeonUi.radarColor(RadarType.B_DEEP_REVERSAL), NeonUi.radarColor(RadarType.C_LONG_RED_VOLUME), NeonUi.radarColor(RadarType.D_MAIN_FORCE), NeonUi.amber, NeonUi.muted, NeonUi.ink, NeonUi.radarColor(RadarType.E_DIF_TOUCH), NeonUi.radarColor(RadarType.F_VOLUME_CONTRACTION), NeonUi.radarColor(RadarType.G_MA5_WAVE))
     private val buttons = titles.mapIndexed { index, title ->
         NeonUi.button(context, title, accents[index]) { onSelected?.invoke(index) }.apply {
             textSize = 12f
@@ -49,7 +50,9 @@ class ResultFilterBar @JvmOverloads constructor(context: Context, attrs: Attribu
         addView(NeonUi.row(context, listOf(buttons[6],buttons[3],buttons[7])))
         addView(NeonUi.gap(context, 3))
         addView(NeonUi.row(context,listOf(buttons[8],buttons[4],buttons[5])))
-        update(List(9) { 0 }, 6)
+        addView(NeonUi.gap(context, 3))
+        addView(NeonUi.row(context,listOf(buttons[9])))
+        update(List(10) { 0 }, 6)
     }
     fun update(counts: List<Int>, selected: Int) {
         buttons.forEachIndexed { i, button ->
