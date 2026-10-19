@@ -34,9 +34,10 @@ class DisplayScale:
         self.app=app;self.root=app.root;self.path=Path(path);self.percent=100
         self.fonts={};self.padding={}
         self.widths={c:int(app.tree.column(c,'width')) for c in app.tree['columns']}
-        try:value=json.loads(self.path.read_text('utf-8')).get('scale',150)
-        except (OSError,ValueError,AttributeError):value=150
-        self.initial=value if type(value) is int and value in SCALES else 150
+        default=150 if self.root.winfo_screenheight()>=1440 else 100
+        try:value=json.loads(self.path.read_text('utf-8')).get('scale',default)
+        except (OSError,ValueError,AttributeError):value=default
+        self.initial=value if type(value) is int and value in SCALES else default
 
     def widgets(self,parent):
         for widget in parent.winfo_children():
