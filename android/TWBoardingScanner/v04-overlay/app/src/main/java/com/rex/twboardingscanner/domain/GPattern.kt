@@ -87,7 +87,7 @@ object GPattern{
         private fun valid(b:DailyBar)=b.open.isFinite()&&b.open>0&&b.high.isFinite()&&b.low.isFinite()&&b.close.isFinite()&&b.close>0&&b.volumeShares>0&&b.low>0&&b.high>=b.low
         private val ready=bars.size>=config.eventDays+2&&bars.all(::valid)
         private val last=bars.lastOrNull()
-        private fun ma5At(i:Int):Double?=if(i<4)return null else bars.subList(i-4,i+1).map{it.close}.average()
+        private fun ma5At(i:Int):Double?=if(i<4)null else bars.subList(i-4,i+1).map{it.close}.average()
         val ma5:Double? get()=if(!ready)null else ma5At(bars.lastIndex)
         private val events:List<Int> by lazy(LazyThreadSafetyMode.NONE) {
             if(!ready)emptyList() else (max(1,bars.lastIndex-config.eventDays)..bars.lastIndex-1).filter{i->
