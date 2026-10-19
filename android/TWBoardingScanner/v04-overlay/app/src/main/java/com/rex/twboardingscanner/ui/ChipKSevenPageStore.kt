@@ -112,7 +112,7 @@ class ChipKSevenPageStore(context: Context) {
             .apply {
                 if (index == ChipKPage.ordered.lastIndex) {
                     putBoolean("active", false)
-                    putString("state", "complete")
+                    putString("state", if (s.failed > 0) "complete_with_failures" else "complete")
                 }
             }.commit()
         snapshot()?.let(::writeReport)
