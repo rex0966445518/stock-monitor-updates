@@ -63,7 +63,7 @@ public class CompanionTest {
         org.robolectric.Shadows.shadowOf(a.getApplication()).denyPermissions(android.Manifest.permission.CAMERA);
         a.scan();
         assertEquals(MainActivity.CAMERA_REQUEST,org.robolectric.Shadows.shadowOf(a).getLastRequestedPermission().requestCode);
-        assertNull(org.robolectric.Shadows.shadowOf(a).getNextStartedActivityForResult());
+        assertEquals("android.content.pm.action.REQUEST_PERMISSIONS",org.robolectric.Shadows.shadowOf(a).getNextStartedActivityForResult().intent.getAction());
         a.onRequestPermissionsResult(MainActivity.CAMERA_REQUEST,new String[]{android.Manifest.permission.CAMERA},new int[]{android.content.pm.PackageManager.PERMISSION_DENIED});
         assertTrue(org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog().isShowing());
         assertFalse(a.isFinishing());a.finish();

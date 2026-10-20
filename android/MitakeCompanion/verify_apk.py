@@ -28,6 +28,8 @@ with zipfile.ZipFile(sys.argv[1]) as apk:
 required = {
     'Landroidx/core/content/ContextCompat;',
     'Landroidx/core/app/ActivityCompat;',
+    'Landroidx/fragment/app/FragmentActivity;',
+    'Landroidx/activity/ComponentActivity;',
     'Lcom/journeyapps/barcodescanner/CaptureActivity;',
     'Lcom/journeyapps/barcodescanner/CaptureManager;',
     'Lcom/google/zxing/MultiFormatReader;',
