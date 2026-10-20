@@ -10,7 +10,7 @@ def snapshot(app):
         engines[rank]={'history':{code:[asdict(q) for q in rows] for code,rows in engine.history.items()},
                        **{key:getattr(engine,key) for key in ('last_alert','highs','pending','last_change','guard_holds')},
                        'session_day':engine.session_day.isoformat() if engine.session_day else None}
-    return dict(near_alert_times=getattr(app,'near_alert_times',{}),display_rows=[[asdict(q),ratio,reason,hit] for q,ratio,reason,hit in getattr(app,'display_rows',[])],display_cfg=getattr(app,'display_cfg',{}),retained={code:[asdict(row[0]),*row[1:]] for code,row in getattr(getattr(app,'retained_candidates',None),'rows',{}).items()},retained_peak=getattr(getattr(app,'retained_candidates',None),'peak',{}),price_history=getattr(getattr(app,'price_history',None),'slots',[]),engines=engines,rows={rank:[[asdict(q),ratio,reason,hit] for q,ratio,reason,hit in rows] for rank,rows in app.rank_rows.items()},records=app.records)
+    return dict(volume_rates=getattr(getattr(app,'volume_rates',None),'dump',lambda:None)(),near_alert_times=getattr(app,'near_alert_times',{}),display_rows=[[asdict(q),ratio,reason,hit] for q,ratio,reason,hit in getattr(app,'display_rows',[])],display_cfg=getattr(app,'display_cfg',{}),retained={code:[asdict(row[0]),*row[1:]] for code,row in getattr(getattr(app,'retained_candidates',None),'rows',{}).items()},retained_peak=getattr(getattr(app,'retained_candidates',None),'peak',{}),price_history=getattr(getattr(app,'price_history',None),'slots',[]),engines=engines,rows={rank:[[asdict(q),ratio,reason,hit] for q,ratio,reason,hit in rows] for rank,rows in app.rank_rows.items()},records=app.records)
 
 
 def restore(app,data):
@@ -29,6 +29,11 @@ def restore(app,data):
         for key in ('last_alert','highs','pending','last_change','guard_holds'):setattr(engine,key,state.get(key,{}))
         engine.session_day=dt.date.fromisoformat(state['session_day']) if state.get('session_day') else None
         engines[rank]=engine
+    from volume_rate import VolumeRates
+    shared=VolumeRates.restore(data.get('volume_rates'),[(code,items) for e in engines.values() for code,items in e.history.items()])
+    app.volume_rates=shared
+    for engine in engines.values():engine.volume_rates=shared
+    if hasattr(app,'engine'):app.engine.volume_rates=shared
     rows={rank:[(Quote(**q),ratio,'等待接續複查｜'+reason,False) for q,ratio,reason,hit in items] for rank,items in data.get('rows',{}).items()}
     app.auto_engines=engines;app.rank_rows=rows;app.records=data.get('records',[])
     latest={}

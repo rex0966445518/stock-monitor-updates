@@ -159,6 +159,21 @@ def run_smoke_test(report):
         archive=app.show_scan_archive();root.update_idletasks()
         assert '讀值筆數' in app.archive_output.get('1.0','end')
         archive.destroy()
+        # Exercise actual Tk cells for shared cross-ranking volume warmup and rates.
+        from volume_rate import VolumeRates
+        app.volume_rates=VolumeRates();app.auto_engines={};app.rank_rows={}
+        for sec,volume,rank in [(0,2000,'漲幅排行'),(340,2340,'成交排行'),(680,3020,'預估量增')]:
+            app.render([Quote('9088','RATE',100,2,volume,1,now-680+sec)],0,0,dict(DEFAULT,source_rank=rank),persist=False)
+        rate_values=[app.tree.item(item,'values')[7] for item in app.tree.get_children() if app.tree.item(item,'values')[0]=='9088']
+        assert rate_values==['約2.00'],rate_values
+        assert app.tree.column('ratio','width')>=190
+        first_time=app.tree.heading('history0','text')
+        app.render([Quote('9088','RATE',100.1,2,3030,1,now+61)],0,0,dict(DEFAULT,source_rank='預估量增',scan_cycle=1),persist=False)
+        assert app.tree.heading('history1','text')==first_time
+        assert app.tree.heading('history0','text')!=first_time
+        from price_history import PriceHistory
+        app.price_history=PriceHistory()
+        app.volume_rates=VolumeRates();app.auto_engines={};app.rank_rows={}
         # Verify the actual GUI has only the everyday action buttons.
         actions=[child.cget('text') for child in app.main_actions.winfo_children() if child.winfo_class()=='TButton']
         assert actions==['開始／繼續（F8）','暫停（F8）','重新開始','掃描設定','一鍵更新'],actions

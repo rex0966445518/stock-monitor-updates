@@ -11,7 +11,7 @@ from auto_ui import AutoUI
 from research_ui import ResearchUI
 from pathlib import Path
 
-VERSION = '0.3.56'
+VERSION = '0.3.57'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -87,7 +87,9 @@ def parse_ocr(result, width, centers, ts):
 
 
 class Engine:
-    def __init__(self):
+    def __init__(self,volume_rates=None):
+        from volume_rate import VolumeRates
+        self.volume_rates=volume_rates if volume_rates is not None else VolumeRates()
         self.history = {}
         self.last_alert = {}
         self.highs = {}
@@ -101,7 +103,7 @@ class Engine:
         for q in quotes:
             day = dt.datetime.fromtimestamp(q.ts).date()
             if day != self.session_day:
-                self.__init__()
+                self.__init__(self.volume_rates)
                 self.session_day = day
             hist = self.history.setdefault(q.code, deque())
             previous = hist[-1] if hist else None
@@ -110,6 +112,10 @@ class Engine:
             # 跳動過大或量倒退時，不寫進基準，等待下一個正常讀值。
             if previous and (q.volume < previous.volume or abs(q.price / previous.price - 1) > .03):
                 rows.append((q, None, '讀值跳動／量倒退，已略過', False))
+                continue
+            shared_rows=self.volume_rates.history.get(q.code,())
+            if shared_rows and q.ts>=shared_rows[-1][0] and q.volume<shared_rows[-1][1]:
+                rows.append((q,None,'讀值跳動／量倒退（跨排行），已略過',False))
                 continue
             if not previous or (q.price, q.volume, q.gain, q.turnover) != (previous.price, previous.volume, previous.gain, previous.turnover):
                 self.last_change[q.code] = q.ts
@@ -132,22 +138,15 @@ class Engine:
             hist.append(q)
             while hist and q.ts - hist[0].ts > 660:
                 hist.popleft()
-            # 兩個連續 5 分鐘觀測窗；不冒充過去20日同時段量比。
-            ratio = None
-            if hist and q.ts - hist[0].ts >= 600:
-                a = min(hist, key=lambda p: abs(p.ts - (q.ts - 600)))
-                b = min(hist, key=lambda p: abs(p.ts - (q.ts - 300)))
-                if abs(a.ts - (q.ts - 600)) <= 15 and abs(b.ts - (q.ts - 300)) <= 15 and a.ts < b.ts < q.ts:
-                    oldrate = (b.volume - a.volume) / (b.ts - a.ts)
-                    newrate = (q.volume - b.volume) / (q.ts - b.ts)
-                    if oldrate > 0:
-                        ratio = newrate / oldrate
+            self.volume_rates.ingest(q.code,q.ts,q.volume)
+            volume_rate=self.volume_rates.result(q.code,q.ts)
+            ratio=volume_rate.value
             reasons = []
             if q.price < config['min_price']: reasons.append('股價不足')
             if q.volume < config['min_volume']: reasons.append('總量不足')
             if not config['min_gain'] <= q.gain <= config['max_gain']: reasons.append('漲幅不符')
             if config['use_turnover'] and (q.turnover is None or q.turnover < config['min_turnover']): reasons.append('換手率不足／缺資料')
-            if config['use_accel'] and (ratio is None or ratio < config['accel']): reasons.append('量速待累積／不足')
+            if config['use_accel'] and (ratio is None or ratio < config['accel']): reasons.append('量速待累積／不足'+'（'+volume_rate.status+'）')
             if config['use_breakout'] and not breakout: reasons.append('等待觀測突破守穩')
             if not previous: reasons.append('等待第二次讀值')
             if stale: reasons.append('60秒讀值未變，請檢查畫面')
@@ -160,6 +159,7 @@ class Engine:
             if hit and q.ts - self.last_alert.get(q.code, -1e20) >= config['cooldown']:
                 self.last_alert[q.code] = q.ts
                 alerts.append((q, reason))
+            reason+='｜量速：'+volume_rate.status
             rows.append((q, ratio, reason, hit))
         return rows, alerts
 
@@ -186,7 +186,9 @@ HELP = '''漲停板探測器-雷允澤製 v0.3.31
 預設股價>=50、總量>=1000張、漲幅1~8.5%。另啟用必要進場檢核：暖機180秒、方向窗60秒、守穩30秒，最大讀取間隔30秒；設定在進階工具。高點是觀測高點，尚未取得完整當日高點。
 「觀測突破」僅依啟動後看到的最高價，不是完整當日高點。
 可選換手率門檻及5分鐘量速比；量速比需觀察10分鐘。
-量速比為近5分鐘每秒增量除以前5分鐘增量，不是預估量增或歷史同時段量比。
+量速比為近5分鐘每秒增量除以前5分鐘每秒增量，跨排行合併同股紀錄。
+約值使用實際3～6分鐘觀測窗並按秒數換算，原因欄列出兩窗長度；沒有插補成交量。
+樣本不足顯示累積時間、採樣缺口或前窗無量；不是預估量增或歷史同時段量比。
 各排行分開累積觀測基準，排行名稱本身不當作買力或大單數值。
 候選股置頂並顯示來源、時間及原因。跨類目結果保留最新讀值；相差60秒的舊結果改標等待複查。
 OCR讀值跳動>3%、量倒退、缺欄及連續60秒未變不提醒。
@@ -223,7 +225,9 @@ class App(AutoUI,ResearchUI):
         self.events, self.stop_event = queue.Queue(), threading.Event()
         self.worker_thread = None
         self.generation = 0
-        self.engine = Engine()
+        from volume_rate import VolumeRates
+        self.volume_rates=VolumeRates()
+        self.engine = Engine(self.volume_rates)
         self.records = []
         self.mode = '待機'
         self.auto_active = False
@@ -308,7 +312,7 @@ class App(AutoUI,ResearchUI):
         table_frame = ttk.Frame(root); table_frame.pack(fill='both', expand=True, padx=18)
         cols = ['code','name','match','price','gain','volume','turnover','ratio','state']+[f'history{i}' for i in range(8)]
         self.tree = ttk.Treeview(table_frame, columns=cols, show='headings')
-        for key, label, width in zip(cols, LABELS[:2] + ['符合條件'] + LABELS[2:] + ['5分量速比', '觀察原因／尚缺條件'], [75,100,125,90,75,100,85,100,380]):
+        for key, label, width in zip(cols, LABELS[:2] + ['符合條件'] + LABELS[2:] + ['5分量速比', '觀察原因／尚缺條件'], [75,100,125,90,75,100,85,190,380]):
             self.tree.heading(key, text=label); self.tree.column(key, width=width, stretch=key == 'state')
         for i in range(8):
             self.tree.heading(f'history{i}',text=f'待掃描 {i+1}')
@@ -545,7 +549,9 @@ class App(AutoUI,ResearchUI):
         from retained_candidates import RetainedCandidates
         self.retained_candidates=RetainedCandidates()
         self.near_alert_times={}
-        self.generation += 1; self.mode = mode; self.engine = Engine(); self.records = []; self.rank_rows = {}
+        from volume_rate import VolumeRates
+        self.volume_rates=VolumeRates()
+        self.generation += 1; self.mode = mode; self.engine = Engine(self.volume_rates); self.records = []; self.rank_rows = {}
         self.stop_event = threading.Event()
         for item in self.tree.get_children(): self.tree.delete(item)
         self.status.set(mode + '｜準備中…'); self.say(mode)
@@ -606,6 +612,14 @@ class App(AutoUI,ResearchUI):
         self.save()
         self.draw_results()
 
+    def volume_ratio_text(self,q,ratio,reason):
+        rates=getattr(self,'volume_rates',None)
+        if any(label in reason for label in ('讀值跳動','量倒退')):return '讀值待複查'
+        if rates is not None:
+            rate=rates.result(q.code,q.ts)
+            if rate.value is not None or ratio is None:return rate.cell()
+        return '待採樣' if ratio is None else f'{ratio:.2f}'
+
     def draw_results(self):
         from candidate_ranking import ordered_candidates,name_eligible,hidden_result
         from price_history import PriceHistory
@@ -621,7 +635,7 @@ class App(AutoUI,ResearchUI):
             if show_name:eligible.add(q.code)
             if hidden_result(q,cfg,filters) and not retained:continue
             if retained and not match['hit']:match['text']='保留候選｜'+match['text']
-            values=[q.code,(q.name or '股名待補') if show_name else '',match['text'],f'{q.price:.2f}',f'{q.gain:+.2f}',f'{q.volume:,.0f}','—' if q.turnover is None else f'{q.turnover:.2f}','待累積' if ratio is None else f'{ratio:.2f}',reason]
+            values=[q.code,(q.name or '股名待補') if show_name else '',match['text'],f'{q.price:.2f}',f'{q.gain:+.2f}',f'{q.volume:,.0f}','—' if q.turnover is None else f'{q.turnover:.2f}',self.volume_ratio_text(q,ratio,reason),reason]
             research=getattr(self,'research_reports',{}).get(q.code)
             if research:values[-1]+=f"｜盤後研究：{research['stage']}（收盤{research['asof']}／集保{research['weekly_asof']}）"
             values+=history.values(q.code)
@@ -631,9 +645,12 @@ class App(AutoUI,ResearchUI):
     def render(self, quotes, rejected, elapsed, cfg, persist):
         from tkinter import messagebox
         captured_quotes=[dataclasses.replace(q) for q in quotes] if persist else []
-        engine = self.auto_engines.setdefault(cfg['source_rank'], Engine()) if cfg.get('source_rank') else self.engine
+        from volume_rate import VolumeRates
+        if not hasattr(self,'volume_rates'):self.volume_rates=VolumeRates()
+        engine = self.auto_engines.setdefault(cfg['source_rank'], Engine(self.volume_rates)) if cfg.get('source_rank') else self.engine
+        engine.volume_rates=self.volume_rates
         rows, alerts = engine.process(quotes, cfg)
-        self.price_history.update(quotes,cfg.get('scan_cycle'))
+        self.price_history.update(quotes,interval=60)
         for item in self.tree.get_children(): self.tree.delete(item)
         batch = []
         display=rows
@@ -656,11 +673,11 @@ class App(AutoUI,ResearchUI):
         for q,_,_,_ in display:
             if q.code in names:q.name=names[q.code]
         from collections import Counter
-        missing=Counter(reason for _,_,text,hit in display if not hit for reason in text.split('｜')[-1].split('；'))
+        missing=Counter(reason for _,_,text,hit in display if not hit for reason in text.split('｜量速：',1)[0].split('｜')[-1].split('；'))
         explanation='；'.join(f'{reason} {count}檔' for reason,count in missing.most_common(2))
         self.observation_summary.set(f'已辨識股票 {len(display)} 檔｜轉強候選 {sum(bool(item[3]) for item in display)} 檔'+('｜'+explanation if explanation else '｜候選股置頂'))
         pending_names=sum(not q.name for q,_,_,_ in display)
-        self.observation_summary.set(self.observation_summary.get()+f'｜股名記憶 {len(names)} 檔、待補 {pending_names} 檔')
+        self.observation_summary.set(self.observation_summary.get()+f'｜股名記憶 {len(names)} 檔、待補 {pending_names} 檔｜股價時間欄：每60秒新快照，非完整輪次')
         self.display_rows=display;self.display_cfg=dict(cfg)
         self.draw_results()
         for q, ratio, reason, hit in rows:

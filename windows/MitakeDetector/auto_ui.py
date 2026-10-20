@@ -1,5 +1,6 @@
 """Setup and execution UI for the calibrated ranking rotation."""
 import json
+import datetime as dt
 import threading
 import time
 from autoswitch import WindowsController, RankingSwitcher, RANKINGS, absolute_roi, validate_roi, F8Toggle, AutomationStopped
@@ -649,15 +650,20 @@ class AutoUI:
                     cfg['column_bounds']=layout['column_bounds'];auto['table']=layout['table']
                 priority_last={}
                 cycle=saved['cycle'] if saved else 1
+                cycle_started=float((saved or {}).get('round_started') or time.time())
+                def round_clock():
+                    from task_progress import duration_text
+                    started=dt.datetime.fromtimestamp(cycle_started).strftime('%H:%M:%S')
+                    return f'起始{started}｜本輪耗時{duration_text(max(0,time.time()-cycle_started))}'
                 known_totals={}
                 start_index=saved['rank'] if saved else 0
                 while not stop.is_set():
                     for rank_index in range(start_index,len(auto['rankings'])):
                         name=auto['rankings'][rank_index]
                         diagnostic.update(cycle=cycle,ranking=name,segment=0,count=0,stage='切換排行')
-                        self.events.put((token,'auto_phase',f'掃描中｜第{cycle}輪｜{name}'))
+                        self.events.put((token,'auto_phase',f'掃描中｜第{cycle}輪｜{round_clock()}｜{name}'))
                         table_resume=saved.get('table') if saved and rank_index==saved['rank'] else None
-                        if store:store.update(context,dict(cycle=cycle,rank=rank_index,table=table_resume))
+                        if store:store.update(context,dict(cycle=cycle,rank=rank_index,table=table_resume,round_started=cycle_started))
                         c.check();self.events.put((token,'auto_status',f'第{cycle}輪｜排行{rank_index+1}/{len(auto["rankings"])}：正在切換{name}'))
                         switcher.switch(name)
                         self.events.put((token,'auto_status','已確認排行：'+name))
@@ -669,7 +675,7 @@ class AutoUI:
                             total=known_totals.get(name)
                             total_text=str(total) if total is not None and total>=len(counted) else '待完整掃描確認'
                             text=f'{name}：已掃描 {len(counted)} 股／總股數 {total_text}'+('（上輪參考）' if total is not None and not done else '')
-                            text+=f'｜目前第 {cycle} 輪｜累計完成 {cycle-1} 遍'
+                            text+=f'｜目前第 {cycle} 輪｜累計完成 {cycle-1} 遍｜{round_clock()}'
                             self.events.put((token,'auto_counts',text))
                         counts()
                         table=absolute_roi(auto['table'],c.rect());center=(table['left']+table['width']//2,table['top']+table['height']//2)
@@ -678,7 +684,7 @@ class AutoUI:
                             diagnostic.update(segment=segment,count=count,stage=stage,seconds_per_segment=getattr(self,"last_table_seconds",0))
                             reused=getattr(getattr(self,'stock_names',None),'reused',0)
                             seconds=getattr(self,'last_table_seconds',0)
-                            detail=f'第{cycle}輪｜類目{rank_index+1}/{len(auto["rankings"])} {name}｜第{segment}段｜已讀{count}檔｜股名重用{reused}次｜{stage}｜{seconds:.1f}秒/段'
+                            detail=f'第{cycle}輪｜{round_clock()}｜類目{rank_index+1}/{len(auto["rankings"])} {name}｜第{segment}段｜已讀{count}檔｜股名重用{reused}次｜{stage}｜{seconds:.1f}秒/段'
                             self.events.put((token,'auto_progress',(detail,rank_index,len(auto['rankings']))))
                         def read(image):
                             started=time.monotonic();self.events.put((token,'auto_rate',dict(start=started)))
@@ -775,7 +781,7 @@ class AutoUI:
                         def checkpoint(state):
                             table_state[0]=state
                             diagnostic.update(last_codes=state.get("codes",[]),wheel_offset=state.get("offset",0),scroll_notches=state.get("notches",1))
-                            if store:store.update(context,dict(cycle=cycle,rank=rank_index,table=state))
+                            if store:store.update(context,dict(cycle=cycle,rank=rank_index,table=state,round_started=cycle_started))
                         from table_scan import scan_with_recovery
                         def attempt_scan(resume):
                             return scan_table(c,auto['table'],read,progress,observed=observed,resume=resume,checkpoint=checkpoint,
@@ -799,7 +805,7 @@ class AutoUI:
                         current=dict(cfg,source_rank=name)
                         if store:
                             next_rank=(rank_index+1)%len(auto['rankings'])
-                            store.update(context,dict(cycle=cycle+(1 if next_rank==0 else 0),rank=next_rank,table=None))
+                            store.update(context,dict(cycle=cycle+(1 if next_rank==0 else 0),rank=next_rank,table=None,round_started=None if next_rank==0 else cycle_started))
                         experience.observed(name,bool(collected) and rejected==0)
                         dwell=experience.wait(name,auto['seconds'])
                         mode='自適應加速' if experience.enabled else '固定間隔'
@@ -822,7 +828,7 @@ class AutoUI:
                     if test_only:break
                     self.events.put((token,'auto_counts',f'本輪排行掃描完成｜累計完成 {cycle} 遍｜準備第 {cycle+1} 輪'))
                     self.events.put((token,'auto_phase',f'第{cycle}輪已完成｜自動開始第{cycle+1}輪'))
-                    cycle+=1;start_index=0
+                    cycle+=1;start_index=0;cycle_started=time.time()
                 self.events.put((token,'auto_end','輪切測試完成' if test_only else '自動輪切已停止'))
             except Exception as exc:
                 from scan_diagnostics import record_interruption

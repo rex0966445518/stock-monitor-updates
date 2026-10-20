@@ -51,9 +51,11 @@ class ScanArchive:
 def replay(batches):
     """Reconstruct engine state using capture timestamps; returns are observations, not fills."""
     from MitakeDetector import Engine,Quote
+    from volume_rate import VolumeRates
+    rates=VolumeRates()
     engines={};signals=[];seen=set();observed={};versions=set()
     for batch in batches:
-        versions.add(batch['version']);engine=engines.setdefault(batch['rank'],Engine())
+        versions.add(batch['version']);engine=engines.setdefault(batch['rank'],Engine(rates))
         quotes=[Quote(**q) for q in batch['quotes']]
         for q in quotes:
             key=(q.code,q.ts)
