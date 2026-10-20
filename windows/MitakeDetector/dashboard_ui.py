@@ -39,9 +39,14 @@ class DashboardUI:
         self.today_tree.tag_configure('weak',foreground='#aebed3');self.today_tree.tag_configure('near',foreground='#ffd36a')
         self.today_tree.bind('<Double-1>',self.open_today_candidate)
         diagnostic=ttk.LabelFrame(bottom,text='辨識／執行訊息');diagnostic.grid(row=0,column=1,sticky='nsew')
+        self.rate_label=tk.Label(diagnostic,textvariable=self.scan_rate_var,bg='#0a1322',fg='#68f5d1',anchor='w')
+        self.rate_label.pack(side='bottom',fill='x')
         self.log=tk.Text(diagnostic,width=35,height=9,wrap='word',bg='#0a1322',fg='#a6b8d2',font=('Microsoft JhengHei',10),state='disabled')
         scroll=ttk.Scrollbar(diagnostic,orient='vertical',command=self.log.yview);self.log.configure(yscrollcommand=scroll.set)
         self.log.pack(side='left',fill='both',expand=True);scroll.pack(side='right',fill='y')
+        # Keep detailed progress in the bounded diagnostic pane, never above the table.
+        self.status.trace_add('write',lambda *_:self.say(self.status.get()))
+        self.say(self.status.get())
         self.diary_store=CandidateDiary(BASE/'observations.sqlite3');self.daily_refresh=0
         return bottom
     def init_dashboard(self):

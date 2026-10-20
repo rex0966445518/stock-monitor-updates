@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.73'
+VERSION = '0.3.74'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -300,12 +300,8 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         self.phase_label.pack(fill='x',padx=20,pady=(7,0))
         self.phase_label.bind('<Configure>',lambda event:self.phase_label.configure(wraplength=max(80,event.width-8)))
         self.status = tk.StringVar(value='開啟三竹「熱門排行」，按 F8 或「開始掃描」。首次會自動定位；再次按 F8 停止。')
-        self.status_label=tk.Label(root,textvariable=self.status,bg='#0b1020',fg='#58ddd0',anchor='w',justify='left',wraplength=1120)
-        self.status_label.pack(fill='x',padx=20,pady=10)
-        self.status_label.bind('<Configure>',lambda event:self.status_label.configure(wraplength=max(80,event.width-8)))
         from scan_rate import ScanRate
         self.scan_rate=ScanRate();self.scan_rate_var=tk.StringVar(value=self.scan_rate.text())
-        tk.Label(root,textvariable=self.scan_rate_var,bg='#0b1020',fg='#68f5d1',anchor='w').pack(fill='x',padx=20)
         self.observation_summary=tk.StringVar(value='尚未讀取股票資料｜轉強候選待判斷')
         self.summary_label=tk.Label(root,textvariable=self.observation_summary,bg='#0b1020',fg='#edf2ff',anchor='w',justify='left',wraplength=1400)
         self.summary_label.pack(fill='x',padx=20,pady=(0,6))
@@ -420,6 +416,8 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
 
     def say(self, text):
         text=format_feedback(text)
+        if text==getattr(self,'_last_log_message',None):return
+        self._last_log_message=text
         self.log.configure(state='normal'); self.log.insert('end', dt.datetime.now().strftime('%H:%M:%S ') + text + '\n')
         self.log.see('end'); self.log.configure(state='disabled')
 
