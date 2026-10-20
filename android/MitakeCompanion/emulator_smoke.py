@@ -32,7 +32,7 @@ def tap(label):
 def assert_scanner():
     time.sleep(2)
     active=adb('shell','dumpsys','activity','activities')
-    assert re.search(r'mResumedActivity.*com.rex.mitakecompanion/com.journeyapps.barcodescanner.CaptureActivity',active),active[-5000:]
+    assert re.search(r'(?:topResumedActivity|mResumedActivity).*com.rex.mitakecompanion/com.journeyapps.barcodescanner.CaptureActivity',active),active[-5000:]
     assert 'FATAL EXCEPTION' not in adb('logcat','-d','-s','AndroidRuntime:E')
 
 # Exercise the actual camera UI before protocol tests; the old test skipped it.
