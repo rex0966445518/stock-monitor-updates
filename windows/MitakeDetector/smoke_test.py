@@ -39,6 +39,11 @@ def run_smoke_test(report):
         assert tkfont.Font(root=root,font=app.log.cget('font')).actual('size')==10
         app.display_scale.apply(scale,save=True,resize=False)
         assert app.log.cget('wrap')=='word'
+        app.stock_names.learn('9998','記憶測試',.99);app.stock_names.save()
+        from fast_quotes import StockNames
+        assert StockNames(BASE/'stock-names.json').names['9998']=='記憶測試'
+        assert (BASE/'stock-names.sqlite3').is_file()
+        info['stock_name_database_verified']=True
         assert app.config['steady_enabled']
         steady=app.show_steady_settings();root.update_idletasks()
         assert steady.winfo_exists();steady.destroy()
@@ -157,8 +162,8 @@ def run_smoke_test(report):
         app.stock_names=StockNames();app.numeric_priority=True
         started=time.perf_counter()
         quick,quick_bad=app.scan_recovering_table(im,bounds)
-        assert len(quick)==2 and quick_bad==0 and all(not q.name for q in quick)
-        assert app.deferred_names,'Unknown names must be queued for later learning'
+        assert len(quick)==2 and quick_bad==0 and all(q.name for q in quick)
+        assert {'2330','2317'}<=set(app.stock_names.names),'First scan must learn names before candidate gating'
         reader=app.read_auto_ocr
         def no_extra_ocr(image):raise AssertionError('Same-view stock anchors were OCRed twice')
         app.read_auto_ocr=no_extra_ocr
@@ -167,7 +172,7 @@ def run_smoke_test(report):
         info.update(priority_numeric_seconds=time.perf_counter()-started,priority_name_queue=len(app.deferred_names))
         app.name_eligible_codes=set()
         app.learn_deferred_names()
-        assert not app.stock_names.names,'Below-threshold names must skip OCR'
+        assert app.stock_names.names,'Known names must remain visible below the candidate threshold'
         app.name_eligible_codes={'2330','2317'}
         app.learn_deferred_names()
         assert app.stock_names.names,'Deferred names were never learned'
@@ -179,6 +184,15 @@ def run_smoke_test(report):
             assert app.cell_metrics['changed']==0,app.cell_metrics
             info['numeric_cells_reused']=app.cell_metrics['reused']
         assert len(same)==2 and same_bad==0
+        excluded=Image.new('RGB',(1200,260),'#101820');draw=ImageDraw.Draw(excluded)
+        for row,code in enumerate(['00929','00679B']):
+            for x,text in zip(DEFAULT['centers'],[code,'IGNORED','100.50','2.30%','1500','1.20%']):
+                draw.text((x*12,60+row*65),text,font=font,fill='white',anchor='mm')
+        skipped,skip_bad=app.scan_recovering_table(excluded,bounds)
+        assert not skipped and skip_bad==0,(skipped,skip_bad)
+        assert set(app.read_stock_anchors(excluded,bounds))=={'00929','00679B'}
+        assert not {'00929','00679B'}&set(app.stock_names.names)
+        info['long_instrument_codes_skipped']=2
         pairing=app.show_mobile_pairing();root.update()
         pairing.destroy()
         app.numeric_priority=False
@@ -267,7 +281,7 @@ def run_smoke_test(report):
         learning_window=app.show_ocr_learning();root.update();assert learning_window.winfo_exists();learning_window.destroy()
         app.stock_names=StockNames();app.stock_names.names={'9001':'LEARNED'}
         app.render([Quote('9001','',100,2,1500,1,now+.1)],0,0,dict(DEFAULT),persist=False)
-        assert app.tree.item(app.tree.get_children()[0],'values')[1]==''
+        assert app.tree.item(app.tree.get_children()[0],'values')[1]=='LEARNED'
         app.stock_names.names={}
         # Changing rankings must retain other observed stocks and deduplicate codes.
         cfg=dict(DEFAULT,guard_enabled=False,source_rank='漲幅排行',use_breakout=False)
@@ -303,10 +317,10 @@ def run_smoke_test(report):
         app.display_rows.append((Quote('9082','FOUR',100,3,2000,4,now),None,'等待觀測突破守穩',False))
         app.draw_results()
         four=next(item for item in app.tree.get_children() if app.tree.item(item,'values')[0]=='9082')
-        assert app.tree.item(four,'values')[1]==''
+        assert app.tree.item(four,'values')[1]=='FOUR'
         assert '9082' not in app.name_eligible_codes
         app.display_rows.pop();app.draw_results()
-        assert app.tree.item(app.tree.get_children()[-1],'values')[1]==''
+        assert app.tree.item(app.tree.get_children()[-1],'values')[1]!=''
         app.result_filters['price'].set(True);app.change_result_filters()
         assert len(app.tree.get_children())==1
         assert json.loads((BASE/'settings.json').read_text('utf-8'))['result_filters']['price']

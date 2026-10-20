@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.65'
+VERSION = '0.3.66'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -61,7 +61,7 @@ def parse_ocr(result, width, centers, ts):
         col = min(range(6), key=lambda k: abs(x - centers[k]))
         cells.append((col, y, max(h, 8), str(raw)))
     out, rejected = [], 0
-    anchors = [c for c in cells if c[0] == 0 and re.fullmatch(r'\d{4,6}', unicodedata.normalize('NFKC', c[3]).strip())]
+    anchors = [c for c in cells if c[0] == 0 and re.fullmatch(r'[0-9]{4}', unicodedata.normalize('NFKC', c[3]).strip())]
     seen = set()
     for _, y, h, rawcode in anchors:
         code = unicodedata.normalize('NFKC', rawcode).strip()
@@ -235,6 +235,8 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         self.volume_rates=VolumeRates()
         self.engine = Engine(self.volume_rates)
         self.records = []
+        from fast_quotes import StockNames
+        self.stock_names=StockNames(BASE/'stock-names.json')
         self.mode = '待機'
         self.auto_active = False
         self.auto_engines = {}
@@ -638,9 +640,11 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         filters={key:var.get() for key,var in getattr(self,'result_filters',{}).items()}
         eligible=set()
         for (q,ratio,reason,hit),match in ordered_candidates(getattr(self,'display_rows',[]),cfg):
+            if not re.fullmatch(r'[0-9]{4}',q.code):continue
+            q.name=getattr(getattr(self,'stock_names',None),'names',{}).get(q.code,q.name)
             retained=q.code in getattr(getattr(self,'retained_candidates',None),'peak',{})
-            show_name=name_eligible(match)
-            if show_name:eligible.add(q.code)
+            show_name=True
+            if name_eligible(match):eligible.add(q.code)
             if hidden_result(q,cfg,filters) and not retained:continue
             if retained and not match['hit']:match['text']='保留候選｜'+match['text']
             values=[q.code,(q.name or '股名待補') if show_name else '',match['text'],f'{q.price:.2f}',f'{q.gain:+.2f}',f'{q.volume:,.0f}','—' if q.turnover is None else f'{q.turnover:.2f}',self.volume_ratio_text(q,ratio,reason),reason]
@@ -652,6 +656,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
 
     def render(self, quotes, rejected, elapsed, cfg, persist):
         from tkinter import messagebox
+        quotes=[q for q in quotes if re.fullmatch(r'[0-9]{4}',q.code)]
         captured_quotes=[dataclasses.replace(q) for q in quotes] if persist else []
         from volume_rate import VolumeRates
         if not hasattr(self,'volume_rates'):self.volume_rates=VolumeRates()
@@ -692,7 +697,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         self.observation_summary.set(f'已辨識股票 {len(display)} 檔｜轉強候選 {sum(bool(item[3]) for item in display)} 檔'+('｜'+explanation if explanation else '｜候選股置頂'))
         if persist and cfg.get('steady_enabled'):self.observation_summary.set(self.steady_summary()+'\n'+self.observation_summary.get())
         pending_names=sum(not q.name for q,_,_,_ in display)
-        self.observation_summary.set(self.observation_summary.get()+f'｜股名記憶 {len(names)} 檔、待補 {pending_names} 檔｜股價時間欄：每60秒新快照，非完整輪次')
+        self.observation_summary.set(self.observation_summary.get()+f'｜股名資料庫 {len(names)} 檔、待補 {pending_names} 檔｜僅掃描四位股號｜股價時間欄：每60秒新快照，非完整輪次')
         self.display_rows=display;self.display_cfg=dict(cfg)
         self.draw_results()
         for q, ratio, reason, hit in rows:

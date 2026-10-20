@@ -1,5 +1,7 @@
 """Batch numeric columns and retain only code/name identities, never quote values."""
 import json
+import sqlite3
+from contextlib import closing
 import re
 import time
 import unicodedata
@@ -9,6 +11,8 @@ from pathlib import Path
 class StockNames:
     def __init__(self,path=None):
         self.path=Path(path) if path else None;self.names={};self.reused=0;self.pending={};self.dirty=False
+        self.db_path=self.path.with_suffix(".sqlite3") if self.path else None
+        self.last_error="";self.confidence={}
         if self.path:
             try:
                 data=json.loads(self.path.read_text(encoding='utf-8'))
@@ -17,16 +21,28 @@ class StockNames:
             try:
                 pending=json.loads(self.path.with_name(self.path.stem+'-learning.json').read_text(encoding='utf-8'))
                 if isinstance(pending,dict):
-                    self.pending={c:e for c,e in list(pending.items())[-2000:] if re.fullmatch(r'[0-9]{4,6}',c) and isinstance(e,dict)}
+                    self.pending={c:e for c,e in list(pending.items())[-2000:] if re.fullmatch(r'[0-9]{4}',c) and isinstance(e,dict)}
             except (OSError,ValueError,TypeError):pass
+            # Verified legacy JSON identities migrate once; DB wins on conflicts.
+            try:
+                self.path.parent.mkdir(parents=True,exist_ok=True)
+                with closing(self.connect()) as c,c:
+                    c.executemany('INSERT OR IGNORE INTO stock_names VALUES (?,?,?,?,?)',[(code,name,.92,'legacy-verified-cache',time.time()) for code,name in self.names.items()])
+                    self.names={code:name for code,name in c.execute('SELECT code,name FROM stock_names') if self.valid(code,name)}
+            except (OSError,sqlite3.Error) as exc:self.last_error=str(exc)
+
+    def connect(self):
+        c=sqlite3.connect(self.db_path,timeout=5)
+        c.execute('CREATE TABLE IF NOT EXISTS stock_names(code TEXT PRIMARY KEY,name TEXT NOT NULL,confidence REAL,source TEXT,learned_at REAL)')
+        return c
 
     @staticmethod
     def valid(code,name):
-        return isinstance(code,str) and isinstance(name,str) and bool(re.fullmatch(r'\d{4,6}',code)) and bool(re.fullmatch(r'[\u3400-\u9fffA-Za-z0-9&*\-]{2,24}',name)) and bool(re.search(r'[\u3400-\u9fffA-Za-z]',name))
+        return isinstance(code,str) and isinstance(name,str) and bool(re.fullmatch(r'[0-9]{4}',code)) and bool(re.fullmatch(r'[\u3400-\u9fffA-Za-z0-9&*\-]{2,24}',name)) and bool(re.search(r'[\u3400-\u9fffA-Za-z]',name))
 
     def learn(self,code,name,confidence):
         if confidence<.92 or not self.valid(code,name) or code in self.names:return False
-        self.names[code]=name;self.pending.pop(code,None);self.dirty=True;return True
+        self.names[code]=name;self.confidence[code]=confidence;self.pending.pop(code,None);self.dirty=True;return True
 
     def consider(self,code,name,confidence,proof):
         name=unicodedata.normalize('NFKC',str(name)).replace(' ','').strip()
@@ -51,11 +67,13 @@ class StockNames:
         if not self.path:return
         try:
             self.path.parent.mkdir(parents=True,exist_ok=True)
+            with closing(self.connect()) as c,c:
+                c.executemany('INSERT OR IGNORE INTO stock_names VALUES (?,?,?,?,?)',[(code,name,self.confidence.get(code,.92),'verified-ocr',time.time()) for code,name in self.names.items() if self.valid(code,name)])
             temporary=self.path.with_suffix('.tmp');temporary.write_text(json.dumps(self.names,ensure_ascii=False),encoding='utf-8');temporary.replace(self.path)
             learning=self.path.with_name(self.path.stem+'-learning.json');self.pending=dict(list(self.pending.items())[-2000:])
             temporary=learning.with_suffix('.tmp');temporary.write_text(json.dumps(self.pending,ensure_ascii=False),encoding='utf-8');temporary.replace(learning)
-            self.dirty=False
-        except OSError:pass
+            self.dirty=False;self.last_error=""
+        except (OSError,sqlite3.Error) as exc:self.last_error=str(exc)
 
 
 def scan_numeric_batch(image,bounds,read,names,memory=None,focus=None,defer_names=False,anchors_ready=None):
@@ -84,7 +102,7 @@ def scan_numeric_batch(image,bounds,read,names,memory=None,focus=None,defer_name
         y=sum(p[1] for p in box)/4;h=max(p[1] for p in box)-min(p[1] for p in box)
         x=50+FIELDS.index(field)*100
         logical.append(([[x-10,y-h/2],[x+10,y-h/2],[x+10,y+h/2],[x-10,y+h/2]],text,confidence))
-        if field=='code' and confidence>=.70 and re.fullmatch(r'\d{4,6}',text):
+        if field=='code' and confidence>=.70 and re.fullmatch(r'[0-9]{4,12}[A-Za-z]{0,2}',text):
             anchors.append((text,y,max(h,8)));code_scores[text]=confidence
     for field,tokens in cached:
         for box,text,confidence in tokens:append(field,box,text,confidence)
@@ -100,7 +118,7 @@ def scan_numeric_batch(image,bounds,read,names,memory=None,focus=None,defer_name
     if memory:
         for field,left,right,crop,key in pieces:memory.record(key,learned[field],0,'數字欄位學習')
     if anchors_ready:anchors_ready(anchors,code_scores)
-    unknown=[a for a in anchors if a[0] not in names.names]
+    unknown=[a for a in anchors if re.fullmatch(r'[0-9]{4}',a[0]) and a[0] not in names.names]
     changed=False
     if unknown and not defer_names:
         left,right=bounds['name']
@@ -166,7 +184,7 @@ def learn_mapped_names(tokens,names,proof):
         text=unicodedata.normalize('NFKC',str(text)).replace(' ','').strip()
         cells.append((field,y,max(8,max(p[1] for p in box)-min(p[1] for p in box)),text,confidence))
     for field,y,h,code,confidence in cells:
-        if field!=0 or confidence<.92 or not re.fullmatch(r'[0-9]{4,6}',code):continue
+        if field!=0 or confidence<.92 or not re.fullmatch(r'[0-9]{4}',code):continue
         near=[c for c in cells if c[0]==1 and abs(c[1]-y)<h*.55]
         if len(near)==1:names.consider(code,near[0][3],near[0][4],proof)
     if names.dirty:names.save()

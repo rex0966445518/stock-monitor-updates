@@ -27,38 +27,40 @@ def row_bands(image,bounds):
 def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,anchors_ready=None):
     from PIL import Image
     from fast_quotes import scan_numeric_batch
+    import re,unicodedata
     bands=row_bands(image,bounds)
     if not bands:return None
-    fields=['code','price','gain','volume','turnover'];cells=[]
-    for top,bottom in bands:
-        for field in fields:
-            left,right=[round(v*image.width) for v in bounds[field]]
-            if right-left<5:return None
-            crop=image.crop((left,top,right,bottom)).convert('RGB')
-            key=f'cell-v1:{field}:{crop.width}x{crop.height}:'+hashlib.sha256(crop.tobytes()).hexdigest()
-            cells.append(dict(field=field,top=top,image=crop,key=key,tokens=None))
-    known={} if force else memory.lookup_many([c['key'] for c in cells]) if memory and hasattr(memory,'lookup_many') else {}
-    reused=0
-    for c in cells:
-        if not force:c['tokens']=cache.get(c['key'],known.get(c['key']))
-        if c['tokens'] is not None:reused+=1
-    missing=[c for c in cells if c['tokens'] is None]
-    x=12;y=12;line=0;width=max(768,max(c['image'].width for c in cells)+24)
-    for c in missing:
-        crop=c['image']
-        if x+crop.width+12>width:x=12;y+=line+20;line=0
-        c['box']=(x,y,x+crop.width,y+crop.height);x+=crop.width+20;line=max(line,crop.height)
-    learned=[]
-    if missing:
+    fields=['code','price','gain','volume','turnover']
+    def make(field,top,bottom):
+        left,right=[round(v*image.width) for v in bounds[field]]
+        if right-left<5:raise ValueError('數字欄位寬度不足')
+        crop=image.crop((left,top,right,bottom)).convert('RGB')
+        key=f'cell-v1:{field}:{crop.width}x{crop.height}:'+hashlib.sha256(crop.tobytes()).hexdigest()
+        return dict(field=field,top=top,bottom=bottom,image=crop,key=key,tokens=None)
+    metrics=dict(reused=0,changed=0,total=0,skipped=0)
+    def resolve(cells):
+        if not cells:return
+        known={} if force else memory.lookup_many([c['key'] for c in cells]) if memory and hasattr(memory,'lookup_many') else {}
+        for c in cells:
+            if not force:c['tokens']=cache.get(c['key'],known.get(c['key']))
+        missing=[c for c in cells if c['tokens'] is None]
+        metrics['reused']+=len(cells)-len(missing);metrics['changed']+=len(missing);metrics['total']+=len(cells)
+        x=12;y=12;line=0;width=max(768,max(c['image'].width for c in cells)+24)
+        for c in missing:
+            crop=c['image']
+            if x+crop.width+12>width:x=12;y+=line+20;line=0
+            c['box']=(x,y,x+crop.width,y+crop.height);x+=crop.width+20;line=max(line,crop.height)
+        if not missing:return
         sheet=Image.new('RGB',(width,y+line+12),image.convert('RGB').getpixel((0,0)))
         for c in missing:sheet.paste(c['image'],c['box'][:2]);c['tokens']=[]
-        if focus:focus(fields,f'變動數字格 {len(missing)}/{len(cells)}｜重用 {reused} 格')
+        if focus:focus(list(dict.fromkeys(c['field'] for c in cells)),f'股號先行｜變動數字格 {len(missing)}｜重用 {metrics["reused"]} 格')
         for box,text,confidence in read(sheet):
             l=min(p[0] for p in box);t=min(p[1] for p in box);r=max(p[0] for p in box);b=max(p[1] for p in box)
             owners=[c for c in missing if c['box'][0]<=l and r<=c['box'][2] and c['box'][1]<=t and b<=c['box'][3]]
             if len(owners)!=1:continue
             c=owners[0];cx,cy,_,_=c['box']
             c['tokens'].append(([[px-cx,py-cy] for px,py in box],text,confidence))
+        learned=[]
         for c in missing:
             tokens=c['tokens']
             if tokens and min(t[2] for t in tokens)>=.93:
@@ -66,12 +68,25 @@ def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,
             learned.append((c['key'],tokens,0,'變動數字格'))
         while len(cache)>4096:cache.popitem(last=False)
         if memory and hasattr(memory,'record_many'):memory.record_many(learned)
+    code_cells=[make('code',top,bottom) for top,bottom in bands]
+    resolve(code_cells)
+    accepted=[]
+    for c in code_cells:
+        tokens=c['tokens'] or []
+        if len(tokens)!=1 or tokens[0][2]<.93:return None
+        code=unicodedata.normalize('NFKC',str(tokens[0][1])).replace(' ','').strip()
+        code=re.sub(r'^[^0-9]+','',code)
+        if not re.fullmatch(r'[0-9]{4,12}[A-Za-z]{0,2}',code):return None
+        if len(code)==4:accepted.append(c)
+        else:metrics['skipped']+=1
+    numeric=[make(field,c['top'],c['bottom']) for c in accepted for field in fields[1:]]
+    resolve(numeric)
     by_field={f:[] for f in fields}
-    for c in cells:
+    for c in code_cells+numeric:
         by_field[c['field']].extend(([[x,y+c['top']] for x,y in box],text,confidence) for box,text,confidence in c['tokens'])
     class Columns:
         def lookup(self,key):return by_field[key.split(':')[1]]
         def record(self,*args):pass
     rows,bad=scan_numeric_batch(image,bounds,lambda im:[],names,memory=Columns(),defer_names=True,anchors_ready=anchors_ready)
-    if bad or len(rows)!=len(bands):return None
-    return rows,bad,dict(reused=reused,changed=len(missing),total=len(cells))
+    if bad or len(rows)!=len(accepted):return None
+    return rows,bad,metrics

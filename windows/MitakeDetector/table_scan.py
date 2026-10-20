@@ -23,7 +23,7 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
     from dataclasses import asdict
     from MitakeDetector import Quote
     saved=resume or {}
-    collected={q['code']:Quote(**q) for q in saved.get('quotes',[])}
+    collected={q['code']:Quote(**q) for q in saved.get('quotes',[]) if len(q['code'])==4 and q['code'].isascii() and q['code'].isdigit()}
     previous=tuple(saved['codes']) if saved.get('codes') else None
     stable=0;rejected=saved.get('rejected',0);notches=saved.get('notches',1)
     cap=max(1,min(6,scroll_cap,int(saved.get('cap',scroll_cap))));recovery_stalls=0
@@ -40,13 +40,19 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
         return codes
     def save(next_segment,codes):
         if checkpoint:checkpoint(dict(segment=next_segment,codes=list(codes),offset=offset,notches=notches,cap=cap,rejected=rejected,quotes=[asdict(q) for q in collected.values()]))
+    def excluded_view(image,quotes):
+        if quotes or not read_anchors:return False
+        codes=anchor_codes(image,quotes)
+        from stock_codes import excluded_only
+        return excluded_only(codes)
     for segment in range(first,min(max_segments,limit_pages) if limit_pages else max_segments):
         controller.check()
         progress(segment+1,len(collected),'擷取股票資料')
         image,_=controller.image(roi)
         quotes,bad=read(image)
         # Repair geometry before repeating OCR against the same stale columns.
-        if not quotes and recover_layout and layout_repairs<3:
+        excluded=excluded_view(image,quotes)
+        if not quotes and not excluded and recover_layout and layout_repairs<3:
             layout_repairs+=1
             progress(segment+1,len(collected),f'資料欄位失效，重新定位表頭 {layout_repairs}/3')
             controller.check()
@@ -58,10 +64,11 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
                 progress(segment+1,len(collected),'表頭已重新定位，重讀當前區段並核對重疊')
         # A blank OCR result cannot establish the bottom; retry fresh captures.
         for retry in range(2):
-            if quotes:break
+            if quotes or excluded_view(image,quotes):break
             progress(segment+1,len(collected),f'複查辨識 {retry+1}/2')
             controller.pause(.5);image,_=controller.image(roi);quotes,bad=read(image)
-        if not quotes:raise RecoverableScanError('股票資料連續三次無法辨識，未宣稱已讀完整清單')
+        if not quotes and not excluded_view(image,quotes):raise RecoverableScanError('股票資料連續三次無法辨識，未宣稱已讀完整清單')
+        if not quotes:progress(segment+1,len(collected),'本段皆為超過四位股號，跳過並繼續捲動')
         codes=anchor_codes(image,quotes)
         if saved and previous and not set(codes).intersection(previous):
             progress(segment+1,len(collected),'定位前次捲動位置，保留已讀資料')

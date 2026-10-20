@@ -51,7 +51,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Syntax check failed' }
           python MitakeDetector.py --self-test
           if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
-          python -m unittest -v test_updater test_autoswitch test_auto_detect test_adaptive test_table_scan test_fast_quotes test_resume_scan test_version_history test_ocr_learning test_start_auto test_research test_scan_archive test_volume_rate test_candidate_diary test_market_index test_ocr_recovery test_status_bounds test_adaptive_layout test_numeric_cells test_mobile_bridge test_steady_trend
+          python -m unittest -v test_updater test_autoswitch test_auto_detect test_adaptive test_table_scan test_fast_quotes test_resume_scan test_version_history test_ocr_learning test_start_auto test_research test_scan_archive test_volume_rate test_candidate_diary test_market_index test_ocr_recovery test_status_bounds test_adaptive_layout test_numeric_cells test_mobile_bridge test_steady_trend test_stock_identity
           if ($LASTEXITCODE -ne 0) { throw 'Update validation tests failed' }
           python -c "from build_release import version; print('MITAKE_VERSION='+version())" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           python build_history.py
@@ -101,9 +101,12 @@ jobs:
           $db = Join-Path $env:LOCALAPPDATA 'MitakeDetector/observations.sqlite3'
           $settingsHash = (Get-FileHash $settings).Hash
           $dbHash = (Get-FileHash $db).Hash
+          $namesDb = Join-Path $env:LOCALAPPDATA 'MitakeDetector/stock-names.sqlite3'
+          $namesHash = (Get-FileHash $namesDb).Hash
           $proc = Start-Process -FilePath $installer -ArgumentList $args -Wait -PassThru
           if ($proc.ExitCode -ne 0) { throw 'Reinstall/update simulation failed' }
           if ((Get-FileHash $settings).Hash -ne $settingsHash -or (Get-FileHash $db).Hash -ne $dbHash) { throw 'Update changed user data' }
+          if ((Get-FileHash $namesDb).Hash -ne $namesHash) { throw 'Update changed stock name database' }
           if (-not (Test-Path (Join-Path $installDir '_internal/python311.dll'))) { throw 'Installed Python DLL missing' }
           if (-not (Test-Path (Join-Path $installDir '_internal/vcruntime140_1.dll'))) { throw 'Installed VC runtime missing' }
           $report = Join-Path (Get-Location) 'release-output/installed-smoke.json'

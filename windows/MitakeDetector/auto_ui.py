@@ -1,3 +1,4 @@
+from stock_codes import excluded_only
 """Setup and execution UI for the calibrated ranking rotation."""
 import json
 import datetime as dt
@@ -151,7 +152,8 @@ class AutoUI:
                 table,_=c.image(auto['table'])
                 quotes,bad=self.scan_recovering_table(table,discovered['column_bounds'])
                 c.check()
-                if not quotes:raise ValueError('自動定位完成，但尚未讀到完整股票資料，未儲存；請保持資料列可見。')
+                nav=(getattr(self,'fast_code_cache',None) or (None,None,[]))[2]
+                if not quotes and not (excluded_only(nav)):raise ValueError('自動定位完成，但尚未讀到完整股票資料，未儲存；請保持資料列可見。')
                 cfg.update(auto_config=auto,column_bounds=discovered['column_bounds'],region=absolute_roi(auto['table'],c.rect()))
                 self.events.put((token,'auto_setup_done',(cfg,target,len(quotes),start_after)))
             except Exception as exc:self.events.put((token,'auto_end','自動設定未完成：'+str(exc)+'；可使用手動設定。'))
@@ -172,7 +174,7 @@ class AutoUI:
         names=getattr(self,'stock_names',None)
         left,right=bounds['name']
         for code,y,h in anchors:
-            if scores.get(code,0)<.92 or not names or code in names.names:continue
+            if len(code)!=4 or not code.isascii() or not code.isdigit() or scores.get(code,0)<.92 or not names or code in names.names:continue
             top=max(0,int(y-h*.7));bottom=min(image.height,int(y+h*.7)+1)
             if bottom<=top:continue
             crop=image.crop((round(left*image.width),top,round(right*image.width),bottom))
@@ -182,15 +184,15 @@ class AutoUI:
         while len(pending)>1000:pending.pop(next(iter(pending)))
         self.deferred_names=pending
 
-    def learn_deferred_names(self,check=lambda:None):
+    def learn_deferred_names(self,check=lambda:None,codes=None):
         """One bounded name sheet in the existing ranking wait, never per row."""
         from PIL import Image
         pending=getattr(self,'deferred_names',{})
         names=getattr(self,'stock_names',None)
         if not pending or not names:return 0
         sections=[];height=8;width=1
-        eligible=getattr(self,'name_eligible_codes',set())
-        for code in [c for c in list(pending) if c in eligible][:8]:
+        selected=set(codes) if codes is not None else None
+        for code in [c for c in list(pending) if selected is None or c in selected][:32]:
             crop,proof=pending.pop(code)
             if code in names.names:continue
             sections.append((code,height,height+crop.height,crop,proof))
@@ -237,7 +239,7 @@ class AutoUI:
         codes=[]
         for box,text,confidence in tokens:
             text=unicodedata.normalize('NFKC',str(text)).replace(' ','').strip()
-            if confidence>=.90 and re.fullmatch(r'[0-9]{4,6}',text):codes.append(text)
+            if confidence>=.90 and re.fullmatch(r'[0-9]{4,12}[A-Za-z]{0,2}',text):codes.append(text)
         return codes
 
     def scan_mapped_table(self,image,bounds):
@@ -245,6 +247,12 @@ class AutoUI:
         import re,unicodedata
         tokens=[]
         for i,field in enumerate(FIELDS):
+            if field=='name':
+                names=getattr(self,'stock_names',None)
+                codes=[(box,str(text),score) for box,text,score in tokens if sum(p[0] for p in box)/4==50 and re.fullmatch(r'[0-9]{4}',str(text))]
+                if names and codes and all(code in names.names and score>=.92 for box,code,score in codes):
+                    tokens.extend(([[x+100,y] for x,y in box],names.names[code],1.) for box,code,score in codes)
+                    continue
             left,right=bounds[field]
             if not 0<=left<right<=1:raise ValueError('自動欄位範圍無效')
             crop=image.crop((round(left*image.width),0,round(right*image.width),image.height))
@@ -267,9 +275,25 @@ class AutoUI:
     def scan_recovering_table(self,image,bounds):
         started=time.perf_counter()
         captured_at=image.info.get('captured_at',time.time())
+        self.fast_code_cache=None
         try:
             result=self._scan_recovering_table(image,bounds)
-            for q in result[0]:q.ts=captured_at
+            names=getattr(self,'stock_names',None)
+            unknown=[q.code for q in result[0] if names and q.code not in names.names]
+            if unknown:
+                def check():
+                    if getattr(self,'stop_event',None) and self.stop_event.is_set():
+                        from autoswitch import AutomationStopped
+                        raise AutomationStopped('股名補讀已停止')
+                try:self.learn_deferred_names(check,codes=unknown)
+                except Exception as exc:
+                    from autoswitch import AutomationStopped
+                    if isinstance(exc,AutomationStopped):raise
+                    self.last_name_error=str(exc)
+            for q in result[0]:
+                q.ts=captured_at
+                if names:q.name=names.names.get(q.code,q.name)
+            if names and getattr(names,'last_error',''):self.last_scan_diagnostic+='｜股名資料庫寫入未完成：'+names.last_error
             return result
         finally:self.last_table_seconds=time.perf_counter()-started
 
@@ -292,7 +316,7 @@ class AutoUI:
                 anchors_ready=lambda anchors,scores:self.remember_fast_rows(image,bounds,anchors,scores))
             if cells is not None:
                 quotes,bad,metrics=cells
-                self.last_scan_diagnostic=f'變動格快掃｜重用{metrics["reused"]}格｜重讀{metrics["changed"]}格｜有效{len(quotes)}列'
+                self.last_scan_diagnostic=f'變動格快掃｜重用{metrics["reused"]}格｜重讀{metrics["changed"]}格｜有效{len(quotes)}列｜跳過長股號{metrics.get("skipped",0)}列'
                 self.cell_metrics=metrics
                 return quotes,bad
         if memory and getattr(self,'force_fresh_ocr',False):
@@ -301,6 +325,9 @@ class AutoUI:
         quotes,bad=scan_numeric_batch(image,bounds,self.read_auto_ocr,names,memory=memory,focus=lambda fields,stage,row=None:self.focus_columns(image,bounds,fields,stage,row),
                                       defer_names=getattr(self,'numeric_priority',False),
                                       anchors_ready=lambda anchors,scores:self.remember_fast_rows(image,bounds,anchors,scores))
+        nav=(getattr(self,'fast_code_cache',None) or (None,None,[]))[2]
+        if not quotes and excluded_only(nav):
+            self.last_scan_diagnostic=f'跳過超過四位股號 {len(nav)} 列';return [],0
         if not quotes and (getattr(self,'force_fresh_ocr',False) or max(image.size)>1600):
             from ocr_recovery import tiled_numeric,fresh_ocr,FreshMemory
             memory=self.get_ocr_learning()
@@ -421,6 +448,8 @@ class AutoUI:
         try:
             (BASE/'stock-names.json').unlink(missing_ok=True)
             (BASE/'stock-names-learning.json').unlink(missing_ok=True)
+            (BASE/'stock-names.sqlite3').unlink(missing_ok=True)
+            self.deferred_names={};self.deferred_name_tried={}
             self.stock_names=None
             self.say('股名記憶已清除，下次讀取時重新學習。')
         except OSError as exc:self.say('無法清除股名記憶：'+str(exc))
@@ -784,7 +813,9 @@ class AutoUI:
                                 self.last_scan_diagnostic=f'{type(error).__name__}: {error}'
                                 result=([],1)
                             self.events.put((token,'auto_rate',dict(elapsed=time.monotonic()-started,count=len(result[0]))))
-                            if result[0]:failed_reads[0]=0
+                            anchors=(getattr(self,'fast_code_cache',None) or (None,None,[]))[2]
+                            excluded_page=not result[0] and auto.get('discovered') and excluded_only(anchors)
+                            if result[0] or excluded_page:failed_reads[0]=0
                             else:
                                 failed_reads[0]+=1
                                 detail=getattr(self,'last_scan_diagnostic','未取得完整數字列')
@@ -913,7 +944,7 @@ class AutoUI:
                         diagnostic.update(stage='排行讀取完成，等待下次切換',count=len(collected))
                         wait_until=time.monotonic()+dwell
                         if getattr(self,'deferred_names',None):
-                            self.events.put((token,'auto_status','數字篩選已完成：利用輪切等待時間批次補讀股名（最多8檔）'))
+                            self.events.put((token,'auto_status','數字篩選已完成：利用輪切等待時間批次補讀股名（最多32檔，已記錄股號不重讀）'))
                             try:self.learn_deferred_names(c.check)
                             except AutomationStopped:raise
                             except Exception as error:

@@ -25,14 +25,14 @@ class CellTests(unittest.TestCase):
     def test_unchanged_cells_skip_ocr_and_changed_price_is_reread(self):
         cache=OrderedDict();first=self.scan(self.image,cache)
         self.assertEqual(len(first[0]),2);self.assertEqual(first[2]['changed'],10)
-        second=self.scan(self.image,cache);self.assertEqual(self.calls,1);self.assertEqual(second[2]['reused'],10)
+        second=self.scan(self.image,cache);self.assertEqual(self.calls,2);self.assertEqual(second[2]['reused'],10)
         changed=self.image.copy();changed.putpixel((42,2),(11,0,0))
-        third=self.scan(changed,cache);self.assertEqual(self.calls,2)
+        third=self.scan(changed,cache);self.assertEqual(self.calls,3)
         self.assertEqual(third[0][0].price,101);self.assertEqual(third[2]['changed'],1)
         self.assertEqual(third[2]['reused'],9)
     def test_forced_recovery_does_not_reuse_cell_cache(self):
         cache=OrderedDict();self.scan(self.image,cache);result=self.scan(self.image,cache,force=True)
-        self.assertEqual(self.calls,2);self.assertEqual(result[2]['reused'],0)
+        self.assertEqual(self.calls,4);self.assertEqual(result[2]['reused'],0)
     def test_incomplete_cells_return_to_existing_fallback(self):
         cache=OrderedDict();self.read=lambda image:[]
         self.assertIsNone(self.scan(self.image,cache));self.assertEqual(len(cache),0)
