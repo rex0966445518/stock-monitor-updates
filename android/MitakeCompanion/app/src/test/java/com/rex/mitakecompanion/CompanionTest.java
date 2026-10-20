@@ -123,4 +123,28 @@ public class CompanionTest {
         assertTrue(ConnectionDiagnosis.reason(new java.io.IOException("配對已失效")).contains("重新掃碼"));
         assertFalse(ConnectionDiagnosis.reason(new java.io.IOException("token-secret")).contains("token-secret"));
     }
+    String candleFixture()throws Exception{android.os.SystemClock.setCurrentTimeMillis(1792483200000L);try(InputStream in=getClass().getResourceAsStream("/yahoo_2330_5m.json")){return new String(in.readAllBytes(),StandardCharsets.UTF_8);}}
+    @Test public void fiveMinuteParserUsesActualOhlcSchemaAndRejectsMismatches()throws Exception{
+        String fixture=candleFixture();IntradayData d=IntradayData.parse(fixture,"2330.TW");
+        assertEquals(4,d.bars.size());assertEquals(2400,d.bars.get(0).open,.01);assertTrue(d.bars.get(1).time>d.bars.get(0).time);
+        assertThrows(IllegalArgumentException.class,()->IntradayData.parse(fixture,"2330.TWO"));
+        assertThrows(IllegalArgumentException.class,()->IntradayData.parse(fixture.replace("\"5m\"","\"1d\""),"2330.TW"));
+        assertTrue(IntradayData.validCode("0050"));assertFalse(IntradayData.validCode("2330.TW"));assertFalse(IntradayData.validCode("../2330"));
+    }
+    @Test public void nullAndInvalidCandlesAreSkippedWithoutInventingBars()throws Exception{
+        JSONObject json=new JSONObject(candleFixture()),r=json.getJSONObject("chart").getJSONArray("result").getJSONObject(0);
+        JSONObject q=r.getJSONObject("indicators").getJSONArray("quote").getJSONObject(0);
+        q.getJSONArray("open").put(0,JSONObject.NULL);q.getJSONArray("high").put(1,1);
+        IntradayData d=IntradayData.parse(json.toString(),"2330.TW");assertEquals(2,d.bars.size());
+        q.getJSONArray("close").put(2,JSONObject.NULL).put(3,JSONObject.NULL);
+        assertThrows(IllegalArgumentException.class,()->IntradayData.parse(json.toString(),"2330.TW"));
+    }
+    @Test public void nativeCandleChartDrawsAndStockCardIsReused()throws Exception{
+        MainActivity a=Robolectric.buildActivity(MainActivity.class).setup().get();
+        IntradayRepository repo=new IntradayRepository();MiniCandleView chart=new MiniCandleView(a,"2330",repo);chart.setTestData(IntradayData.parse(candleFixture(),"2330.TW"));
+        chart.layout(0,0,900,560);android.graphics.Bitmap bitmap=android.graphics.Bitmap.createBitmap(900,560,android.graphics.Bitmap.Config.ARGB_8888);chart.draw(new android.graphics.Canvas(bitmap));
+        assertTrue(chart.getContentDescription().toString().contains("五分K"));assertTrue(chart.getContentDescription().toString().contains("來源可能延遲"));
+        a.cards.removeAllViews();JSONObject r=event(5,100,false).put("peak",5);a.addCard(r,false);View first=a.cards.getChildAt(0);a.cards.removeAllViews();a.addCard(r,false);assertSame(first,a.cards.getChildAt(0));
+        assertTrue(first instanceof StockCard);repo.close();a.finish();
+    }
 }

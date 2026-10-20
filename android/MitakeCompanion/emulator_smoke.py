@@ -87,6 +87,11 @@ with tempfile.TemporaryDirectory() as folder:
         time.sleep(8)
         ui=dump();assert '測試候選' in ui and '5/6' in ui,ui
         screen('companion-5of6.png')
+        # The stock card embeds native five-minute K and separates its source.
+        assert '5分K' in ui or '五分K' in ui or '五分' in ui,ui
+        adb('shell','input','swipe','450','1250','450','500','400')
+        time.sleep(5)
+        screen('companion-card-chart.png')
         notification=adb('shell','dumpsys','notification','--noredact')
         assert 'candidate-2330' in notification,notification[-5000:]
         promote.set();time.sleep(7)

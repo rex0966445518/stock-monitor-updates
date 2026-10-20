@@ -17,6 +17,8 @@ import java.util.*;
 public class MainActivity extends Activity {
     static final int BG=Color.rgb(10,16,27),PANEL=Color.rgb(18,29,45),TEXT=Color.rgb(238,244,251),MUTED=Color.rgb(143,163,186),TEAL=Color.rgb(101,230,196),RED=Color.rgb(255,111,133),GOLD=Color.rgb(245,200,112);
     private final Handler handler=new Handler(Looper.getMainLooper());
+    private final Map<String,StockCard> stockCards=new HashMap<>();
+    private final IntradayRepository intraday=new IntradayRepository();
     private AppUpdater updater;private SpeechAnnouncer testSpeech;
     LinearLayout content,cards;TextView connection,counts6,counts5,freshness;String filter="全部",last="";
     private final Runnable tick=new Runnable(){public void run(){refresh();handler.postDelayed(this,1000);}};
@@ -32,7 +34,7 @@ public class MainActivity extends Activity {
         scroll.setOnApplyWindowInsetsListener((v,in)->{int top,bottom;if(Build.VERSION.SDK_INT>=30){android.graphics.Insets i=in.getInsets(WindowInsets.Type.systemBars());top=i.top;bottom=i.bottom;}else{top=in.getSystemWindowInsetTop();bottom=in.getSystemWindowInsetBottom();}content.setPadding(dp(22),top+dp(20),dp(22),bottom+dp(24));return in;});
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
         TextView brand=text("◉  漲停雷達",27,TEXT,true);header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));header.addView(button("配對",this::showPairing));add(content,header,8);
-        add(content,text("MITAKE LIVE  /  雷允澤製 v0.1.3",11,MUTED,false),22);
+        add(content,text("MITAKE LIVE  /  雷允澤製 v0.1.4",11,MUTED,false),22);
         LinearLayout tools=new LinearLayout(this);
         tools.addView(button("一鍵更新",()->updater.check()),new LinearLayout.LayoutParams(0,-2,1));
         tools.addView(button("語音通報",this::showVoice),new LinearLayout.LayoutParams(0,-2,1));tools.addView(button("連線診斷",this::showDiagnosis),new LinearLayout.LayoutParams(0,-2,1));add(content,tools,10);
@@ -87,7 +89,7 @@ public class MainActivity extends Activity {
         TextView hint=text("同Wi-Fi可直接連線；外出請經私人VPN連回電腦。\n電腦須保持開機、啟用連線並執行掃描。",12,MUTED,false);fields.addView(hint);
         new AlertDialog.Builder(this).setTitle("電腦連動").setView(fields).setPositiveButton("連線",(d,w)->{try{String value=token.getText().toString().trim();if(value.startsWith("mitake:"))acceptPair(value);else connect(new Pairing(address.getText().toString(),value));}catch(Exception e){message("無法連線",e.getMessage());}}).setNeutralButton("掃描QR碼",(d,w)->scan()).setNegativeButton("取消",null).show();
     }
-    @Override public void onDestroy(){if(updater!=null)updater.close();if(testSpeech!=null)testSpeech.close();super.onDestroy();}
+    @Override public void onDestroy(){intraday.close();stockCards.clear();if(updater!=null)updater.close();if(testSpeech!=null)testSpeech.close();super.onDestroy();}
     void showDiagnosis(){
         String address=BridgeService.prefs(this).getString("address","");
         long success=BridgeService.prefs(this).getLong("last_success",0);
@@ -118,20 +120,18 @@ public class MainActivity extends Activity {
         if(rows!=null)for(int i=0;i<rows.length();i++){
             JSONObject r=rows.optJSONObject(i);if(r==null)continue;
             boolean fresh=online&&data.optBoolean("active")&&r.optBoolean("valid")&&now-r.optDouble("ts")<=15&&now>=r.optDouble("ts");
-            int count=r.optInt("matched");if(fresh&&count==6)n6++;if(fresh&&count==5)n5++;
+            int count=r.optInt("matched");if(count<5&&r.optInt("peak")<5)continue;if(fresh&&count==6)n6++;if(fresh&&count==5)n5++;
             if(filter.equals("6/6")&&count!=6||filter.equals("5/6")&&count!=5)continue;
             addCard(r,fresh);
         }
+        Set<String> present=new HashSet<>();if(rows!=null)for(int i=0;i<rows.length();i++){JSONObject r=rows.optJSONObject(i);if(r!=null)present.add(r.optString("code"));}stockCards.keySet().retainAll(present);
         counts6.setText(String.valueOf(n6));counts5.setText(String.valueOf(n5));
         if(cards.getChildCount()==0){TextView empty=text(data==null?"等待與電腦配對\n\n在電腦開啟「進階工具 → 手機連動／配對」\n啟用連線後，掃描QR碼即可。":"尚無此類候選\n\n電腦需開啟全部六項條件並持續掃描。\n找到候選後會自動出現在這裡。",15,MUTED,false);empty.setPadding(dp(18),dp(28),dp(18),dp(28));empty.setBackground(box(PANEL,0,16));add(cards,empty,12);}
     }
-    void addCard(JSONObject r,boolean fresh){int count=r.optInt("matched");int accent=fresh?(count==6?RED:TEAL):MUTED;
-        LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(dp(18),dp(17),dp(18),dp(16));card.setBackground(box(PANEL,fresh?Color.rgb(42,71,79):Color.rgb(30,44,62),18));
-        LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);String name=r.optString("name");if(name.isEmpty())name="股名待補";
-        row.addView(text(name+"  "+r.optString("code"),18,TEXT,true),new LinearLayout.LayoutParams(0,-2,1));row.addView(text(count+"/6",24,accent,true));add(card,row,10);
-        LinearLayout price=new LinearLayout(this);price.addView(text(String.format(Locale.US,"%.2f",r.optDouble("price")),29,TEXT,true),new LinearLayout.LayoutParams(0,-2,1));price.addView(text(String.format(Locale.US,"%+.2f%%",r.optDouble("gain")),18,r.optDouble("gain")>=0?RED:TEAL,true));add(card,price,9);
-        String state=!fresh?"非即時／待複查":r.optBoolean("confirmed")?"必要檢核已通過":"觀察候選 · 必要檢核待確認";
-        add(card,text(state,12,accent,true),7);add(card,text(String.format(Locale.TAIWAN,"%,d 張",r.optInt("volume"))+"  ·  "+clock(r.optDouble("ts"))+"  ·  曾達 "+r.optInt("peak")+"/6",11,MUTED,false),0);
-        card.setOnClickListener(v->message(r.optString("code")+" · 判定原因",r.optString("reason")+"\n\n資料時間 "+clock(r.optDouble("ts"))+"\n來源："+r.optString("source")+"\n觀察訊號不代表一定漲停。"));add(cards,card,12);
+    void addCard(JSONObject r,boolean fresh){
+        String code=r.optString("code");
+        StockCard card=stockCards.get(code);
+        if(card==null){card=new StockCard(this,code,intraday);stockCards.put(code,card);}
+        card.update(r,fresh);add(cards,card,12);
     }
 }
