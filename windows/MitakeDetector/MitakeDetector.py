@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.75'
+VERSION = '0.3.76'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -274,46 +274,38 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
             menu.add_command(label=label, command=action)
         advanced.configure(menu=menu); advanced.pack(side='left', padx=4)
         self.main_actions=bar
-        auto_bar = ttk.Frame(root); auto_bar.pack(fill='x', padx=18, pady=(0, 8))
+        auto_bar = ttk.Frame(self.header); auto_bar.grid(row=1,column=0,columnspan=3,sticky='ew',pady=(4,0))
         self.voice_var=tk.BooleanVar(value=self.config.get('voice_enabled',True))
         ttk.Checkbutton(auto_bar,text='語音提醒',variable=self.voice_var,command=self.toggle_task_voice).pack(side='left',padx=5)
         ttk.Label(auto_bar, text='F8 開始／暫停 · 三竹畫面保持可見').pack(side='left', padx=8)
-        opts = ttk.LabelFrame(root, text='篩選條件（變更後，停止並重新開始以套用）'); opts.pack(fill='x', padx=18)
         self.vars = {}
-        fields = [('min_price', '股價 ≥'), ('min_volume', '總量張 ≥'), ('min_gain', '漲幅 ≥%'), ('max_gain', '漲幅 ≤%'), ('interval', '間隔秒'), ('cooldown', '提醒間隔秒')]
-        for idx, (key, label) in enumerate(fields):
-            ttk.Label(opts, text=label).grid(row=0, column=idx*2, padx=4, pady=9)
-            self.vars[key] = tk.StringVar(value=str(self.config[key]))
-            ttk.Entry(opts, textvariable=self.vars[key], width=7).grid(row=0, column=idx*2+1)
-        for idx, (key, label, valkey) in enumerate([('use_turnover', '換手率 ≥%', 'min_turnover'), ('use_accel', '近5分量速比 ≥', 'accel'), ('use_breakout', '觀測突破後連續兩次守穩', None)]):
-            self.vars[key] = tk.BooleanVar(value=self.config[key])
-            ttk.Checkbutton(opts, text=label, variable=self.vars[key]).grid(row=1, column=idx*4, columnspan=3, padx=5, pady=8, sticky='w')
-            if valkey:
-                self.vars[valkey] = tk.StringVar(value=str(self.config[valkey]))
-                ttk.Entry(opts, textvariable=self.vars[valkey], width=7).grid(row=1, column=idx*4+3)
+        for key in ('min_price','min_volume','min_gain','max_gain','interval','cooldown','min_turnover','accel'):
+            self.vars[key]=tk.StringVar(value=str(self.config[key]))
+        for key in ('use_turnover','use_accel','use_breakout'):
+            self.vars[key]=tk.BooleanVar(value=self.config[key])
         self.build_steady_controls(auto_bar)
         self.vars['guard_enabled']=tk.BooleanVar(value=self.config['guard_enabled'])
         for key in ['guard_warmup','guard_window','guard_hold','guard_max_gap','guard_min_rise','guard_max_pullback']:
             self.vars[key]=tk.StringVar(value=str(self.config[key]))
         self.scan_phase=tk.StringVar(value='待機｜按 F8 開始連續掃描')
-        self.phase_label=tk.Label(root,textvariable=self.scan_phase,bg='#12243a',fg='#68f5d1',font=('Microsoft JhengHei',14,'bold'),anchor='w',justify='left')
-        self.phase_label.pack(fill='x',padx=20,pady=(7,0))
+        self.phase_label=tk.Label(self.header_status,textvariable=self.scan_phase,bg='#12243a',fg='#68f5d1',font=('Microsoft JhengHei',14,'bold'),anchor='w',justify='left')
+        self.phase_label.pack(fill='x')
         self.phase_label.bind('<Configure>',lambda event:self.phase_label.configure(wraplength=max(80,event.width-8)))
         self.status = tk.StringVar(value='開啟三竹「熱門排行」，按 F8 或「開始掃描」。首次會自動定位；再次按 F8 停止。')
         from scan_rate import ScanRate
         self.scan_rate=ScanRate();self.scan_rate_var=tk.StringVar(value=self.scan_rate.text())
         self.observation_summary=tk.StringVar(value='尚未讀取股票資料｜轉強候選待判斷')
-        self.summary_label=tk.Label(root,textvariable=self.observation_summary,bg='#0b1020',fg='#edf2ff',anchor='w',justify='left',wraplength=1400)
-        self.summary_label.pack(fill='x',padx=20,pady=(0,6))
+        self.summary_label=tk.Label(self.header_status,textvariable=self.observation_summary,bg='#0b1020',fg='#edf2ff',anchor='w',justify='left',wraplength=1400)
+        self.summary_label.pack(fill='x',pady=(2,3))
         self.summary_label.bind('<Configure>',lambda event:self.summary_label.configure(wraplength=max(80,event.width-8)))
-        filters=ttk.Frame(root);filters.pack(fill='x',padx=20,pady=(0,5))
-        ttk.Label(filters,text='隱藏結果：').pack(side='left')
+        filters=ttk.Frame(self.header_status);filters.pack(fill='x')
+        ttk.Label(filters,text='隱藏結果：').grid(row=0,column=0,sticky='w')
         self.result_filters={}
         saved_filters=self.config.get('result_filters',{})
-        for key,label in [('gain','漲幅不符'),('turnover','換手率不足（已啟用條件時）'),('price','股價不足')]:
+        for index,(key,label) in enumerate([('gain','漲幅不符'),('turnover','換手率不足'),('price','股價不足')]):
             var=tk.BooleanVar(value=bool(saved_filters.get(key,False)))
             self.result_filters[key]=var
-            ttk.Checkbutton(filters,text=label,variable=var,command=self.change_result_filters).pack(side='left',padx=5)
+            ttk.Checkbutton(filters,text=label,variable=var,command=self.change_result_filters).grid(row=1+index//2,column=index%2,sticky='w',padx=2)
         table_frame = ttk.Frame(root); table_frame.pack(fill='both', expand=True, padx=18)
         table_outer=table_frame
         notebook=ttk.Notebook(table_outer);notebook.pack(fill='both',expand=True)

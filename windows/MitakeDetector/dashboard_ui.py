@@ -10,16 +10,17 @@ class DashboardUI:
     def build_market_header(self):
         tk=self.tk
         self.header=tk.Frame(self.root,bg='#0b1020');self.header.pack(fill='x',padx=20,pady=(15,3))
-        self.header.columnconfigure(0,weight=3,uniform='header');self.header.columnconfigure(1,weight=2,uniform='header')
+        self.header.columnconfigure(0,weight=4,uniform='header');self.header.columnconfigure(1,weight=4,uniform='header');self.header.columnconfigure(2,weight=2,uniform='header')
         from MitakeDetector import VERSION
         self.product_title=tk.Label(self.header,text='漲停板探測器-雷允澤製 v'+VERSION,fg='#ff5879',bg='#0b1020',font=('Microsoft JhengHei',22,'bold'),justify='left',anchor='w')
         self.product_title.grid(row=0,column=0,sticky='w')
         self.market_var=tk.StringVar(value='台股加權指數\n行情待取得')
         self.market_label=tk.Label(self.header,textvariable=self.market_var,bg='#0b1020',fg='#a6b8d2',font=('Microsoft JhengHei',12,'bold'),justify='right',anchor='e')
-        self.market_label.grid(row=0,column=1,sticky='e')
+        self.market_label.grid(row=0,column=2,sticky='ne')
+        self.header_status=tk.Frame(self.header,bg='#0b1020');self.header_status.grid(row=0,column=1,sticky='nsew',padx=12)
         def resize(event):
-            self.product_title.configure(wraplength=max(100,int(event.width*.58)))
-            self.market_label.configure(wraplength=max(100,int(event.width*.38)))
+            self.product_title.configure(wraplength=max(100,int(event.width*.39)))
+            self.market_label.configure(wraplength=max(100,int(event.width*.19)))
         self.header.bind('<Configure>',resize)
         self.index_quote=None;self.index_error=''
     def build_daily_bottom(self):

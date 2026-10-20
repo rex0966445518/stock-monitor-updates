@@ -498,19 +498,36 @@ class AutoUI:
                 else:self.say('F8未啟動：請將熱門排行視窗放在最前方。')
         self.root.after(20,self.poll_f8)
 
+    def build_filter_settings(self,parent):
+        self.ttk.Label(parent,text='變更後請儲存，並重新開始掃描以套用。',wraplength=800).pack(anchor='w',padx=18,pady=15)
+        form=self.ttk.Frame(parent);form.pack(fill='x',padx=18)
+        fields=[('min_price','股價 ≥'),('min_volume','總量張 ≥'),('min_gain','漲幅 ≥%'),('max_gain','漲幅 ≤%'),('interval','間隔秒'),('cooldown','提醒間隔秒'),('min_turnover','換手率 ≥%'),('accel','近5分量速比 ≥')]
+        for row,(key,label) in enumerate(fields):
+            self.ttk.Label(form,text=label).grid(row=row,column=0,sticky='w',pady=8)
+            self.ttk.Entry(form,textvariable=self.vars[key],width=12).grid(row=row,column=1,sticky='w',padx=12)
+        for key,label in [('use_turnover','啟用換手率條件'),('use_accel','啟用近5分量速比'),('use_breakout','觀測突破後連續兩次守穩')]:
+            self.ttk.Checkbutton(parent,text=label,variable=self.vars[key]).pack(anchor='w',padx=18,pady=6)
+        def save_conditions():
+            if self.settings():self.say('篩選條件已儲存，重新開始掃描後套用')
+        self.ttk.Button(parent,text='儲存篩選條件',command=save_conditions).pack(anchor='w',padx=18,pady=15)
+
     def configure_auto(self):
         from tkinter import messagebox
         if not self.idle():return
         if __import__('os').name!='nt':
             messagebox.showinfo('Windows功能','自動輪切需要在Windows安裝版使用。');return
-        top=self.tk.Toplevel(self.root);top.title('三竹自動輪切設定');top.geometry('860x780')
+        top=self.tk.Toplevel(self.root);top.title('三竹自動輪切設定');top.geometry('960x850')
+        tabs=self.ttk.Notebook(top);tabs.pack(fill='both',expand=True)
+        conditions=self.ttk.Frame(tabs);body=self.ttk.Frame(tabs)
+        tabs.add(conditions,text='篩選條件');tabs.add(body,text='輪切排行與定位')
+        self.build_filter_settings(conditions)
         cfg=json.loads(json.dumps(self.config.get('auto_config') or {}))
         windows=[w for w in WindowsController.windows() if '漲停板探測器-雷允澤製' not in w[1] and '三竹盤中轉強偵測器' not in w[1] and '三竹自動輪切設定' not in w[1]]
         choices=[f'{title}  [視窗 {hwnd}]' for hwnd,title in windows]
-        self.ttk.Button(top,text='一鍵自動設定（免框選）',command=lambda:(top.destroy(),self.auto_setup())).pack(anchor='w',padx=15,pady=5)
-        self.ttk.Label(top,text='1. 選擇三竹視窗（啟動後會使用滑鼠；F8開始／停止，可操作探測器主頁，三竹畫面保持可見）').pack(anchor='w',padx=15,pady=10)
+        self.ttk.Button(body,text='一鍵自動設定（免框選）',command=lambda:(top.destroy(),self.auto_setup())).pack(anchor='w',padx=15,pady=5)
+        self.ttk.Label(body,text='1. 選擇三竹視窗（啟動後會使用滑鼠；F8開始／停止，可操作探測器主頁，三竹畫面保持可見）').pack(anchor='w',padx=15,pady=10)
         choice=self.tk.StringVar()
-        combo=self.ttk.Combobox(top,textvariable=choice,values=choices,state='readonly',width=90);combo.pack(padx=15,fill='x')
+        combo=self.ttk.Combobox(body,textvariable=choice,values=choices,state='readonly',width=90);combo.pack(padx=15,fill='x')
         selected=next((i for i,w in enumerate(windows) if w[1]==cfg.get('title')),None)
         if selected is None:selected=next((i for i,w in enumerate(windows) if '三竹' in w[1]),None)
         if selected is not None:combo.current(selected)
@@ -571,7 +588,7 @@ class AutoUI:
             self.ttk.Button(row,text=title,command=lambda k=key:region(k)).pack(side='left',padx=4)
             labels[key]=self.tk.StringVar(value='已設定' if cfg.get(key) else '未設定')
             self.ttk.Label(row,textvariable=labels[key]).pack(side='left',padx=3)
-        self.ttk.Label(top,text='2. 勾選要輪切的排行。表格需沿用主畫面的六欄位置校正；各排行欄位須一致。').pack(anchor='w',padx=15,pady=5)
+        self.ttk.Label(body,text='2. 勾選要輪切的排行。表格需沿用主畫面的六欄位置校正；各排行欄位須一致。').pack(anchor='w',padx=15,pady=5)
         ranks=self.ttk.Frame(top);ranks.pack(fill='x',padx=15)
         enabled=set(cfg.get('rankings',['漲幅排行','預估量增','大單流入','大單匯集']))
         rank_vars={}
@@ -584,16 +601,16 @@ class AutoUI:
         self.ttk.Label(fields,text='每個排行讀取後停留秒數 ≥3').pack(side='left');self.ttk.Entry(fields,textvariable=delay,width=6).pack(side='left',padx=5)
         self.ttk.Label(fields,text='每個排行讀取頁數 1～20').pack(side='left',padx=10);self.ttk.Entry(fields,textvariable=pages,width=6).pack(side='left')
         full_table=self.tk.BooleanVar(value=cfg.get('full_table',True))
-        self.ttk.Checkbutton(top,text='自動逐段讀取清單（建議）：重疊捲動，連續三次未移動才結束；關閉則使用指定頁數',variable=full_table).pack(anchor='w',padx=15)
+        self.ttk.Checkbutton(body,text='自動逐段讀取清單（建議）：重疊捲動，連續三次未移動才結束；關閉則使用指定頁數',variable=full_table).pack(anchor='w',padx=15)
         adaptive=self.tk.BooleanVar(value=cfg.get('adaptive',True))
-        self.ttk.Checkbutton(top,text='自適應加速：記住已驗證搜尋路徑，成功讀取後縮短停留（最低1秒）',variable=adaptive).pack(anchor='w',padx=15)
+        self.ttk.Checkbutton(body,text='自適應加速：記住已驗證搜尋路徑，成功讀取後縮短停留（最低1秒）',variable=adaptive).pack(anchor='w',padx=15)
         def clear_experience():
             from MitakeDetector import BASE
             try:(BASE/'automation-experience.json').unlink(missing_ok=True)
             except OSError as exc:messagebox.showerror('清除失敗',str(exc));return
             self.say('操作經驗已清除，下次重新學習')
-        self.ttk.Button(top,text='清除操作經驗',command=clear_experience).pack(anchor='w',padx=15)
-        self.ttk.Label(top,text='優先重用已驗證搜尋路徑，失敗時回頂端找文字，再確認切換後標題；找不到或視窗縮放時停止。\n多頁使用滑鼠滾輪向下讀取並依股號合併；不是官方全市場資料。\n首次先按「測試輪切一次」，確認切換正確後再開始持續輪切。',wraplength=810).pack(anchor='w',padx=15,pady=7)
+        self.ttk.Button(body,text='清除操作經驗',command=clear_experience).pack(anchor='w',padx=15)
+        self.ttk.Label(body,text='優先重用已驗證搜尋路徑，失敗時回頂端找文字，再確認切換後標題；找不到或視窗縮放時停止。\n多頁使用滑鼠滾輪向下讀取並依股號合併；不是官方全市場資料。\n首次先按「測試輪切一次」，確認切換正確後再開始持續輪切。',wraplength=810).pack(anchor='w',padx=15,pady=7)
         def save(close=True):
             try:
                 if combo.current()>=0:hwnd()
@@ -602,6 +619,7 @@ class AutoUI:
                 if not 3<=cfg['seconds']<=3600 or not 1<=cfg['pages']<=20:raise ValueError('秒數需3～3600，頁數需1～20')
                 cfg['rankings']=[n for n,v in rank_vars.items() if v.get()]
                 if not cfg['rankings']:raise ValueError('請至少勾選一個排行')
+                if not self.settings():return False
                 self.persist_auto_preferences(cfg)
                 self.say('自動輪切設定已儲存，共'+str(len(cfg['rankings']))+'個排行；讀取後停留 '+str(cfg['seconds'])+' 秒，重開後保留')
                 if close:top.destroy()

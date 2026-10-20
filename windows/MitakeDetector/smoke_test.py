@@ -79,6 +79,17 @@ def run_smoke_test(report):
         root.update()
         assert app.update_panel.window.winfo_ismapped()
         assert app.log.winfo_height()>=100
+        assert app.phase_label.master==app.header_status
+        assert app.summary_label.master==app.header_status
+        assert app.header_status.winfo_rootx()>app.product_title.winfo_rootx()
+        assert app.tree.winfo_rooty()>app.main_actions.winfo_rooty()
+        settings_preview=app.tk.Toplevel(root)
+        app.build_filter_settings(settings_preview)
+        root.update_idletasks()
+        entries=[w for frame in settings_preview.winfo_children() for w in frame.winfo_children() if w.winfo_class()=='TEntry']
+        assert len(entries)==8
+        assert entries[0].get()==app.vars['min_price'].get()
+        settings_preview.destroy()
         assert app.market_label.winfo_rootx()>app.product_title.winfo_rootx()
         assert app.log.winfo_rootx()>app.today_tree.winfo_rootx()
         assert app.market_label.winfo_rootx()+app.market_label.winfo_width()<=root.winfo_rootx()+root.winfo_width()
