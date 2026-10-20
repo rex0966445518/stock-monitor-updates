@@ -116,6 +116,12 @@ def run_smoke_test(report):
         assert fast[0].price==100.5 and fast[1].volume==2800
         assert fast[0].name=='TESTA' and names.reused==2
         info.update(numeric_batch_rows=len(fast),numeric_batch_seconds=fast_seconds,remembered_names_reused=names.reused)
+        from ocr_recovery import tiled_numeric,fresh_ocr
+        with fresh_ocr(app):
+            recovered,rb,anchors,scores=tiled_numeric(im,bounds,app.read_auto_ocr,names,height=128)
+        assert {q.code for q in recovered}=={'2330','2317'},repr(recovered)
+        assert next(q for q in recovered if q.code=='2317').price==205
+        info['fresh_tiled_recovery_rows']=len(recovered)
         # Actual bundled OCR: unknown names must not block numeric results.
         app.stock_names=StockNames();app.numeric_priority=True
         started=time.perf_counter()

@@ -12,7 +12,7 @@ from research_ui import ResearchUI
 from dashboard_ui import DashboardUI
 from pathlib import Path
 
-VERSION = '0.3.59'
+VERSION = '0.3.60'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'

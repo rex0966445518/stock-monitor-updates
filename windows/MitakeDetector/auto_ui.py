@@ -137,7 +137,7 @@ class AutoUI:
                 threading.Thread(target=c.monitor_hotkey,daemon=True).start()
                 im,_=c.image([0,0,1,1])
                 self.events.put((token,'auto_status','正在辨識排行下拉框與六個表頭…'))
-                discovered=detect_layout(im,self.read_auto_ocr);c.check()
+                discovered=self.detect_layout_recovering(im);c.check()
                 combo=absolute_roi(discovered['combo'],c.rect())
                 c.click((combo['left']+combo['width']//2,combo['top']+combo['height']//2));c.pause(.6)
                 self.events.put((token,'auto_status','正在定位展開選單…'))
@@ -282,9 +282,20 @@ class AutoUI:
         from MitakeDetector import BASE
         names=getattr(self,'stock_names',None)
         if names is None:self.stock_names=names=StockNames(BASE/'stock-names.json')
-        quotes,bad=scan_numeric_batch(image,bounds,self.read_auto_ocr,names,memory=self.get_ocr_learning(),focus=lambda fields,stage,row=None:self.focus_columns(image,bounds,fields,stage,row),
+        memory=self.get_ocr_learning()
+        if memory and getattr(self,'force_fresh_ocr',False):
+            from ocr_recovery import FreshMemory
+            memory=FreshMemory(memory)
+        quotes,bad=scan_numeric_batch(image,bounds,self.read_auto_ocr,names,memory=memory,focus=lambda fields,stage,row=None:self.focus_columns(image,bounds,fields,stage,row),
                                       defer_names=getattr(self,'numeric_priority',False),
                                       anchors_ready=lambda anchors,scores:self.remember_fast_rows(image,bounds,anchors,scores))
+        if not quotes and (getattr(self,'force_fresh_ocr',False) or max(image.size)>1600):
+            from ocr_recovery import tiled_numeric,fresh_ocr,FreshMemory
+            memory=self.get_ocr_learning()
+            with fresh_ocr(self):
+                quotes,bad,anchors,scores=tiled_numeric(image,bounds,self.read_auto_ocr,names,
+                    memory=FreshMemory(memory) if memory else None,status=lambda box:self.recovery_region(image,box,'分區放大複查數字'))
+            self.remember_fast_rows(image,bounds,anchors,scores)
         if not quotes:quotes,bad=self.scan_mapped_table(image,bounds)
         self.last_table_seconds=time.perf_counter()-started
         self.last_scan_diagnostic=f'欄位辨識：有效{len(quotes)}列，略過{bad}列'
@@ -317,6 +328,25 @@ class AutoUI:
             quotes,rejected=parse(self.read_auto_ocr(high))
         self.last_scan_diagnostic=(f'整表複查：有效{len(quotes)}列｜股號文字{counts["code"]}、成交價{counts["price"]}、漲幅{counts["gain"]}、總量{counts["volume"]}；請核對欄位是否完整可見')
         return quotes,max(bad,rejected) if not quotes else rejected
+
+    def recovery_region(self,image,box,stage):
+        source=getattr(self,'scan_capture_region',None);context=getattr(self,'scan_focus_context',None)
+        if not source or not context:return
+        token,stop=context
+        left,top,right,bottom=box
+        self.events.put((token,'auto_status',f'{stage}｜x={left},y={top},w={right-left},h={bottom-top}'))
+        self.highlight_scan(token,dict(left=source['left']+left,top=source['top']+top,width=right-left,height=bottom-top),stop)
+
+    def detect_layout_recovering(self,image,require_combo=True):
+        from auto_detect import detect_layout
+        try:return detect_layout(image,self.read_auto_ocr,require_combo=require_combo)
+        except AutomationStopped:raise
+        except (ValueError,RuntimeError):
+            from ocr_recovery import fresh_ocr,tiled_tokens
+            with fresh_ocr(self):
+                return detect_layout(image,lambda crop:tiled_tokens(crop,self.read_auto_ocr,
+                    status=lambda box:self.recovery_region(crop,box,'表頭分區放大重新定位')),
+                    require_combo=require_combo)
 
     def show_scan_diagnostics(self):
         from MitakeDetector import BASE
@@ -550,12 +580,12 @@ class AutoUI:
         learning=self.get_ocr_learning()
         cache=getattr(self,'ocr_image_cache',None)
         if cache is None:self.ocr_image_cache=cache=OrderedDict()
-        if key in cache:
+        if key in cache and not getattr(self,'force_fresh_ocr',False):
             cache.move_to_end(key)
             self.ocr_cache_hits=getattr(self,'ocr_cache_hits',0)+1
             if learning:learning.record(persistent_key,cache[key],time.perf_counter()-started,'記憶體重用')
             return cache[key]
-        if learning:
+        if learning and not getattr(self,'force_fresh_ocr',False):
             remembered=learning.lookup(persistent_key)
             if remembered is not None:
                 cache[key]=remembered
@@ -645,10 +675,15 @@ class AutoUI:
                     from auto_detect import cached_layout
                     self.events.put((token,'auto_status','快速核對表頭頭尾位置，沿用已確認欄位…'))
                     full,_=c.image([0,0,1,1])
-                    layout,reused=cached_layout(full,self.read_auto_ocr,BASE/'header-layout.json',cfg.get('column_bounds'),auto.get('table'));c.check()
+                    try:layout,reused=cached_layout(full,self.read_auto_ocr,BASE/'header-layout.json',cfg.get('column_bounds'),auto.get('table'))
+                    except AutomationStopped:raise
+                    except (ValueError,RuntimeError):
+                        layout=self.detect_layout_recovering(full);reused=False
+                    c.check()
                     self.events.put((token,'auto_status','表頭頭尾一致，已略過逐欄辨識' if reused else '表頭配置已重新確認並記住'))
                     cfg['column_bounds']=layout['column_bounds'];auto['table']=layout['table']
                 priority_last={}
+                failed_reads=[0];saved_failure=[False]
                 cycle=saved['cycle'] if saved else 1
                 cycle_started=float((saved or {}).get('round_started') or time.time())
                 def round_clock():
@@ -668,7 +703,7 @@ class AutoUI:
                         switcher.switch(name)
                         self.events.put((token,'auto_status','已確認排行：'+name))
                         if test_only:continue
-                        collected={};rejected=0;begin=time.monotonic()
+                        collected={};rejected=0;begin=time.monotonic();failed_reads[0]=0;saved_failure[0]=False
                         counted=set(q['code'] for q in (table_resume or {}).get('quotes',[]))
                         def counts(done=False):
                             if done and auto.get('full_table',True):known_totals[name]=len(counted)
@@ -688,21 +723,37 @@ class AutoUI:
                             self.events.put((token,'auto_progress',(detail,rank_index,len(auto['rankings']))))
                         def read(image):
                             started=time.monotonic();self.events.put((token,'auto_rate',dict(start=started)))
+                            from ocr_recovery import fresh_ocr
+                            from contextlib import nullcontext
                             try:
-                                result=self.scan_recovering_table(image,cfg['column_bounds']) if auto.get('discovered') else self.scan(image,cfg['centers'])
-                                self.events.put((token,'auto_rate',dict(elapsed=time.monotonic()-started,count=len(result[0]))))
-                                return result
-                            except Exception:
-                                self.events.put((token,'auto_rate',dict(elapsed=time.monotonic()-started,count=0)))
-                                raise
+                                with fresh_ocr(self) if failed_reads[0] else nullcontext():
+                                    result=self.scan_recovering_table(image,cfg['column_bounds']) if auto.get('discovered') else self.scan(image,cfg['centers'])
+                            except AutomationStopped:raise
+                            except (ValueError,RuntimeError) as error:
+                                diagnostic.update(ocr_error_type=type(error).__name__,ocr_error=str(error))
+                                self.last_scan_diagnostic=f'{type(error).__name__}: {error}'
+                                result=([],1)
+                            self.events.put((token,'auto_rate',dict(elapsed=time.monotonic()-started,count=len(result[0]))))
+                            if result[0]:failed_reads[0]=0
+                            else:
+                                failed_reads[0]+=1
+                                detail=getattr(self,'last_scan_diagnostic','未取得完整數字列')
+                                diagnostic.update(ocr_detail=detail,image_size=getattr(image,'size',None),column_bounds=cfg.get('column_bounds'),table_roi=list(auto['table']),read_failures=failed_reads[0])
+                                self.events.put((token,'auto_status',f'第{diagnostic.get("segment",1)}段尚未讀到股票｜第{failed_reads[0]}次｜{detail}｜正在重新擷取、定位與複查'))
+                                if not saved_failure[0] and hasattr(image,'save'):
+                                    from scan_diagnostics import save_failed_capture
+                                    saved_failure[0]=True
+                                    diagnostic['failed_capture']=save_failed_capture(BASE/'scan-failures',image,diagnostic)
+                            return result
                         def recover_layout():
                             from auto_detect import detect_layout
                             diagnostic.update(stage='掃描中重新定位表頭')
                             self.events.put((token,'auto_status','讀不到股票資料：重新定位表頭與欄位，保留目前進度…'))
                             c.check();full,_=c.image([0,0,1,1])
                             try:
-                                layout=detect_layout(full,self.read_auto_ocr,require_combo=False)
-                            except ValueError as error:
+                                layout=self.detect_layout_recovering(full,require_combo=False)
+                            except AutomationStopped:raise
+                            except (ValueError,RuntimeError) as error:
                                 self.events.put((token,'auto_status','表頭重定位尚未成功：'+str(error)))
                                 diagnostic.update(layout_recovery_error=str(error))
                                 return False
