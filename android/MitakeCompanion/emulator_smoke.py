@@ -80,6 +80,19 @@ assert '新訊號語音通報' in dump()
 tap('試聽');time.sleep(2)
 assert 'FATAL EXCEPTION' not in adb('logcat','-d','-s','AndroidRuntime:E')
 
+# A user can test card content and the missing-app handoff without live candidates.
+adb('shell','input','swipe','450','400','450','1500','400')
+tap('顯示測試卡片（5/6、6/6）')
+adb('shell','input','swipe','450','1400','450','500','400')
+ui=dump();assert '測試｜台積電' in ui and '示範價格' in ui,ui
+screen('demo-card.png')
+tap('測試｜台積電  2330')
+assert '無法開啟籌碼K線' in dump()
+tap('取消')
+adb('shell','input','swipe','450','400','450','1600','500')
+tap('關閉測試卡片')
+assert '顯示測試卡片' in dump()
+
 with tempfile.TemporaryDirectory() as folder:
     bridge=MobileBridge(Path(folder)/'pair.json');bridge.start()
     stop=threading.Event();promote=threading.Event()
@@ -104,9 +117,9 @@ with tempfile.TemporaryDirectory() as folder:
         ui=dump();assert '測試候選' in ui and '5/6' in ui,ui
         screen('companion-5of6.png')
         # The stock card embeds native five-minute K and separates its source.
-        assert '5分K' in ui or '五分K' in ui or '五分' in ui,ui
         adb('shell','input','swipe','450','1250','450','500','400')
         time.sleep(5)
+        ui=dump();assert '5分K' in ui or '五分K' in ui or '五分' in ui,ui
         screen('companion-card-chart.png')
         notification=adb('shell','dumpsys','notification','--noredact')
         assert 'candidate-2330' in notification,notification[-5000:]

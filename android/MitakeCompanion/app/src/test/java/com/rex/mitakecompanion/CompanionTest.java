@@ -147,4 +147,33 @@ public class CompanionTest {
         a.cards.removeAllViews();JSONObject r=event(5,100,false).put("peak",5);a.addCard(r,false);View first=a.cards.getChildAt(0);a.cards.removeAllViews();a.addCard(r,false);assertSame(first,a.cards.getChildAt(0));
         assertTrue(first instanceof StockCard);repo.close();a.finish();
     }
+    @Test public void demoCardsToggleWithoutChangingRealCountsOrSavedSnapshot()throws Exception{
+        MainActivity a=Robolectric.buildActivity(MainActivity.class).setup().get();
+        String before=BridgeService.prefs(a).getString("snapshot","");a.toggleDemo();
+        assertTrue(a.demoMode);assertEquals(2,a.cards.getChildCount());assertEquals("0",a.counts5.getText().toString());assertEquals("0",a.counts6.getText().toString());
+        assertEquals(before,BridgeService.prefs(a).getString("snapshot",""));
+        for(int n=0;n<2;n++)assertFalse(AlertPolicy.eligible(DemoCards.rows().getJSONObject(n),100,true));
+        BridgeService.prefs(a).edit().putBoolean("enabled",true).apply();BridgeService.receivedAt=android.os.SystemClock.elapsedRealtime()+1;
+        BridgeService.latest=new JSONObject().put("server_time",110).put("active",true).put("rows",new JSONArray().put(event(6,100,true).put("peak",6)));
+        a.last="";a.refresh();assertEquals(3,a.cards.getChildCount());assertEquals("1",a.counts6.getText().toString());
+        a.filter="6/6";a.last="";a.refresh();assertEquals(2,a.cards.getChildCount());
+        a.toggleDemo();assertFalse(a.demoMode);assertEquals(1,a.cards.getChildCount());a.finish();
+    }
+    @Test public void chipKMissingAppShowsInstallAndCopyFallback(){
+        MainActivity a=Robolectric.buildActivity(MainActivity.class).setup().get();
+        ChipKLauncher.open(a,"2330");AlertDialog dialog=org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+        assertNotNull(dialog);assertTrue(dialog.isShowing());assertNull(org.robolectric.Shadows.shadowOf(a).getNextStartedActivity());
+        ChipKLauncher.copy(a,"2330");assertEquals("2330",a.getSystemService(android.content.ClipboardManager.class).getPrimaryClip().getItemAt(0).getText().toString());a.finish();
+    }
+    @Test public void clickingCardLaunchesInstalledChipKPackage()throws Exception{
+        MainActivity a=Robolectric.buildActivity(MainActivity.class).setup().get();
+        android.content.pm.ResolveInfo result=new android.content.pm.ResolveInfo();result.activityInfo=new android.content.pm.ActivityInfo();
+        result.activityInfo.packageName=ChipKLauncher.PACKAGE;result.activityInfo.name="com.cmoney.chipk.MainActivity";result.activityInfo.exported=true;result.activityInfo.enabled=true;
+        result.activityInfo.applicationInfo=new android.content.pm.ApplicationInfo();result.activityInfo.applicationInfo.packageName=ChipKLauncher.PACKAGE;result.activityInfo.applicationInfo.enabled=true;
+        android.content.Intent match=new android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_INFO).setPackage(ChipKLauncher.PACKAGE);
+        org.robolectric.Shadows.shadowOf(a.getPackageManager()).addResolveInfoForIntent(match,result);
+        assertNotNull(ChipKLauncher.appIntent(a.getPackageManager()));
+        a.cards.removeAllViews();a.addCard(DemoCards.rows().getJSONObject(0),false);assertTrue(a.cards.getChildAt(0).performClick());
+        assertEquals(ChipKLauncher.PACKAGE,org.robolectric.Shadows.shadowOf(a).getNextStartedActivity().getComponent().getPackageName());a.finish();
+    }
 }

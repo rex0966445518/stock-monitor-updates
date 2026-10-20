@@ -24,17 +24,20 @@ public final class StockCard extends LinearLayout {
             MiniCandleView chart=new MiniCandleView(a,code,repository);chart.expandWith(this::expand);addView(chart,new LinearLayout.LayoutParams(-1,a.dp(210)));
             TextView note=a.text("點圖放大 · 紅漲綠跌 · K圖行情與掃描股價時間可能不同",9,MainActivity.MUTED,false);a.add(this,note,6);
         }else a.add(this,a.text("股號待確認，暫不顯示K圖",11,MainActivity.MUTED,false),6);
+        setOnClickListener(v->ChipKLauncher.open(a,code));
+        a.add(this,a.text("點卡片開啟籌碼K線 App 主頁；個股可用複製股號搜尋",10,MainActivity.MUTED,false),6);
+        LinearLayout actions=new LinearLayout(a);actions.addView(a.button("開啟籌碼K線",()->ChipKLauncher.open(a,code)),new LinearLayout.LayoutParams(0,-2,1));actions.addView(a.button("複製股號",()->ChipKLauncher.copy(a,code)),new LinearLayout.LayoutParams(0,-2,1));a.add(this,actions,6);
         TextView reason=a.button("查看判定原因",()->{if(row!=null)a.message(code+" · 判定原因",row.optString("reason")+"\n觀察訊號不代表一定漲停。");});a.add(this,reason,0);
     }
     void update(JSONObject r,boolean fresh){
-        row=r;int matched=r.optInt("matched"),accent=fresh?(matched==6?MainActivity.RED:MainActivity.TEAL):MainActivity.MUTED;
-        String stockName=r.optString("name");name.setText((stockName.isEmpty()?"股名待補":stockName)+"  "+code);
+        row=r;boolean demo=r.optBoolean("demo");int matched=r.optInt("matched"),accent=demo?MainActivity.GOLD:fresh?(matched==6?MainActivity.RED:MainActivity.TEAL):MainActivity.MUTED;
+        String stockName=r.optString("name");name.setText((demo?"測試｜":"")+(stockName.isEmpty()?"股名待補":stockName)+"  "+code);
         score.setText(matched+"/6");score.setTextColor(accent);
         double p=r.optDouble("price",Double.NaN),change=r.optDouble("gain",Double.NaN);
         price.setText(Double.isFinite(p)&&p>0?String.format(Locale.US,"%.2f 元",p):"股價待確認");
         gain.setText(Double.isFinite(change)?String.format(Locale.US,"%+.2f%%",change):"—");gain.setTextColor(change>=0?MainActivity.RED:MainActivity.TEAL);
-        details.setText("電腦掃描 "+owner.clock(r.optDouble("ts"))+" · "+String.format(Locale.TAIWAN,"%,d 張",r.optInt("volume"))+" · 曾達 "+r.optInt("peak")+"/6");
-        state.setText(!fresh?"非即時／待複查"+(matched<5?" · 已轉弱，保留紀錄":""):r.optBoolean("confirmed")?"必要檢核已通過":"觀察候選 · 必要檢核待確認");state.setTextColor(accent);
+        details.setText(demo?"示範價格／漲跌，非即時行情 · "+String.format(Locale.TAIWAN,"%,d 張",r.optInt("volume")):"電腦掃描 "+owner.clock(r.optDouble("ts"))+" · "+String.format(Locale.TAIWAN,"%,d 張",r.optInt("volume"))+" · 曾達 "+r.optInt("peak")+"/6");
+        state.setText(demo?"測試卡片 · 不列入真實訊號、不播報":!fresh?"非即時／待複查"+(matched<5?" · 已轉弱，保留紀錄":""):r.optBoolean("confirmed")?"必要檢核已通過":"觀察候選 · 必要檢核待確認");state.setTextColor(accent);
         setBackground(owner.box(MainActivity.PANEL,fresh?Color.rgb(42,71,79):Color.rgb(30,44,62),18));
     }
     private void expand(){

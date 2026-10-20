@@ -19,6 +19,7 @@ public class MainActivity extends Activity {
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final Map<String,StockCard> stockCards=new HashMap<>();
     private final IntradayRepository intraday=new IntradayRepository();
+    boolean demoMode;TextView demoButton,demoBanner;
     private AppUpdater updater;private SpeechAnnouncer testSpeech;
     LinearLayout content,cards;TextView connection,counts6,counts5,freshness;String filter="全部",last="";
     private final Runnable tick=new Runnable(){public void run(){refresh();handler.postDelayed(this,1000);}};
@@ -28,16 +29,19 @@ public class MainActivity extends Activity {
     void add(LinearLayout parent,View child,int bottom){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.bottomMargin=dp(bottom);parent.addView(child,p);}
     TextView button(String title,Runnable action){TextView b=text(title,14,TEAL,true);b.setGravity(Gravity.CENTER);b.setPadding(dp(14),dp(11),dp(14),dp(11));b.setBackground(box(PANEL,Color.rgb(40,62,79),12));b.setOnClickListener(v->action.run());return b;}
     @Override public void onCreate(Bundle state){super.onCreate(state);
+        demoMode=state!=null&&state.getBoolean("demo_mode",false);
         updater=new AppUpdater(this);
         ScrollView scroll=new ScrollView(this);scroll.setBackgroundColor(BG);scroll.setFillViewport(true);
         content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(22),dp(24),dp(22),dp(28));scroll.addView(content);setContentView(scroll);
         scroll.setOnApplyWindowInsetsListener((v,in)->{int top,bottom;if(Build.VERSION.SDK_INT>=30){android.graphics.Insets i=in.getInsets(WindowInsets.Type.systemBars());top=i.top;bottom=i.bottom;}else{top=in.getSystemWindowInsetTop();bottom=in.getSystemWindowInsetBottom();}content.setPadding(dp(22),top+dp(20),dp(22),bottom+dp(24));return in;});
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
         TextView brand=text("◉  漲停雷達",27,TEXT,true);header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));header.addView(button("配對",this::showPairing));add(content,header,8);
-        add(content,text("MITAKE LIVE  /  雷允澤製 v0.1.4",11,MUTED,false),22);
+        add(content,text("MITAKE LIVE  /  雷允澤製 v0.1.5",11,MUTED,false),22);
         LinearLayout tools=new LinearLayout(this);
         tools.addView(button("一鍵更新",()->updater.check()),new LinearLayout.LayoutParams(0,-2,1));
         tools.addView(button("語音通報",this::showVoice),new LinearLayout.LayoutParams(0,-2,1));tools.addView(button("連線診斷",this::showDiagnosis),new LinearLayout.LayoutParams(0,-2,1));add(content,tools,10);
+        demoButton=button(demoMode?"關閉測試卡片":"顯示測試卡片（5/6、6/6）",this::toggleDemo);add(content,demoButton,6);
+        demoBanner=text("測試模式：示範卡片置頂，價格與條件非行情；不計入真實訊號、不播報、不存檔。五分K另取公開來源。",11,GOLD,false);demoBanner.setVisibility(demoMode?View.VISIBLE:View.GONE);add(content,demoBanner,10);
         connection=text("●  尚未連線",14,TEAL,true);add(content,connection,6);
         freshness=text("由電腦持續掃描，手機同步觀察候選",12,MUTED,false);add(content,freshness,20);
         LinearLayout hero=new LinearLayout(this);hero.setOrientation(LinearLayout.HORIZONTAL);hero.setPadding(dp(20),dp(20),dp(20),dp(20));hero.setBackground(box(PANEL,Color.rgb(33,56,72),20));
@@ -51,6 +55,8 @@ public class MainActivity extends Activity {
         add(content,text("5/6 與 6/6 是觀察條件，並非買進指令。\n價格來自電腦 OCR；請在下單前核對原始行情。",11,MUTED,false),4);
         if(getIntent().getData()!=null)acceptPair(getIntent().getData().toString());
     }
+    @Override protected void onSaveInstanceState(Bundle state){state.putBoolean("demo_mode",demoMode);super.onSaveInstanceState(state);}
+    void toggleDemo(){demoMode=!demoMode;demoButton.setText(demoMode?"關閉測試卡片":"顯示測試卡片（5/6、6/6）");demoBanner.setVisibility(demoMode?View.VISIBLE:View.GONE);last="";refresh();}
     @Override public void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);if(intent.getData()!=null)acceptPair(intent.getData().toString());}
     @Override public void onResume(){super.onResume();handler.post(tick);if(updater!=null)updater.resume();}
     @Override public void onPause(){handler.removeCallbacks(tick);if(updater!=null)updater.pause();super.onPause();}
@@ -113,10 +119,11 @@ public class MainActivity extends Activity {
         connection.setText("●  "+label);connection.setTextColor(online?TEAL:GOLD);
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)label+="｜通知未允許，僅顯示列表";
         freshness.setText((enabled&&!online?ConnectionDiagnosis.network(this)+"\n":"")+(data==null?"等待配對電腦資料":(online?"資料更新 ":"最後快照 ")+clock(data.optDouble("server_time"))+" · "+(online?data.optString("status"):"目前非即時"))+ (label.contains("通知未允許")?"\n通知未允許，請到系統設定開啟":""));
-        String key=(data==null?"":data.toString())+filter+online+(data!=null&&online?(long)((data.optDouble("server_time")+(SystemClock.elapsedRealtime()-BridgeService.receivedAt)/1000.0)/15):0);
+        String key=(data==null?"":data.toString())+filter+demoMode+online+(data!=null&&online?(long)((data.optDouble("server_time")+(SystemClock.elapsedRealtime()-BridgeService.receivedAt)/1000.0)/15):0);
         if(key.equals(last))return;last=key;cards.removeAllViews();int n5=0,n6=0;
         JSONArray rows=data==null?null:data.optJSONArray("rows");
         double now=data==null?0:data.optDouble("server_time")+(online?(SystemClock.elapsedRealtime()-BridgeService.receivedAt)/1000.0:0);
+        if(demoMode){JSONArray examples=DemoCards.rows();for(int i=0;i<examples.length();i++){JSONObject r=examples.optJSONObject(i);int n=r.optInt("matched");if(filter.equals("6/6")&&n!=6||filter.equals("5/6")&&n!=5)continue;addCard(r,false);}}
         if(rows!=null)for(int i=0;i<rows.length();i++){
             JSONObject r=rows.optJSONObject(i);if(r==null)continue;
             boolean fresh=online&&data.optBoolean("active")&&r.optBoolean("valid")&&now-r.optDouble("ts")<=15&&now>=r.optDouble("ts");
@@ -124,14 +131,15 @@ public class MainActivity extends Activity {
             if(filter.equals("6/6")&&count!=6||filter.equals("5/6")&&count!=5)continue;
             addCard(r,fresh);
         }
-        Set<String> present=new HashSet<>();if(rows!=null)for(int i=0;i<rows.length();i++){JSONObject r=rows.optJSONObject(i);if(r!=null)present.add(r.optString("code"));}stockCards.keySet().retainAll(present);
+        Set<String> present=new HashSet<>();if(rows!=null)for(int i=0;i<rows.length();i++){JSONObject r=rows.optJSONObject(i);if(r!=null)present.add(r.optString("code"));}if(demoMode){present.add("demo:2330");present.add("demo:2317");}stockCards.keySet().retainAll(present);
         counts6.setText(String.valueOf(n6));counts5.setText(String.valueOf(n5));
         if(cards.getChildCount()==0){TextView empty=text(data==null?"等待與電腦配對\n\n在電腦開啟「進階工具 → 手機連動／配對」\n啟用連線後，掃描QR碼即可。":"尚無此類候選\n\n電腦需開啟全部六項條件並持續掃描。\n找到候選後會自動出現在這裡。",15,MUTED,false);empty.setPadding(dp(18),dp(28),dp(18),dp(28));empty.setBackground(box(PANEL,0,16));add(cards,empty,12);}
     }
     void addCard(JSONObject r,boolean fresh){
         String code=r.optString("code");
-        StockCard card=stockCards.get(code);
-        if(card==null){card=new StockCard(this,code,intraday);stockCards.put(code,card);}
+        String key=r.optBoolean("demo")?"demo:"+code:code;
+        StockCard card=stockCards.get(key);
+        if(card==null){card=new StockCard(this,code,intraday);stockCards.put(key,card);}
         card.update(r,fresh);add(cards,card,12);
     }
 }
