@@ -21,7 +21,7 @@ public class BridgeService extends Service {
     private PendingIntent open(){return PendingIntent.getActivity(this,0,new Intent(this,MainActivity.class),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);}
     private Notification connectionNotification(String text){
         PendingIntent stop=PendingIntent.getService(this,1,new Intent(this,BridgeService.class).setAction(STOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-        return new Notification.Builder(this,"connection").setSmallIcon(com.rex.mitakecompanion.R.drawable.ic_radar).setContentTitle("漲停雷達 · 電腦連動").setContentText(text).setContentIntent(open()).setOngoing(true).addAction(new Notification.Action.Builder(null,"停止連線",stop).build()).build();
+        return new Notification.Builder(this,"connection").setSmallIcon(com.rex.mitakecompanion.R.drawable.ic_notification).setContentTitle("漲停雷達 · 電腦連動").setContentText(text).setContentIntent(open()).setOngoing(true).addAction(new Notification.Action.Builder(null,"停止連線",stop).build()).build();
     }
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         if(intent!=null&&STOP.equals(intent.getAction())){prefs.edit().putBoolean("enabled",false).apply();stopSelf();return START_NOT_STICKY;}
@@ -43,7 +43,7 @@ public class BridgeService extends Service {
                 JSONObject e=events.getJSONObject(i);
                 if(same&&e.optLong("seq")<=after)continue;
                 if(AlertPolicy.eligible(e,data.optDouble("server_time"),data.optBoolean("active"))&&(Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED)) {
-                    Notification notification=new Notification.Builder(this,"signals").setSmallIcon(R.drawable.ic_radar)
+                    Notification notification=new Notification.Builder(this,"signals").setSmallIcon(R.drawable.ic_notification)
                         .setContentTitle(AlertPolicy.title(e)).setContentText(AlertPolicy.detail(e))
                         .setStyle(new Notification.BigTextStyle().bigText(AlertPolicy.detail(e)))
                         .setContentIntent(open()).setAutoCancel(true).setShowWhen(true).build();

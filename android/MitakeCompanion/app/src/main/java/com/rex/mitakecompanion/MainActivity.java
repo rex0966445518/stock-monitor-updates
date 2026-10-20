@@ -34,11 +34,11 @@ public class MainActivity extends Activity {
         connection=text("●  尚未連線",14,TEAL,true);add(content,connection,6);
         freshness=text("由電腦持續掃描，手機同步觀察候選",12,MUTED,false);add(content,freshness,20);
         LinearLayout hero=new LinearLayout(this);hero.setOrientation(LinearLayout.HORIZONTAL);hero.setPadding(dp(20),dp(20),dp(20),dp(20));hero.setBackground(box(PANEL,Color.rgb(33,56,72),20));
-        LinearLayout six=new LinearLayout(this);six.setOrientation(1);six.addView(text("6 / 6 基礎條件",13,RED,true));counts6=text("—",44,TEXT,true);six.addView(counts6);six.addView(text("必要檢核另行標示",11,MUTED,false));hero.addView(six,new LinearLayout.LayoutParams(0,-2,1));
-        LinearLayout five=new LinearLayout(this);five.setOrientation(1);five.addView(text("5 / 6 接近候選",13,TEAL,true));counts5=text("—",44,TEXT,true);five.addView(counts5);five.addView(text("持續追蹤變化",11,MUTED,false));hero.addView(five,new LinearLayout.LayoutParams(0,-2,1));add(content,hero,20);
+        LinearLayout six=new LinearLayout(this);six.setOrientation(LinearLayout.VERTICAL);six.addView(text("6 / 6 基礎條件",13,RED,true));counts6=text("—",44,TEXT,true);six.addView(counts6);six.addView(text("必要檢核另行標示",11,MUTED,false));hero.addView(six,new LinearLayout.LayoutParams(0,-2,1));
+        LinearLayout five=new LinearLayout(this);five.setOrientation(LinearLayout.VERTICAL);five.addView(text("5 / 6 接近候選",13,TEAL,true));counts5=text("—",44,TEXT,true);five.addView(counts5);five.addView(text("持續追蹤變化",11,MUTED,false));hero.addView(five,new LinearLayout.LayoutParams(0,-2,1));add(content,hero,20);
         LinearLayout tabs=new LinearLayout(this);for(String f:new String[]{"全部","6/6","5/6"}){TextView tab=button(f,()->{filter=f;last="";refresh();});LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.rightMargin=dp(6);tabs.addView(tab,p);}add(content,tabs,18);
         add(content,text("今日訊號",18,TEXT,true),4);add(content,text("符合數優先排列 · 轉弱紀錄保留",12,MUTED,false),14);
-        cards=new LinearLayout(this);cards.setOrientation(1);add(content,cards,14);
+        cards=new LinearLayout(this);cards.setOrientation(LinearLayout.VERTICAL);add(content,cards,14);
         add(content,button("掃描電腦配對碼",this::scan),10);
         add(content,button("停止手機連線",()->{BridgeService.prefs(this).edit().putBoolean("enabled",false).apply();stopService(new Intent(this,BridgeService.class));last="";refresh();}),16);
         add(content,text("5/6 與 6/6 是觀察條件，並非買進指令。\n價格來自電腦 OCR；請在下單前核對原始行情。",11,MUTED,false),4);
@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},10);
         startForegroundService(new Intent(this,BridgeService.class));last="";refresh();
     }
-    void showPairing(){LinearLayout fields=new LinearLayout(this);fields.setOrientation(1);fields.setPadding(dp(20),dp(8),dp(20),0);
+    void showPairing(){LinearLayout fields=new LinearLayout(this);fields.setOrientation(LinearLayout.VERTICAL);fields.setPadding(dp(20),dp(8),dp(20),0);
         EditText address=new EditText(this);address.setText(BridgeService.prefs(this).getString("address",""));address.setHint("電腦位址，例如 http://192.168.1.10:8765");address.setInputType(17);fields.addView(address);
         EditText token=new EditText(this);token.setHint("配對碼，或貼上完整 mitake://pair 連結");token.setInputType(129);fields.addView(token);
         TextView hint=text("同Wi-Fi可直接連線；外出請經私人VPN連回電腦。\n電腦須保持開機、啟用連線並執行掃描。",12,MUTED,false);fields.addView(hint);
@@ -86,7 +86,7 @@ public class MainActivity extends Activity {
         if(cards.getChildCount()==0){TextView empty=text(data==null?"等待與電腦配對\n\n在電腦開啟「進階工具 → 手機連動／配對」\n啟用連線後，掃描QR碼即可。":"尚無此類候選\n\n電腦需開啟全部六項條件並持續掃描。\n找到候選後會自動出現在這裡。",15,MUTED,false);empty.setPadding(dp(18),dp(28),dp(18),dp(28));empty.setBackground(box(PANEL,0,16));add(cards,empty,12);}
     }
     void addCard(JSONObject r,boolean fresh){int count=r.optInt("matched");int accent=fresh?(count==6?RED:TEAL):MUTED;
-        LinearLayout card=new LinearLayout(this);card.setOrientation(1);card.setPadding(dp(18),dp(17),dp(18),dp(16));card.setBackground(box(PANEL,fresh?Color.rgb(42,71,79):Color.rgb(30,44,62),18));
+        LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(dp(18),dp(17),dp(18),dp(16));card.setBackground(box(PANEL,fresh?Color.rgb(42,71,79):Color.rgb(30,44,62),18));
         LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);String name=r.optString("name");if(name.isEmpty())name="股名待補";
         row.addView(text(name+"  "+r.optString("code"),18,TEXT,true),new LinearLayout.LayoutParams(0,-2,1));row.addView(text(count+"/6",24,accent,true));add(card,row,10);
         LinearLayout price=new LinearLayout(this);price.addView(text(String.format(Locale.US,"%.2f",r.optDouble("price")),29,TEXT,true),new LinearLayout.LayoutParams(0,-2,1));price.addView(text(String.format(Locale.US,"%+.2f%%",r.optDouble("gain")),18,r.optDouble("gain")>=0?RED:TEAL,true));add(card,price,9);
