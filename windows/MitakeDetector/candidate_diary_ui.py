@@ -41,7 +41,7 @@ class DiaryView:
         self.month=dt.date(y,m+1,1);self.draw_calendar()
     def draw_calendar(self):
         for child in self.calendar.winfo_children():child.destroy()
-        app=self.app;counts=self.store.days(self.month.strftime('%Y-%m'));self.month_label.configure(text=self.month.strftime('%Y年%m月'))
+        app=self.app;counts=self.store.days(self.month.strftime('%Y-%m'));self.month_label.configure(text=f'{self.month.year:04d}年{self.month.month:02d}月')
         for i,label in enumerate('一二三四五六日'):app.ttk.Label(self.calendar,text=label,anchor='center').grid(row=0,column=i,sticky='ew')
         for r,week in enumerate(calendar.monthcalendar(self.month.year,self.month.month),1):
             for col,number in enumerate(week):

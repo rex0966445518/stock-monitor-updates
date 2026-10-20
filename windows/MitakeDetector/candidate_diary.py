@@ -48,8 +48,13 @@ class CandidateDiary:
                        WHERE d.day=? ORDER BY 10 DESC,d.first_ts,d.code''',(day,)).fetchall()
     def events(self,day,code,before=None):
         with closing(self.connect()) as c:
+            cutoff=1e20
+            if before is not None:
+                row=c.execute('SELECT ts FROM candidate_diary_events WHERE id=? AND day=? AND code=?',(before,day,code)).fetchone()
+                if not row:return []
+                cutoff=row[0]
             return c.execute('''SELECT e.id,e.ts,e.price,e.gain,e.volume,e.turnover,e.ratio,e.matched,e.total,e.hit,e.blocked,e.reason,e.source,e.version,k.body
-                       FROM candidate_diary_events e JOIN candidate_diary_configs k ON k.hash=e.config_hash WHERE day=? AND code=? AND e.id<? ORDER BY e.id DESC LIMIT 200''',(day,code,before or 9223372036854775807)).fetchall()
+                       FROM candidate_diary_events e JOIN candidate_diary_configs k ON k.hash=e.config_hash WHERE day=? AND code=? AND (e.ts<? OR (e.ts=? AND e.id<?)) ORDER BY e.ts DESC,e.id DESC LIMIT 200''',(day,code,cutoff,cutoff,before or 9223372036854775807)).fetchall()
     def import_archive(self,progress=lambda n:None):
         from MitakeDetector import Quote
         from itertools import groupby

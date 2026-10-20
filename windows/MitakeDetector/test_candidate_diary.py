@@ -64,3 +64,12 @@ class CandidateDiaryTests(unittest.TestCase):
             page=d.events('1970-01-01','2330');self.assertEqual(len(page),200)
             older=d.events('1970-01-01','2330',page[-1][0]);self.assertEqual(len(older),5)
             self.assertTrue(set(r[0] for r in page).isdisjoint(r[0] for r in older))
+    def test_late_archive_import_keeps_events_in_capture_time_order(self):
+        with tempfile.TemporaryDirectory() as folder:
+            d=CandidateDiary(Path(folder)/'scan.sqlite3')
+            d.observe([row(10200)],CFG,'live')
+            d.observe([row(10000)],CFG,'archive')
+            records=d.events('1970-01-01','2330')
+            self.assertEqual([r[1] for r in records],[10200,10000])
+            self.assertEqual(d.stocks('1970-01-01')[0][2],10000)
+            self.assertEqual(d.events('1970-01-01','2330',records[0][0])[0][1],10000)
