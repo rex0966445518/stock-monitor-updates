@@ -58,4 +58,30 @@ public class CompanionTest {
         a.refresh();assertEquals("1",a.counts6.getText().toString());assertEquals(2,a.cards.getChildCount());
         BridgeService.receivedAt=0;a.refresh();assertEquals("0",a.counts6.getText().toString());assertEquals(2,a.cards.getChildCount());a.finish();
     }
+    @Test public void scanRequestsPermissionBeforeLaunchingCamera(){
+        MainActivity a=Robolectric.buildActivity(MainActivity.class).setup().get();
+        org.robolectric.Shadows.shadowOf(a.getApplication()).denyPermissions(android.Manifest.permission.CAMERA);
+        a.scan();
+        assertEquals(MainActivity.CAMERA_REQUEST,org.robolectric.Shadows.shadowOf(a).getLastRequestedPermission().requestCode);
+        assertNull(org.robolectric.Shadows.shadowOf(a).getNextStartedActivityForResult());
+        a.onRequestPermissionsResult(MainActivity.CAMERA_REQUEST,new String[]{android.Manifest.permission.CAMERA},new int[]{android.content.pm.PackageManager.PERMISSION_DENIED});
+        assertTrue(org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog().isShowing());
+        assertFalse(a.isFinishing());a.finish();
+    }
+    @Test public void scanWithPermissionLaunchesEmbeddedCapture(){
+        MainActivity a=Robolectric.buildActivity(MainActivity.class).setup().get();
+        org.robolectric.Shadows.shadowOf(a.getApplication()).grantPermissions(android.Manifest.permission.CAMERA);
+        a.scan();
+        android.content.Intent intent=org.robolectric.Shadows.shadowOf(a).getNextStartedActivityForResult().intent;
+        assertEquals("com.journeyapps.barcodescanner.CaptureActivity",intent.getComponent().getClassName());
+        assertFalse(intent.getBooleanExtra("BEEP_ENABLED",true));
+        a.finish();
+    }
+    @Test public void captureActivityInflatesWithPackagedDependencies(){
+        org.robolectric.android.controller.ActivityController<com.journeyapps.barcodescanner.CaptureActivity> controller=
+            Robolectric.buildActivity(com.journeyapps.barcodescanner.CaptureActivity.class,new com.google.zxing.integration.android.IntentIntegrator(Robolectric.buildActivity(MainActivity.class).setup().get()).createScanIntent());
+        controller.create().start();
+        assertNotNull(controller.get().findViewById(com.google.zxing.client.android.R.id.zxing_barcode_scanner));
+        controller.stop().destroy();
+    }
 }

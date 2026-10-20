@@ -30,7 +30,7 @@ public class MainActivity extends Activity {
         scroll.setOnApplyWindowInsetsListener((v,in)->{int top,bottom;if(Build.VERSION.SDK_INT>=30){android.graphics.Insets i=in.getInsets(WindowInsets.Type.systemBars());top=i.top;bottom=i.bottom;}else{top=in.getSystemWindowInsetTop();bottom=in.getSystemWindowInsetBottom();}content.setPadding(dp(22),top+dp(20),dp(22),bottom+dp(24));return in;});
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
         TextView brand=text("◉  漲停雷達",27,TEXT,true);header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));header.addView(button("配對",this::showPairing));add(content,header,8);
-        add(content,text("MITAKE LIVE  /  雷允澤製 v0.1.0",11,MUTED,false),22);
+        add(content,text("MITAKE LIVE  /  雷允澤製 v0.1.1",11,MUTED,false),22);
         connection=text("●  尚未連線",14,TEAL,true);add(content,connection,6);
         freshness=text("由電腦持續掃描，手機同步觀察候選",12,MUTED,false);add(content,freshness,20);
         LinearLayout hero=new LinearLayout(this);hero.setOrientation(LinearLayout.HORIZONTAL);hero.setPadding(dp(20),dp(20),dp(20),dp(20));hero.setBackground(box(PANEL,Color.rgb(33,56,72),20));
@@ -47,7 +47,28 @@ public class MainActivity extends Activity {
     @Override public void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);if(intent.getData()!=null)acceptPair(intent.getData().toString());}
     @Override public void onResume(){super.onResume();handler.post(tick);}
     @Override public void onPause(){handler.removeCallbacks(tick);super.onPause();}
-    void scan(){new IntentIntegrator(this).setDesiredBarcodeFormats(Collections.singletonList(IntentIntegrator.QR_CODE)).setPrompt("掃描電腦「手機連動／配對」的QR碼").setBeepEnabled(false).setOrientationLocked(false).initiateScan();}
+    static final int CAMERA_REQUEST=11;
+    void scan(){
+        if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED){
+            requestPermissions(new String[]{Manifest.permission.CAMERA},CAMERA_REQUEST);
+            return;
+        }
+        launchScanner();
+    }
+    void launchScanner(){
+        try{
+            new IntentIntegrator(this).setDesiredBarcodeFormats(Collections.singletonList(IntentIntegrator.QR_CODE)).setPrompt("掃描電腦「手機連動／配對」的QR碼").setBeepEnabled(false).setOrientationLocked(false).initiateScan();
+        }catch(RuntimeException | LinkageError e){
+            message("無法開啟掃描", "請改在「配對」輸入電腦位址與配對碼，或貼上完整配對連結。\n錯誤類型："+e.getClass().getSimpleName());
+        }
+    }
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){
+        super.onRequestPermissionsResult(request,permissions,results);
+        if(request==CAMERA_REQUEST){
+            if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)launchScanner();
+            else message("相機權限未開啟","請到系統設定允許相機權限，或在「配對」手動輸入電腦位址與配對碼。");
+        }
+    }
     @Override public void onActivityResult(int request,int result,Intent data){IntentResult scan=IntentIntegrator.parseActivityResult(request,result,data);if(scan!=null){if(scan.getContents()!=null)acceptPair(scan.getContents());return;}super.onActivityResult(request,result,data);}
     void acceptPair(String value){try{Pairing pair=Pairing.parse(value);new AlertDialog.Builder(this).setTitle("連接這台電腦？").setMessage(pair.address+"\n接收5/6、6/6觀察通知，直到手動停止。").setPositiveButton("連線",(d,w)->connect(pair)).setNegativeButton("取消",null).show();}catch(Exception e){message("配對失敗",e.getMessage());}}
     void connect(Pairing pair){stopService(new Intent(this,BridgeService.class));BridgeService.latest=null;BridgeService.receivedAt=0;BridgeService.connection="正在連接電腦…";

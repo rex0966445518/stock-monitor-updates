@@ -23,6 +23,39 @@ def dump():
     adb('shell','uiautomator','dump','/sdcard/mitake-ui.xml')
     return adb('shell','cat','/sdcard/mitake-ui.xml')
 
+def tap(label):
+    ui=dump()
+    button=next(n for n in ET.fromstring(ui).iter('node') if n.attrib.get('text')==label)
+    x1,y1,x2,y2=map(int,re.findall(r'\d+',button.attrib['bounds']))
+    adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2))
+
+def assert_scanner():
+    time.sleep(2)
+    active=adb('shell','dumpsys','activity','activities')
+    assert re.search(r'mResumedActivity.*com.rex.mitakecompanion/com.journeyapps.barcodescanner.CaptureActivity',active),active[-5000:]
+    assert 'FATAL EXCEPTION' not in adb('logcat','-d','-s','AndroidRuntime:E')
+
+# Exercise the actual camera UI before protocol tests; the old test skipped it.
+adb('install','-r','android/MitakeCompanion/app/build/outputs/apk/debug/app-debug.apk')
+adb('logcat','-c')
+adb('shell','am','start','-W','-n','com.rex.mitakecompanion/.MainActivity')
+tap('配對');tap('掃描QR碼')
+ui=dump()
+# Android permission button IDs are stable even if the emulator locale changes.
+node=next(n for n in ET.fromstring(ui).iter('node') if n.attrib.get('resource-id','').endswith('/permission_deny_button'))
+x1,y1,x2,y2=map(int,re.findall(r'\d+',node.attrib['bounds']))
+adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2))
+assert '相機權限未開啟' in dump()
+tap('確定')
+adb('shell','pm','grant','com.rex.mitakecompanion','android.permission.CAMERA')
+tap('配對');tap('掃描QR碼');assert_scanner();screen('qr-camera.png')
+adb('shell','input','keyevent','4')
+# Main-page scan entry is below the fold on small screens.
+adb('shell','input','swipe','450','1100','450','350','400')
+tap('掃描電腦配對碼');assert_scanner()
+adb('shell','input','keyevent','4')
+assert 'FATAL EXCEPTION' not in adb('logcat','-d','-s','AndroidRuntime:E')
+
 with tempfile.TemporaryDirectory() as folder:
     bridge=MobileBridge(Path(folder)/'pair.json');bridge.start()
     stop=threading.Event();promote=threading.Event()
