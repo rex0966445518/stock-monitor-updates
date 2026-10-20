@@ -9,9 +9,8 @@ class SteadyUI:
         self.vars['steady_enabled']=self.tk.BooleanVar(value=self.config['steady_enabled'])
         for key,value in DEFAULTS.items():
             if key!='steady_enabled':self.vars[key]=self.tk.StringVar(value=str(self.config.get(key,value)))
-        self.ttk.Checkbutton(parent,text='09:00–12:50 盤尾緩漲檢核',variable=self.vars['steady_enabled']).grid(row=2,column=0,columnspan=5,sticky='w',padx=5,pady=5)
-        self.ttk.Button(parent,text='緩漲明細／設定',command=self.show_steady_settings).grid(row=2,column=5,columnspan=3,sticky='w')
-        self.ttk.Label(parent,text='全天累積，12:50後判定；非大戶身分判定').grid(row=2,column=8,columnspan=4,sticky='w')
+        self.ttk.Checkbutton(parent,text='09:00–12:50 盤尾緩漲檢核',variable=self.vars['steady_enabled']).pack(side='left',padx=8)
+        self.ttk.Button(self.main_actions,text='緩漲明細／設定',command=self.show_steady_settings).pack(side='left',padx=4)
     def init_steady(self):
         self.steady_tracker=SteadyTracker();self.steady_tracker.reset_day(time.time())
         self.steady_report_day=self.steady_tracker.day

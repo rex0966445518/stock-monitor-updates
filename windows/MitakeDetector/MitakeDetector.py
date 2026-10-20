@@ -275,7 +275,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         auto_bar = ttk.Frame(root); auto_bar.pack(fill='x', padx=18, pady=(0, 8))
         self.voice_var=tk.BooleanVar(value=self.config.get('voice_enabled',True))
         ttk.Checkbutton(auto_bar,text='語音提醒',variable=self.voice_var,command=self.toggle_task_voice).pack(side='left',padx=5)
-        ttk.Label(auto_bar, text='F8 開始／停止 · 可操作探測器主頁 · 三竹畫面請保持可見').pack(side='left', padx=8)
+        ttk.Label(auto_bar, text='F8 開始／暫停 · 三竹畫面保持可見').pack(side='left', padx=8)
         opts = ttk.LabelFrame(root, text='篩選條件（變更後，停止並重新開始以套用）'); opts.pack(fill='x', padx=18)
         self.vars = {}
         fields = [('min_price', '股價 ≥'), ('min_volume', '總量張 ≥'), ('min_gain', '漲幅 ≥%'), ('max_gain', '漲幅 ≤%'), ('interval', '間隔秒'), ('cooldown', '提醒間隔秒')]
@@ -289,7 +289,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
             if valkey:
                 self.vars[valkey] = tk.StringVar(value=str(self.config[valkey]))
                 ttk.Entry(opts, textvariable=self.vars[valkey], width=7).grid(row=1, column=idx*4+3)
-        self.build_steady_controls(opts)
+        self.build_steady_controls(auto_bar)
         self.vars['guard_enabled']=tk.BooleanVar(value=self.config['guard_enabled'])
         for key in ['guard_warmup','guard_window','guard_hold','guard_max_gap','guard_min_rise','guard_max_pullback']:
             self.vars[key]=tk.StringVar(value=str(self.config[key]))
