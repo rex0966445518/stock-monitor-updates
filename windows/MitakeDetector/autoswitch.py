@@ -225,6 +225,12 @@ class RankingSwitcher:
         self.c=controller;self.ocr=ocr;self.ocr_retry=ocr_retry;self.status=status or (lambda text:None)
         self.combo=validate_roi(combo_roi);self.menu=validate_roi(menu_roi)
 
+    @staticmethod
+    def menu_signature(im):
+        if not hasattr(im,'tobytes'):return None
+        import hashlib
+        return [list(im.size),hashlib.sha256(im.tobytes()).hexdigest()]
+
     def enlarged_reads(self,im,name):
         if not hasattr(im,'resize'):return
         from PIL import Image
@@ -274,14 +280,22 @@ class RankingSwitcher:
             import hashlib
             signature=(name,im.size,hashlib.sha256(im.tobytes()).digest())
             if signature==getattr(self,'verified_title_pixels',None):return True
+            if signature in getattr(self,'verified_titles',set()):return True
         def accepted(tokens):
             if not self.title_tokens_match(tokens,name):return False
-            if signature is not None:self.verified_title_pixels=signature
+            if signature is not None:
+                self.verified_title_pixels=signature
+                if not hasattr(self,'verified_titles'):self.verified_titles=set()
+                if len(self.verified_titles)>128:self.verified_titles.clear()
+                self.verified_titles.add(signature)
             return True
         for reader in [self.ocr,self.ocr_retry]:
             if reader is None:continue
             self.c.check()
-            if accepted(reader(im)):return True
+            tokens=reader(im)
+            if accepted(tokens):return True
+            # A clearly recognized different title needs no enlargement retries.
+            if any(find_menu_item(tokens,other) for other in RANKINGS if other!=name):return False
         if hasattr(im,'crop'):
             from PIL import ImageOps
             # The combo arrow and cyan frame can merge into the four-character
@@ -327,10 +341,14 @@ class RankingSwitcher:
             for _ in range(hint):
                 self.c.scroll(center,-120);self.c.pause(.12)
             im,region=self.c.image(self.menu)
-            point=self.menu_point(im,self.ocr(im),name)
+            cached=self.experience.position(name,self.menu_signature(im))
+            point=cached or self.menu_point(im,self.ocr(im),name)
+            if cached:self.status(f'位置快取命中：直接選取「{name}」，核對切換結果')
             if point is not None:
                 self.c.click((region['left']+point[0],region['top']+point[1]))
-                if self.verify_label(name):return
+                if self.verify_label(name):
+                    self.experience.record(name,hint,point,self.menu_signature(im))
+                    return
                 self.experience.forget(name)
                 raise AutomationStopped(self.title_failure()+'；已清除該位置經驗')
             self.experience.forget(name)
@@ -344,7 +362,7 @@ class RankingSwitcher:
             if point:
                 self.c.click((region['left']+point[0],region['top']+point[1]))
                 if self.verify_label(name):
-                    if self.experience:self.experience.record(name,page)
+                    if self.experience:self.experience.record(name,page,point,self.menu_signature(im))
                     return
                 if self.experience:self.experience.forget(name)
                 raise AutomationStopped(self.title_failure())

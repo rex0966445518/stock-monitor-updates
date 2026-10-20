@@ -101,3 +101,24 @@ class OCRCacheTests(unittest.TestCase):
             self.assertEqual(len(ui.ocr_image_cache),24)
 
 if __name__=='__main__':unittest.main()
+
+class PositionCacheTests(AdaptiveTests):
+    def test_identical_menu_skips_ocr_but_still_checks_title(self):
+        p=Experience();c,calls,s=self.make_switch(p)
+        s.menu_signature=lambda im:[[200,500],'a'*64]
+        s.switch('大單流入');self.assertEqual(len(calls),6)
+        c,calls,s=self.make_switch(p);s.menu_signature=lambda im:[[200,500],'a'*64]
+        s.switch('大單流入');self.assertEqual(calls,[])
+        self.assertTrue(any(a[0]=='click' for a in c.actions))
+    def test_changed_pixels_require_ocr(self):
+        p=Experience();p.record('大單流入',5,(20,20),[[200,500],'a'*64])
+        c,calls,s=self.make_switch(p);s.menu_signature=lambda im:[[200,500],'b'*64]
+        s.switch('大單流入');self.assertEqual(calls,[5])
+    def test_position_persists_and_rejects_out_of_bounds(self):
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/'experience.json';p=Experience(path,[1]);sig=[[200,500],'a'*64]
+            p.record('大單流入',5,(20,30),sig)
+            self.assertEqual(Experience(path,[1]).position('大單流入',sig),(20,30))
+            self.assertIsNone(Experience(path,[2]).position('大單流入',sig))
+            p.record('大單流入',5,(2000,30),sig)
+            self.assertIsNone(Experience(path,[1]).position('大單流入',sig))

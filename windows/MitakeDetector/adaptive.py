@@ -19,6 +19,11 @@ class Experience:
                         page=entry.get('page');wins=entry.get('wins',0)
                         if type(page) is int and 0<=page<60 and type(wins) is int and wins>=0:
                             self.data['ranks'][name]={'page':page,'wins':min(wins,20)}
+                            sig=entry.get('signature');point=entry.get('point')
+                            if isinstance(sig,list) and len(sig)==2 and isinstance(sig[0],list) and len(sig[0])==2 and all(type(v) is int and 0<v<=32768 for v in sig[0]) and isinstance(sig[1],str) and len(sig[1])==64:
+                                self.data['ranks'][name].update(signature=sig,point=point)
+                                if self.position(name,sig) is None:
+                                    self.data['ranks'][name].pop('point',None);self.data['ranks'][name].pop('signature',None)
                     for name,entry in value.get('scrolls',{}).items():
                         if isinstance(entry,dict) and type(entry.get('cap')) is int and 1<=entry['cap']<=6:
                             self.data['scrolls'][name]={'cap':entry['cap'],'recoveries':max(0,min(100000,int(entry.get('recoveries',0))))}
@@ -36,11 +41,21 @@ class Experience:
     def hint(self,name):
         return self.data['ranks'].get(name,{}).get('page') if self.enabled else None
 
-    def record(self,name,page):
+    def position(self,name,signature):
+        if not self.enabled or signature is None:return None
+        entry=self.data['ranks'].get(name,{})
+        point=entry.get('point')
+        if entry.get('signature')!=signature or not isinstance(point,list) or len(point)!=2:return None
+        if all(type(v) in (int,float) for v in point) and 0<=point[0]<signature[0][0] and 0<=point[1]<signature[0][1]:return tuple(point)
+        return None
+
+    def record(self,name,page,point=None,signature=None):
         if not self.enabled:return
         previous=self.data['ranks'].get(name,{})
         wins=previous.get('wins',0) if previous.get('page')==page else 0
         self.data['ranks'][name]={'page':page,'wins':min(20,wins)}
+        if signature is not None and point is not None:
+            self.data['ranks'][name].update(point=list(point),signature=signature)
         self.save()
 
     def observed(self,name,valid):
