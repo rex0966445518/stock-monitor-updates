@@ -283,6 +283,18 @@ class AutoUI:
         names=getattr(self,'stock_names',None)
         if names is None:self.stock_names=names=StockNames(BASE/'stock-names.json')
         memory=self.get_ocr_learning()
+        if getattr(self,'numeric_priority',False):
+            from numeric_cells import scan_cells
+            from collections import OrderedDict
+            if not hasattr(self,'numeric_cell_cache'):self.numeric_cell_cache=OrderedDict()
+            cells=scan_cells(image,bounds,self.read_auto_ocr,names,self.numeric_cell_cache,memory=memory,
+                force=getattr(self,'force_fresh_ocr',False),focus=lambda fields,stage:self.focus_columns(image,bounds,fields,stage),
+                anchors_ready=lambda anchors,scores:self.remember_fast_rows(image,bounds,anchors,scores))
+            if cells is not None:
+                quotes,bad,metrics=cells
+                self.last_scan_diagnostic=f'變動格快掃｜重用{metrics["reused"]}格｜重讀{metrics["changed"]}格｜有效{len(quotes)}列'
+                self.cell_metrics=metrics
+                return quotes,bad
         if memory and getattr(self,'force_fresh_ocr',False):
             from ocr_recovery import FreshMemory
             memory=FreshMemory(memory)
@@ -746,7 +758,7 @@ class AutoUI:
                             diagnostic.update(segment=segment,count=count,stage=stage,seconds_per_segment=getattr(self,"last_table_seconds",0))
                             reused=getattr(getattr(self,'stock_names',None),'reused',0)
                             seconds=getattr(self,'last_table_seconds',0)
-                            detail=f'第{cycle}輪｜{round_clock()}｜類目{rank_index+1}/{len(auto["rankings"])} {name}｜第{segment}段｜已讀{count}檔｜股名重用{reused}次｜{stage}｜{seconds:.1f}秒/段'
+                            detail=f'第{cycle}輪｜{round_clock()}｜{getattr(self,"last_scan_diagnostic","準備讀取")}｜類目{rank_index+1}/{len(auto["rankings"])} {name}｜第{segment}段｜已讀{count}檔｜股名重用{reused}次｜{stage}｜{seconds:.1f}秒/段'
                             self.events.put((token,'auto_progress',(detail,rank_index,len(auto['rankings']))))
                         def read(image):
                             started=time.monotonic();self.events.put((token,'auto_rate',dict(start=started)))

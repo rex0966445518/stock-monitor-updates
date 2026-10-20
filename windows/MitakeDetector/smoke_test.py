@@ -167,6 +167,16 @@ def run_smoke_test(report):
         app.name_eligible_codes={'2330','2317'}
         app.learn_deferred_names()
         assert app.stock_names.names,'Deferred names were never learned'
+        # Real bundled OCR: repeat identical cells without invoking OCR again.
+        before=time.perf_counter()
+        same,same_bad=app.scan_recovering_table(im,bounds)
+        info['unchanged_cells_seconds']=time.perf_counter()-before
+        if hasattr(app,'cell_metrics'):
+            assert app.cell_metrics['changed']==0,app.cell_metrics
+            info['numeric_cells_reused']=app.cell_metrics['reused']
+        assert len(same)==2 and same_bad==0
+        pairing=app.show_mobile_pairing();root.update()
+        pairing.destroy()
         app.numeric_priority=False
         from price_history import PriceHistory
         app.price_history=PriceHistory()

@@ -35,15 +35,29 @@ class OCRLearning:
             return clean_tokens(json.loads(row[0])) if row else None
         except (sqlite3.Error,OSError,ValueError,TypeError) as exc:self.last_error=str(exc);return None
 
-    def record(self,key,tokens,elapsed,source):
+    def lookup_many(self,keys):
+        result={}
         try:
-            tokens=clean_tokens(tokens);payload=json.dumps(tokens,ensure_ascii=False)
-            confidence=sum(t[2] for t in tokens)/len(tokens) if tokens else 0
-            cacheable=bool(tokens) and confidence>=.93 and min(t[2] for t in tokens)>=.80
+            with closing(sqlite3.connect(self.path)) as db:
+                for key in dict.fromkeys(keys):
+                    row=db.execute('SELECT tokens FROM cache WHERE key=?',(PROFILE+key,)).fetchone()
+                    if row:result[key]=clean_tokens(json.loads(row[0]))
+        except (sqlite3.Error,OSError,ValueError,TypeError) as exc:self.last_error=str(exc)
+        return result
+
+    def record(self,key,tokens,elapsed,source):
+        self.record_many([(key,tokens,elapsed,source)])
+
+    def record_many(self,entries):
+        try:
             now=dt.datetime.now(dt.timezone.utc)
             with closing(sqlite3.connect(self.path)) as db:
-                db.execute('INSERT INTO reads(ts,key,source,elapsed,count,tokens) VALUES (?,?,?,?,?,?)',(now.isoformat(),PROFILE+key,source,max(0,float(elapsed)),len(tokens),payload))
-                if cacheable:db.execute('INSERT OR REPLACE INTO cache VALUES (?,?,?)',(PROFILE+key,payload,now.timestamp()))
+                for key,tokens,elapsed,source in entries:
+                    tokens=clean_tokens(tokens);payload=json.dumps(tokens,ensure_ascii=False)
+                    confidence=sum(t[2] for t in tokens)/len(tokens) if tokens else 0
+                    cacheable=bool(tokens) and confidence>=.93 and min(t[2] for t in tokens)>=.80
+                    db.execute('INSERT INTO reads(ts,key,source,elapsed,count,tokens) VALUES (?,?,?,?,?,?)',(now.isoformat(),PROFILE+key,source,max(0,float(elapsed)),len(tokens),payload))
+                    if cacheable:db.execute('INSERT OR REPLACE INTO cache VALUES (?,?,?)',(PROFILE+key,payload,now.timestamp()))
                 db.execute('DELETE FROM reads WHERE id NOT IN (SELECT id FROM reads ORDER BY id DESC LIMIT 2000)')
                 db.execute('DELETE FROM cache WHERE key NOT IN (SELECT key FROM cache ORDER BY touched DESC LIMIT 512)')
                 db.commit()

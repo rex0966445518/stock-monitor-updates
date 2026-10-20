@@ -1,0 +1,54 @@
+name: Build Mitake Android Companion
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['android/MitakeCompanion/**', '.github/workflows/mitake-companion.yml']
+  pull_request:
+    paths: ['android/MitakeCompanion/**', '.github/workflows/mitake-companion.yml']
+permissions:
+  contents: write
+concurrency:
+  group: mitake-companion-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: SDK and persistent beta signing
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+          mkdir -p "$HOME/.android"
+          cp android/TWBoardingScanner/signing/debug.keystore "$HOME/.android/debug.keystore"
+      - name: Verify UI, protocol and APK
+        working-directory: android/MitakeCompanion
+        run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
+      - name: Preserve diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MitakeCompanion-build
+          path: |
+            android/MitakeCompanion/app/build/reports
+            android/MitakeCompanion/app/build/test-results
+            android/MitakeCompanion/app/build/outputs/apk/debug/*.apk
+      - name: Verify and publish APK
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/MitakeCompanion/app/build/outputs/apk/debug/app-debug.apk MitakeCompanion-v0.1.0.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs MitakeCompanion-v0.1.0.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging MitakeCompanion-v0.1.0.apk | head -8
+          sha256sum MitakeCompanion-v0.1.0.apk > MitakeCompanion-SHA256SUMS.txt
+          gh release create mitake-companion-v0.1.0 MitakeCompanion-v0.1.0.apk MitakeCompanion-SHA256SUMS.txt --target "$GITHUB_SHA" --title '漲停雷達 Android 電腦連動 v0.1.0' --notes-file android/MitakeCompanion/README.md --latest=false
+          curl --fail --location --retry 3 --max-time 90 'https://github.com/rex0966445518/stock-monitor-updates/releases/download/mitake-companion-v0.1.0/MitakeCompanion-v0.1.0.apk' --output verified.apk
+          cmp verified.apk MitakeCompanion-v0.1.0.apk

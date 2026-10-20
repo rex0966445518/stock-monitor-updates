@@ -10,9 +10,10 @@ from collections import deque
 from auto_ui import AutoUI
 from research_ui import ResearchUI
 from dashboard_ui import DashboardUI
+from mobile_ui import MobileUI
 from pathlib import Path
 
-VERSION = '0.3.62'
+VERSION = '0.3.63'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -212,7 +213,7 @@ def format_feedback(text):
     return text
 
 
-class App(AutoUI,ResearchUI,DashboardUI):
+class App(AutoUI,ResearchUI,DashboardUI,MobileUI):
     def __init__(self, root):
         import tkinter as tk
         from tkinter import ttk
@@ -263,7 +264,7 @@ class App(AutoUI,ResearchUI,DashboardUI):
             ttk.Button(bar, text=label, command=action).pack(side='left', padx=4)
         advanced = ttk.Menubutton(bar, text='進階工具 ▾')
         menu = tk.Menu(advanced, tearoff=False)
-        for label, action in [('重新自動定位', self.auto_setup), ('清除股名記憶', self.clear_stock_names), ('手動框選排行榜', self.select_region), ('手動校正欄位', self.calibrate), ('圖片辨識測試', self.image_test), ('合成資料示範', self.demo), ('辨識元件檢查', self.install), ('資料資料夾', self.open_folder), ('OCR學習紀錄', self.show_ocr_learning), ('中斷診斷', self.show_scan_diagnostics), ('版本日誌', self.show_version_history), ('訊號驗證紀錄', self.show_signal_reviews), ('進場檢核設定', self.show_guard_settings), ('籌碼觀察／研究', self.show_research), ('每日紀錄／重播驗證', self.show_scan_archive), ('5/6候選歷史日誌', self.show_candidate_diary), ('使用說明', self.help)]:
+        for label, action in [('手機連動／配對', self.show_mobile_pairing), ('重新自動定位', self.auto_setup), ('清除股名記憶', self.clear_stock_names), ('手動框選排行榜', self.select_region), ('手動校正欄位', self.calibrate), ('圖片辨識測試', self.image_test), ('合成資料示範', self.demo), ('辨識元件檢查', self.install), ('資料資料夾', self.open_folder), ('OCR學習紀錄', self.show_ocr_learning), ('中斷診斷', self.show_scan_diagnostics), ('版本日誌', self.show_version_history), ('訊號驗證紀錄', self.show_signal_reviews), ('進場檢核設定', self.show_guard_settings), ('籌碼觀察／研究', self.show_research), ('每日紀錄／重播驗證', self.show_scan_archive), ('5/6候選歷史日誌', self.show_candidate_diary), ('使用說明', self.help)]:
             menu.add_command(label=label, command=action)
         advanced.configure(menu=menu); advanced.pack(side='left', padx=4)
         self.main_actions=bar
@@ -683,6 +684,10 @@ class App(AutoUI,ResearchUI,DashboardUI):
             self.records.append(record); batch.append(record)
         self.status.set(f'{self.mode}｜本輪讀取 {len(quotes)} 檔｜略過 {rejected} 列｜辨識耗時 {elapsed:.1f} 秒｜本機掃描時間 {dt.datetime.now():%H:%M:%S}')
         if persist:
+            bridge=getattr(self,'mobile_bridge',None)
+            if bridge:
+                bridge.set_status(self.auto_active,self.scan_phase.get())
+                bridge.publish(rows,cfg,VERSION)
             try:
                 from candidate_diary import CandidateDiary
                 changed=CandidateDiary(BASE/'observations.sqlite3').observe(rows,cfg,VERSION)
@@ -815,6 +820,8 @@ class App(AutoUI,ResearchUI,DashboardUI):
                         self.tree.insert('', 'end', values=[q.code,q.name,q.price,q.gain,q.volume,q.turnover if q.turnover is not None else '—','—','圖片測試；請對照原圖'])
                     self.status.set(f'圖片測試｜讀取{len(quotes)}檔，略過{rejected}列；不寫實盤歷史、不提醒。')
         except queue.Empty: pass
+        bridge=getattr(self,'mobile_bridge',None)
+        if bridge:bridge.set_status(self.auto_active,self.scan_phase.get())
         self.scan_rate_var.set(self.scan_rate.text())
         panel=getattr(self,'task_panel',None)
         if panel and panel.alive:panel.rate.set(self.scan_rate.text())
@@ -977,6 +984,8 @@ class App(AutoUI,ResearchUI,DashboardUI):
         text.insert('1.0', HELP); text.configure(state='disabled')
 
     def close(self):
+        bridge=getattr(self,'mobile_bridge',None)
+        if bridge:bridge.close()
         index=getattr(self,'index_service',None)
         if index:index.close()
         service=getattr(self,'research_service',None)
