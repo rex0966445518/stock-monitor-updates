@@ -11,7 +11,7 @@ import android.view.*;
 import android.widget.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
-import com.sun.net.httpserver.HttpServer;
+import java.io.*;
 @RunWith(RobolectricTestRunner.class) @Config(sdk=34)
 public class CompanionTest {
     static final String TOKEN="a".repeat(48);
@@ -33,9 +33,15 @@ public class CompanionTest {
         assertTrue(AlertPolicy.detail(event(6,100,false)).contains("待確認"));assertTrue(AlertPolicy.detail(event(6,100,true)).contains("已通過"));
     }
     @Test public void actualAuthenticatedHttpClientAndCursor()throws Exception{
-        HttpServer server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
-        final String[] seen={""};server.createContext("/v1/snapshot",x->{seen[0]=x.getRequestHeaders().getFirst("Authorization");byte[] bytes="{\"protocol\":1,\"seq\":42}".getBytes(StandardCharsets.UTF_8);x.sendResponseHeaders(200,bytes.length);x.getResponseBody().write(bytes);x.close();});server.start();
-        try{JSONObject value=new BridgeClient().fetch(new Pairing("http://127.0.0.1:"+server.getAddress().getPort(),TOKEN),41,"session");assertEquals(42,value.getInt("seq"));assertEquals("Bearer "+TOKEN,seen[0]);}finally{server.stop(0);}
+        ServerSocket server=new ServerSocket(0);server.setSoTimeout(5000);
+        final String[] seen={""};
+        Thread worker=new Thread(()->{try(Socket client=server.accept()){
+            BufferedReader reader=new BufferedReader(new InputStreamReader(client.getInputStream(),StandardCharsets.UTF_8));
+            String line;while((line=reader.readLine())!=null&&!line.isEmpty())if(line.startsWith("Authorization: "))seen[0]=line.substring(15);
+            byte[] bytes="{\"protocol\":1,\"seq\":42}".getBytes(StandardCharsets.UTF_8);
+            OutputStream out=client.getOutputStream();out.write(("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "+bytes.length+"\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));out.write(bytes);out.flush();
+        }catch(Exception e){seen[0]=e.toString();}});worker.start();
+        try{JSONObject value=new BridgeClient().fetch(new Pairing("http://127.0.0.1:"+server.getLocalPort(),TOKEN),41,"session");assertEquals(42,value.getInt("seq"));assertEquals("Bearer "+TOKEN,seen[0]);}finally{server.close();worker.join(6000);}
     }
     @Test public void realActivityShowsOfflineAndDoesNotFabricateStocks(){
         MainActivity a=Robolectric.buildActivity(MainActivity.class).setup().get();

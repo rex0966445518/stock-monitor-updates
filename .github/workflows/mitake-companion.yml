@@ -31,12 +31,25 @@ jobs:
       - name: Verify UI, protocol and APK
         working-directory: android/MitakeCompanion
         run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
+      - name: Enable emulator acceleration
+        run: sudo chmod 666 /dev/kvm
+      - name: Android 15 PC connection and notification smoke
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: python3 android/MitakeCompanion/emulator_smoke.py
       - name: Preserve diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: MitakeCompanion-build
           path: |
+            android/MitakeCompanion/app/build/ui-previews
             android/MitakeCompanion/app/build/reports
             android/MitakeCompanion/app/build/test-results
             android/MitakeCompanion/app/build/outputs/apk/debug/*.apk
