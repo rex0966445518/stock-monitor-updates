@@ -45,6 +45,7 @@ class CandidateCharts:
     PAGE_SIZE=8
     def __init__(self,app,parent):
         self.app=app;self.frame=parent;self.rows=[];self.page=0;self.cache={};self.pending=set();self.cards={};self.key=None
+        self.test_mode=False;self.live_rows=[]
         self.web_cache={};self.photos={};self.last_requests={};self.closed=False
         from wantgoo_chart import WantGooCharts
         from MitakeDetector import BASE
@@ -52,9 +53,11 @@ class CandidateCharts:
         tk,ttk=app.tk,app.ttk
         bar=ttk.Frame(parent);bar.pack(fill='x')
         self.status=tk.StringVar(value='等待目前符合 5/6 或 6/6 的股票')
-        ttk.Label(bar,textvariable=self.status).pack(side='left',padx=8)
+        ttk.Label(parent,textvariable=self.status,wraplength=1000).pack(fill='x',padx=8,pady=4)
         ttk.Button(bar,text='上一頁',command=lambda:self.turn(-1)).pack(side='right')
         ttk.Button(bar,text='下一頁',command=lambda:self.turn(1)).pack(side='right')
+        self.test_button=ttk.Button(bar,text='測試 5/6・6/6 卡片',command=self.toggle_test)
+        self.test_button.pack(side='right',padx=8)
         self.canvas=tk.Canvas(parent,bg='#101827',highlightthickness=0)
         scroll=ttk.Scrollbar(parent,orient='vertical',command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=scroll.set);scroll.pack(side='right',fill='y');self.canvas.pack(fill='both',expand=True)
@@ -63,15 +66,16 @@ class CandidateCharts:
         self.inner.bind('<Configure>',lambda e:self.canvas.configure(scrollregion=self.canvas.bbox('all')))
         self.timer=app.root.after(1000,self.tick)
     def update(self,rows):
-        self.rows=rows
+        self.live_rows=list(rows)
+        self.rows=test_candidates() if self.test_mode else self.live_rows
         self.page=min(self.page,max(0,(len(rows)-1)//self.PAGE_SIZE))
         self.render()
     def turn(self,delta):
         self.page=max(0,min(self.page+delta,max(0,(len(self.rows)-1)//self.PAGE_SIZE)));self.canvas.yview_moveto(0);self.render()
     def render(self):
         visible=self.rows[self.page*self.PAGE_SIZE:(self.page+1)*self.PAGE_SIZE]
-        key=tuple((q.code,q.name,round(q.price,2),m['count'],m['total']) for q,m in visible)
-        self.status.set(f'候選 {len(self.rows)} 檔｜第 {self.page+1}/{max(1,(len(self.rows)+7)//8)} 頁｜日線非即時；五分 K 背景載入／點圖放大')
+        key=tuple((q.code,q.name,q.price,m['count'],m['total'],self.test_mode) for q,m in visible)
+        self.status.set(('【測試模式：符合數為示範，不是選股結果】 ' if self.test_mode else '')+f'候選 {len(self.rows)} 檔｜第 {self.page+1}/{max(1,(len(self.rows)+7)//8)} 頁｜日線非即時；五分 K 背景載入／點圖放大')
         if key!=self.key:
             self.key=key
             for child in self.inner.winfo_children():child.destroy()
@@ -83,7 +87,8 @@ class CandidateCharts:
     def make_card(self,q,match):
         tk,ttk=self.app.tk,self.app.ttk
         card=ttk.Frame(self.inner,padding=8);card.pack(fill='x',pady=5)
-        ttk.Label(card,text=f'{q.name or "股名待補"}  {q.code}  ｜ {match["count"]}/6 ｜ 掃描價 {q.price:.2f}',font=('Microsoft JhengHei',13,'bold')).pack(anchor='w')
+        price_text='未執行掃描' if q.price is None else f'{q.price:.2f}'
+        ttk.Label(card,text=('【測試】 ' if self.test_mode else '')+f'{q.name or "股名待補"}  {q.code}  ｜ {match["count"]}/6 ｜ 掃描價 {price_text}',font=('Microsoft JhengHei',13,'bold')).pack(anchor='w')
         panels=ttk.Frame(card);panels.pack(fill='x')
         links=source_links(q.code);canvases=[]
         for i,title in enumerate(('5 分 K · 玩股網','日 K · 官方快取','日成交量 · 張','日 MACD · 12/26/9')):
@@ -160,6 +165,20 @@ class CandidateCharts:
             if len(points)>1:c.create_line(*[a for p in points for a in p],fill=color,width=2)
         c.create_text(40,10,anchor='w',text='黃 DIF / 藍 DEA / 柱 2×差',fill='#b9cadd')
 
+    def toggle_test(self):
+        self.test_mode=not self.test_mode;self.page=0;self.key=None
+        self.test_button.configure(text='結束測試／回正式名單' if self.test_mode else '測試 5/6・6/6 卡片')
+        self.update(self.live_rows)
+        self.canvas.yview_moveto(0)
+        if self.test_mode and '--smoke-test' not in __import__('sys').argv:
+            codes=[q.code for q,m in self.rows]
+            service=getattr(self.app,'research_service',None)
+            if service:service.request(codes)
+            for code in codes:
+                self.last_requests.pop(code,None)
+                self.web_service.request(code)
+                self.last_requests[code]=time.monotonic()
+
     def tick(self):
         if self.closed:return
         # Load only the current chart page, not hundreds of off-screen candidates.
@@ -212,3 +231,10 @@ class CandidateCharts:
         try:self.app.root.after_cancel(self.timer)
         except Exception:pass
         self.web_service.close()
+
+
+def test_candidates():
+    """UI-only fixtures: scores are simulated, all market charts remain real sources."""
+    from types import SimpleNamespace
+    return [(SimpleNamespace(code=code,name=name,price=None),dict(count=count,total=6))
+            for code,name,count in [('2330','台積電',6),('2317','鴻海',5)]]

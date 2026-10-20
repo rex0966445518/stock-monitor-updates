@@ -183,6 +183,18 @@ def run_smoke_test(report):
         charts.enlarge('2330');app.root.update_idletasks()
         charts.update([])
         info['wantgoo_edge_fixture']=chart_result
+        original_rows=list(app.display_rows)
+        charts.test_button.invoke();app.root.update_idletasks()
+        assert charts.test_mode and set(charts.cards)=={'2330','2317'}
+        assert [m['count'] for q,m in charts.rows]==[6,5]
+        assert all(q.price is None for q,m in charts.rows)
+        charts.update([])
+        assert set(charts.cards)=={'2330','2317'},'Live scan redraw erased test mode'
+        assert app.display_rows==original_rows,'Test button changed actual scanner results'
+        charts.test_button.invoke();app.root.update_idletasks()
+        assert not charts.test_mode and not charts.cards
+        info['candidate_test_button']=True
+
 
         from layout_smoke import run_layout_smoke
         info['adaptive_header_layouts']=run_layout_smoke(app)

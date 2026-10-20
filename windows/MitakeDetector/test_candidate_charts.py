@@ -47,3 +47,12 @@ class WantGooTests(unittest.TestCase):
             self.assertEqual(service.cached('2330')['error'],'timeout')
             data['error']='';(p/'result.json').write_text(json.dumps(data))
             self.assertIsNone(service.cached('2330'))
+
+class PreviewTests(unittest.TestCase):
+    def test_preview_scores_are_explicit_and_not_market_quotes(self):
+        from candidate_charts import test_candidates
+        rows=test_candidates()
+        self.assertEqual([m['count'] for q,m in rows],[6,5])
+        self.assertTrue(all(m['total']==6 and q.price is None for q,m in rows))
+        rows[0][1]['count']=0
+        self.assertEqual(test_candidates()[0][1]['count'],6)
