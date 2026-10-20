@@ -47,7 +47,7 @@ public class MainActivity extends Activity {
     @Override public void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);if(intent.getData()!=null)acceptPair(intent.getData().toString());}
     @Override public void onResume(){super.onResume();handler.post(tick);}
     @Override public void onPause(){handler.removeCallbacks(tick);super.onPause();}
-    void scan(){new IntentIntegrator(this).setDesiredBarcodeFormats(IntentIntegrator.QR_CODE_TYPES).setPrompt("掃描電腦「手機連動／配對」的QR碼").setBeepEnabled(false).setOrientationLocked(false).initiateScan();}
+    void scan(){new IntentIntegrator(this).setDesiredBarcodeFormats(Collections.singletonList(IntentIntegrator.QR_CODE)).setPrompt("掃描電腦「手機連動／配對」的QR碼").setBeepEnabled(false).setOrientationLocked(false).initiateScan();}
     @Override public void onActivityResult(int request,int result,Intent data){IntentResult scan=IntentIntegrator.parseActivityResult(request,result,data);if(scan!=null){if(scan.getContents()!=null)acceptPair(scan.getContents());return;}super.onActivityResult(request,result,data);}
     void acceptPair(String value){try{Pairing pair=Pairing.parse(value);new AlertDialog.Builder(this).setTitle("連接這台電腦？").setMessage(pair.address+"\n接收5/6、6/6觀察通知，直到手動停止。").setPositiveButton("連線",(d,w)->connect(pair)).setNegativeButton("取消",null).show();}catch(Exception e){message("配對失敗",e.getMessage());}}
     void connect(Pairing pair){stopService(new Intent(this,BridgeService.class));BridgeService.latest=null;BridgeService.receivedAt=0;BridgeService.connection="正在連接電腦…";

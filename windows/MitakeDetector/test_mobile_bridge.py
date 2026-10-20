@@ -14,7 +14,7 @@ class BridgeTests(unittest.TestCase):
     def row(self,stamp,ratio=2,hit=False,reason='等待觀測突破守穩',turnover=4):return (Quote('2330','台積電',100,3,2000,turnover,stamp),ratio,reason,hit)
     def test_upgrade_dedup_weak_stale_and_paused(self):
         with tempfile.TemporaryDirectory() as folder:
-            b=MobileBridge(Path(folder)/'pair.json');now=time.time();cfg=self.cfg()
+            b=MobileBridge(Path(folder)/'pair.json');now=time.time()-10;cfg=self.cfg()
             b.publish([self.row(now)],cfg,'test',now)
             self.assertEqual((b.seq,b.snapshot()['rows'][0]['matched']),(1,5))
             b.publish([self.row(now)],cfg,'test',now+1);self.assertEqual(b.seq,1)
@@ -27,7 +27,7 @@ class BridgeTests(unittest.TestCase):
             self.assertFalse(b.snapshot()['active'])
     def test_invalid_and_disabled_conditions_do_not_emit(self):
         with tempfile.TemporaryDirectory() as folder:
-            b=MobileBridge(Path(folder)/'pair.json');now=time.time()
+            b=MobileBridge(Path(folder)/'pair.json');now=time.time()-10
             b.publish([self.row(now,hit=True,reason='掃描讀值已過期')],self.cfg(),'test',now)
             b.publish([self.row(now+1,hit=True,reason='轉強候選')],dict(self.cfg(),use_accel=False),'test',now+1)
             self.assertEqual(b.seq,0)
@@ -40,7 +40,7 @@ class BridgeTests(unittest.TestCase):
                 self.assertEqual(error.exception.code,401)
                 def get(path=''):
                     return json.load(urllib.request.urlopen(urllib.request.Request(url+path,headers={'Authorization':'Bearer '+b.token})))
-                now=time.time();b.publish([self.row(now)],self.cfg(),'test',now)
+                now=time.time()-10;b.publish([self.row(now)],self.cfg(),'test',now)
                 self.assertEqual(len(get()['events']),1)
                 self.assertEqual(get(f'?after=1&session={b.session}')['events'],[])
                 old=b.token;b.rotate()
@@ -49,7 +49,7 @@ class BridgeTests(unittest.TestCase):
             finally:b.close()
     def test_restart_changes_session_and_day_rolls_history(self):
         with tempfile.TemporaryDirectory() as folder:
-            path=Path(folder)/'pair.json';b=MobileBridge(path);now=time.time()
+            path=Path(folder)/'pair.json';b=MobileBridge(path);now=time.time()-10
             b.publish([self.row(now)],self.cfg(),'test',now)
             b.publish([self.row(now+86400)],self.cfg(),'test',now+86400)
             self.assertEqual(len(b.rows),1);self.assertEqual(len(b.events),1)
