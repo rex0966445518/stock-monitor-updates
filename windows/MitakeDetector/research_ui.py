@@ -26,6 +26,7 @@ class ResearchUI:
         if kind=='research_status':self.research_status.set(payload)
         elif kind=='research_diary':
             self.candidate_import_running=False
+            if hasattr(self,'refresh_today_candidates'):self.refresh_today_candidates(force=True)
             diary=getattr(self,'candidate_diary_view',None)
             if diary and diary.window.winfo_exists():
                 diary.importing=False;diary.refresh(force=True);diary.status.set(payload)

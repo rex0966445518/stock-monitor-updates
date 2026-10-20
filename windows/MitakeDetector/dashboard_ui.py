@@ -46,8 +46,20 @@ class DashboardUI:
         return bottom
     def init_dashboard(self):
         self.index_service=MarketIndex(lambda payload:self.events.put((None,'market_index',payload)))
-        if '--smoke-test' not in sys.argv:self.index_service.start()
+        if '--smoke-test' not in sys.argv:
+            self.index_service.start()
+            self.app_import_diary()
         self.refresh_today_candidates(force=True)
+    def app_import_diary(self):
+        import threading
+        self.candidate_import_running=True
+        def job():
+            try:
+                count=self.diary_store.import_archive()
+                message=f'候選日誌已整理既有{count}筆讀值'
+            except Exception as exc:message='候選舊紀錄整理暫停，可從日曆重試：'+str(exc)
+            self.events.put((None,'research_diary',message))
+        threading.Thread(target=job,daemon=True).start()
     def update_market_index(self,payload):
         if payload.get('quote'):
             q=payload['quote']
