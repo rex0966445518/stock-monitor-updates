@@ -12,7 +12,7 @@ from research_ui import ResearchUI
 from dashboard_ui import DashboardUI
 from pathlib import Path
 
-VERSION = '0.3.61'
+VERSION = '0.3.62'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -781,6 +781,9 @@ class App(AutoUI,ResearchUI,DashboardUI):
                 elif kind == 'auto_progress':
                     detail,completed,total=payload
                     self.status.set(detail); self.update_task_progress(detail,completed,total)
+                elif kind == 'auto_layout_done':
+                    self.config.update(payload);self.save()
+                    self.say('已儲存此設備的表頭與選單位置；原篩選條件及歷史資料保留')
                 elif kind == 'auto_setup_done':
                     cfg,target,count,start_after=payload
                     self.auto_active=False;self.auto_hwnd=target;self.config=cfg
@@ -1060,11 +1063,8 @@ if __name__ == '__main__':
     elif '--self-test' in sys.argv:
         self_test()
     else:
-        if sys.platform == 'win32':
-            try:
-                import ctypes
-                ctypes.windll.shcore.SetProcessDpiAwareness(2)
-            except Exception: pass
+        from display_scale import enable_dpi_awareness
+        enable_dpi_awareness()
         if sys.platform == 'win32':
             import ctypes
             _app_mutex = ctypes.windll.kernel32.CreateMutexW(None, False, 'Local\\RexMitakeDetector')

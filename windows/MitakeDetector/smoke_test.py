@@ -11,6 +11,8 @@ def run_smoke_test(report):
     info={}
     root=None
     try:
+        from display_scale import enable_dpi_awareness
+        enable_dpi_awareness()
         import tkinter as tk
         from PIL import Image,ImageDraw,ImageFont,ImageGrab
         from MitakeDetector import App,Quote,DEFAULT,VERSION,BASE
@@ -145,6 +147,8 @@ def run_smoke_test(report):
         assert {q.code for q in recovered}=={'2330','2317'},repr(recovered)
         assert next(q for q in recovered if q.code=='2317').price==205
         info['fresh_tiled_recovery_rows']=len(recovered)
+        from layout_smoke import run_layout_smoke
+        info['adaptive_header_layouts']=run_layout_smoke(app)
         # Actual bundled OCR: unknown names must not block numeric results.
         app.stock_names=StockNames();app.numeric_priority=True
         started=time.perf_counter()

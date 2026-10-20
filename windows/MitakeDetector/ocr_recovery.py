@@ -42,3 +42,11 @@ def tiled_numeric(image,bounds,read,names,memory=None,status=lambda *args:None,h
             if q.code in allowed:found[q.code]=q
         bad+=rejected
     return list(found.values()),bad,anchors_all,scores_all
+
+
+def zoom_tokens(image,read):
+    """Enlarge small header glyphs, returning coordinates in original pixels."""
+    from PIL import Image,ImageOps
+    image=ImageOps.autocontrast(image.convert('RGB'))
+    enlarged=image.resize((image.width*2,image.height*2),Image.Resampling.LANCZOS)
+    return [([[x/2,y/2] for x,y in box],text,score) for box,text,score in read(enlarged)]

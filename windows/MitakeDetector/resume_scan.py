@@ -70,3 +70,10 @@ class ScanCheckpoint:
     def clear(self):
         with self.lock:
             self.path.unlink(missing_ok=True);self.data={}
+
+
+def rebase_viewport_cursor(table):
+    """Old wheel offsets are invalid after relayout; retain every observed quote."""
+    table=json.loads(json.dumps(table))
+    table.update(segment=0,codes=[],offset=0,notches=1,cap=1,relayout=True)
+    return table

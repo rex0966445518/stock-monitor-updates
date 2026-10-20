@@ -339,14 +339,45 @@ class AutoUI:
 
     def detect_layout_recovering(self,image,require_combo=True):
         from auto_detect import detect_layout
+        from ocr_recovery import fresh_ocr,tiled_tokens,zoom_tokens
         try:return detect_layout(image,self.read_auto_ocr,require_combo=require_combo)
         except AutomationStopped:raise
-        except (ValueError,RuntimeError):
-            from ocr_recovery import fresh_ocr,tiled_tokens
-            with fresh_ocr(self):
-                return detect_layout(image,lambda crop:tiled_tokens(crop,self.read_auto_ocr,
-                    status=lambda box:self.recovery_region(crop,box,'表頭分區放大重新定位')),
-                    require_combo=require_combo)
+        except (ValueError,RuntimeError):pass
+        with fresh_ocr(self):
+            try:return detect_layout(image,lambda crop:tiled_tokens(crop,self.read_auto_ocr),require_combo=require_combo)
+            except AutomationStopped:raise
+            except (ValueError,RuntimeError):
+                return detect_layout(image,lambda crop:tiled_tokens(crop,
+                    lambda tile:zoom_tokens(tile,self.read_auto_ocr),width=384,height=192,overlap=24),require_combo=require_combo)
+
+    def adapt_scan_layout(self,c,auto,cfg,token,ranking):
+        """Recalibrate at task start; never click a scaled old coordinate."""
+        from auto_detect import cached_layout,detect_menu
+        from MitakeDetector import BASE
+        size=[c.initial_rect[2]-c.initial_rect[0],c.initial_rect[3]-c.initial_rect[1]]
+        resized=size!=auto.get('window_size')
+        if not resized and not auto.get('discovered'):return False
+        self.events.put((token,'auto_status',f'目前視窗 {size[0]}×{size[1]}｜'+('解析度或視窗大小已變更，自動重新定位表頭與選單' if resized else '核對表頭頭尾位置，必要時自動重新定位')))
+        full,_=c.image([0,0,1,1])
+        layout,reused=cached_layout(full,self.read_auto_ocr,BASE/'header-layout.json',
+            None if resized else cfg.get('column_bounds'),None if resized else auto.get('table'),detector=self.detect_layout_recovering)
+        c.check()
+        menu_changed=resized or layout['combo']!=auto.get('combo')
+        menu=auto['menu']
+        if menu_changed:
+            self.events.put((token,'auto_status','已找到新表頭｜正在重新定位排行下拉選單'))
+            combo=absolute_roi(layout['combo'],c.rect())
+            c.click((combo['left']+combo['width']//2,combo['top']+combo['height']//2));c.pause(.6)
+            opened,_=c.image([0,0,1,1])
+            menu=detect_menu(opened,layout['combo'],self.read_auto_ocr);c.check()
+            RankingSwitcher(c,self.read_auto_ocr,layout['combo'],menu,ocr_retry=self.read_menu_ocr_retry,
+                status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None)))).switch(ranking,menu_open=True)
+        geometry_changed=resized or layout['column_bounds']!=cfg.get('column_bounds') or layout['table']!=auto.get('table') or menu_changed
+        auto.update(window_size=size,combo=layout['combo'],menu=menu,table=layout['table'],discovered=1)
+        cfg.update(auto_config=auto,column_bounds=layout['column_bounds'],region=absolute_roi(layout['table'],c.rect()))
+        self.events.put((token,'auto_layout_done',dict(auto_config=auto.copy(),column_bounds=layout['column_bounds'],region=cfg['region'])))
+        self.events.put((token,'auto_status','表頭頭尾一致，已略過逐欄辨識' if reused else f'已適應 {size[0]}×{size[1]} 視窗｜表頭與操作位置已確認'))
+        return geometry_changed
 
     def show_scan_diagnostics(self):
         from MitakeDetector import BASE
@@ -661,27 +692,23 @@ class AutoUI:
             try:
                 c=WindowsController(target,stop)
                 c.highlight=lambda region:self.prepare_scan_capture(token,region,stop)
-                if list((c.initial_rect[2]-c.initial_rect[0],c.initial_rect[3]-c.initial_rect[1]))!=auto.get('window_size'):
-                    raise ValueError('三竹視窗尺寸與框選時不同，請重新設定位置')
                 c.activate()
                 self.hide_scan_cursor(token)
                 threading.Thread(target=c.monitor_hotkey,daemon=True).start()
+                ranking=auto['rankings'][saved['rank'] if saved else 0]
+                changed=self.adapt_scan_layout(c,auto,cfg,token,ranking)
+                if changed:
+                    from resume_scan import rebase_viewport_cursor
+                    if saved and saved.get('table'):
+                        saved['table']=rebase_viewport_cursor(saved['table'])
+                        self.events.put((token,'auto_status','已保留前次股票與輪次｜新設備重新核對目前排行位置'))
+                    context.clear();context.update(scan_context(cfg))
+                    if store and saved:store.update(context,saved)
                 from adaptive import Experience
                 from MitakeDetector import BASE
                 experience=Experience(BASE/'automation-experience.json',
                     {k:auto.get(k) for k in ('title','window_size','combo','menu','table')},auto.get('adaptive',True))
                 switcher=RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu'],experience=experience,ocr_retry=self.read_menu_ocr_retry,status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None))))
-                if auto.get('discovered'):
-                    from auto_detect import cached_layout
-                    self.events.put((token,'auto_status','快速核對表頭頭尾位置，沿用已確認欄位…'))
-                    full,_=c.image([0,0,1,1])
-                    try:layout,reused=cached_layout(full,self.read_auto_ocr,BASE/'header-layout.json',cfg.get('column_bounds'),auto.get('table'))
-                    except AutomationStopped:raise
-                    except (ValueError,RuntimeError):
-                        layout=self.detect_layout_recovering(full);reused=False
-                    c.check()
-                    self.events.put((token,'auto_status','表頭頭尾一致，已略過逐欄辨識' if reused else '表頭配置已重新確認並記住'))
-                    cfg['column_bounds']=layout['column_bounds'];auto['table']=layout['table']
                 priority_last={}
                 failed_reads=[0];saved_failure=[False]
                 cycle=saved['cycle'] if saved else 1

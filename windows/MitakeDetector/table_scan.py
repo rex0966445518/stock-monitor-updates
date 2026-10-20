@@ -29,7 +29,7 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
     cap=max(1,min(6,scroll_cap,int(saved.get('cap',scroll_cap))));recovery_stalls=0
     rebuilds=0;layout_repairs=0
     offset=saved.get('offset',0);first=saved.get('segment',0)
-    if not saved:
+    if not saved or saved.get('relayout'):
         controller.scroll(center,120*4000);controller.pause(.6)
     else:progress(first+1,len(collected),'接續前次斷點，核對目前股票列')
     def anchor_codes(image,quotes):

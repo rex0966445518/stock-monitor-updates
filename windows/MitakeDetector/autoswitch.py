@@ -154,7 +154,7 @@ class WindowsController:
         # Refuse to continue after resizing; calibrated proportions can change column layout.
         a=self.initial_rect
         if abs((rect[2]-rect[0])-(a[2]-a[0]))>3 or abs((rect[3]-rect[1])-(a[3]-a[1]))>3:
-            raise AutomationStopped('目標視窗已縮放，請重新設定位置')
+            raise AutomationStopped('目標視窗已縮放，進度保留；按F8自動重新定位並接續')
         fg=self.u.GetForegroundWindow()
         if not self.belongs(fg) and not self.dashboard_foreground(fg):
             raise AutomationStopped('焦點已切換到其他軟體，已暫停；三竹與探測器主頁之間切換不會停止')

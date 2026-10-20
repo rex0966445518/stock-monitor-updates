@@ -107,3 +107,18 @@ class DisplayScale:
                 temporary=self.path.with_suffix('.tmp');temporary.write_text(json.dumps({'scale':value}),'utf-8');temporary.replace(self.path)
             except OSError as error:self.app.say('介面縮放已套用，設定無法儲存：'+str(error))
         return value
+
+
+def enable_dpi_awareness():
+    """Use physical screen coordinates before creating Tk or grabbing pixels."""
+    import sys
+    if sys.platform!='win32':return
+    import ctypes
+    try:
+        u=ctypes.windll.user32
+        u.SetProcessDpiAwarenessContext.argtypes=[ctypes.c_void_p]
+        u.SetProcessDpiAwarenessContext.restype=ctypes.c_bool
+        if u.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4)):return
+    except (AttributeError,OSError):pass
+    try:ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except (AttributeError,OSError):pass

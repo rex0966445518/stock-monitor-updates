@@ -24,19 +24,20 @@ def combo_frame(image,tokens):
     candidates=[]
     for token in tokens:
         l,t,r,b=bbox(token)
-        if token[2]<.65 or l>w*.20 or t>h*.13:continue
+        if token[2]<.65 or l>w*.35 or t>h*.45:continue
+        unit=max(.5,min(4,(b-t)/18));pad=max(10,round(20*unit))
         text=normalized(token[1])
         score=max(difflib.SequenceMatcher(None,text,normalized(n)).ratio() for n in RANKINGS)
         if score<.70:continue
         cy=(t+b)/2;cx=(l+r)/2
         edges=[]
-        for y in range(max(0,int(t)-20),min(h,int(b)+20)):
-            row=a[y,:min(w,int(w*.35))]
+        for y in range(max(0,int(t)-pad),min(h,int(b)+pad)):
+            row=a[y,:min(w,int(w*.60))]
             mask=(row.max(1)-row.min(1)<55)&(row.mean(1)>65)&(row.mean(1)<190)
             for x0,x1 in runs(np.flatnonzero(mask)):
-                if x0<cx<x1 and r-l+12<x1-x0<min(420,w*.35):edges.append((y,x0,x1))
+                if x0<cx<x1 and r-l+max(4,6*unit)<x1-x0<min(420*unit,w*.60):edges.append((y,x0,x1))
         above=[e for e in edges if e[0]<cy-3];below=[e for e in edges if e[0]>cy+3]
-        pairs=[(up,dn) for up in above for dn in below if abs(up[1]-dn[1])<6 and abs(up[2]-dn[2])<6 and 15<dn[0]-up[0]<80]
+        pairs=[(up,dn) for up in above for dn in below if abs(up[1]-dn[1])<6 and abs(up[2]-dn[2])<6 and max(8,10*unit)<dn[0]-up[0]<80*unit]
         if pairs:
             up,dn=min(pairs,key=lambda pair:pair[1][0]-pair[0][0])
             candidates.append((min(up[1],dn[1])-1,up[0]-1,max(up[2],dn[2])+2,dn[0]+2))
@@ -52,7 +53,7 @@ ALIASES={
 def clean(text):return re.sub(r'[^\u3400-\u9fffA-Za-z0-9]','',unicodedata.normalize('NFKC',text))
 
 
-def detect_layout(image,ocr,require_combo=True):
+def _detect_layout_pixels(image,ocr,require_combo=True):
     import numpy as np
     w,h=image.size
     top=image.crop((0,0,w,min(h,max(150,int(h*.18)))))
@@ -91,6 +92,53 @@ def detect_layout(image,ocr,require_combo=True):
     return dict(combo=combo,table=table,column_bounds=bounds,headers=headers)
 
 
+def _layout_from_tokens(image,tokens,require_combo):
+    """Require all six unique labels on one row, independent of font pixels."""
+    w,h=image.size
+    usable=[t for t in tokens if t[2]>=.65 and bbox(t)[3]>bbox(t)[1]]
+    candidates=[]
+    for code in [t for t in usable if clean(t[1]) in ALIASES['code']]:
+        _,ct,_,cb=bbox(code);cy=(ct+cb)/2;ch=cb-ct
+        row=[t for t in usable if abs((bbox(t)[1]+bbox(t)[3])/2-cy)<=max(ch,bbox(t)[3]-bbox(t)[1])*.55]
+        found={}
+        for field,aliases in ALIASES.items():
+            matches=[t for t in row if clean(t[1]) in aliases]
+            if len(matches)!=1:break
+            found[field]=bbox(matches[0])
+        if len(found)!=len(ALIASES):continue
+        ordered=sorted(found.items(),key=lambda pair:pair[1][0])
+        if any(a[1][2]>=b[1][0] for a,b in zip(ordered,ordered[1:])):continue
+        # Extra visible columns also delimit fields; do not absorb their values.
+        spans=sorted((bbox(t)[0],bbox(t)[2],clean(t[1])) for t in row)
+        if any(a[1]>b[0] for a,b in zip(spans,spans[1:])):continue
+        bounds={}
+        for field,(l,t,r,b) in found.items():
+            i=next(i for i,v in enumerate(spans) if v[:2]==(l,r))
+            left=(spans[i-1][1]+l)/2 if i else 0
+            right=(r+spans[i+1][0])/2 if i+1<len(spans) else w
+            if field=='code':left=max(left,l-ch)
+            bounds[field]=[max(0,left/w),min(1,right/w)]
+        bottom=max(v[3] for v in found.values())+max(2,round(ch*.18))
+        if bottom>=h-20:continue
+        combo=None
+        if require_combo:
+            try:
+                l,t,r,b=combo_frame(image,tokens);combo=[l/w,t/h,(r-l)/w,(b-t)/h]
+            except ValueError:continue
+        candidates.append(dict(combo=combo,table=[0,bottom/h,1,(h-bottom-max(4,round(ch*.5)))/h],
+                               column_bounds=bounds,headers=spans))
+    if len(candidates)!=1:raise ValueError('未找到唯一且完整的六欄表頭；請保持股號、股名、成交價、漲幅、成交量、週轉率完整可見。')
+    return candidates[0]
+
+
+def detect_layout(image,ocr,require_combo=True):
+    try:return _detect_layout_pixels(image,ocr,require_combo)
+    except ValueError:
+        # Laptop DPI/titlebars can put headers below the old top-18% strip.
+        height=min(image.height,max(240,round(image.height*.55)))
+        return _layout_from_tokens(image,ocr(image.crop((0,0,image.width,height))),require_combo)
+
+
 def detect_menu(image,combo,ocr):
     w,h=image.size
     x,y,cw,ch=combo
@@ -101,7 +149,7 @@ def detect_menu(image,combo,ocr):
     items=[t for t in tokens if t[2]>=.65 and normalized(t[1]) in {normalized(n) for n in RANKINGS}]
     if len(items)<3:raise ValueError('展開選單後未辨識到至少三個排行名稱，已停止自動設定。')
     xs=[bbox(t)[0] for t in items]
-    if max(xs)-min(xs)>40:raise ValueError('選單文字位置不一致，請使用手動框選。')
+    if max(xs)-min(xs)>max(40,max(bbox(t)[3]-bbox(t)[1] for t in items)*2):raise ValueError('選單文字位置不一致，請使用手動框選。')
     l=max(0,left+min(bbox(t)[0] for t in items)-10)
     r=min(w,left+max(bbox(t)[2] for t in items)+55)
     t=max(top,top+min(bbox(t)[1] for t in items)-6)
@@ -109,7 +157,7 @@ def detect_menu(image,combo,ocr):
     return [l/w,t/h,(r-l)/w,(b-t)/h]
 
 
-def cached_layout(image,ocr,path,configured_bounds,configured_table):
+def cached_layout(image,ocr,path,configured_bounds,configured_table,detector=None):
     """Reuse verified geometry after checking only the two end header patches."""
     import hashlib
     import json
@@ -125,7 +173,7 @@ def cached_layout(image,ocr,path,configured_bounds,configured_table):
                 and len(ends)==2 and all(signature(e['box'])==e['hash'] for e in ends)):
             return layout,True
     except (OSError,ValueError,KeyError,TypeError):pass
-    layout=detect_layout(image,ocr)
+    layout=detector(image) if detector else detect_layout(image,ocr)
     headers=sorted(layout['headers'],key=lambda x:x[0])
     w,h=image.size;y=int(layout['table'][1]*h)
     # Include the full header height and its surrounding position, never live quote rows.

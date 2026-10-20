@@ -51,7 +51,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Syntax check failed' }
           python MitakeDetector.py --self-test
           if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
-          python -m unittest -v test_updater test_autoswitch test_auto_detect test_adaptive test_table_scan test_fast_quotes test_resume_scan test_version_history test_ocr_learning test_start_auto test_research test_scan_archive test_volume_rate test_candidate_diary test_market_index test_ocr_recovery test_status_bounds
+          python -m unittest -v test_updater test_autoswitch test_auto_detect test_adaptive test_table_scan test_fast_quotes test_resume_scan test_version_history test_ocr_learning test_start_auto test_research test_scan_archive test_volume_rate test_candidate_diary test_market_index test_ocr_recovery test_status_bounds test_adaptive_layout
           if ($LASTEXITCODE -ne 0) { throw 'Update validation tests failed' }
           python -c "from build_release import version; print('MITAKE_VERSION='+version())" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           python build_history.py
