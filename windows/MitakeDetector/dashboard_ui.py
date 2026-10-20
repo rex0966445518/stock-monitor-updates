@@ -26,6 +26,7 @@ class DashboardUI:
         from MitakeDetector import BASE
         ttk=self.ttk;tk=self.tk
         bottom=ttk.Frame(self.root);bottom.pack(fill='x',padx=18,pady=8)
+        bottom.rowconfigure(0,weight=1)
         bottom.columnconfigure(0,weight=3,uniform='bottom');bottom.columnconfigure(1,weight=2,uniform='bottom')
         self.today_frame=ttk.LabelFrame(bottom,text='今日曾達5/6（轉弱仍保留）');self.today_frame.grid(row=0,column=0,sticky='nsew',padx=(0,8))
         columns=('code','name','first','price','latest','state')
