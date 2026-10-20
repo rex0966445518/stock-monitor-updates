@@ -34,6 +34,9 @@ required = {
     'Lcom/journeyapps/barcodescanner/CaptureManager;',
     'Lcom/google/zxing/MultiFormatReader;',
     'Lcom/rex/mitakecompanion/MainActivity;',
+    'Lcom/rex/mitakecompanion/portfolio/PortfolioActivity;',
+    'Lcom/rex/mitakecompanion/portfolio/ChipCaptureService;',
+    'Lcom/google/mlkit/vision/text/chinese/ChineseTextRecognizerOptions;',
 }
 missing = required - classes
 assert not missing, f'Missing packaged scanner classes: {sorted(missing)}'

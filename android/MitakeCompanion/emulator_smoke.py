@@ -151,3 +151,60 @@ with tempfile.TemporaryDirectory() as folder:
     except Exception:
         screen('companion-failure.png');(out/'logcat.txt').write_text(adb('logcat','-d','-t','300'),'utf-8');raise
     finally:stop.set();bridge.close()
+
+# Personal portfolio: confirm units, persistence, local screenshot OCR and missing-key flow.
+adb('shell','input','swipe','400','400','400','1500','450')
+tap('個人股倉分析',seek='up')
+assert '尚無持股' in dump()
+tap('手動新增持股')
+fields=[n for n in ET.fromstring(dump()).iter('node') if n.attrib.get('class')=='android.widget.EditText']
+assert len(fields)==5
+x1,y1,x2,y2=map(int,re.findall(r'\d+',fields[0].attrib['bounds']))
+adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2))
+for index,value in enumerate(['2330','QA-TSMC','1000','100','110']):
+    adb('shell','input','text',value)
+    if index<4:adb('shell','input','keyevent','61')
+if re.search(r'mInputShown=true|mIsInputViewShown=true',adb('shell','dumpsys','input_method')):
+    adb('shell','input','keyevent','4')
+tap('確認儲存')
+ui=dump();assert '1000 股' in ui and '10000 元' in ui,ui
+tap('收集圖片與分析')
+assert 'K線 · 缺圖' in dump()
+tap('送至Gemini分析')
+assert 'Gemini設定' in dump() and '輸入Gemini API金鑰' in dump()
+tap('取消')
+# Use an explicitly synthetic existing scanner screenshot as a real image-picker input.
+adb('push',str(out/'companion-card-chart.png'),'/sdcard/Download/mitake-portfolio-fixture.png')
+adb('shell','am','broadcast','-a','android.intent.action.MEDIA_SCANNER_SCAN_FILE','-d','file:///sdcard/Download/mitake-portfolio-fixture.png')
+tap('匯入「K線」截圖',seek='up')
+time.sleep(2)
+ui=dump()
+# DocumentsUI may open either the recent view or a remembered download folder.
+if 'mitake-portfolio-fixture' not in ui:
+    root=ET.fromstring(ui)
+    drawer=next((n for n in root.iter('node') if n.attrib.get('content-desc') in ['Show roots','顯示根目錄','開啟導覽匣']),None)
+    assert drawer is not None,ui
+    x1,y1,x2,y2=map(int,re.findall(r'\d+',drawer.attrib['bounds']))
+    adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2));time.sleep(.5)
+    ui=dump();downloads=next((n for n in ET.fromstring(ui).iter('node') if n.attrib.get('text') in ['Downloads','下載']),None)
+    assert downloads is not None,ui
+    x1,y1,x2,y2=map(int,re.findall(r'\d+',downloads.attrib['bounds']))
+    adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2));time.sleep(.8)
+ui,node=find_ui('mitake-portfolio-fixture',contains=True)
+x1,y1,x2,y2=map(int,re.findall(r'\d+',node.attrib['bounds']))
+adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2))
+for attempt in range(12):
+    time.sleep(2);ui=dump()
+    if '核對個股圖片' in ui:break
+assert '核對個股圖片' in ui and '本機辨識' in ui,ui
+assert '本機文字辨識失敗' not in ui,ui
+tap('已核對，加入本次分析')
+ui=dump();assert 'K線 · 已加入' in ui,ui
+# Data survives activity/process restart; this fixture never contacts Gemini.
+adb('shell','am','force-stop','com.rex.mitakecompanion')
+adb('shell','am','start','-W','-n','com.rex.mitakecompanion/.MainActivity')
+tap('個人股倉分析',seek='up')
+ui=dump();assert 'QA-TSMC' in ui and '1000 股' in ui,ui
+(out/'portfolio-ui.xml').write_text(ui,'utf-8')
+assert 'FATAL EXCEPTION' not in adb('logcat','-d','-s','AndroidRuntime:E')
+(out/'portfolio-integration.json').write_text(json.dumps(dict(ok=True,synthetic=True,holdings_persist=True,local_ocr=True,manual_image_confirm=True,gemini_live_test=False,real_chipk_test=False)),'utf-8')

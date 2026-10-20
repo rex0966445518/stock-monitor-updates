@@ -2,7 +2,7 @@ plugins { id 'com.android.application' }
 android {
     namespace 'com.rex.mitakecompanion'
     compileSdk 35
-    defaultConfig { applicationId 'com.rex.mitakecompanion'; minSdk 26; targetSdk 35; versionCode 6; versionName '0.1.5' }
+    defaultConfig { applicationId 'com.rex.mitakecompanion'; minSdk 26; targetSdk 35; versionCode 7; versionName '0.1.6' }
     signingConfigs {
         companionBeta {
             storeFile rootProject.file('../TWBoardingScanner/signing/debug.keystore')
@@ -20,6 +20,7 @@ dependencies {
     implementation 'androidx.core:core:1.13.1'
     implementation 'androidx.fragment:fragment:1.6.2'
     implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
+    implementation 'com.google.mlkit:text-recognition-chinese:16.0.1'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.robolectric:robolectric:4.14.1'
 }

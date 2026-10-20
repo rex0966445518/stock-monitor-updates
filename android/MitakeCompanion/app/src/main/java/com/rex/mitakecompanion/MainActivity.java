@@ -36,10 +36,11 @@ public class MainActivity extends Activity {
         scroll.setOnApplyWindowInsetsListener((v,in)->{int top,bottom;if(Build.VERSION.SDK_INT>=30){android.graphics.Insets i=in.getInsets(WindowInsets.Type.systemBars());top=i.top;bottom=i.bottom;}else{top=in.getSystemWindowInsetTop();bottom=in.getSystemWindowInsetBottom();}content.setPadding(dp(22),top+dp(20),dp(22),bottom+dp(24));return in;});
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
         TextView brand=text("◉  漲停雷達",27,TEXT,true);header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));header.addView(button("配對",this::showPairing));add(content,header,8);
-        add(content,text("MITAKE LIVE  /  雷允澤製 v0.1.5",11,MUTED,false),22);
+        add(content,text("MITAKE LIVE  /  雷允澤製 v0.1.6",11,MUTED,false),22);
         LinearLayout tools=new LinearLayout(this);
         tools.addView(button("一鍵更新",()->updater.check()),new LinearLayout.LayoutParams(0,-2,1));
         tools.addView(button("語音通報",this::showVoice),new LinearLayout.LayoutParams(0,-2,1));tools.addView(button("連線診斷",this::showDiagnosis),new LinearLayout.LayoutParams(0,-2,1));add(content,tools,10);
+        add(content,button("個人股倉分析",()->startActivity(new Intent(this,com.rex.mitakecompanion.portfolio.PortfolioActivity.class))),10);
         demoButton=button(demoMode?"關閉測試卡片":"顯示測試卡片（5/6、6/6）",this::toggleDemo);add(content,demoButton,6);
         demoBanner=text("測試模式：示範卡片置頂，價格與條件非行情；不計入真實訊號、不播報、不存檔。五分K另取公開來源。",11,GOLD,false);demoBanner.setVisibility(demoMode?View.VISIBLE:View.GONE);add(content,demoBanner,10);
         connection=text("●  尚未連線",14,TEAL,true);add(content,connection,6);

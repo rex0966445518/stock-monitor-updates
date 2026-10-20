@@ -1,0 +1,1 @@
+<resources><string name="capture_description">由你啟動單次個股收集後，只在籌碼K線讀取畫面、輸入股號、切換六類頁面並擷取圖片。可隨時按停止；不操作交易、不讀取其他App。圖片先保存在本機，按送出後才傳至Google Gemini。</string></resources>
