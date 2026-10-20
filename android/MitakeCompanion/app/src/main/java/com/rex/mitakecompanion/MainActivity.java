@@ -32,10 +32,10 @@ public class MainActivity extends Activity {
         scroll.setOnApplyWindowInsetsListener((v,in)->{int top,bottom;if(Build.VERSION.SDK_INT>=30){android.graphics.Insets i=in.getInsets(WindowInsets.Type.systemBars());top=i.top;bottom=i.bottom;}else{top=in.getSystemWindowInsetTop();bottom=in.getSystemWindowInsetBottom();}content.setPadding(dp(22),top+dp(20),dp(22),bottom+dp(24));return in;});
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
         TextView brand=text("◉  漲停雷達",27,TEXT,true);header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));header.addView(button("配對",this::showPairing));add(content,header,8);
-        add(content,text("MITAKE LIVE  /  雷允澤製 v0.1.2",11,MUTED,false),22);
+        add(content,text("MITAKE LIVE  /  雷允澤製 v0.1.3",11,MUTED,false),22);
         LinearLayout tools=new LinearLayout(this);
         tools.addView(button("一鍵更新",()->updater.check()),new LinearLayout.LayoutParams(0,-2,1));
-        tools.addView(button("語音通報",this::showVoice),new LinearLayout.LayoutParams(0,-2,1));add(content,tools,10);
+        tools.addView(button("語音通報",this::showVoice),new LinearLayout.LayoutParams(0,-2,1));tools.addView(button("連線診斷",this::showDiagnosis),new LinearLayout.LayoutParams(0,-2,1));add(content,tools,10);
         connection=text("●  尚未連線",14,TEAL,true);add(content,connection,6);
         freshness=text("由電腦持續掃描，手機同步觀察候選",12,MUTED,false);add(content,freshness,20);
         LinearLayout hero=new LinearLayout(this);hero.setOrientation(LinearLayout.HORIZONTAL);hero.setPadding(dp(20),dp(20),dp(20),dp(20));hero.setBackground(box(PANEL,Color.rgb(33,56,72),20));
@@ -88,6 +88,12 @@ public class MainActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("電腦連動").setView(fields).setPositiveButton("連線",(d,w)->{try{String value=token.getText().toString().trim();if(value.startsWith("mitake:"))acceptPair(value);else connect(new Pairing(address.getText().toString(),value));}catch(Exception e){message("無法連線",e.getMessage());}}).setNeutralButton("掃描QR碼",(d,w)->scan()).setNegativeButton("取消",null).show();
     }
     @Override public void onDestroy(){if(updater!=null)updater.close();if(testSpeech!=null)testSpeech.close();super.onDestroy();}
+    void showDiagnosis(){
+        String address=BridgeService.prefs(this).getString("address","");
+        long success=BridgeService.prefs(this).getLong("last_success",0);
+        String text="電腦位址："+(address.isEmpty()?"尚未配對":address)+"\n\n"+ConnectionDiagnosis.network(this)+"\n\n最後成功連線："+(success==0?"尚無成功紀錄":new SimpleDateFormat("MM/dd HH:mm:ss",Locale.TAIWAN).format(new Date(success)))+"\n\n"+(BridgeService.connectionReason.isEmpty()?BridgeService.connection:BridgeService.connectionReason)+"\n\n電腦需開啟「進階工具 → 手機連動／配對 → 啟用／顯示配對碼」。Windows 防火牆需允許私人網路。電腦換 IP 或重設配對碼後，請重新掃碼。";
+        new AlertDialog.Builder(this).setTitle("連線診斷").setMessage(text).setPositiveButton("立即重連",(d,w)->{if(BridgeService.prefs(this).getBoolean("enabled",false))startForegroundService(new Intent(this,BridgeService.class).setAction(BridgeService.RETRY));else showPairing();}).setNegativeButton("關閉",null).show();
+    }
     void showVoice(){
         LinearLayout settings=new LinearLayout(this);settings.setOrientation(LinearLayout.VERTICAL);settings.setPadding(dp(20),dp(8),dp(20),dp(8));
         Switch enabled=new Switch(this);enabled.setText("新訊號語音通報");enabled.setChecked(BridgeService.prefs(this).getBoolean("voice_enabled",true));enabled.setOnCheckedChangeListener((v,on)->BridgeService.prefs(this).edit().putBoolean("voice_enabled",on).apply());settings.addView(enabled);
@@ -101,10 +107,10 @@ public class MainActivity extends Activity {
         if(data==null)try{data=new JSONObject(BridgeService.prefs(this).getString("snapshot",""));cached=true;}catch(Exception ignored){}
         boolean enabled=BridgeService.prefs(this).getBoolean("enabled",false);
         boolean online=enabled&&!cached&&BridgeService.receivedAt>0&&SystemClock.elapsedRealtime()-BridgeService.receivedAt<10000;
-        String label=enabled?(!online&&BridgeService.latest!=null?"連線中斷 · 自動重連":BridgeService.connection):"已停止連線";
+        String label=enabled?BridgeService.connection:"已停止連線";
         connection.setText("●  "+label);connection.setTextColor(online?TEAL:GOLD);
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)label+="｜通知未允許，僅顯示列表";
-        freshness.setText((data==null?"等待配對電腦資料":(online?"資料更新 ":"最後快照 ")+clock(data.optDouble("server_time"))+" · "+(online?data.optString("status"):"目前非即時"))+ (label.contains("通知未允許")?"\n通知未允許，請到系統設定開啟":""));
+        freshness.setText((enabled&&!online?ConnectionDiagnosis.network(this)+"\n":"")+(data==null?"等待配對電腦資料":(online?"資料更新 ":"最後快照 ")+clock(data.optDouble("server_time"))+" · "+(online?data.optString("status"):"目前非即時"))+ (label.contains("通知未允許")?"\n通知未允許，請到系統設定開啟":""));
         String key=(data==null?"":data.toString())+filter+online+(data!=null&&online?(long)((data.optDouble("server_time")+(SystemClock.elapsedRealtime()-BridgeService.receivedAt)/1000.0)/15):0);
         if(key.equals(last))return;last=key;cards.removeAllViews();int n5=0,n6=0;
         JSONArray rows=data==null?null:data.optJSONArray("rows");

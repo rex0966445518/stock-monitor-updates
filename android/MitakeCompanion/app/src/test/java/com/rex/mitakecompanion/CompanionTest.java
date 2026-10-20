@@ -117,4 +117,10 @@ public class CompanionTest {
         assertFalse(BridgeService.prefs(a).getBoolean("voice_enabled",true));a.finish();
     }
     android.widget.Switch findSwitch(View v){if(v instanceof android.widget.Switch)return (android.widget.Switch)v;if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++){android.widget.Switch found=findSwitch(((ViewGroup)v).getChildAt(i));if(found!=null)return found;}return null;}
+    @Test public void connectionDiagnosisDistinguishesFailuresWithoutLeakingToken(){
+        assertTrue(ConnectionDiagnosis.reason(new java.net.SocketTimeoutException("token-secret")).contains("逾時"));
+        assertTrue(ConnectionDiagnosis.reason(new java.net.ConnectException()).contains("無法連到電腦"));
+        assertTrue(ConnectionDiagnosis.reason(new java.io.IOException("配對已失效")).contains("重新掃碼"));
+        assertFalse(ConnectionDiagnosis.reason(new java.io.IOException("token-secret")).contains("token-secret"));
+    }
 }
