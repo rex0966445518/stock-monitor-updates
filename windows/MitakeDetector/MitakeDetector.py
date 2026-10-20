@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.71'
+VERSION = '0.3.72'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -791,6 +791,8 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
                     finally:ready.set()
                     continue
                 if token is None:
+                    if kind=='wantgoo_chart':
+                        self.candidate_charts.receive_wantgoo(payload);continue
                     if kind=='candidate_chart':
                         self.candidate_charts.receive(payload);continue
                     if kind=='steady_loaded':
@@ -1018,6 +1020,8 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         text.insert('1.0', HELP); text.configure(state='disabled')
 
     def close(self):
+        charts=getattr(self,"candidate_charts",None)
+        if charts:charts.close()
         bridge=getattr(self,'mobile_bridge',None)
         if bridge:bridge.close()
         index=getattr(self,'index_service',None)
@@ -1085,7 +1089,12 @@ def self_test():
 
 
 if __name__ == '__main__':
-    if '--cursor-guard' in sys.argv:
+    if '--wantgoo-capture' in sys.argv:
+        from wantgoo_chart import run_capture
+        index=sys.argv.index('--wantgoo-capture')
+        result=run_capture(sys.argv[index+1],sys.argv[index+2],fixture='--chart-fixture' in sys.argv)
+        sys.exit(1 if result['error'] else 0)
+    elif '--cursor-guard' in sys.argv:
         from cursor_visibility import run_guard
         try:
             index=sys.argv.index('--cursor-guard')

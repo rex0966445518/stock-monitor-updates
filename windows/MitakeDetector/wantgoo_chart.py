@@ -1,0 +1,159 @@
+"""Capture the public, rendered WantGoo five-minute chart in an isolated Edge session.
+No private API, login cookies, fingerprints or access-control workarounds.
+"""
+import datetime as dt
+import io
+import json
+import os
+from pathlib import Path
+import queue
+import re
+import subprocess
+import sys
+import threading
+import time
+
+
+def chart_url(code):
+    if not re.fullmatch(r'[0-9]{4}',str(code)):raise ValueError('股號必須為四位數字')
+    return f'https://www.wantgoo.com/stock/{code}/technical-chart'
+
+
+def taipei_day():return dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).date().isoformat()
+
+
+def validate_state(state,code):
+    if not state.get('selected'):raise ValueError('尚未確認五分週期，拒絕顯示其他週期')
+    if code not in state.get('title',''):raise ValueError('圖表股號不一致')
+    stamp=state.get('stamp','').strip()
+    try:dt.datetime.strptime(stamp,'%Y-%m-%d %H:%M')
+    except ValueError:raise ValueError('圖表資料時間未載入')
+    if state.get('candles',0)<2:raise ValueError('K線未載入完成')
+    if state.get('loading'):raise ValueError('圖表仍在載入')
+    return stamp
+
+
+STATE_JS="""() => {
+const root=document.querySelector('#technical-chart svg.highcharts-root');
+return {selected:!!document.querySelector('button[type="five-minutes"].active'),
+title:document.querySelector('h1')?.textContent||'',
+stamp:document.querySelector('#ohlc [c-model="time"]')?.textContent||'',
+candles:root?.querySelectorAll('g.highcharts-candlestick-series path').length||0,
+loading:[...document.querySelectorAll('.highcharts-loading')].some(e=>getComputedStyle(e).display!=='none')};
+}"""
+
+
+def capture(page,code):
+    from PIL import Image
+    button=page.get_by_role('button',name='5分',exact=True)
+    button.wait_for(state='visible',timeout=20000)
+    button.click(timeout=10000)
+    # A date-only daily title must become intraday; active button alone is not sufficient.
+    page.wait_for_function("() => {const s=("+STATE_JS+")();return s.selected && /\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}/.test(s.stamp) && s.candles>=2 && !s.loading}",timeout=25000)
+    state=page.evaluate(STATE_JS);stamp=validate_state(state,code)
+    svg=page.locator('#technical-chart svg.highcharts-root')
+    # Use rendered DOM geometry, never Highcharts' hidden runtime data.
+    crop=svg.evaluate("e=>{const r=e.getBoundingClientRect(),g=e.querySelector('g.highcharts-yaxis-grid')?.getBoundingClientRect();return g?{bottom:g.bottom-r.top+15,height:r.height}:null}")
+    raw=svg.screenshot(timeout=10000,animations='disabled')
+    validate_state(page.evaluate(STATE_JS),code)
+    image=Image.open(io.BytesIO(raw));image.load()
+    if image.width<100 or image.height<80:raise ValueError('圖表尺寸異常')
+    if crop and 30<crop['bottom']<crop['height']:
+        image=image.crop((0,0,image.width,round(image.height*crop['bottom']/crop['height'])))
+    thumb=io.BytesIO();image.save(thumb,format='PNG')
+    return raw,thumb.getvalue(),stamp
+
+
+def run_capture(code,directory,fixture=False):
+    chart_url(code);directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
+    report=dict(code=code,url=chart_url(code),period='5m',fetched_at=time.time(),day=taipei_day(),error='')
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            try:browser=p.chromium.launch(channel='msedge',headless=True,chromium_sandbox=True)
+            except Exception as exc:raise RuntimeError('無法啟動 Microsoft Edge，請確認已安裝並可正常開啟。'+str(exc)[:160])
+            try:
+                context=browser.new_context(viewport={'width':1280,'height':1000},locale='zh-TW',timezone_id='Asia/Taipei')
+                page=context.new_page();page.set_default_timeout(15000)
+                if fixture:
+                    page.set_content('''<h1>測試股(2330) 技術分析</h1><button type="five-minutes" onclick="this.classList.add('active');document.querySelector('[c-model]').textContent='2026-01-02 13:30'">5分</button><ul id="ohlc"><span c-model="time">2026-01-02</span></ul><div id="technical-chart"><svg class="highcharts-root" width="600" height="300"><rect width="600" height="300" fill="white"/><g class="highcharts-yaxis-grid"><path d="M0 30 L600 30 M0 200 L600 200" stroke="gray"/></g><g class="highcharts-candlestick-series"><path d="M100 50 L100 150" stroke="red"/><path d="M200 60 L200 180" stroke="green"/></g></svg></div>''')
+                else:
+                    response=page.goto(chart_url(code),wait_until='domcontentloaded',timeout=30000)
+                    if response and response.status>=400:raise RuntimeError(f'玩股網回應 HTTP {response.status}；未重試或繞過限制')
+                    text=page.locator('body').inner_text(timeout=10000)[:3000].lower()
+                    if any(s in text for s in ('verify you are human','checking your browser','access denied','驗證您是人類')):raise RuntimeError('網站要求驗證或限制存取；請使用原站檢視')
+                full,thumb,stamp=capture(page,code)
+                (directory/'full.png').write_bytes(full);(directory/'thumb.png').write_bytes(thumb)
+                report['data_time']=stamp;report['fixture']=fixture
+            finally:browser.close()
+    except Exception as exc:report['error']=str(exc)[:700]
+    report['fetched_at']=time.time()
+    (directory/'result.json').write_text(json.dumps(report,ensure_ascii=False),encoding='utf-8')
+    return report
+
+
+class WantGooCharts:
+    """One bounded worker, five-minute cache, no UI-thread browser calls."""
+    def __init__(self,base,emit):
+        self.base=Path(base)/'wantgoo-charts';self.emit=emit;self.queue=queue.Queue(maxsize=8)
+        self.pending=set();self.lock=threading.Lock();self.stop=threading.Event();self.proc=None;self.thread=None
+    def cached(self,code):
+        chart_url(code);directory=self.base/code
+        try:
+            result=json.loads((directory/'result.json').read_text(encoding='utf-8'))
+            if result.get('code')!=code or result.get('period')!='5m' or result.get('day')!=taipei_day():return None
+            if result.get('fixture'):return None
+            if not result.get('error') and not all((directory/n).is_file() for n in ('full.png','thumb.png')):return None
+            return dict(result,directory=str(directory))
+        except (OSError,ValueError,TypeError):return None
+    def request(self,code):
+        chart_url(code)
+        if self.stop.is_set():return
+        cached=self.cached(code)
+        if cached and 0<=time.time()-cached.get('fetched_at',0)<300:
+            self.emit(cached);return
+        with self.lock:
+            if code in self.pending:return
+            self.pending.add(code)
+            try:self.queue.put_nowait(code)
+            except queue.Full:self.pending.discard(code);return
+            if not self.thread:
+                self.thread=threading.Thread(target=self.work,daemon=True,name='wantgoo-chart-worker');self.thread.start()
+        self.emit(dict(code=code,loading=True,error='排隊載入玩股網五分 K…'))
+    def work(self):
+        while not self.stop.is_set():
+            try:code=self.queue.get(timeout=.5)
+            except queue.Empty:continue
+            try:
+                if self.stop.is_set():break
+                self.emit(dict(code=code,loading=True,error='載入並確認五分 K 圖表…'))
+                directory=self.base/code;directory.mkdir(parents=True,exist_ok=True)
+                command=[sys.executable]+([] if getattr(sys,'frozen',False) else [str(Path(__file__).with_name('MitakeDetector.py'))])+['--wantgoo-capture',code,str(directory)]
+                env=os.environ.copy();env['PYINSTALLER_RESET_ENVIRONMENT']='1'
+                with self.lock:
+                    if self.stop.is_set():break
+                    self.proc=subprocess.Popen(command,env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+                try:self.proc.wait(timeout=90)
+                except subprocess.TimeoutExpired:
+                    self.kill();raise RuntimeError('圖表載入超過 90 秒，稍後再試；掃描繼續')
+                result=self.cached(code)
+                if not result:raise RuntimeError('圖表程序未回傳有效結果，請檢查 Edge 或改開原站')
+                if not self.stop.is_set():self.emit(result)
+            except Exception as exc:
+                result=dict(code=code,error=str(exc),day=taipei_day(),period='5m',fetched_at=time.time())
+                try:(self.base/code/'result.json').write_text(json.dumps(result,ensure_ascii=False),encoding='utf-8')
+                except OSError:pass
+                if not self.stop.is_set():self.emit(result)
+            finally:
+                with self.lock:self.pending.discard(code);self.proc=None
+                self.queue.task_done()
+    def kill(self):
+        proc=self.proc
+        if proc and proc.poll() is None:
+            if sys.platform=='win32':subprocess.run(['taskkill','/PID',str(proc.pid),'/T','/F'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=subprocess.CREATE_NO_WINDOW,timeout=10)
+            else:proc.kill()
+    def close(self):
+        self.stop.set()
+        with self.lock:
+            try:self.kill()
+            except (OSError,subprocess.SubprocessError):pass

@@ -9,7 +9,7 @@ import webbrowser
 
 def source_links(code):
     if not re.fullmatch(r'[0-9]{4}',code):raise ValueError('股號必須為四位數字')
-    return (f'https://histock.tw/stock/tchart.aspx?m=minks&no={code}&time=5',
+    return (f'https://www.wantgoo.com/stock/{code}/technical-chart',
             f'https://goodinfo.tw/tw/ShowK_Chart.asp?STOCK_ID={code}')
 
 
@@ -45,6 +45,10 @@ class CandidateCharts:
     PAGE_SIZE=8
     def __init__(self,app,parent):
         self.app=app;self.frame=parent;self.rows=[];self.page=0;self.cache={};self.pending=set();self.cards={};self.key=None
+        self.web_cache={};self.photos={};self.last_requests={};self.closed=False
+        from wantgoo_chart import WantGooCharts
+        from MitakeDetector import BASE
+        self.web_service=WantGooCharts(BASE,lambda data:app.events.put((None,'wantgoo_chart',data)))
         tk,ttk=app.tk,app.ttk
         bar=ttk.Frame(parent);bar.pack(fill='x')
         self.status=tk.StringVar(value='等待目前符合 5/6 或 6/6 的股票')
@@ -57,6 +61,7 @@ class CandidateCharts:
         self.inner=ttk.Frame(self.canvas);self.window=self.canvas.create_window(0,0,window=self.inner,anchor='nw')
         self.canvas.bind('<Configure>',lambda e:self.canvas.itemconfigure(self.window,width=e.width))
         self.inner.bind('<Configure>',lambda e:self.canvas.configure(scrollregion=self.canvas.bbox('all')))
+        self.timer=app.root.after(1000,self.tick)
     def update(self,rows):
         self.rows=rows
         self.page=min(self.page,max(0,(len(rows)-1)//self.PAGE_SIZE))
@@ -66,11 +71,11 @@ class CandidateCharts:
     def render(self):
         visible=self.rows[self.page*self.PAGE_SIZE:(self.page+1)*self.PAGE_SIZE]
         key=tuple((q.code,q.name,round(q.price,2),m['count'],m['total']) for q,m in visible)
-        self.status.set(f'候選 {len(self.rows)} 檔｜第 {self.page+1}/{max(1,(len(self.rows)+7)//8)} 頁｜日線非即時；5 分 K 開啟原站')
+        self.status.set(f'候選 {len(self.rows)} 檔｜第 {self.page+1}/{max(1,(len(self.rows)+7)//8)} 頁｜日線非即時；五分 K 背景載入／點圖放大')
         if key!=self.key:
             self.key=key
             for child in self.inner.winfo_children():child.destroy()
-            self.cards={}
+            self.cards={};self.photos={}
             for q,m in visible:self.make_card(q,m)
         for q,m in visible:
             self.request(q.code)
@@ -81,7 +86,7 @@ class CandidateCharts:
         ttk.Label(card,text=f'{q.name or "股名待補"}  {q.code}  ｜ {match["count"]}/6 ｜ 掃描價 {q.price:.2f}',font=('Microsoft JhengHei',13,'bold')).pack(anchor='w')
         panels=ttk.Frame(card);panels.pack(fill='x')
         links=source_links(q.code);canvases=[]
-        for i,title in enumerate(('5 分 K · HiStock','日 K · 官方快取','日成交量 · 張','日 MACD · 12/26/9')):
+        for i,title in enumerate(('5 分 K · 玩股網','日 K · 官方快取','日成交量 · 張','日 MACD · 12/26/9')):
             panels.columnconfigure(i,weight=1,uniform='chart')
             panel=ttk.Frame(panels);panel.grid(row=0,column=i,sticky='nsew',padx=3)
             ttk.Label(panel,text=title).pack(anchor='w')
@@ -89,10 +94,11 @@ class CandidateCharts:
             canvases.append(c)
             c.bind('<Configure>',lambda e,code=q.code:self.paint(code))
             url=links[0 if i==0 else 1]
-            ttk.Button(panel,text='開啟 HiStock' if i==0 else 'Goodinfo 原站',command=lambda u=url:threading.Thread(target=webbrowser.open,args=(u,),daemon=True).start()).pack(anchor='w')
+            ttk.Button(panel,text='玩股網原站' if i==0 else 'Goodinfo 原站',command=lambda u=url:threading.Thread(target=webbrowser.open,args=(u,),daemon=True).start()).pack(anchor='w')
         detail=self.app.tk.StringVar(value='讀取本地日線…')
         ttk.Label(card,textvariable=detail,wraplength=1100).pack(anchor='w')
         self.cards[q.code]=(canvases,detail)
+        canvases[0].bind('<Button-1>',lambda e,code=q.code:self.enlarge(code))
     def request(self,code):
         now=time.monotonic()
         if code in self.pending or now-self.cache.get(code,{}).get('read_at',-1000)<60:return
@@ -117,7 +123,7 @@ class CandidateCharts:
         canvases,detail=self.cards[code];data=self.cache.get(code);rows=data['rows'] if data else []
         for c in canvases:c.delete('all')
         def message(c,text):c.create_text(max(90,c.winfo_width()/2),85,text=text,fill='#b9cadd',width=max(140,c.winfo_width()-20),justify='center')
-        message(canvases[0],'HiStock 5 分 K\n尚未完成內嵌\n請按下方原站按鈕')
+        self.paint_web(code,canvases[0],message)
         if not rows:
             note='日線快取不足；啟用籌碼研究後等待背景更新' if data else '讀取本地日線…'
             if data and data['error']:note='日線讀取失敗：'+data['error']
@@ -153,3 +159,56 @@ class CandidateCharts:
             points=[(x(i),y(v[index])) for i,v in enumerate(values) if v[index] is not None]
             if len(points)>1:c.create_line(*[a for p in points for a in p],fill=color,width=2)
         c.create_text(40,10,anchor='w',text='黃 DIF / 藍 DEA / 柱 2×差',fill='#b9cadd')
+
+    def tick(self):
+        if self.closed:return
+        # Load only the current chart page, not hundreds of off-screen candidates.
+        if self.frame.winfo_ismapped() and '--smoke-test' not in __import__('sys').argv:
+            now=time.monotonic()
+            for code in self.cards:
+                if now-self.last_requests.get(code,-1000)>=300:
+                    self.last_requests[code]=now;self.web_service.request(code)
+        self.timer=self.app.root.after(1000,self.tick)
+    def receive_wantgoo(self,data):
+        code=data['code'];self.web_cache[code]=data
+        if not data.get('loading'):self.photos.pop(code,None)
+        while len(self.web_cache)>100:
+            old=next(iter(self.web_cache));self.web_cache.pop(old);self.photos.pop(old,None);self.last_requests.pop(old,None)
+        self.paint(code)
+    def paint_web(self,code,c,message):
+        data=self.web_cache.get(code)
+        if not data:message(c,'等待背景載入玩股網五分 K');return
+        if data.get('error'):message(c,data['error']);return
+        from pathlib import Path
+        from PIL import Image,ImageTk
+        try:
+            width=max(160,c.winfo_width()-8);key=(width,data['fetched_at'])
+            stored=self.photos.get(code)
+            if not stored or stored[0]!=key:
+                with Image.open(Path(data['directory'])/'thumb.png') as im:
+                    image=im.copy();image.thumbnail((width,140))
+                stored=(key,ImageTk.PhotoImage(image,master=c));self.photos[code]=stored
+            c.create_image(c.winfo_width()/2,3,anchor='n',image=stored[1])
+            stamp=data.get('data_time','未知')
+            fetched=dt.datetime.fromtimestamp(data['fetched_at'],dt.timezone(dt.timedelta(hours=8))).strftime('%H:%M:%S')
+            old='（舊交易日）' if stamp[:10]!=dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).date().isoformat() else ''
+            c.create_text(5,148,anchor='nw',text=f"五分 K {stamp}{old}\n擷取 {fetched} · 點圖放大",fill='#b9cadd',width=width)
+        except (OSError,ValueError,KeyError) as exc:message(c,'圖檔讀取失敗：'+str(exc))
+    def enlarge(self,code):
+        data=self.web_cache.get(code)
+        if not data or data.get('error'):return
+        from pathlib import Path
+        from PIL import Image,ImageTk
+        try:
+            with Image.open(Path(data['directory'])/'full.png') as im:image=im.copy()
+        except OSError:return
+        top=self.app.tk.Toplevel(self.app.root);top.title(f'{code} 玩股網五分 K · {data.get("data_time","")}')
+        image.thumbnail((min(1200,top.winfo_screenwidth()-100),min(850,top.winfo_screenheight()-120)))
+        photo=ImageTk.PhotoImage(image,master=top)
+        label=self.app.ttk.Label(top,image=photo);label.image=photo;label.pack()
+        self.app.ttk.Label(top,text='來源：玩股網｜五分 K 圖表快照；圖內全部指標均為五分週期，不是即時串流。').pack()
+    def close(self):
+        self.closed=True
+        try:self.app.root.after_cancel(self.timer)
+        except Exception:pass
+        self.web_service.close()

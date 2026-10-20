@@ -23,6 +23,27 @@ class CandidateChartTests(unittest.TestCase):
         self.assertAlmostEqual(out[-1][1],7)
         self.assertAlmostEqual(out[-1][2],0)
     def test_links_validate_codes(self):
-        self.assertIn('time=5',source_links('2330')[0])
+        self.assertEqual(source_links('2330')[0],'https://www.wantgoo.com/stock/2330/technical-chart')
         for code in ['23300','<script>','１２３４']:
             with self.assertRaises(ValueError):source_links(code)
+
+class WantGooTests(unittest.TestCase):
+    def test_reject_daily_or_wrong_stock_or_empty_chart(self):
+        from wantgoo_chart import validate_state
+        state=dict(selected=True,title='台積電(2330)',stamp='2026-01-02 13:30',candles=20,loading=False)
+        self.assertEqual(validate_state(state,'2330'),state['stamp'])
+        for delta in [dict(selected=False),dict(stamp='2026-01-02'),dict(candles=0),dict(loading=True),dict(title='台積電(2331)')]:
+            with self.assertRaises(ValueError):validate_state(dict(state,**delta),'2330')
+    def test_previous_day_cache_and_failed_cache(self):
+        import tempfile,json,time
+        from pathlib import Path
+        from wantgoo_chart import WantGooCharts,taipei_day
+        with tempfile.TemporaryDirectory() as d:
+            service=WantGooCharts(d,lambda data:None);p=service.base/'2330';p.mkdir(parents=True)
+            data=dict(code='2330',period='5m',day='2000-01-01',error='timeout',fetched_at=time.time())
+            (p/'result.json').write_text(json.dumps(data))
+            self.assertIsNone(service.cached('2330'))
+            data['day']=taipei_day();(p/'result.json').write_text(json.dumps(data))
+            self.assertEqual(service.cached('2330')['error'],'timeout')
+            data['error']='';(p/'result.json').write_text(json.dumps(data))
+            self.assertIsNone(service.cached('2330'))

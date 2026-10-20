@@ -167,6 +167,23 @@ def run_smoke_test(report):
         assert '至少需要 34' in str(charts.cards['2330'][0][3].itemcget(charts.cards['2330'][0][3].find_all()[-1],'text'))
         charts.update([])
         info['candidate_four_panel_smoke']=True
+        # Test bundled browser driver, Edge launch and period validation without relying on external network.
+        import subprocess,os
+        target=report.parent/'chart-fixture'
+        command=[sys.executable]+([] if getattr(sys,'frozen',False) else [str(Path(__file__).with_name('MitakeDetector.py'))])+['--wantgoo-capture','2330',str(target),'--chart-fixture']
+        environment=os.environ.copy();environment['PYINSTALLER_RESET_ENVIRONMENT']='1'
+        checked=subprocess.run(command,env=environment,timeout=60,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+        chart_result=json.loads((target/'result.json').read_text(encoding='utf-8'))
+        assert checked.returncode==0 and not chart_result['error'],chart_result
+        assert (target/'thumb.png').stat().st_size>100
+        charts.receive_wantgoo(dict(chart_result,directory=str(target)))
+        charts.update([(SimpleNamespace(code='2330',name='測試股',price=101),{'count':5,'total':6})])
+        app.root.update_idletasks()
+        assert any(charts.cards['2330'][0][0].type(item)=='image' for item in charts.cards['2330'][0][0].find_all())
+        charts.enlarge('2330');app.root.update_idletasks()
+        charts.update([])
+        info['wantgoo_edge_fixture']=chart_result
+
         from layout_smoke import run_layout_smoke
         info['adaptive_header_layouts']=run_layout_smoke(app)
         # Actual bundled OCR: unknown names must not block numeric results.
