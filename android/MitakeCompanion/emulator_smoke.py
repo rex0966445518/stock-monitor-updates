@@ -23,6 +23,15 @@ def dump():
     adb('shell','uiautomator','dump','/sdcard/mitake-ui.xml')
     return adb('shell','cat','/sdcard/mitake-ui.xml')
 
+def diagnostics(kind,value,tb):
+    try:
+        screen('companion-failure.png')
+        (out/'logcat.txt').write_text(adb('logcat','-d','-t','600'),'utf-8')
+        (out/'failure-ui.xml').write_text(dump(),'utf-8')
+    except Exception:pass
+    sys.__excepthook__(kind,value,tb)
+sys.excepthook=diagnostics
+
 def tap(label):
     ui=dump()
     button=next(n for n in ET.fromstring(ui).iter('node') if n.attrib.get('text')==label)
@@ -38,11 +47,18 @@ def assert_scanner():
 # Exercise the actual camera UI before protocol tests; the old test skipped it.
 adb('install','-r','android/MitakeCompanion/app/build/outputs/apk/debug/app-debug.apk')
 adb('logcat','-c')
+adb('shell','pm','revoke','com.rex.mitakecompanion','android.permission.CAMERA')
+adb('shell','pm','clear-permission-flags','com.rex.mitakecompanion','android.permission.CAMERA','user-set','user-fixed')
 adb('shell','am','start','-W','-n','com.rex.mitakecompanion/.MainActivity')
 tap('配對');tap('掃描QR碼')
 ui=dump()
 # Android permission button IDs are stable even if the emulator locale changes.
-node=next(n for n in ET.fromstring(ui).iter('node') if n.attrib.get('resource-id','').endswith('/permission_deny_button'))
+node=None
+for attempt in range(5):
+    node=next((n for n in ET.fromstring(ui).iter('node') if n.attrib.get('resource-id','').endswith('/permission_deny_button')),None)
+    if node is not None:break
+    time.sleep(1);ui=dump()
+assert node is not None,ui
 x1,y1,x2,y2=map(int,re.findall(r'\d+',node.attrib['bounds']))
 adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2))
 assert '相機權限未開啟' in dump()
