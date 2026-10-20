@@ -174,6 +174,20 @@ def run_smoke_test(report):
         from price_history import PriceHistory
         app.price_history=PriceHistory()
         app.volume_rates=VolumeRates();app.auto_engines={};app.rank_rows={}
+        # Verify the actual calendar, dated list and immutable 5/6 details.
+        from candidate_diary import CandidateDiary,TAIPEI
+        diary_cfg=dict(DEFAULT,use_turnover=True,min_turnover=3,use_accel=True,use_breakout=True)
+        CandidateDiary(BASE/'observations.sqlite3').observe([(Quote('9089','DIARY',100,2,2000,4,now),2,'等待觀測突破守穩',False)],diary_cfg,VERSION)
+        diary_top=app.show_candidate_diary();root.update_idletasks()
+        view=app.candidate_diary_view;today=dt.datetime.fromtimestamp(now,TAIPEI).date()
+        items=view.tree.get_children();assert any(view.tree.item(item,'values')[0]=='9089' for item in items)
+        item=next(item for item in items if view.tree.item(item,'values')[0]=='9089')
+        view.tree.selection_set(item);view.select()
+        assert '5/6' in view.text.get('1.0','end')
+        assert 'min_turnover' in view.text.get('1.0','end')
+        view.choose((today-dt.timedelta(days=10000)).isoformat());assert not view.tree.get_children()
+        view.choose(today.isoformat());assert view.tree.get_children()
+        diary_top.destroy()
         # Verify the actual GUI has only the everyday action buttons.
         actions=[child.cget('text') for child in app.main_actions.winfo_children() if child.winfo_class()=='TButton']
         assert actions==['開始／繼續（F8）','暫停（F8）','重新開始','掃描設定','一鍵更新'],actions

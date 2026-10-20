@@ -11,7 +11,7 @@ from auto_ui import AutoUI
 from research_ui import ResearchUI
 from pathlib import Path
 
-VERSION = '0.3.57'
+VERSION = '0.3.58'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -262,7 +262,7 @@ class App(AutoUI,ResearchUI):
             ttk.Button(bar, text=label, command=action).pack(side='left', padx=4)
         advanced = ttk.Menubutton(bar, text='進階工具 ▾')
         menu = tk.Menu(advanced, tearoff=False)
-        for label, action in [('重新自動定位', self.auto_setup), ('清除股名記憶', self.clear_stock_names), ('手動框選排行榜', self.select_region), ('手動校正欄位', self.calibrate), ('圖片辨識測試', self.image_test), ('合成資料示範', self.demo), ('辨識元件檢查', self.install), ('資料資料夾', self.open_folder), ('OCR學習紀錄', self.show_ocr_learning), ('中斷診斷', self.show_scan_diagnostics), ('版本日誌', self.show_version_history), ('訊號驗證紀錄', self.show_signal_reviews), ('進場檢核設定', self.show_guard_settings), ('籌碼觀察／研究', self.show_research), ('每日紀錄／重播驗證', self.show_scan_archive), ('使用說明', self.help)]:
+        for label, action in [('重新自動定位', self.auto_setup), ('清除股名記憶', self.clear_stock_names), ('手動框選排行榜', self.select_region), ('手動校正欄位', self.calibrate), ('圖片辨識測試', self.image_test), ('合成資料示範', self.demo), ('辨識元件檢查', self.install), ('資料資料夾', self.open_folder), ('OCR學習紀錄', self.show_ocr_learning), ('中斷診斷', self.show_scan_diagnostics), ('版本日誌', self.show_version_history), ('訊號驗證紀錄', self.show_signal_reviews), ('進場檢核設定', self.show_guard_settings), ('籌碼觀察／研究', self.show_research), ('每日紀錄／重播驗證', self.show_scan_archive), ('5/6候選歷史日誌', self.show_candidate_diary), ('使用說明', self.help)]:
             menu.add_command(label=label, command=action)
         advanced.configure(menu=menu); advanced.pack(side='left', padx=4)
         self.main_actions=bar
@@ -685,6 +685,12 @@ class App(AutoUI,ResearchUI):
             self.records.append(record); batch.append(record)
         self.status.set(f'{self.mode}｜本輪讀取 {len(quotes)} 檔｜略過 {rejected} 列｜辨識耗時 {elapsed:.1f} 秒｜本機掃描時間 {dt.datetime.now():%H:%M:%S}')
         if persist:
+            try:
+                from candidate_diary import CandidateDiary
+                changed=CandidateDiary(BASE/'observations.sqlite3').observe(rows,cfg,VERSION)
+                diary=getattr(self,'candidate_diary_view',None)
+                if changed and diary and diary.window.winfo_exists():diary.refresh()
+            except (sqlite3.Error,OSError,ValueError) as exc:self.say('候選歷史日誌寫入失敗：'+str(exc))
             try:
                 from scan_archive import ScanArchive
                 ScanArchive(BASE/'observations.sqlite3').append(captured_quotes,rows,cfg,VERSION,rejected,elapsed)

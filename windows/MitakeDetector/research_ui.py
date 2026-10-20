@@ -24,6 +24,11 @@ class ResearchUI:
         self.research_service.request(self.research_codes())
     def research_event(self,kind,payload):
         if kind=='research_status':self.research_status.set(payload)
+        elif kind=='research_diary':
+            self.candidate_import_running=False
+            diary=getattr(self,'candidate_diary_view',None)
+            if diary and diary.window.winfo_exists():
+                diary.importing=False;diary.refresh(force=True);diary.status.set(payload)
         elif kind=='research_replay':
             self.research_status.set('本地重播：'+str(payload))
             widget=getattr(self,'archive_output',None)
@@ -167,3 +172,13 @@ class ResearchUI:
         for row in archive.summary():output.insert('end','｜'.join(map(str,row))+'\n')
         output.insert('end','重播以原批次到達順序、當時設定及當前引擎重建判定；使用300～330秒首筆後續觀測價，沒有資料就留缺。不是實際成交回測，亦不自動調整盤中參數。既有舊版observations及訊號紀錄保留；完整批次紀錄從本版開始。\n')
         return top
+
+    def show_candidate_diary(self):
+        from MitakeDetector import BASE
+        from candidate_diary_ui import DiaryView
+        view=getattr(self,'candidate_diary_view',None)
+        if view and view.window.winfo_exists():view.window.lift();view.refresh(force=True);return view.window
+        view=DiaryView(self,BASE/'observations.sqlite3');self.candidate_diary_view=view
+        import sys
+        if '--smoke-test' not in sys.argv:self.root.after(200,view.import_old)
+        return view.window
