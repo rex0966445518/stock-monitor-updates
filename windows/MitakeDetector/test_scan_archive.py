@@ -32,7 +32,7 @@ class ArchiveTests(unittest.TestCase):
             self.assertEqual(a.summary()[0][0],'1970-01-02')
             with closing(a.connect()) as c:self.assertIn('引擎略過',c.execute('SELECT reason FROM scan_quotes').fetchone()[0])
     def test_replay_cannot_fill_missing_future_observations(self):
-        cfg=dict(DEFAULT,use_breakout=False,guard_enabled=False,min_volume=0)
+        cfg=dict(DEFAULT,steady_enabled=False,use_breakout=False,guard_enabled=False,min_volume=0)
         batches=[]
         for ts in (1000,1005):
             batches.append(dict(rank='漲幅排行',config=cfg,version='fixture',received=ts+1,quotes=[dict(code='2330',name='',price=100+ts/10000,gain=2,volume=ts,turnover=None,ts=ts)]))

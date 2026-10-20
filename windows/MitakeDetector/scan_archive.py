@@ -52,6 +52,8 @@ def replay(batches):
     """Reconstruct engine state using capture timestamps; returns are observations, not fills."""
     from MitakeDetector import Engine,Quote
     from volume_rate import VolumeRates
+    from steady_trend import SteadyTracker,process
+    tracker=SteadyTracker()
     rates=VolumeRates()
     engines={};signals=[];seen=set();observed={};versions=set()
     for batch in batches:
@@ -61,7 +63,7 @@ def replay(batches):
             key=(q.code,q.ts)
             if key not in seen:observed.setdefault(q.code,[]).append((q,batch['received']));seen.add(key)
         # Each batch is processed only when it was available, never with later quotes.
-        _,alerts=engine.process(quotes,batch['config'],now=batch['received'])
+        _,alerts,_=process(engine,quotes,batch['config'],tracker,batch['received'])
         signals.extend((q,batch['rank'],batch['received']) for q,_ in alerts)
     changes=[];missing=0
     for q,rank,available in signals:

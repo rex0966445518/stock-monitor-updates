@@ -11,9 +11,11 @@ from auto_ui import AutoUI
 from research_ui import ResearchUI
 from dashboard_ui import DashboardUI
 from mobile_ui import MobileUI
+from steady_ui import SteadyUI
+from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.64'
+VERSION = '0.3.65'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -22,6 +24,8 @@ DEFAULT = dict(interval=5, min_price=50, min_volume=1000, min_gain=1,
                use_accel=False, accel=1.5, use_breakout=True, cooldown=300,
                research_enabled=True,guard_enabled=True,guard_warmup=180,guard_window=60,guard_hold=30,guard_max_gap=30,guard_max_age=15,guard_min_rise=.2,guard_max_pullback=1,
                centers=[6, 22, 40, 57, 75, 92], region=None, auto_config=None, column_bounds=None, voice_enabled=True)
+
+DEFAULT.update(STEADY_DEFAULTS)
 
 @dataclasses.dataclass
 class Quote:
@@ -213,7 +217,7 @@ def format_feedback(text):
     return text
 
 
-class App(AutoUI,ResearchUI,DashboardUI,MobileUI):
+class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
     def __init__(self, root):
         import tkinter as tk
         from tkinter import ttk
@@ -285,6 +289,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI):
             if valkey:
                 self.vars[valkey] = tk.StringVar(value=str(self.config[valkey]))
                 ttk.Entry(opts, textvariable=self.vars[valkey], width=7).grid(row=1, column=idx*4+3)
+        self.build_steady_controls(opts)
         self.vars['guard_enabled']=tk.BooleanVar(value=self.config['guard_enabled'])
         for key in ['guard_warmup','guard_window','guard_hold','guard_max_gap','guard_min_rise','guard_max_pullback']:
             self.vars[key]=tk.StringVar(value=str(self.config[key]))
@@ -351,6 +356,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI):
         except sqlite3.Error as exc:self.say('版本啟用紀錄寫入失敗：'+str(exc))
         self.init_research()
         self.init_dashboard()
+        self.init_steady()
         self.load_daily_table()
         root.protocol('WM_DELETE_WINDOW', self.close)
         self.init_f8()
@@ -419,14 +425,17 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI):
         try:
             cfg = dict(self.config)
             for key, var in self.vars.items():
-                cfg[key] = bool(var.get()) if key.startswith('use_') or key=='guard_enabled' else float(var.get())
+                cfg[key] = bool(var.get()) if key.startswith('use_') or key in ('guard_enabled','steady_enabled') else float(var.get())
             if not all(math.isfinite(v) and v >= 0 for v in cfg.values() if isinstance(v, (float, int))): raise ValueError()
             if cfg['interval'] < 2 or cfg['cooldown'] < 10 or cfg['min_gain'] > cfg['max_gain']: raise ValueError()
             if cfg.get('guard_enabled') and (min(cfg['guard_warmup'],cfg['guard_window'],cfg['guard_hold'],cfg['guard_max_gap'])<1 or cfg['guard_warmup']<cfg['guard_window']):raise ValueError()
+            from steady_trend import validate_config
+            validate_config(cfg)
             self.config = cfg; self.save()
             return dict(cfg)
-        except (ValueError, OSError):
-            messagebox.showerror('設定錯誤', '請輸入非負有限數字；掃描間隔至少2秒，提醒間隔至少10秒；漲幅下限不可大於上限。')
+        except (ValueError, OSError) as exc:
+            if str(exc):self.say(str(exc))
+            messagebox.showerror('設定錯誤', '請輸入非負有限數字；掃描間隔至少2秒，提醒間隔至少10秒；漲幅下限不可大於上限。'+('\n'+str(exc) if str(exc) else ''))
 
     def idle(self):
         from tkinter import messagebox
@@ -648,7 +657,13 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI):
         if not hasattr(self,'volume_rates'):self.volume_rates=VolumeRates()
         engine = self.auto_engines.setdefault(cfg['source_rank'], Engine(self.volume_rates)) if cfg.get('source_rank') else self.engine
         engine.volume_rates=self.volume_rates
-        rows, alerts = engine.process(quotes, cfg)
+        if persist:
+            from steady_trend import process as process_steady
+            rows,alerts,reports=process_steady(engine,quotes,cfg,self.steady_tracker,time.time(),self.steady_ready)
+            if self.steady_reports and self.steady_report_day!=self.steady_tracker.day:self.steady_reports={}
+            self.steady_report_day=self.steady_tracker.day
+            self.steady_reports.update(reports)
+        else:rows,alerts=engine.process(quotes,cfg)
         self.price_history.update(quotes,interval=60)
         for item in self.tree.get_children(): self.tree.delete(item)
         batch = []
@@ -675,6 +690,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI):
         missing=Counter(reason for _,_,text,hit in display if not hit for reason in text.split('｜量速：',1)[0].split('｜')[-1].split('；'))
         explanation='；'.join(f'{reason} {count}檔' for reason,count in missing.most_common(2))
         self.observation_summary.set(f'已辨識股票 {len(display)} 檔｜轉強候選 {sum(bool(item[3]) for item in display)} 檔'+('｜'+explanation if explanation else '｜候選股置頂'))
+        if persist and cfg.get('steady_enabled'):self.observation_summary.set(self.steady_summary()+'\n'+self.observation_summary.get())
         pending_names=sum(not q.name for q,_,_,_ in display)
         self.observation_summary.set(self.observation_summary.get()+f'｜股名記憶 {len(names)} 檔、待補 {pending_names} 檔｜股價時間欄：每60秒新快照，非完整輪次')
         self.display_rows=display;self.display_cfg=dict(cfg)
@@ -715,7 +731,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI):
                 from signal_review import SignalReview
                 from candidate_ranking import assess
                 signals=[(q,'進場檢核通過',reason) for q,reason in alerts]
-                signals += [(q,'基礎觀察候選',reason) for q,ratio,reason,hit in rows if not hit and assess((q,ratio,reason,hit),cfg)['count']>=5]
+                signals += [(q,'基礎觀察候選',reason) for q,ratio,reason,hit in rows if not hit and '盤尾緩漲未通過' not in reason and assess((q,ratio,reason,hit),cfg)['count']>=5]
                 valid=[q for q,ratio,reason,hit in rows if '讀值跳動' not in reason and '量倒退' not in reason]
                 SignalReview(BASE/'observations.sqlite3').observe(valid,signals,cfg)
             except sqlite3.Error as exc:self.say('訊號驗證紀錄失敗：'+str(exc))
@@ -761,6 +777,8 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI):
                     finally:ready.set()
                     continue
                 if token is None:
+                    if kind=='steady_loaded':
+                        self.steady_loaded(payload);continue
                     if kind=='market_index':
                         self.update_market_index(payload);continue
                     if kind.startswith('research_'):

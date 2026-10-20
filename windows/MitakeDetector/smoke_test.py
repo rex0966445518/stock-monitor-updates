@@ -39,6 +39,10 @@ def run_smoke_test(report):
         assert tkfont.Font(root=root,font=app.log.cget('font')).actual('size')==10
         app.display_scale.apply(scale,save=True,resize=False)
         assert app.log.cget('wrap')=='word'
+        assert app.config['steady_enabled']
+        steady=app.show_steady_settings();root.update_idletasks()
+        assert steady.winfo_exists();steady.destroy()
+        info['steady_settings_gui']=True
         assert app.config['guard_enabled']
         panel=app.show_guard_settings();root.update_idletasks()
         assert panel.winfo_exists();panel.destroy()
@@ -205,6 +209,9 @@ def run_smoke_test(report):
         now=dt.datetime.now().timestamp()
         app.mode='CI smoke / synthetic data'
         app.render([Quote('9001','SMOKE',100,2,1500,1,now)],0,0,dict(DEFAULT),persist=True)
+        assert '盤尾緩漲未通過' in next(row[2] for row in app.display_rows if row[0].code=='9001')
+        assert not next(row[3] for row in app.display_rows if row[0].code=='9001')
+        assert '09:00–12:50' in app.observation_summary.get() or '歷史載入' in app.observation_summary.get()
         assert (BASE/'observations.sqlite3').is_file()
         from scan_archive import ScanArchive
         assert ScanArchive(BASE/'observations.sqlite3').summary()

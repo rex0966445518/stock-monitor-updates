@@ -56,7 +56,7 @@ class MobileBridge:
                 old=self.rows.get(q.code)
                 if old and q.ts<=old['ts']:continue
                 fresh=0<=now-q.ts<=cfg.get('guard_max_age',15)
-                valid=match['label']!='待複查' and not reason.startswith('引擎略過') and '已轉弱' not in reason
+                valid='盤尾緩漲未通過' not in reason and match['label']!='待複查' and not reason.startswith('引擎略過') and '已轉弱' not in reason
                 count=match['count'];confirmed=bool(match['hit'])
                 if count<5 and old is None:continue
                 row=dict(code=q.code,name=q.name or (old or {}).get('name',''),price=q.price,gain=q.gain,volume=q.volume,
