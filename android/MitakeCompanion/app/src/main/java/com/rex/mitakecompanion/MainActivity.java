@@ -63,6 +63,7 @@ public class MainActivity extends Activity {
     @Override public void onPause(){handler.removeCallbacks(tick);if(updater!=null)updater.pause();super.onPause();}
     static final int CAMERA_REQUEST=11;
     void scan(){
+        android.util.Log.i("MitakeCamera","scan permission="+checkSelfPermission(Manifest.permission.CAMERA));
         if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED){
             requestPermissions(new String[]{Manifest.permission.CAMERA},CAMERA_REQUEST);
             return;
@@ -78,6 +79,7 @@ public class MainActivity extends Activity {
     }
     @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){
         super.onRequestPermissionsResult(request,permissions,results);
+        android.util.Log.i("MitakeCamera","permission result request="+request+" results="+java.util.Arrays.toString(results));
         if(request==CAMERA_REQUEST){
             if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)launchScanner();
             else message("相機權限未開啟","請到系統設定允許相機權限，或在「配對」手動輸入電腦位址與配對碼。");

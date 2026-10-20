@@ -84,8 +84,21 @@ for attempt in range(6):
     if deny is not None:
         a,b,c,d=map(int,re.findall(r'\d+',deny.attrib['bounds']))
         adb('shell','input','tap',str((a+c)//2),str((b+d)//2))
-assert '相機權限未開啟' in ui,ui
+if '相機權限未開啟' not in ui:
+    # Some API36 images dismiss the native prompt without dispatching a result.
+    # Independently verify the real permanent-denial path, rather than treating
+    # prompt dismissal as a successful application callback.
+    package=adb('shell','dumpsys','package','com.rex.mitakecompanion')
+    assert 'android.permission.CAMERA: granted=false' in package,package
+    if 'permission_deny_button' in ui:adb('shell','input','keyevent','4')
+    adb('shell','pm','set-permission-flags','com.rex.mitakecompanion','android.permission.CAMERA','user-set','user-fixed')
+    tap('配對');tap('掃描QR碼')
+    for attempt in range(4):
+        time.sleep(1);ui=dump()
+        if '相機權限未開啟' in ui:break
+assert '相機權限未開啟' in ui,ui+'\n'+adb('logcat','-d','-s','MitakeCamera:I','AndroidRuntime:E')
 tap('確定')
+adb('shell','pm','clear-permission-flags','com.rex.mitakecompanion','android.permission.CAMERA','user-set','user-fixed')
 adb('shell','pm','grant','com.rex.mitakecompanion','android.permission.CAMERA')
 tap('配對');tap('掃描QR碼');assert_scanner();screen('qr-camera.png')
 adb('shell','input','keyevent','4')
