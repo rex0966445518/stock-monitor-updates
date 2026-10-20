@@ -52,7 +52,7 @@ public class PortfolioActivity extends Activity {
         if(holdings.length()==0)add(content,text("尚無持股，請匯入截圖或手動新增。",14,MUTED));
         for(int i=0;i<holdings.length();i++){
             JSONObject h=holdings.getJSONObject(i);LinearLayout p=panel(content);
-            add(p,text(h.getString("name")+"  "+h.getString("code"),19,TEAL));
+            TextView title=text(h.getString("name")+"  "+h.getString("code")+"  ›",19,TEAL);title.setTextIsSelectable(false);title.setContentDescription("開啟並收集 "+h.getString("code"));title.setOnClickListener(view->{try{selectedRun=store.newRun(h).getString("id");render();beginCapture(store.run(selectedRun));}catch(Exception e){message("無法建立收集",safe(e));}});add(p,title);
             add(p,text(h.getString("shares")+" 股 · 平均成本 "+shown(h,"cost")+"\n紀錄現價 "+shown(h,"price")+" · "+PortfolioStore.pnl(h),13,TEXT));
             add(p,text("核對時間 "+time(h.optLong("confirmed")),11,MUTED));
             button(p,"收集圖片與分析",()->{try{selectedRun=store.newRun(h).getString("id");render();}catch(Exception e){message("無法建立分析",safe(e));}});
@@ -80,6 +80,7 @@ public class PortfolioActivity extends Activity {
         add(fields,text("使用你自己的Google Gemini API金鑰。圖片與持股資料會送至Google，依你的API帳戶額度計費。金鑰在本機加密儲存，請勿貼到聊天。",13,TEXT));
         EditText key=new EditText(this);key.setHint(gemini.hasKey()?"已設定；留空保留原金鑰":"輸入Gemini API金鑰");key.setInputType(129);key.setSaveEnabled(false);fields.addView(key);
         EditText model=new EditText(this);model.setSingleLine(true);model.setHint("模型名稱");model.setText(gemini.model());fields.addView(model);
+        button(fields,"取得API金鑰（Google AI Studio）",()->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://aistudio.google.com/apikey")));}catch(Exception e){message("無法開啟Google AI Studio","請用瀏覽器開啟 aistudio.google.com/apikey 取得自己的Gemini API金鑰。");}});
         new AlertDialog.Builder(this).setTitle("Gemini設定").setView(fields).setPositiveButton("儲存",(d,w)->{try{gemini.model(model.getText().toString().trim());if(!key.getText().toString().trim().isEmpty())gemini.saveKey(key.getText().toString());key.setText("");message("設定已儲存","尚未傳送任何圖片。分析時會使用所選模型。");}catch(Exception e){message("設定失敗",safe(e));}}).setNeutralButton("清除金鑰",(d,w)->{try{gemini.saveKey("");}catch(Exception e){message("清除失敗",safe(e));}}).setNegativeButton("取消",null).show();
     }
     void pick(boolean holding,String page){pickHolding=holding;pickPage=page;try{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,41);}catch(Exception e){message("無法開啟相簿",safe(e));}}
