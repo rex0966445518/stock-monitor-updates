@@ -207,3 +207,19 @@ class DashboardFocusTests(unittest.TestCase):
         c.scroll((10,20),-120)
         self.assertEqual(active[0],1)
         self.assertEqual(self.messages[0][0],0x0800)
+
+class CumulativeBuyTests(unittest.TestCase):
+    def test_neighbor_bounds_and_conflict(self):
+        from autoswitch import find_cumulative_buy_below_sell
+        def row(name,y):return ([[10,y-5],[90,y-5],[90,y+5],[10,y+5]],name,.99)
+        tokens=[row('分時買力',20),row('分時賣力',40)]
+        self.assertEqual(find_cumulative_buy_below_sell(tokens,100),(50,60))
+        self.assertIsNone(find_cumulative_buy_below_sell(tokens,65))
+        self.assertIsNone(find_cumulative_buy_below_sell(tokens+[row('累計賣力',60)],100))
+    def test_suffix_requires_distinctive_text_and_confidence(self):
+        from autoswitch import cumulative_buy_suffix
+        self.assertIsNotNone(cumulative_buy_suffix([token('計買力')]))
+        self.assertIsNotNone(cumulative_buy_suffix([token('異計買力')]))
+        self.assertIsNone(cumulative_buy_suffix([token('分時買力')]))
+        self.assertIsNone(cumulative_buy_suffix([token('計賣力')]))
+        self.assertIsNone(cumulative_buy_suffix([token('買力')]))

@@ -98,6 +98,28 @@ def find_buy_power_between_neighbors(tokens):
     return None
 
 
+def cumulative_buy_suffix(tokens):
+    # Permit only an unreadable first character, never buy/sell ambiguity.
+    for box,text,score in tokens or []:
+        text=normalized(text)
+        if score>=.85 and text not in {normalized(n) for n in RANKINGS if n!='累計買力'} and len(text) in (3,4) and text.endswith(normalized('計買力')):
+            return (sum(p[0] for p in box)/4,sum(p[1] for p in box)/4)
+    return None
+
+
+def find_cumulative_buy_below_sell(tokens,height):
+    above=find_menu_item(tokens,'分時買力');anchor=find_menu_item(tokens,'分時賣力')
+    if not above or not anchor:return None
+    pitch=anchor[1]-above[1]
+    if pitch<6 or abs(above[0]-anchor[0])>pitch*.5:return None
+    y=anchor[1]+pitch
+    if y+pitch*.4>=height:return None  # Scroll before clicking a clipped row.
+    for box,text,score in tokens or []:
+        cy=sum(p[1] for p in box)/4
+        if score>=.65 and abs(cy-y)<pitch*.4 and normalized(text) in {normalized(n) for n in RANKINGS if n!='累計買力'}:return None
+    return (anchor[0],y)
+
+
 class WindowsController:
     def __init__(self, hwnd, stop):
         if os.name!='nt':raise RuntimeError('自動操作僅支援Windows')
@@ -247,6 +269,11 @@ class RankingSwitcher:
     def menu_point(self,im,tokens,name):
         point=find_menu_item(tokens,name)
         if point:return point
+        if name=='累計買力':
+            point=cumulative_buy_suffix(tokens) or find_cumulative_buy_below_sell(tokens,getattr(im,'height',0))
+            if point:
+                self.status('依分時賣力下一列定位累計買力，切換後核對計買力')
+                return point
         candidates=[tokens]
         if self.ocr_retry:
             self.c.check()
@@ -271,7 +298,7 @@ class RankingSwitcher:
         # Ignore arrow/border OCR and unrelated toolbar text, but never accept a
         # different recognized ranking alongside the requested label.
         if any(find_menu_item(tokens,other) for other in RANKINGS if other!=name):return False
-        return find_menu_item(tokens,name) is not None
+        return find_menu_item(tokens,name) is not None or (name=='累計買力' and cumulative_buy_suffix(tokens) is not None)
 
     def label_matches(self,name):
         im,_=self.c.image(self.combo)
