@@ -412,3 +412,37 @@ class CaptureTimeTests(unittest.TestCase):
         image=Image.new('RGB',(100,100));image.info['captured_at']=10000
         rows,bad=app.scan_recovering_table(image,{})
         self.assertEqual(rows[0].ts,10000)
+
+class SavedRotationTests(unittest.TestCase):
+    def test_twelve_rankings_three_seconds_survive_disk_and_recalibration(self):
+        import json
+        import MitakeDetector as app
+        from auto_ui import calibrated_auto
+        from autoswitch import RANKINGS
+        prefs=dict(rankings=list(RANKINGS)[:12],seconds=3,pages=7,
+                   full_table=False,adaptive=False,combo=[0,0,.2,.1])
+        ui=UI(copy.deepcopy(DEFAULT));ui.save=lambda:app.App.save(ui)
+        with tempfile.TemporaryDirectory() as folder,patch.object(app,'BASE',Path(folder)):
+            ui.persist_auto_preferences(prefs)
+            loaded=json.loads((Path(folder)/'settings.json').read_text('utf-8'))
+            result=calibrated_auto(loaded['auto_config'],combo=[.1,.1,.3,.1],discovered=1)
+            for key in ('rankings','seconds','pages','full_table','adaptive'):
+                self.assertEqual(result[key],prefs[key])
+            self.assertNotEqual(result['combo'],prefs['combo'])
+            ui.persist_auto_preferences(result)
+            self.assertEqual(json.loads((Path(folder)/'settings.json').read_text('utf-8'))['auto_config'],result)
+
+    def test_failed_write_rolls_back_without_success(self):
+        ui=UI(copy.deepcopy(DEFAULT));original=ui.config
+        def fail():raise OSError('disk full')
+        ui.save=fail
+        with self.assertRaises(OSError):ui.persist_auto_preferences(dict(seconds=3))
+        self.assertIs(ui.config,original)
+
+    def test_first_setup_has_defaults_and_never_mutates_saved_preferences(self):
+        from auto_ui import calibrated_auto
+        self.assertEqual(calibrated_auto(None)['seconds'],15)
+        old=dict(rankings=['漲幅排行'],seconds=3)
+        result=calibrated_auto(old,title='new screen')
+        result['rankings'].append('預估量增')
+        self.assertEqual(old['rankings'],['漲幅排行'])

@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.66'
+VERSION = '0.3.67'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -817,7 +817,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
                     self.auto_active=False;self.auto_hwnd=target;self.config=cfg
                     self.scan_phase.set('設定完成｜準備連續掃描' if start_after else '設定完成｜按 F8 開始連續掃描')
                     self.save();self.status.set(f'自動設定完成｜已驗證 {count} 檔資料｜F8 開始／停止')
-                    self.say('已自動定位選單、表格與六欄；預設輪切五個排行，逐段捲動並複查末端；持續重複觀察轉強條件。')
+                    self.say(f'已自動定位選單、表格與六欄；保留輪切 {len(cfg["auto_config"]["rankings"])} 個排行、停留 {cfg["auto_config"]["seconds"]} 秒；持續重複觀察轉強條件。')
                     if start_after:
                         self.update_task_progress('自動設定完成，準備啟動輪切掃描…')
                         self.root.after(300,lambda:self.start_auto(announce=False))

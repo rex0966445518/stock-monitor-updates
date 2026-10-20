@@ -7,7 +7,24 @@ import time
 from autoswitch import WindowsController, RankingSwitcher, RANKINGS, absolute_roi, validate_roi, F8Toggle, AutomationStopped
 
 
+def calibrated_auto(previous, **geometry):
+    """Replace device geometry without replacing the user's scan preferences."""
+    auto=dict(rankings=['漲幅排行','預估量增','分時買力','大單流入','連續買單'],
+              seconds=15,pages=1,full_table=True,adaptive=True)
+    auto.update(json.loads(json.dumps(previous or {})))
+    auto.update(geometry)
+    return auto
+
+
 class AutoUI:
+    def persist_auto_preferences(self, auto):
+        previous=self.config
+        self.config=dict(previous,auto_config=json.loads(json.dumps(auto)))
+        try:self.save()
+        except Exception:
+            self.config=previous
+            raise
+
     def hide_scan_cursor(self,token):
         from cursor_visibility import CursorVisibility
         self.restore_scan_cursor()
@@ -144,8 +161,8 @@ class AutoUI:
                 self.events.put((token,'auto_status','正在定位展開選單…'))
                 opened,_=c.image([0,0,1,1])
                 menu=detect_menu(opened,discovered['combo'],self.read_auto_ocr);c.check()
-                auto=dict(title=title,window_size=[im.width,im.height],combo=discovered['combo'],menu=menu,table=discovered['table'],
-                          rankings=['漲幅排行','預估量增','分時買力','大單流入','連續買單'],seconds=15,pages=1,full_table=True,discovered=1)
+                auto=calibrated_auto(cfg.get('auto_config'),title=title,window_size=[im.width,im.height],
+                                     combo=discovered['combo'],menu=menu,table=discovered['table'],discovered=1)
                 # The popup is known to be open after detect_menu: select directly.
                 RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu'],ocr_retry=self.read_menu_ocr_retry,status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None)))).switch('漲幅排行',menu_open=True)
                 self.events.put((token,'auto_status','正在讀取股票資料並驗證欄位…'))
@@ -579,17 +596,14 @@ class AutoUI:
         self.ttk.Label(top,text='優先重用已驗證搜尋路徑，失敗時回頂端找文字，再確認切換後標題；找不到或視窗縮放時停止。\n多頁使用滑鼠滾輪向下讀取並依股號合併；不是官方全市場資料。\n首次先按「測試輪切一次」，確認切換正確後再開始持續輪切。',wraplength=810).pack(anchor='w',padx=15,pady=7)
         def save(close=True):
             try:
-                hwnd();validate_roi(cfg.get('combo'));validate_roi(cfg.get('menu'))
+                if combo.current()>=0:hwnd()
                 cfg['adaptive']=bool(adaptive.get());cfg['full_table']=bool(full_table.get())
                 cfg['seconds']=float(delay.get());cfg['pages']=int(pages.get())
                 if not 3<=cfg['seconds']<=3600 or not 1<=cfg['pages']<=20:raise ValueError('秒數需3～3600，頁數需1～20')
                 cfg['rankings']=[n for n,v in rank_vars.items() if v.get()]
                 if not cfg['rankings']:raise ValueError('請至少勾選一個排行')
-                self.config['auto_config']=cfg
-                if cfg.get('table'):
-                    self.config['region']=absolute_roi(cfg['table'],WindowsController(self.auto_hwnd,threading.Event()).rect())
-                self.save()
-                self.say('自動輪切設定已儲存，共'+str(len(cfg['rankings']))+'個排行')
+                self.persist_auto_preferences(cfg)
+                self.say('自動輪切設定已儲存，共'+str(len(cfg['rankings']))+'個排行；讀取後停留 '+str(cfg['seconds'])+' 秒，重開後保留')
                 if close:top.destroy()
                 return True
             except Exception as exc:messagebox.showerror('設定錯誤',str(exc));return False
