@@ -1,4 +1,5 @@
 import json
+from contextlib import closing
 import sqlite3
 import tempfile
 import unittest
@@ -16,7 +17,7 @@ class IdentityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             path=Path(d)/'stock-names.json';names=StockNames(path)
             self.assertTrue(names.learn('2330','台積電',.99));names.save()
-            with sqlite3.connect(path.with_suffix('.sqlite3')) as c:
+            with closing(sqlite3.connect(path.with_suffix('.sqlite3'))) as c:
                 row=c.execute('SELECT code,name,confidence,source,learned_at FROM stock_names').fetchone()
                 self.assertEqual(row[:4],('2330','台積電',.99,'verified-ocr'));self.assertGreater(row[4],0)
             path.unlink();names=StockNames(path)
