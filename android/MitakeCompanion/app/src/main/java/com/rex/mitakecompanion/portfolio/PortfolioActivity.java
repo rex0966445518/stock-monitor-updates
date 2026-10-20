@@ -47,7 +47,7 @@ public class PortfolioActivity extends Activity {
     void home()throws Exception{
         add(content,text("匯入持股截圖 → 核對 → 收集六類圖片 → Gemini分析",13,MUTED));
         button(content,"匯入持股截圖",()->pick(true,""));button(content,"手動新增持股",()->editHolding(null));button(content,"Gemini設定",this::settings);
-        add(content,text("截圖先在本機辨識；只有按下Gemini辨識或送出分析才上傳Google。持股價格是截圖紀錄，並非即時行情。",12,GOLD));
+        add(content,text("截圖先在本機辨識；只有啟動Gemini辨識、送出分析或勾選本次自動分析才上傳Google。持股價格是截圖紀錄，並非即時行情。",12,GOLD));
         JSONArray holdings=store.read().getJSONArray("holdings");add(content,text("我的持股 · "+holdings.length()+" 檔",19,TEXT));
         if(holdings.length()==0)add(content,text("尚無持股，請匯入截圖或手動新增。",14,MUTED));
         for(int i=0;i<holdings.length();i++){
@@ -133,9 +133,11 @@ public class PortfolioActivity extends Activity {
     }
     void beginCapture(JSONObject r){
         if(Build.VERSION.SDK_INT<34){message("請改用圖片匯入","這版跨App擷取需要Android 14以上；仍可手動匯入六類截圖分析。");return;}
-        new AlertDialog.Builder(this).setTitle("啟動單次籌碼K線收集").setMessage("本次目標："+r.optJSONObject("holding").optString("code")+"。\n\n會在籌碼K線中嘗試輸入股號、選擇個股，再依序切換K線、籌碼日報、法人、多空、主力、大戶並截圖。只讀取籌碼K線，不操作買賣；找不到股號或頁籤就停止。圖片先保存在本機，返回檢查後才可送至Google。\n\n輔助使用權限必須由你在Android系統設定手動啟用；Android若限制側載App設定，需在應用程式資訊允許受限制的設定。").setPositiveButton(ChipCaptureService.available()?"開始收集":"前往輔助使用設定",(d,w)->{
+        LinearLayout options=column();options.setPadding(dp(18),0,dp(18),0);CheckBox automatic=new CheckBox(this);automatic.setText("六頁完成後自動傳送Google Gemini分析（使用我的API額度）");automatic.setChecked(false);automatic.setEnabled(gemini.hasKey());options.addView(automatic);
+        if(!gemini.hasKey())add(options,text("尚未設定Gemini金鑰；本次只收集圖片。可稍後在股倉設定金鑰並送出。",12,GOLD));
+        new AlertDialog.Builder(this).setTitle("啟動單次籌碼K線收集").setMessage("本次目標："+r.optJSONObject("holding").optString("code")+"。\n\n會在籌碼K線中嘗試輸入股號、選擇個股，再依序切換K線、籌碼日報、法人、多空、主力、大戶並截圖。只讀取籌碼K線，不操作買賣；找不到股號或頁籤就停止。\n\n若勾選自動分析，六頁全部核對成功後會立即將圖片、股數及成本傳送Google，不再另行確認。否則先保存本機，返回檢查後手動送出。\n\n輔助使用權限須由你在Android設定手動啟用；若限制側載App設定，需在應用程式資訊允許受限制的設定。").setView(options).setPositiveButton(ChipCaptureService.available()?"依上述選項開始":"前往輔助使用設定",(d,w)->{
             if(!ChipCaptureService.available()){try{startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));}catch(Exception e){message("無法開啟設定",safe(e));}return;}
-            try{ChipCaptureService.begin(r.getString("id"),r.getJSONObject("holding").getString("code"));}catch(Exception e){message("無法開始收集",safe(e));}
+            try{JSONObject fresh=store.run(r.getString("id"));fresh.put("auto_analyze",automatic.isChecked());store.updateRun(fresh);ChipCaptureService.begin(r.getString("id"),r.getJSONObject("holding").getString("code"));}catch(Exception e){message("無法開始收集",safe(e));}
         }).setNegativeButton("取消",null).show();
     }
     void confirmAnalysis(JSONObject original){
@@ -143,11 +145,8 @@ public class PortfolioActivity extends Activity {
         try{JSONObject r=store.run(original.getString("id"));JSONObject pages=r.getJSONObject("pages");if(pages.length()==0){message("尚未加入圖片","請先匯入或收集至少一類個股圖片。");return;}
             List<File> images=new ArrayList<>();List<String> labels=new ArrayList<>();StringBuilder missing=new StringBuilder();
             for(String p:PortfolioStore.PAGES){JSONObject v=pages.optJSONObject(p);if(v==null)missing.append(p).append("、");else{images.add(new File(v.getString("path")));labels.add(p);}}
-            String prompt=GeminiClient.ANALYZE+"\n使用者已核對的持股JSON："+r.getJSONObject("holding")+"\n缺圖："+missing+"\n圖片組建立時間（非行情日期）："+time(r.getLong("created"));
             new AlertDialog.Builder(this).setTitle("送出 "+images.size()+" 張圖片至Google Gemini？").setMessage("個股 "+r.getJSONObject("holding").getString("code")+"\n包含已核對股數與成本。\n"+(missing.length()>0?"缺圖："+missing+"，只進行部分分析。\n":"")+"請先核對所有圖片與日期，移除姓名、帳號等不需上傳的內容。使用你的API額度；完成後結果保存在本機。").setPositiveButton("確認圖片並送出分析",(d,w)->background(()->{
-                store.status(r.getString("id"),"Gemini分析中");
-                try{String evidence=pages.toString();String answer=gemini.generate(prompt,images,labels,false);JSONObject latest=store.run(r.getString("id"));if(!evidence.equals(latest.getJSONObject("pages").toString()))throw new IllegalStateException("分析期間圖片已變更，本次結果未儲存；請重新分析");latest.put("analysis",answer).put("analyzed",System.currentTimeMillis()).put("model",gemini.model()).put("status","分析完成");store.updateRun(latest);return answer;}
-                catch(Exception e){store.status(r.getString("id"),"分析未完成，可重試");throw e;}
+                return PortfolioAnalysis.analyze(this,r.getString("id"),false);
             },v->render())).setNegativeButton("取消",null).show();
         }catch(Exception e){message("無法分析",safe(e));}
     }

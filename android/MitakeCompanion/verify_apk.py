@@ -35,6 +35,7 @@ required = {
     'Lcom/google/zxing/MultiFormatReader;',
     'Lcom/rex/mitakecompanion/MainActivity;',
     'Lcom/rex/mitakecompanion/portfolio/PortfolioActivity;',
+    'Lcom/rex/mitakecompanion/portfolio/PortfolioAnalysis;',
     'Lcom/rex/mitakecompanion/portfolio/ChipCaptureService;',
     'Lcom/google/mlkit/vision/text/chinese/ChineseTextRecognizerOptions;',
 }

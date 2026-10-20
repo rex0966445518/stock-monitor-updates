@@ -138,7 +138,10 @@ public final class ChipCaptureService extends AccessibilityService {
                             AccessibilityNodeInfo root=getRootInActiveWindow();if(root==null||!PACKAGE.contentEquals(root.getPackageName())){finish("畫面已切換，未納入本次截圖");return;}
                             AccessibilityNodeInfo tab=tab(nodes(root),target);if(tab==null||!selected(tab)||!exactCode(allText(root),expected)){finish("個股或頁面已切換，未納入本次截圖");return;}
                             File dest=store.imageFile(id,target);java.nio.file.Files.move(temp.toPath(),dest.toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING);store.attach(id,target,dest,"輔助使用擷取；股號已由本機OCR核對",recognized);
-                            page++;screenshotBusy=false;if(page>=PortfolioStore.PAGES.length){finish("六頁收集完成，請返回股倉檢查並送出分析");return;}
+                            page++;screenshotBusy=false;if(page>=PortfolioStore.PAGES.length){
+                                boolean automatic=store.run(id).optBoolean("auto_analyze");finish(automatic?"六頁完成，準備依本次授權送至Gemini":"六頁收集完成，請返回股倉檢查並送出分析");
+                                if(automatic)worker.execute(()->{try{PortfolioAnalysis.analyze(ChipCaptureService.this,id,true);}catch(Exception ignored){}});return;
+                            }
                             deadline=SystemClock.elapsedRealtime()+30000;stableSince=SystemClock.elapsedRealtime();store.status(id,"已收集 "+page+"/6 頁");
                         }catch(Exception e){finish("圖片儲存失敗，未完成收集");}finally{temp.delete();}
                     });

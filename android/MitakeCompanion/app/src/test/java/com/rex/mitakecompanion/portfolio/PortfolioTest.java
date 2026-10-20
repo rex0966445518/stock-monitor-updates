@@ -69,4 +69,10 @@ public class PortfolioTest {
         PortfolioActivity a=Robolectric.buildActivity(PortfolioActivity.class).setup().get();assertFalse(a.isFinishing());
         assertFalse(new GeminiClient(a).hasKey());a.settings();assertTrue(org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog().isShowing());a.finish();
     }
+    @Test public void automaticAnalysisRejectsPartialImagesBeforeAnyApiRequest()throws Exception{
+        PortfolioStore s=PortfolioStore.get(RuntimeEnvironment.getApplication());JSONObject r=s.newRun(PortfolioStore.holding("2330","台積電","1000","100","110"));
+        File f=s.imageFile(r.getString("id"),"K線");Files.write(f.toPath(),new byte[]{1});s.attach(r.getString("id"),"K線",f,"manual","2330");
+        IllegalStateException failure=assertThrows(IllegalStateException.class,()->PortfolioAnalysis.analyze(RuntimeEnvironment.getApplication(),r.getString("id"),true));
+        assertTrue(failure.getMessage().contains("圖片不完整"));assertFalse(s.run(r.getString("id")).has("analysis"));
+    }
 }
