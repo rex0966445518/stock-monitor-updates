@@ -111,3 +111,24 @@ class SteadyTests(unittest.TestCase):
             with self.assertRaises(ValueError):validate_config(dict(CFG,**{key:val}))
 
 if __name__=='__main__':unittest.main()
+
+class HistoryFeedbackTests(unittest.TestCase):
+    def ui(self):
+        from steady_ui import SteadyUI
+        ui=SteadyUI();ui.steady_tracker=SteadyTracker();ui.steady_reports={'1234':{'status':'old'}}
+        ui.messages=[];ui.say=ui.messages.append;ui.updates=[];ui.steady_views=[lambda:ui.updates.append(True)]
+        return ui
+    def test_loaded_history_invalidates_old_reports_refreshes_and_reports_range(self):
+        from unittest.mock import patch
+        ui=self.ui()
+        with patch('steady_ui.time.time',return_value=END):ui.steady_loaded((tracker(begin=60,stop=65),''))
+        self.assertTrue(ui.steady_ready);self.assertEqual(ui.steady_reports,{})
+        self.assertIn('1檔／6筆',ui.steady_load_status);self.assertIn('10:00:00',ui.steady_load_status)
+        self.assertEqual(len(ui.updates),1)
+        self.assertFalse(ui.steady_tracker.evaluate('1234',CFG,END)['passed'])
+    def test_empty_success_is_distinct_from_failure(self):
+        ui=self.ui();ui.steady_loaded((SteadyTracker(),''))
+        self.assertTrue(ui.steady_ready);self.assertIn('沒有可用',ui.steady_load_status)
+        ui.steady_loaded((None,'database is locked'))
+        self.assertFalse(ui.steady_ready);self.assertIn('database is locked',ui.steady_load_status)
+        self.assertFalse(ui.steady_loading)
