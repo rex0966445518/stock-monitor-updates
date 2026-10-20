@@ -37,7 +37,7 @@ public final class ChipCaptureService extends AccessibilityService {
         JSONObject r=s.store.run(id);if(!r.getJSONObject("holding").getString("code").equals(code))throw new IllegalArgumentException("目標股號不符");
         Intent launch=s.getPackageManager().getLaunchIntentForPackage(PACKAGE);if(launch==null)throw new IllegalStateException("請先安裝並登入籌碼K線");
         s.runId=id;s.code=code;s.name=r.getJSONObject("holding").getString("name");s.page=0;s.searchAttempts=0;s.token++;s.screenshotBusy=false;s.lastUi="";s.stableSince=SystemClock.elapsedRealtime();s.deadline=SystemClock.elapsedRealtime()+45000;
-        s.showOverlay();active=true;s.store.status(id,"等待確認個股 "+code);s.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));s.handler.postDelayed(s.tick,1500);
+        s.showOverlay();active=true;s.store.status(id,"等待確認個股 "+code);try{s.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));s.handler.postDelayed(s.tick,1500);}catch(RuntimeException e){s.finish("無法開啟籌碼K線，未開始收集");throw new IllegalStateException("無法開啟籌碼K線");}
     }
     @Override protected void onServiceConnected(){super.onServiceConnected();store=PortfolioStore.get(this);instance=this;}
     @Override public void onAccessibilityEvent(AccessibilityEvent event){}
@@ -76,12 +76,11 @@ public final class ChipCaptureService extends AccessibilityService {
     }
     private void step()throws Exception{
         if(Build.VERSION.SDK_INT<34){finish("需要Android 14以上，請手動匯入圖片");return;}
-        if(screenshotBusy)return;
         if(SystemClock.elapsedRealtime()>deadline){finish("收集暫停：未能確認"+code+"的「"+PortfolioStore.PAGES[page]+"」頁面；請返回股倉手動匯入。未傳送Google。");return;}
+        if(screenshotBusy)return;
         AccessibilityNodeInfo root=getRootInActiveWindow();
         if(root==null||!PACKAGE.contentEquals(root.getPackageName())){overlayText.setText("等待籌碼K線 · "+code+"\n切換其他App時不讀取、不截圖");return;}
         List<AccessibilityNodeInfo> list=nodes(root);String ui=allText(root);
-        if(!ui.equals(lastUi)){lastUi=ui;stableSince=SystemClock.elapsedRealtime();}
         int tabs=0;for(String p:PortfolioStore.PAGES)if(tab(list,p)!=null)tabs++;
         // Require the code in the top part of an actual six-tab stock detail page.
         Rect screen=new Rect();root.getBoundsInScreen(screen);boolean header=false;
@@ -90,6 +89,8 @@ public final class ChipCaptureService extends AccessibilityService {
         String target=PortfolioStore.PAGES[page];AccessibilityNodeInfo tab=tab(list,target);
         overlayText.setText(code+" · "+(page+1)+"/6 "+target+"\n只存本機，尚未上傳");
         if(tab==null)return;
+        String signature=code+"|"+target+"|"+selected(tab);
+        if(!signature.equals(lastUi)){lastUi=signature;stableSince=SystemClock.elapsedRealtime();}
         if(!selected(tab)){if(SystemClock.elapsedRealtime()-stableSince>1200){clickable(tab).performAction(AccessibilityNodeInfo.ACTION_CLICK);stableSince=SystemClock.elapsedRealtime();}return;}
         if(ui.contains("載入中")||ui.contains("加載中")||SystemClock.elapsedRealtime()-stableSince<1800)return;
         capture(root.getWindowId(),target);
