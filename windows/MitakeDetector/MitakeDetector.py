@@ -9,9 +9,10 @@ import queue, random, re, sqlite3, subprocess, sys, threading, time, unicodedata
 from collections import deque
 from auto_ui import AutoUI
 from research_ui import ResearchUI
+from dashboard_ui import DashboardUI
 from pathlib import Path
 
-VERSION = '0.3.58'
+VERSION = '0.3.59'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -211,7 +212,7 @@ def format_feedback(text):
     return text
 
 
-class App(AutoUI,ResearchUI):
+class App(AutoUI,ResearchUI,DashboardUI):
     def __init__(self, root):
         import tkinter as tk
         from tkinter import ttk
@@ -255,7 +256,7 @@ class App(AutoUI,ResearchUI):
         style.map('TCombobox',fieldbackground=[('readonly','#e6edf7')],foreground=[('readonly','#101827')])
         style.configure('Treeview', background='#101a2c', fieldbackground='#101a2c', foreground='#e4eaf5', rowheight=30)
         style.map('Treeview', background=[('selected', '#7b253c')])
-        tk.Label(root, text='漲停板探測器-雷允澤製 v'+VERSION, fg='#ff5879', bg='#0b1020', font=('Microsoft JhengHei', 22, 'bold')).pack(anchor='w', padx=20, pady=(15, 3))
+        self.build_market_header()
         tk.Label(root, text='觀察轉強候選股 · 持續複查量價與突破守穩 · 訊號不代表一定漲停', fg='#9caeca', bg='#0b1020').pack(anchor='w', padx=20)
         bar = ttk.Frame(root); bar.pack(fill='x', padx=15, pady=12)
         for label, action in [('開始／繼續（F8）', self.begin_observation), ('暫停（F8）', self.stop), ('重新開始', self.restart_observation), ('掃描設定', self.configure_auto), ('一鍵更新', self.check_update)]:
@@ -326,11 +327,7 @@ class App(AutoUI,ResearchUI):
         horizontal=ttk.Scrollbar(table_frame,orient='horizontal',command=self.tree.xview)
         self.tree.configure(xscrollcommand=horizontal.set)
         horizontal.pack(side='bottom',fill='x',before=self.tree)
-        log_frame=ttk.Frame(root);log_frame.pack(fill='x',padx=18,pady=8)
-        self.log=tk.Text(log_frame,height=9,wrap='word',bg='#0a1322',fg='#a6b8d2',font=('Microsoft JhengHei',10),state='disabled')
-        log_scroll=ttk.Scrollbar(log_frame,orient='vertical',command=self.log.yview)
-        self.log.configure(yscrollcommand=log_scroll.set)
-        self.log.pack(side='left',fill='x',expand=True);log_scroll.pack(side='right',fill='y')
+        log_frame=self.build_daily_bottom()
         foot = ttk.Frame(root); foot.pack(fill='x', padx=18, pady=(0,12))
         # Reserve footer and diagnostic space before the expanding quote table.
         foot.pack_configure(side='bottom',before=table_frame)
@@ -352,6 +349,7 @@ class App(AutoUI,ResearchUI):
         try:record_launch(BASE,VERSION)
         except sqlite3.Error as exc:self.say('版本啟用紀錄寫入失敗：'+str(exc))
         self.init_research()
+        self.init_dashboard()
         self.load_daily_table()
         root.protocol('WM_DELETE_WINDOW', self.close)
         self.init_f8()
@@ -758,6 +756,8 @@ class App(AutoUI,ResearchUI):
                     finally:ready.set()
                     continue
                 if token is None:
+                    if kind=='market_index':
+                        self.update_market_index(payload);continue
                     if kind.startswith('research_'):
                         self.research_event(kind,payload);continue
                     if kind=='voice_error':self.say('語音提醒無法播放：'+str(payload))
@@ -815,6 +815,8 @@ class App(AutoUI,ResearchUI):
         self.scan_rate_var.set(self.scan_rate.text())
         panel=getattr(self,'task_panel',None)
         if panel and panel.alive:panel.rate.set(self.scan_rate.text())
+        self.refresh_index_label()
+        self.refresh_today_candidates()
         self.root.after(150, self.poll)
 
     def export(self):
@@ -972,6 +974,8 @@ class App(AutoUI,ResearchUI):
         text.insert('1.0', HELP); text.configure(state='disabled')
 
     def close(self):
+        index=getattr(self,'index_service',None)
+        if index:index.close()
         service=getattr(self,'research_service',None)
         if service:service.close()
         self.save_daily_table()

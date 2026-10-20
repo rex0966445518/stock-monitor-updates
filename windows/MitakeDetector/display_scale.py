@@ -34,6 +34,8 @@ class DisplayScale:
         self.app=app;self.root=app.root;self.path=Path(path);self.percent=100
         self.fonts={};self.padding={}
         self.widths={c:int(app.tree.column(c,'width')) for c in app.tree['columns']}
+        daily=getattr(app,'today_tree',None)
+        self.daily_widths={c:int(daily.column(c,'width')) for c in daily['columns']} if daily is not None else {}
         default=150 if self.root.winfo_screenheight()>=1440 else 100
         try:value=json.loads(self.path.read_text('utf-8')).get('scale',default)
         except (OSError,ValueError,AttributeError):value=default
@@ -82,6 +84,7 @@ class DisplayScale:
         style.configure('Treeview.Heading',font=('Microsoft JhengHei',round(10*factor),'bold'))
         self.app.tree.tag_configure('hit',font=('Microsoft JhengHei',round(10*factor),'bold'))
         for column,width in self.widths.items():self.app.tree.column(column,width=round(width*factor),minwidth=round(min(width,60)*factor))
+        for column,width in self.daily_widths.items():self.app.today_tree.column(column,width=round(width*factor),minwidth=round(min(width,60)*factor))
         self.app.log.configure(height=6 if value>100 else 9)
         self.percent=value
         if hasattr(self.app,'display_scale_var'):self.app.display_scale_var.set(f'{value}%')

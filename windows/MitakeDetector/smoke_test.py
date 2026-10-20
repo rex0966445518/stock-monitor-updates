@@ -23,7 +23,7 @@ def run_smoke_test(report):
         app.rank_rows={};app.auto_engines={};app.display_rows=[]
 
         assert root.title()=='漲停板探測器-雷允澤製 v'+VERSION
-        assert any(str(w.cget('text'))=='漲停板探測器-雷允澤製 v'+VERSION for w in root.winfo_children() if w.winfo_class()=='Label')
+        assert app.product_title.cget('text')=='漲停板探測器-雷允澤製 v'+VERSION
         import tkinter.font as tkfont
         from tkinter import ttk
         scale=app.display_scale.percent
@@ -63,6 +63,15 @@ def run_smoke_test(report):
         root.update()
         assert app.update_panel.window.winfo_ismapped()
         assert app.log.winfo_height()>=100
+        assert app.market_label.winfo_rootx()>app.product_title.winfo_rootx()
+        assert app.log.winfo_rootx()>app.today_tree.winfo_rootx()
+        assert app.market_label.winfo_rootx()+app.market_label.winfo_width()<=root.winfo_rootx()+root.winfo_width()
+        app.update_market_index(dict(quote=dict(price=10000,change=-10,percent=-.1,ts=dt.datetime.now().timestamp()),error=''))
+        assert '10,000.00' in app.market_var.get()
+        assert app.market_label.cget('fg')=='#59d99d'
+        app.update_market_index(dict(error='fixture offline'))
+        assert '保留前值' in app.market_var.get()
+
         assert app.log.winfo_rooty()+app.log.winfo_height()<=root.winfo_rooty()+root.winfo_height()
         app.set_update_progress(dict(stage='downloading',version='99.0.0',percent=42,downloaded=42*1048576,total=100*1048576,elapsed=4,message='CI download'))
         root.update()
@@ -188,6 +197,14 @@ def run_smoke_test(report):
         view.choose((today-dt.timedelta(days=10000)).isoformat());assert not view.tree.get_children()
         view.choose(today.isoformat());assert view.tree.get_children()
         diary_top.destroy()
+        # The daily panel survives weaker readings and invalid OCR spikes.
+        CandidateDiary(BASE/'observations.sqlite3').observe([(Quote('9089','DIARY',20,2,2200,4,now+1),2,'已轉弱；股價不足；等待觀測突破守穩',False)],diary_cfg,VERSION)
+        CandidateDiary(BASE/'observations.sqlite3').observe([(Quote('9089','DIARY',9999,2,2200,4,now+2),2,'讀值跳動／量倒退',False)],diary_cfg,VERSION)
+        app.refresh_today_candidates(force=True)
+        daily=[app.today_tree.item(item,'values') for item in app.today_tree.get_children() if app.today_tree.item(item,'values')[0]=='9089']
+        assert daily and daily[0][4]=='20.00',daily
+        assert '待複查' in daily[0][5],daily
+
         # Verify the actual GUI has only the everyday action buttons.
         actions=[child.cget('text') for child in app.main_actions.winfo_children() if child.winfo_class()=='TButton']
         assert actions==['開始／繼續（F8）','暫停（F8）','重新開始','掃描設定','一鍵更新'],actions
