@@ -211,7 +211,7 @@ class CandidateCharts:
             stamp=data.get('data_time','未知')
             fetched=dt.datetime.fromtimestamp(data['fetched_at'],dt.timezone(dt.timedelta(hours=8))).strftime('%H:%M:%S')
             old='（舊交易日）' if stamp[:10]!=dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).date().isoformat() else ''
-            c.create_text(5,148,anchor='nw',text=f"五分 K {stamp}{old}\n擷取 {fetched} · 點圖放大",fill='#b9cadd',width=width)
+            c.create_text(5,148,anchor='nw',text=f"當日五分 K｜09:00 起\n{stamp}{old} · 點圖放大",fill='#b9cadd',width=width)
         except (OSError,ValueError,KeyError) as exc:message(c,'圖檔讀取失敗：'+str(exc))
     def enlarge(self,code):
         data=self.web_cache.get(code)

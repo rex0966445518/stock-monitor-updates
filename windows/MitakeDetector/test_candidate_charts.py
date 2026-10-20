@@ -56,3 +56,11 @@ class PreviewTests(unittest.TestCase):
         self.assertTrue(all(m['total']==6 and q.price is None for q,m in rows))
         rows[0][1]['count']=0
         self.assertEqual(test_candidates()[0][1]['count'],6)
+
+class DayRangeTests(unittest.TestCase):
+    def test_reject_multiday_and_missing_open(self):
+        from wantgoo_chart import validate_day_range
+        valid=dict(one_day=True,axis_labels=['10/20 09:00','10/20 13:00'])
+        self.assertEqual(validate_day_range(valid,'2026-10-20 13:30'),'10/20')
+        for delta in [dict(one_day=False),dict(axis_labels=['10/19 09:00','10/20 13:00']),dict(axis_labels=['10/20 10:00']),dict(axis_labels=[])]:
+            with self.assertRaises(ValueError):validate_day_range(dict(valid,**delta),'2026-10-20 13:30')

@@ -33,9 +33,22 @@ def validate_state(state,code):
     return stamp
 
 
+def validate_day_range(state,stamp):
+    labels=state.get('axis_labels',[])
+    day=dt.datetime.strptime(stamp,'%Y-%m-%d %H:%M').strftime('%m/%d')
+    if not state.get('one_day'):raise ValueError('尚未確認當日範圍')
+    if not labels or any(not str(label).startswith(day+' ') for label in labels):
+        raise ValueError('圖表仍包含其他交易日，暫不顯示')
+    if not any(str(label).endswith('09:00') for label in labels):
+        raise ValueError('尚未確認開盤時間軸，暫不顯示')
+    return day
+
+
 STATE_JS="""() => {
 const root=document.querySelector('#technical-chart svg.highcharts-root');
 return {selected:!!document.querySelector('button[type="five-minutes"].active'),
+one_day:[...document.querySelectorAll('#technical-chart g.highcharts-button-pressed')].some(e=>e.textContent.trim()==='1 天'),
+axis_labels:[...document.querySelectorAll('#technical-chart g.highcharts-xaxis-labels:not(.highcharts-navigator-xaxis) text')].map(e=>e.textContent.trim()),
 title:document.querySelector('h1')?.textContent||'',
 stamp:document.querySelector('#ohlc [c-model="time"]')?.textContent||'',
 candles:root?.querySelectorAll('g.highcharts-candlestick-series path').length||0,
@@ -51,22 +64,31 @@ def capture(page,code):
     # A date-only daily title must become intraday; active button alone is not sufficient.
     page.wait_for_function("() => {const s=("+STATE_JS+")();return s.selected && /\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}/.test(s.stamp) && s.candles>=2 && !s.loading}",timeout=25000)
     state=page.evaluate(STATE_JS);stamp=validate_state(state,code)
+    page.get_by_text('1 天',exact=True).click(timeout=10000)
+    page.wait_for_function("() => {const s=("+STATE_JS+")();const d=s.stamp.slice(5,10).replace('-','/');return s.one_day && s.axis_labels.length && s.axis_labels.every(t=>t.startsWith(d+' ')) && s.axis_labels.some(t=>t.endsWith('09:00')) && !s.loading}",timeout=15000)
+    validate_day_range(page.evaluate(STATE_JS),stamp)
     svg=page.locator('#technical-chart svg.highcharts-root')
     # Use rendered DOM geometry, never Highcharts' hidden runtime data.
-    crop=svg.evaluate("e=>{const r=e.getBoundingClientRect(),g=e.querySelector('g.highcharts-yaxis-grid')?.getBoundingClientRect();return g?{bottom:g.bottom-r.top+15,height:r.height}:null}")
+    crop=svg.evaluate("e=>{const r=e.getBoundingClientRect(),g=e.querySelector('g.highcharts-yaxis-grid')?.getBoundingClientRect(),a=e.querySelector('g.highcharts-xaxis-labels:not(.highcharts-navigator-xaxis)')?.getBoundingClientRect();return g?{bottom:g.bottom-r.top+15,height:r.height,axis:a?{top:a.top-r.top,bottom:a.bottom-r.top}:null}:null}")
     raw=svg.screenshot(timeout=10000,animations='disabled')
-    validate_state(page.evaluate(STATE_JS),code)
+    final=page.evaluate(STATE_JS)
+    validate_day_range(final,validate_state(final,code))
     image=Image.open(io.BytesIO(raw));image.load()
     if image.width<100 or image.height<80:raise ValueError('圖表尺寸異常')
     if crop and 30<crop['bottom']<crop['height']:
-        image=image.crop((0,0,image.width,round(image.height*crop['bottom']/crop['height'])))
+        scale=image.height/crop['height']
+        panel=image.crop((0,0,image.width,round(scale*crop['bottom'])))
+        if crop.get('axis'):
+            a=crop['axis'];axis=image.crop((0,max(0,round(scale*a['top'])-3),image.width,min(image.height,round(scale*a['bottom'])+3)))
+            joined=Image.new('RGB',(image.width,panel.height+axis.height),'white');joined.paste(panel,(0,0));joined.paste(axis,(0,panel.height));image=joined
+        else:image=panel
     thumb=io.BytesIO();image.save(thumb,format='PNG')
     return raw,thumb.getvalue(),stamp
 
 
 def run_capture(code,directory,fixture=False):
     chart_url(code);directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
-    report=dict(code=code,url=chart_url(code),period='5m',fetched_at=time.time(),day=taipei_day(),error='')
+    report=dict(code=code,url=chart_url(code),period='5m',range_version=2,fetched_at=time.time(),day=taipei_day(),error='')
     try:
         from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
@@ -76,7 +98,7 @@ def run_capture(code,directory,fixture=False):
                 context=browser.new_context(viewport={'width':1280,'height':1000},locale='zh-TW',timezone_id='Asia/Taipei')
                 page=context.new_page();page.set_default_timeout(15000)
                 if fixture:
-                    page.set_content('''<h1>測試股(2330) 技術分析</h1><button type="five-minutes" onclick="this.classList.add('active');document.querySelector('[c-model]').textContent='2026-01-02 13:30'">5分</button><ul id="ohlc"><span c-model="time">2026-01-02</span></ul><div id="technical-chart"><svg class="highcharts-root" width="600" height="300"><rect width="600" height="300" fill="white"/><g class="highcharts-yaxis-grid"><path d="M0 30 L600 30 M0 200 L600 200" stroke="gray"/></g><g class="highcharts-candlestick-series"><path d="M100 50 L100 150" stroke="red"/><path d="M200 60 L200 180" stroke="green"/></g></svg></div>''')
+                    page.set_content('''<h1>測試股(2330) 技術分析</h1><button type="five-minutes" onclick="this.classList.add('active');document.querySelector('[c-model]').textContent='2026-01-02 13:30'">5分</button><ul id="ohlc"><span c-model="time">2026-01-02</span></ul><div id="technical-chart"><svg class="highcharts-root" width="600" height="300"><rect width="600" height="300" fill="white"/><g class="highcharts-yaxis-grid"><path d="M0 30 L600 30 M0 200 L600 200" stroke="gray"/></g><g class="highcharts-candlestick-series"><path d="M100 50 L100 150" stroke="red"/><path d="M200 60 L200 180" stroke="green"/></g><g class="highcharts-xaxis-labels"><text x="20" y="220">01/01 09:00</text></g><g class="highcharts-button" onclick="this.classList.add('highcharts-button-pressed');document.querySelector('.highcharts-xaxis-labels text').textContent='01/02 09:00'"><text x="20" y="280">1 天</text></g></svg></div>''')
                 else:
                     response=page.goto(chart_url(code),wait_until='domcontentloaded',timeout=30000)
                     if response and response.status>=400:raise RuntimeError(f'玩股網回應 HTTP {response.status}；未重試或繞過限制')
@@ -103,6 +125,7 @@ class WantGooCharts:
             result=json.loads((directory/'result.json').read_text(encoding='utf-8'))
             if result.get('code')!=code or result.get('period')!='5m' or result.get('day')!=taipei_day():return None
             if result.get('fixture'):return None
+            if not result.get('error') and result.get('range_version')!=2:return None
             if not result.get('error') and not all((directory/n).is_file() for n in ('full.png','thumb.png')):return None
             return dict(result,directory=str(directory))
         except (OSError,ValueError,TypeError):return None
@@ -140,7 +163,7 @@ class WantGooCharts:
                 if not result:raise RuntimeError('圖表程序未回傳有效結果，請檢查 Edge 或改開原站')
                 if not self.stop.is_set():self.emit(result)
             except Exception as exc:
-                result=dict(code=code,error=str(exc),day=taipei_day(),period='5m',fetched_at=time.time())
+                result=dict(code=code,error=str(exc),day=taipei_day(),period='5m',range_version=2,fetched_at=time.time())
                 try:(self.base/code/'result.json').write_text(json.dumps(result,ensure_ascii=False),encoding='utf-8')
                 except OSError:pass
                 if not self.stop.is_set():self.emit(result)
