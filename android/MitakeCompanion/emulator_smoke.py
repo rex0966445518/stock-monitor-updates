@@ -56,6 +56,14 @@ tap('掃描電腦配對碼');assert_scanner()
 adb('shell','input','keyevent','4')
 assert 'FATAL EXCEPTION' not in adb('logcat','-d','-s','AndroidRuntime:E')
 
+# Verify voice settings persist and opening test speech handles missing voices.
+# Scroll to the new controls after returning from camera.
+adb('shell','input','swipe','450','1100','450','350','400')
+tap('語音通報')
+assert '新訊號語音通報' in dump()
+tap('試聽');time.sleep(2)
+assert 'FATAL EXCEPTION' not in adb('logcat','-d','-s','AndroidRuntime:E')
+
 with tempfile.TemporaryDirectory() as folder:
     bridge=MobileBridge(Path(folder)/'pair.json');bridge.start()
     stop=threading.Event();promote=threading.Event()

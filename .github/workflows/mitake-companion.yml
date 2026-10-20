@@ -60,11 +60,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp android/MitakeCompanion/app/build/outputs/apk/debug/app-debug.apk MitakeCompanion-v0.1.1.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs MitakeCompanion-v0.1.1.apk
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging MitakeCompanion-v0.1.1.apk | head -8
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs MitakeCompanion-v0.1.1.apk | grep -F '60704cfc2efe84748087d8beaf66be317e6ad1b273030c7c08ac27773d6582fe'
-          sha256sum MitakeCompanion-v0.1.1.apk > MitakeCompanion-SHA256SUMS.txt
-          gh release create mitake-companion-v0.1.1 MitakeCompanion-v0.1.1.apk MitakeCompanion-SHA256SUMS.txt --target "$GITHUB_SHA" --title '漲停雷達 Android 電腦連動 v0.1.1' --notes-file android/MitakeCompanion/README.md --latest=false
-          curl --fail --location --retry 3 --max-time 90 'https://github.com/rex0966445518/stock-monitor-updates/releases/download/mitake-companion-v0.1.1/MitakeCompanion-v0.1.1.apk' --output verified.apk
-          cmp verified.apk MitakeCompanion-v0.1.1.apk
+          cp android/MitakeCompanion/app/build/outputs/apk/debug/app-debug.apk MitakeCompanion-v0.1.2.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs MitakeCompanion-v0.1.2.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging MitakeCompanion-v0.1.2.apk | head -8
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs MitakeCompanion-v0.1.2.apk | grep -F '60704cfc2efe84748087d8beaf66be317e6ad1b273030c7c08ac27773d6582fe'
+          sha256sum MitakeCompanion-v0.1.2.apk > MitakeCompanion-SHA256SUMS.txt
+          gh release create mitake-companion-v0.1.2 MitakeCompanion-v0.1.2.apk MitakeCompanion-SHA256SUMS.txt --target "$GITHUB_SHA" --title '漲停雷達 Android 電腦連動 v0.1.2' --notes-file android/MitakeCompanion/README.md --latest=false
+          curl --fail --location --retry 3 --max-time 90 'https://github.com/rex0966445518/stock-monitor-updates/releases/download/mitake-companion-v0.1.2/MitakeCompanion-v0.1.2.apk' --output verified.apk
+          cmp verified.apk MitakeCompanion-v0.1.2.apk

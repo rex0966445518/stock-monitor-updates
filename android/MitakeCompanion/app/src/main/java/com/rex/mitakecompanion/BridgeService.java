@@ -11,10 +11,11 @@ public class BridgeService extends Service {
     public static volatile long receivedAt;
     public static volatile String connection="尚未連線";
     private ScheduledExecutorService executor;
+    private SpeechAnnouncer speech;
     private SharedPreferences prefs;
     public static final String STOP="com.rex.mitakecompanion.STOP";
     public static SharedPreferences prefs(Context c){return c.getSharedPreferences("pairing",MODE_PRIVATE);}
-    @Override public void onCreate(){super.onCreate();prefs=prefs(this);NotificationManager n=getSystemService(NotificationManager.class);
+    @Override public void onCreate(){super.onCreate();prefs=prefs(this);speech=new SpeechAnnouncer(this);NotificationManager n=getSystemService(NotificationManager.class);
         n.createNotificationChannel(new NotificationChannel("connection","電腦連線狀態",NotificationManager.IMPORTANCE_LOW));
         NotificationChannel signals=new NotificationChannel("signals","5/6 與 6/6 觀察提醒",NotificationManager.IMPORTANCE_HIGH);signals.enableVibration(true);n.createNotificationChannel(signals);
     }
@@ -42,6 +43,7 @@ public class BridgeService extends Service {
             if(events!=null)for(int i=0;i<events.length();i++){
                 JSONObject e=events.getJSONObject(i);
                 if(same&&e.optLong("seq")<=after)continue;
+                if(speech!=null)speech.announce(e,data.optDouble("server_time"),data.optBoolean("active"));
                 if(AlertPolicy.eligible(e,data.optDouble("server_time"),data.optBoolean("active"))&&(Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED)) {
                     Notification notification=new Notification.Builder(this,"signals").setSmallIcon(R.drawable.ic_notification)
                         .setContentTitle(AlertPolicy.title(e)).setContentText(AlertPolicy.detail(e))
@@ -56,6 +58,6 @@ public class BridgeService extends Service {
             if(Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED)manager.notify(1,connectionNotification(connection));
         }catch(Exception error){connection="連線中斷 · 自動重連";if(Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED)getSystemService(NotificationManager.class).notify(1,connectionNotification(error.getMessage()!=null&&error.getMessage().contains("配對")?"配對失效，請重新掃碼":"無法連接電腦，3秒後重試"));}
     }
-    @Override public void onDestroy(){if(executor!=null)executor.shutdownNow();executor=null;connection="已停止連線";receivedAt=0;super.onDestroy();}
+    @Override public void onDestroy(){if(speech!=null)speech.close();speech=null;if(executor!=null)executor.shutdownNow();executor=null;connection="已停止連線";receivedAt=0;super.onDestroy();}
     @Override public IBinder onBind(Intent i){return null;}
 }

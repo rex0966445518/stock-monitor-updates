@@ -17,6 +17,7 @@ import java.util.*;
 public class MainActivity extends Activity {
     static final int BG=Color.rgb(10,16,27),PANEL=Color.rgb(18,29,45),TEXT=Color.rgb(238,244,251),MUTED=Color.rgb(143,163,186),TEAL=Color.rgb(101,230,196),RED=Color.rgb(255,111,133),GOLD=Color.rgb(245,200,112);
     private final Handler handler=new Handler(Looper.getMainLooper());
+    private AppUpdater updater;private SpeechAnnouncer testSpeech;
     LinearLayout content,cards;TextView connection,counts6,counts5,freshness;String filter="全部",last="";
     private final Runnable tick=new Runnable(){public void run(){refresh();handler.postDelayed(this,1000);}};
     int dp(float v){return Math.round(v*getResources().getDisplayMetrics().density);}
@@ -25,12 +26,16 @@ public class MainActivity extends Activity {
     void add(LinearLayout parent,View child,int bottom){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.bottomMargin=dp(bottom);parent.addView(child,p);}
     TextView button(String title,Runnable action){TextView b=text(title,14,TEAL,true);b.setGravity(Gravity.CENTER);b.setPadding(dp(14),dp(11),dp(14),dp(11));b.setBackground(box(PANEL,Color.rgb(40,62,79),12));b.setOnClickListener(v->action.run());return b;}
     @Override public void onCreate(Bundle state){super.onCreate(state);
+        updater=new AppUpdater(this);
         ScrollView scroll=new ScrollView(this);scroll.setBackgroundColor(BG);scroll.setFillViewport(true);
         content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(22),dp(24),dp(22),dp(28));scroll.addView(content);setContentView(scroll);
         scroll.setOnApplyWindowInsetsListener((v,in)->{int top,bottom;if(Build.VERSION.SDK_INT>=30){android.graphics.Insets i=in.getInsets(WindowInsets.Type.systemBars());top=i.top;bottom=i.bottom;}else{top=in.getSystemWindowInsetTop();bottom=in.getSystemWindowInsetBottom();}content.setPadding(dp(22),top+dp(20),dp(22),bottom+dp(24));return in;});
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
         TextView brand=text("◉  漲停雷達",27,TEXT,true);header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));header.addView(button("配對",this::showPairing));add(content,header,8);
-        add(content,text("MITAKE LIVE  /  雷允澤製 v0.1.1",11,MUTED,false),22);
+        add(content,text("MITAKE LIVE  /  雷允澤製 v0.1.2",11,MUTED,false),22);
+        LinearLayout tools=new LinearLayout(this);
+        tools.addView(button("一鍵更新",()->updater.check()),new LinearLayout.LayoutParams(0,-2,1));
+        tools.addView(button("語音通報",this::showVoice),new LinearLayout.LayoutParams(0,-2,1));add(content,tools,10);
         connection=text("●  尚未連線",14,TEAL,true);add(content,connection,6);
         freshness=text("由電腦持續掃描，手機同步觀察候選",12,MUTED,false);add(content,freshness,20);
         LinearLayout hero=new LinearLayout(this);hero.setOrientation(LinearLayout.HORIZONTAL);hero.setPadding(dp(20),dp(20),dp(20),dp(20));hero.setBackground(box(PANEL,Color.rgb(33,56,72),20));
@@ -45,8 +50,8 @@ public class MainActivity extends Activity {
         if(getIntent().getData()!=null)acceptPair(getIntent().getData().toString());
     }
     @Override public void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);if(intent.getData()!=null)acceptPair(intent.getData().toString());}
-    @Override public void onResume(){super.onResume();handler.post(tick);}
-    @Override public void onPause(){handler.removeCallbacks(tick);super.onPause();}
+    @Override public void onResume(){super.onResume();handler.post(tick);if(updater!=null)updater.resume();}
+    @Override public void onPause(){handler.removeCallbacks(tick);if(updater!=null)updater.pause();super.onPause();}
     static final int CAMERA_REQUEST=11;
     void scan(){
         if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED){
@@ -81,6 +86,14 @@ public class MainActivity extends Activity {
         EditText token=new EditText(this);token.setHint("配對碼，或貼上完整 mitake://pair 連結");token.setInputType(129);fields.addView(token);
         TextView hint=text("同Wi-Fi可直接連線；外出請經私人VPN連回電腦。\n電腦須保持開機、啟用連線並執行掃描。",12,MUTED,false);fields.addView(hint);
         new AlertDialog.Builder(this).setTitle("電腦連動").setView(fields).setPositiveButton("連線",(d,w)->{try{String value=token.getText().toString().trim();if(value.startsWith("mitake:"))acceptPair(value);else connect(new Pairing(address.getText().toString(),value));}catch(Exception e){message("無法連線",e.getMessage());}}).setNeutralButton("掃描QR碼",(d,w)->scan()).setNegativeButton("取消",null).show();
+    }
+    @Override public void onDestroy(){if(updater!=null)updater.close();if(testSpeech!=null)testSpeech.close();super.onDestroy();}
+    void showVoice(){
+        LinearLayout settings=new LinearLayout(this);settings.setOrientation(LinearLayout.VERTICAL);settings.setPadding(dp(20),dp(8),dp(20),dp(8));
+        Switch enabled=new Switch(this);enabled.setText("新訊號語音通報");enabled.setChecked(BridgeService.prefs(this).getBoolean("voice_enabled",true));enabled.setOnCheckedChangeListener((v,on)->BridgeService.prefs(this).edit().putBoolean("voice_enabled",on).apply());settings.addView(enabled);
+        TextView status=text(BridgeService.prefs(this).getString("voice_status","連線後啟用中文語音"),12,MUTED,false);settings.addView(status);
+        settings.addView(text("播報股名、股號、5/6 或 6/6 及檢核狀態。只播報有效新訊號；重播、過期及暫停資料不播報。音量跟隨手機媒體音量。",12,MUTED,false));
+        new AlertDialog.Builder(this).setTitle("語音通報設定").setView(settings).setPositiveButton("試聽",(d,w)->{if(testSpeech==null)testSpeech=new SpeechAnnouncer(this);testSpeech.test();}).setNeutralButton("系統語音設定",(d,w)->{try{startActivity(new Intent("com.android.settings.TTS_SETTINGS"));}catch(RuntimeException e){message("語音設定","請從手機系統設定開啟文字轉語音，下載中文語音。");}}).setNegativeButton("完成",null).show();
     }
     void message(String title,String value){new AlertDialog.Builder(this).setTitle(title).setMessage(value==null?"請重新掃描配對碼":value).setPositiveButton("確定",null).show();}
     String clock(double seconds){return new SimpleDateFormat("HH:mm:ss",Locale.TAIWAN).format(new Date((long)(seconds*1000)));}

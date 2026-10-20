@@ -84,4 +84,37 @@ public class CompanionTest {
         assertNotNull(controller.get().findViewById(com.google.zxing.client.android.R.id.zxing_barcode_scanner));
         controller.stop().destroy();
     }
+    JSONObject release(String version,String url)throws Exception{
+        return new JSONObject().put("tag_name","mitake-companion-v"+version).put("assets",new JSONArray().put(new JSONObject().put("name","MitakeCompanion-v"+version+".apk").put("browser_download_url",url).put("size",2048).put("digest","sha256:"+"a".repeat(64))));
+    }
+    @Test public void updatesChooseOnlyNewerPublishedCompanionApks()throws Exception{
+        String root=UpdatePolicy.ROOT;
+        JSONObject newer=release("0.1.3",root+"mitake-companion-v0.1.3/MitakeCompanion-v0.1.3.apk");
+        JSONArray rows=new JSONArray().put(release("0.1.4","https://example.com/other.apk")).put(new JSONObject().put("tag_name","mitake-latest")).put(newer);
+        assertEquals("0.1.3",UpdatePolicy.newest(rows,"0.1.2").version);
+        newer.put("draft",true);assertNull(UpdatePolicy.newest(rows,"0.1.2"));
+        newer.put("draft",false).put("prerelease",true);assertNull(UpdatePolicy.newest(rows,"0.1.2"));
+        newer.put("prerelease",false);assertNull(UpdatePolicy.newest(rows,"0.1.3"));
+        assertTrue(UpdatePolicy.compare("0.1.10","0.1.9")>0);
+    }
+    @Test public void updaterRejectsWrongChecksumAndOversizedAssets()throws Exception{
+        assertEquals("a".repeat(64),UpdatePolicy.checksum("a".repeat(64)+"  app.apk\n","app.apk"));
+        assertThrows(IllegalArgumentException.class,()->UpdatePolicy.checksum("a".repeat(64)+"  wrong.apk","app.apk"));
+        assertThrows(IllegalArgumentException.class,()->UpdatePolicy.checksum("broken  app.apk","app.apk"));
+        JSONObject r=release("0.1.3",UpdatePolicy.ROOT+"mitake-companion-v0.1.3/MitakeCompanion-v0.1.3.apk");
+        r.getJSONArray("assets").getJSONObject(0).put("size",UpdatePolicy.MAX_APK+1);
+        assertNull(UpdatePolicy.newest(new JSONArray().put(r),"0.1.2"));
+    }
+    @Test public void voiceUsesObservationWordingAndPersistentSwitch()throws Exception{
+        JSONObject e=event(5,100,false);
+        assertTrue(SpeechAnnouncer.phrase(e).contains("台積電"));assertTrue(SpeechAnnouncer.phrase(e).contains("股號"));
+        assertTrue(SpeechAnnouncer.phrase(e).contains("必要檢核待確認"));
+        assertFalse(SpeechAnnouncer.phrase(e).contains("買進"));
+        assertTrue(SpeechAnnouncer.phrase(event(6,100,true)).contains("必要檢核已通過"));
+        MainActivity a=Robolectric.buildActivity(MainActivity.class).setup().get();a.showVoice();
+        AlertDialog dialog=org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+        android.widget.Switch toggle=findSwitch(dialog.getWindow().getDecorView());assertNotNull(toggle);assertTrue(toggle.isChecked());toggle.setChecked(false);
+        assertFalse(BridgeService.prefs(a).getBoolean("voice_enabled",true));a.finish();
+    }
+    android.widget.Switch findSwitch(View v){if(v instanceof android.widget.Switch)return (android.widget.Switch)v;if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++){android.widget.Switch found=findSwitch(((ViewGroup)v).getChildAt(i));if(found!=null)return found;}return null;}
 }
