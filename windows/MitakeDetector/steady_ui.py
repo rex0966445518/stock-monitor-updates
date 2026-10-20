@@ -46,7 +46,7 @@ class SteadyUI:
     def steady_summary(self):
         if not self.steady_ready:return '盤尾緩漲：'+('歷史載入失敗，請開明細重試' if self.steady_error else '當日歷史載入中')
         counts=Counter(r['status'] for r in self.steady_reports.values())
-        return '目標：持續記錄價量、觀察承接線索（非大戶確認）｜'+('、'.join(f'{s} {n}檔' for s,n in counts.items()) or '等待累積實際讀值')
+        return '目標：09:00–12:50持續記錄價量、觀察承接線索（非大戶確認）｜'+('、'.join(f'{s} {n}檔' for s,n in counts.items()) or '等待累積實際讀值')
     def show_steady_settings(self):
         top=self.tk.Toplevel(self.root);top.title('09:00–12:50 緩漲觀察｜明細與設定');top.geometry('1080x720')
         self.ttk.Label(top,text='持續記錄價格與累計量，觀察緩漲、回落量速及低點變化。12:50前累積；早盤缺資料不補造。',wraplength=1000).pack(anchor='w',padx=15,pady=8)
