@@ -71,7 +71,8 @@ def run_smoke_test(report):
         app.status.set('掃描已暫停\n原因：焦點離開三竹\n第22段，已讀39檔\n進度保留，按F8接續')
         assert '第22段，已讀39檔' in app.log.get('1.0','end')
         app.scan_rate_var.set('17.9 秒 / 段 | 0.33 檔 / 秒')
-        assert app.rate_label.cget('textvariable')==str(app.scan_rate_var)
+        assert str(app.rate_label.cget('textvariable'))==str(app.scan_rate_var)
+        assert app.rate_label.cget('text')=='17.9 秒 / 段 | 0.33 檔 / 秒'
         # Verify real Tk widgets with simulated bytes; never install in this test.
         root.deiconify()
         app.set_update_progress(dict(stage='checking',message='CI check'))
