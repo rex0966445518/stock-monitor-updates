@@ -131,3 +131,56 @@ class RelayoutScrollTests(unittest.TestCase):
         rows,bad=scan_table(c,[0,0,1,1],read,lambda *s:None,resume=cursor)
         self.assertTrue(any(delta>10000 for delta in c.scrolls))
         self.assertIn('9999',{q.code for q in rows});self.assertIn('1000',{q.code for q in rows})
+
+class HeaderFragmentTests(unittest.TestCase):
+    def test_split_labels_at_small_and_large_fonts(self):
+        from auto_detect import merge_label_fragments
+        for scale in (.65,1,1.5,2.5):
+            im,tokens=headers(2560,1440,scale,y=450)
+            fragmented=[]
+            for points,text,score in tokens:
+                if text=='漲幅排行':fragmented.append((points,text,score));continue
+                l,t=points[0];step=16*scale
+                for i,ch in enumerate(text):
+                    x=l+i*step
+                    fragmented.append(([[x,t],[x+step-1,t],[x+step-1,t+18*scale],[x,t+18*scale]],ch,score))
+            with self.subTest(scale=scale):
+                layout=_layout_from_tokens(im,fragmented,True)
+                self.assertEqual(len(layout['column_bounds']),6)
+                self.assertTrue(any(t[1]=='成交量' for t in merge_label_fragments(fragmented)))
+
+    def test_never_join_separate_rows_or_distant_columns(self):
+        from auto_detect import merge_label_fragments
+        def t(text,x,y):return ([[x,y],[x+12,y],[x+12,y+18],[x,y+18]],text,.99)
+        for pieces in ([t('成交',0,0),t('量',100,0)], [t('成交',0,0),t('量',13,30)]):
+            self.assertNotIn('成交量',[v[1] for v in merge_label_fragments(pieces)])
+
+    def test_low_headers_search_beyond_old_55_percent(self):
+        from auto_detect import detect_layout
+        im,tokens=headers(1366,768,y=500)
+        def read(crop):return [t for t in tokens if max(p[1] for p in t[0])<=crop.height]
+        layout=detect_layout(im,read)
+        self.assertGreater(layout['table'][1],.65)
+
+    def test_single_header_read_without_per_label_ocr(self):
+        from auto_detect import detect_layout
+        im,tokens=headers(1366,768,y=90)
+        read=Mock(return_value=tokens)
+        layout=detect_layout(im,read)
+        self.assertEqual(len(layout['column_bounds']),6)
+        self.assertEqual(read.call_count,1)
+
+    def test_zoom_scale_maps_coordinates_exactly(self):
+        for scale in (.75,3):
+            result=zoom_tokens(Image.new('RGB',(100,50)),lambda im:[([[10*scale,5*scale],[20*scale,5*scale],[20*scale,15*scale],[10*scale,15*scale]],'股號',.99)],scale)
+            self.assertEqual(result[0][0][0],[10,5])
+            self.assertEqual(result[0][0][2],[20,15])
+
+    def test_recovery_reaches_small_font_scale_and_keeps_stop_exception(self):
+        app=AutoUI();app.read_auto_ocr=Mock(return_value=[])
+        result={'column_bounds':{}}
+        with patch('auto_detect.detect_layout',side_effect=[ValueError('native'),ValueError('tile'),ValueError('2x'),result]) as detect:
+            self.assertEqual(app.detect_layout_recovering(Image.new('RGB',(100,50))),result)
+            self.assertEqual(detect.call_count,4)
+        with patch('auto_detect.detect_layout',side_effect=AutomationStopped('stop')):
+            with self.assertRaises(AutomationStopped):app.detect_layout_recovering(Image.new('RGB',(100,50)))

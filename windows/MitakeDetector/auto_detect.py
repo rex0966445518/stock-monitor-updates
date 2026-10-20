@@ -53,6 +53,46 @@ ALIASES={
 def clean(text):return re.sub(r'[^\u3400-\u9fffA-Za-z0-9]','',unicodedata.normalize('NFKC',text))
 
 
+def merge_label_fragments(tokens):
+    """Join only exact known labels with adjacent, aligned OCR fragments.
+
+    Unknown text and separate columns remain boundaries. No fuzzy header names,
+    old column proportions or missing fields are invented.
+    """
+    vocabulary={clean(label) for labels in ALIASES.values() for label in labels}
+    vocabulary.update(clean(label) for label in RANKINGS)
+    remaining=list(tokens);result=[]
+    while remaining:
+        first=min(remaining,key=lambda t:(bbox(t)[1],bbox(t)[0]))
+        remaining.remove(first)
+        if first[2]<.65:
+            result.append(first);continue
+        l,t,r,b=bbox(first);height=b-t;cy=(t+b)/2
+        pieces=[first];text=clean(first[1]);best=None
+        if height<=0:
+            result.append(first);continue
+        for _ in range(4):
+            if not any(label.startswith(text) and label!=text for label in vocabulary):break
+            nearby=[v for v in remaining if v[2]>=.65 and bbox(v)[0]>=r
+                    and bbox(v)[0]-r<=height*.85
+                    and abs((bbox(v)[1]+bbox(v)[3])/2-cy)<=height*.35
+                    and .55*height<=bbox(v)[3]-bbox(v)[1]<=1.7*height]
+            if not nearby:break
+            next_token=min(nearby,key=lambda v:bbox(v)[0])
+            suffix=clean(next_token[1])
+            if not suffix:break
+            text+=suffix;pieces.append(next_token);r=bbox(next_token)[2]
+            if text in vocabulary:best=(list(pieces),text)
+        if best:
+            used,text=best
+            for v in used[1:]:remaining.remove(v)
+            boxes=[bbox(v) for v in used];left=min(v[0] for v in boxes);top=min(v[1] for v in boxes)
+            right=max(v[2] for v in boxes);bottom=max(v[3] for v in boxes)
+            result.append(([[left,top],[right,top],[right,bottom],[left,bottom]],text,min(v[2] for v in used)))
+        else:result.append(first)
+    return result
+
+
 def _detect_layout_pixels(image,ocr,require_combo=True):
     import numpy as np
     w,h=image.size
@@ -95,6 +135,7 @@ def _detect_layout_pixels(image,ocr,require_combo=True):
 def _layout_from_tokens(image,tokens,require_combo):
     """Require all six unique labels on one row, independent of font pixels."""
     w,h=image.size
+    tokens=merge_label_fragments(tokens)
     usable=[t for t in tokens if t[2]>=.65 and bbox(t)[3]>bbox(t)[1]]
     candidates=[]
     for code in [t for t in usable if clean(t[1]) in ALIASES['code']]:
@@ -132,10 +173,16 @@ def _layout_from_tokens(image,tokens,require_combo):
 
 
 def detect_layout(image,ocr,require_combo=True):
+    # Prefer a single header read. The pixel/per-label path is a fallback only.
+    height=min(image.height,max(150,round(image.height*.18)))
+    tokens=ocr(image.crop((0,0,image.width,height)))
+    try:return _layout_from_tokens(image,tokens,require_combo)
+    except ValueError:pass
     try:return _detect_layout_pixels(image,ocr,require_combo)
     except ValueError:
-        # Laptop DPI/titlebars can put headers below the old top-18% strip.
-        height=min(image.height,max(240,round(image.height*.55)))
+        # Small laptop viewports and expanded toolbars can push headers much
+        # lower. Still require six unique labels aligned on a single row.
+        height=min(image.height,max(240,round(image.height*.90)))
         return _layout_from_tokens(image,ocr(image.crop((0,0,image.width,height))),require_combo)
 
 

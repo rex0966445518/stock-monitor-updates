@@ -358,9 +358,20 @@ class AutoUI:
         with fresh_ocr(self):
             try:return detect_layout(image,lambda crop:tiled_tokens(crop,self.read_auto_ocr),require_combo=require_combo)
             except AutomationStopped:raise
-            except (ValueError,RuntimeError):
-                return detect_layout(image,lambda crop:tiled_tokens(crop,
-                    lambda tile:zoom_tokens(tile,self.read_auto_ocr),width=384,height=192,overlap=24),require_combo=require_combo)
+            except (ValueError,RuntimeError):pass
+            failures=[]
+            for scale in (2,3,.75):
+                context=getattr(self,'scan_focus_context',None)
+                if context:
+                    token,stop=context
+                    if stop.is_set():raise AutomationStopped('使用者已停止')
+                    self.events.put((token,'auto_status',f'表頭重新定位｜{image.width}×{image.height}｜文字縮放 {scale:g} 倍確認中'))
+                try:
+                    return detect_layout(image,lambda crop:tiled_tokens(crop,
+                        lambda tile:zoom_tokens(tile,self.read_auto_ocr,scale),width=384,height=192,overlap=32),require_combo=require_combo)
+                except AutomationStopped:raise
+                except (ValueError,RuntimeError) as error:failures.append(str(error))
+            raise ValueError(f'表頭定位失敗｜視窗 {image.width}×{image.height}｜已完成原圖、分區、2倍、3倍及縮小複查。'+failures[-1])
 
     def adapt_scan_layout(self,c,auto,cfg,token,ranking):
         """Recalibrate at task start; never click a scaled old coordinate."""

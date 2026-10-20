@@ -3,7 +3,7 @@ def run_layout_smoke(app):
     from PIL import Image,ImageDraw,ImageFont
     from auto_detect import bbox
     reports=[]
-    for width,height,pixels in [(1366,768,18),(1920,1080,27),(3840,2160,36)]:
+    for width,height,pixels in [(1280,720,14),(1366,768,18),(1920,1080,27),(2560,1440,36),(3840,2160,36)]:
         scale=pixels/18
         image=Image.new('RGB',(width,height),'#101820');draw=ImageDraw.Draw(image)
         font=ImageFont.truetype('C:/Windows/Fonts/msjh.ttc',pixels)
