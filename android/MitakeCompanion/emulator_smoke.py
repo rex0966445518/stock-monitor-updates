@@ -129,7 +129,7 @@ with tempfile.TemporaryDirectory() as folder:
         x1,y1,x2,y2=map(int,re.findall(r'\d+',button.attrib['bounds']))
         adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2))
         time.sleep(8)
-        ui=dump();assert '測試候選' in ui and '5/6' in ui,ui
+        ui,_=find_ui('測試候選',contains=True);assert '5/6' in ui,ui
         screen('companion-5of6.png')
         # The stock card embeds native five-minute K and separates its source.
         adb('shell','input','swipe','450','1250','450','500','400')

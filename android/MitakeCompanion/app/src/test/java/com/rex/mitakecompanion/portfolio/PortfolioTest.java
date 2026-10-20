@@ -21,6 +21,8 @@ public class PortfolioTest {
         assertThrows(IllegalArgumentException.class,()->PortfolioStore.holding("2330","台積電","1.5","100","110"));
         assertThrows(IllegalArgumentException.class,()->PortfolioStore.holding("2330","台積電","0","100","110"));
         assertThrows(IllegalArgumentException.class,()->PortfolioStore.number("NaN",false,true));
+        assertThrows(IllegalArgumentException.class,()->PortfolioStore.number("1e2147483647",false,true));
+        assertThrows(IllegalArgumentException.class,()->PortfolioStore.number("1,2",true,false));
         assertEquals("1200",PortfolioStore.number("1,200",true,false));
         assertTrue(PortfolioStore.pnl(PortfolioStore.holding("2330","台積電","1000","","")).contains("待核對"));
     }

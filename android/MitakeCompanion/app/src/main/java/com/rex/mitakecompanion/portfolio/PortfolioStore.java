@@ -18,7 +18,7 @@ public final class PortfolioStore {
     public File root(){File f=new File(context.getFilesDir(),"portfolio");if(!f.exists()&&!f.mkdirs())throw new IllegalStateException("無法建立股倉資料夾");return f;}
     public synchronized JSONObject read()throws Exception{
         AtomicFile f=new AtomicFile(new File(root(),"portfolio.json"));
-        if(!f.getBaseFile().exists())return new JSONObject().put("holdings",new JSONArray()).put("runs",new JSONArray());
+        if(!f.getBaseFile().exists()&&!new File(root(),"portfolio.json.bak").exists())return new JSONObject().put("holdings",new JSONArray()).put("runs",new JSONArray());
         return new JSONObject(new String(f.readFully(),StandardCharsets.UTF_8));
     }
     private synchronized void write(JSONObject value)throws Exception{
@@ -28,7 +28,7 @@ public final class PortfolioStore {
     public static boolean code(String s){return s!=null&&s.matches("[0-9]{4,6}[A-Z]?");}
     public static String number(String s,boolean integer,boolean zeroAllowed){
         if(s==null||s.trim().isEmpty())return "";
-        try{BigDecimal d=new BigDecimal(s.trim().replace(",",""));
+        try{String input=s.trim();if(input.length()>40||!input.matches("(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)(?:\\.[0-9]+)?"))throw new Exception();BigDecimal d=new BigDecimal(input.replace(",",""));
             if(d.signum()<0||(!zeroAllowed&&d.signum()==0)||d.precision()>16||d.scale()>6||integer&&d.stripTrailingZeros().scale()>0)throw new Exception();
             return d.stripTrailingZeros().toPlainString();
         }catch(Exception e){throw new IllegalArgumentException(integer?"股數請輸入整數，單位為股":"價格請輸入有效的非負數");}
