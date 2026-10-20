@@ -7,6 +7,7 @@ android {
     testOptions { unitTests.includeAndroidResources = true }
 }
 dependencies {
+    implementation platform('org.jetbrains.kotlin:kotlin-bom:1.8.22')
     implementation 'androidx.core:core:1.13.1'
     implementation 'androidx.fragment:fragment:1.6.2'
     implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
