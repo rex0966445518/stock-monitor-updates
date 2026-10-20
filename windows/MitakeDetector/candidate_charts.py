@@ -100,6 +100,7 @@ class CandidateCharts:
             c.bind('<Configure>',lambda e,code=q.code:self.paint(code))
             url=links[0 if i==0 else 1]
             ttk.Button(panel,text='玩股網原站' if i==0 else 'Goodinfo 原站',command=lambda u=url:threading.Thread(target=webbrowser.open,args=(u,),daemon=True).start()).pack(anchor='w')
+        ttk.Button(card,text='重試五分 K',command=lambda code=q.code:self.retry_web(code)).pack(anchor='w')
         detail=self.app.tk.StringVar(value='讀取本地日線…')
         ttk.Label(card,textvariable=detail,wraplength=1100).pack(anchor='w')
         self.cards[q.code]=(canvases,detail)
@@ -178,6 +179,10 @@ class CandidateCharts:
                 self.last_requests.pop(code,None)
                 self.web_service.request(code)
                 self.last_requests[code]=time.monotonic()
+
+    def retry_web(self,code):
+        self.last_requests[code]=time.monotonic()
+        self.web_service.request(code,force=True)
 
     def tick(self):
         if self.closed:return

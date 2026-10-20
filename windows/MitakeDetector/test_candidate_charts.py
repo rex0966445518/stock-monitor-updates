@@ -64,3 +64,29 @@ class DayRangeTests(unittest.TestCase):
         self.assertEqual(validate_day_range(valid,'2026-10-20 13:30'),'10/20')
         for delta in [dict(one_day=False),dict(axis_labels=['10/19 09:00','10/20 13:00']),dict(axis_labels=['10/20 10:00']),dict(axis_labels=[])]:
             with self.assertRaises(ValueError):validate_day_range(dict(valid,**delta),'2026-10-20 13:30')
+
+class ChartRetryTests(unittest.TestCase):
+    def test_explicit_retry_bypasses_recent_failure_and_deduplicates(self):
+        import tempfile,time
+        from unittest.mock import patch
+        from wantgoo_chart import WantGooCharts
+        with tempfile.TemporaryDirectory() as directory:
+            events=[];service=WantGooCharts(directory,events.append)
+            service.thread=object() # keep the worker queue observable
+            failure=dict(code='2330',error='timeout',fetched_at=time.time())
+            with patch.object(service,'cached',return_value=failure):
+                service.request('2330')
+                self.assertEqual(events,[failure]);self.assertTrue(service.queue.empty())
+                service.request('2330',force=True)
+                service.request('2330',force=True)
+                self.assertEqual(service.queue.qsize(),1)
+                self.assertTrue(events[-1]['loading'])
+    def test_failure_cache_expires_after_thirty_seconds(self):
+        import tempfile,time
+        from unittest.mock import patch
+        from wantgoo_chart import WantGooCharts
+        with tempfile.TemporaryDirectory() as directory:
+            service=WantGooCharts(directory,lambda data:None);service.thread=object()
+            with patch.object(service,'cached',return_value=dict(error='timeout',fetched_at=time.time()-31)):
+                service.request('2330')
+                self.assertEqual(service.queue.qsize(),1)

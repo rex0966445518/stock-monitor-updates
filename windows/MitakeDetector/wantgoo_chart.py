@@ -52,8 +52,25 @@ axis_labels:[...document.querySelectorAll('#technical-chart g.highcharts-xaxis-l
 title:document.querySelector('h1')?.textContent||'',
 stamp:document.querySelector('#ohlc [c-model="time"]')?.textContent||'',
 candles:root?.querySelectorAll('g.highcharts-candlestick-series path').length||0,
-loading:[...document.querySelectorAll('.highcharts-loading')].some(e=>getComputedStyle(e).display!=='none')};
+loading:[...document.querySelectorAll('#technical-chart .highcharts-loading')].some(e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none' && s.visibility!=='hidden' && Number(s.opacity)>0.01 && r.width>0 && r.height>0})};
 }"""
+
+
+def wait_chart(page, predicate, code, stage, timeout):
+    from playwright.sync_api import TimeoutError as PlaywrightTimeout
+    try:
+        page.wait_for_function(predicate, timeout=timeout)
+    except PlaywrightTimeout as exc:
+        state=page.evaluate(STATE_JS)
+        reason=[]
+        if not state.get('selected'):reason.append('五分週期未切換')
+        if not re.fullmatch(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}',state.get('stamp','').strip()):reason.append('分K時間未載入')
+        if state.get('candles',0)<2:reason.append('K線不足')
+        if state.get('loading'):reason.append('圖表仍有載入遮罩')
+        if stage=='單日範圍':
+            try:validate_day_range(state,validate_state(state,code))
+            except ValueError as error:reason.append(str(error))
+        raise RuntimeError(stage+'等待逾時：'+('、'.join(reason) or '圖表尚未就緒')+'；可按「重試五分 K」或開啟原站確認。') from exc
 
 
 def capture(page,code):
@@ -62,10 +79,10 @@ def capture(page,code):
     button.wait_for(state='visible',timeout=20000)
     button.click(timeout=10000)
     # A date-only daily title must become intraday; active button alone is not sufficient.
-    page.wait_for_function("() => {const s=("+STATE_JS+")();return s.selected && /\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}/.test(s.stamp) && s.candles>=2 && !s.loading}",timeout=25000)
+    wait_chart(page,"() => {const s=("+STATE_JS+")();return s.selected && /\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}/.test(s.stamp) && s.candles>=2 && !s.loading}",code,'五分K資料',timeout=25000)
     state=page.evaluate(STATE_JS);stamp=validate_state(state,code)
     page.get_by_text('1 天',exact=True).click(timeout=10000)
-    page.wait_for_function("() => {const s=("+STATE_JS+")();const d=s.stamp.slice(5,10).replace('-','/');return s.one_day && s.axis_labels.length && s.axis_labels.every(t=>t.startsWith(d+' ')) && s.axis_labels.some(t=>t.endsWith('09:00')) && !s.loading}",timeout=15000)
+    wait_chart(page,"() => {const s=("+STATE_JS+")();const d=s.stamp.slice(5,10).replace('-','/');return s.one_day && s.axis_labels.length && s.axis_labels.every(t=>t.startsWith(d+' ')) && s.axis_labels.some(t=>t.endsWith('09:00')) && !s.loading}",code,'單日範圍',timeout=15000)
     validate_day_range(page.evaluate(STATE_JS),stamp)
     svg=page.locator('#technical-chart svg.highcharts-root')
     # Use rendered DOM geometry, never Highcharts' hidden runtime data.
@@ -98,7 +115,7 @@ def run_capture(code,directory,fixture=False):
                 context=browser.new_context(viewport={'width':1280,'height':1000},locale='zh-TW',timezone_id='Asia/Taipei')
                 page=context.new_page();page.set_default_timeout(15000)
                 if fixture:
-                    page.set_content('''<h1>測試股(2330) 技術分析</h1><button type="five-minutes" onclick="this.classList.add('active');document.querySelector('[c-model]').textContent='2026-01-02 13:30'">5分</button><ul id="ohlc"><span c-model="time">2026-01-02</span></ul><div id="technical-chart"><svg class="highcharts-root" width="600" height="300"><rect width="600" height="300" fill="white"/><g class="highcharts-yaxis-grid"><path d="M0 30 L600 30 M0 200 L600 200" stroke="gray"/></g><g class="highcharts-candlestick-series"><path d="M100 50 L100 150" stroke="red"/><path d="M200 60 L200 180" stroke="green"/></g><g class="highcharts-xaxis-labels"><text x="20" y="220">01/01 09:00</text></g><g class="highcharts-button" onclick="this.classList.add('highcharts-button-pressed');document.querySelector('.highcharts-xaxis-labels text').textContent='01/02 09:00'"><text x="20" y="280">1 天</text></g></svg></div>''')
+                    page.set_content('''<div class="highcharts-loading" style="width:50px;height:50px">Unrelated chart</div><h1>測試股(2330) 技術分析</h1><button type="five-minutes" onclick="this.classList.add('active');document.querySelector('[c-model]').textContent='2026-01-02 13:30'">5分</button><ul id="ohlc"><span c-model="time">2026-01-02</span></ul><div id="technical-chart"><div class="highcharts-loading" style="opacity:0;display:block;width:100px;height:100px;position:absolute">Finished loading</div><svg class="highcharts-root" width="600" height="300"><rect width="600" height="300" fill="white"/><g class="highcharts-yaxis-grid"><path d="M0 30 L600 30 M0 200 L600 200" stroke="gray"/></g><g class="highcharts-candlestick-series"><path d="M100 50 L100 150" stroke="red"/><path d="M200 60 L200 180" stroke="green"/></g><g class="highcharts-xaxis-labels"><text x="20" y="220">01/01 09:00</text></g><g class="highcharts-button" onclick="this.classList.add('highcharts-button-pressed');document.querySelector('.highcharts-xaxis-labels text').textContent='01/02 09:00'"><text x="20" y="280">1 天</text></g></svg></div>''')
                 else:
                     response=page.goto(chart_url(code),wait_until='domcontentloaded',timeout=30000)
                     if response and response.status>=400:raise RuntimeError(f'玩股網回應 HTTP {response.status}；未重試或繞過限制')
@@ -129,11 +146,11 @@ class WantGooCharts:
             if not result.get('error') and not all((directory/n).is_file() for n in ('full.png','thumb.png')):return None
             return dict(result,directory=str(directory))
         except (OSError,ValueError,TypeError):return None
-    def request(self,code):
+    def request(self,code,force=False):
         chart_url(code)
         if self.stop.is_set():return
         cached=self.cached(code)
-        if cached and 0<=time.time()-cached.get('fetched_at',0)<300:
+        if not force and cached and 0<=time.time()-cached.get('fetched_at',0)<(30 if cached.get('error') else 300):
             self.emit(cached);return
         with self.lock:
             if code in self.pending:return
