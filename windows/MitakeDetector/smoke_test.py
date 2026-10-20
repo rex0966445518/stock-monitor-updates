@@ -156,6 +156,17 @@ def run_smoke_test(report):
         assert {q.code for q in recovered}=={'2330','2317'},repr(recovered)
         assert next(q for q in recovered if q.code=='2317').price==205
         info['fresh_tiled_recovery_rows']=len(recovered)
+        from types import SimpleNamespace
+        from candidate_charts import daily_series
+        charts=app.candidate_charts
+        charts.cache['2330']={'rows':daily_series([dict(day=f'2026-01-{i:02d}',open=100,high=102,low=99,close=101,volume=1000) for i in range(1,29)]),'error':'','read_at':__import__('time').monotonic()}
+        charts.update([(SimpleNamespace(code='2330',name='測試股',price=101),{'count':5,'total':6})])
+        app.root.update_idletasks()
+        assert len(charts.cards['2330'][0])==4
+        assert len(charts.cards['2330'][0][1].find_all())>20
+        assert '至少需要 34' in str(charts.cards['2330'][0][3].itemcget(charts.cards['2330'][0][3].find_all()[-1],'text'))
+        charts.update([])
+        info['candidate_four_panel_smoke']=True
         from layout_smoke import run_layout_smoke
         info['adaptive_header_layouts']=run_layout_smoke(app)
         # Actual bundled OCR: unknown names must not block numeric results.

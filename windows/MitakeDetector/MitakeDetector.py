@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.70'
+VERSION = '0.3.71'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -319,6 +319,12 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
             self.result_filters[key]=var
             ttk.Checkbutton(filters,text=label,variable=var,command=self.change_result_filters).pack(side='left',padx=5)
         table_frame = ttk.Frame(root); table_frame.pack(fill='both', expand=True, padx=18)
+        table_outer=table_frame
+        notebook=ttk.Notebook(table_outer);notebook.pack(fill='both',expand=True)
+        table_frame=ttk.Frame(notebook);charts_frame=ttk.Frame(notebook)
+        notebook.add(table_frame,text='數據列表');notebook.add(charts_frame,text='5/6・6/6 四格圖表')
+        from candidate_charts import CandidateCharts
+        self.candidate_charts=CandidateCharts(self,charts_frame)
         cols = ['code','name','match','price','gain','volume','turnover','ratio','state']+[f'history{i}' for i in range(8)]
         self.tree = ttk.Treeview(table_frame, columns=cols, show='headings')
         for key, label, width in zip(cols, LABELS[:2] + ['符合條件'] + LABELS[2:] + ['5分量速比', '觀察原因／尚缺條件'], [75,100,125,90,75,100,85,190,380]):
@@ -338,8 +344,8 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         log_frame=self.build_daily_bottom()
         foot = ttk.Frame(root); foot.pack(fill='x', padx=18, pady=(0,12))
         # Reserve footer and diagnostic space before the expanding quote table.
-        foot.pack_configure(side='bottom',before=table_frame)
-        log_frame.pack_configure(side='bottom',before=table_frame)
+        foot.pack_configure(side='bottom',before=table_outer)
+        log_frame.pack_configure(side='bottom',before=table_outer)
         ttk.Button(foot, text='匯出本輪 CSV', command=self.export).pack(side='left')
         self.update_bar=ttk.Progressbar(foot,mode='determinate',maximum=100,length=150)
         ttk.Label(foot, textvariable=self.update_status).pack(side='left',padx=8)
@@ -638,10 +644,11 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         for item in self.tree.get_children():self.tree.delete(item)
         cfg=getattr(self,'display_cfg',self.config)
         filters={key:var.get() for key,var in getattr(self,'result_filters',{}).items()}
-        eligible=set()
+        eligible=set();chart_rows=[]
         for (q,ratio,reason,hit),match in ordered_candidates(getattr(self,'display_rows',[]),cfg):
             if not re.fullmatch(r'[0-9]{4}',q.code):continue
             q.name=getattr(getattr(self,'stock_names',None),'names',{}).get(q.code,q.name)
+            if match['total']==6 and match['count']>=5:chart_rows.append((q,match.copy()))
             retained=q.code in getattr(getattr(self,'retained_candidates',None),'peak',{})
             show_name=True
             if name_eligible(match):eligible.add(q.code)
@@ -653,6 +660,8 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
             values+=history.values(q.code)
             self.tree.insert('','end',values=values,tags=('hit',) if match['hit'] else ('near',) if match['label']=='接近候選' else ())
         self.name_eligible_codes=eligible
+        charts=getattr(self,"candidate_charts",None)
+        if charts:charts.update(chart_rows)
 
     def render(self, quotes, rejected, elapsed, cfg, persist):
         from tkinter import messagebox
@@ -782,6 +791,8 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
                     finally:ready.set()
                     continue
                 if token is None:
+                    if kind=='candidate_chart':
+                        self.candidate_charts.receive(payload);continue
                     if kind=='steady_loaded':
                         self.steady_loaded(payload);continue
                     if kind=='market_index':
