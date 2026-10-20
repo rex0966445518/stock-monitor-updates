@@ -87,6 +87,29 @@ def run_smoke_test(report):
         from PIL import ImageGrab
         win=app.update_panel.window
         ImageGrab.grab(bbox=(win.winfo_rootx(),win.winfo_rooty(),win.winfo_rootx()+win.winfo_width(),win.winfo_rooty()+win.winfo_height())).save(report.with_name('update-progress.png'))
+        from task_progress import TaskProgress
+        panel=TaskProgress(root,app.tk,app.ttk,(0,0,1200,800),'掃描中')
+        root.update()
+        assert panel.toggle_window.winfo_ismapped() and panel.window.winfo_ismapped()
+        panel.toggle_label.event_generate('<Button-1>');root.update()
+        assert panel.collapsed and not panel.window.winfo_ismapped()
+        assert panel.toggle_window.winfo_width()<=24 and panel.toggle_window.winfo_height()<=24
+        panel.update('第2輪｜擷取股票資料');panel.counts.set('已掃描 42 股／總股數 100｜累計完成 1 遍')
+        assert panel.values['scanned'].get()=='42 股'
+        panel.toggle_label.event_generate('<Button-1>');root.update()
+        assert not panel.collapsed and panel.window.winfo_ismapped()
+        assert '第2輪' in panel.detail.get()
+        import ctypes
+        u=ctypes.windll.user32
+        get_style=u.GetWindowLongPtrW if ctypes.sizeof(ctypes.c_void_p)==8 else u.GetWindowLongW
+        assert get_style(panel.toggle_hwnd,-20)&0x08000000
+        assert not get_style(panel.toggle_hwnd,-20)&0x20
+        assert get_style(panel.native_hwnd,-20)&0x20
+        panel.toggle_collapsed();panel.close()
+        panel=TaskProgress(root,app.tk,app.ttk,(0,0,1200,800),'繼續掃描');root.update()
+        assert panel.collapsed and not panel.window.winfo_ismapped()
+        panel.toggle_collapsed();panel.close()
+        info['collapsible_status_verified']=True
         app.set_update_progress(dict(stage='verifying',message='CI verify'))
         assert str(app.update_panel.bar['mode'])=='indeterminate'
         app.set_update_progress(dict(stage='error',message='CI failure'))

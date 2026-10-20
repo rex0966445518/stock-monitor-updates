@@ -19,3 +19,20 @@ class StatusBoundsTests(unittest.TestCase):
     def test_content_height_does_not_change_top_docking(self):
         bounds=status_bounds((0,0,1920,1040),[0,.02,.1,.04],[0,.06,.2,.6])
         for height in (24,48,180):self.assertEqual(status_top(bounds,height),bounds[1])
+
+class CollapseTests(unittest.TestCase):
+    def test_collapsing_changes_visibility_only_and_remembers_session_choice(self):
+        from unittest.mock import Mock
+        from types import SimpleNamespace
+        from task_progress import TaskProgress
+        p=TaskProgress.__new__(TaskProgress)
+        p.alive=True;p.collapsed=False;p.root=SimpleNamespace()
+        p.window=Mock();p.toggle_window=Mock();p.toggle_label=Mock();p.show_passive=Mock()
+        p.detail=Mock();p.started=123;p.after_id='timer'
+        p.toggle_collapsed()
+        self.assertTrue(p.collapsed);self.assertTrue(p.root._scan_status_collapsed)
+        p.window.withdraw.assert_called_once();p.detail.set.assert_not_called()
+        self.assertEqual(p.started,123);self.assertEqual(p.after_id,'timer')
+        p.toggle_collapsed()
+        self.assertFalse(p.collapsed);p.show_passive.assert_called_once_with(p.window,True)
+        self.assertEqual(p.toggle_label.configure.call_args.kwargs['text'],'◀')

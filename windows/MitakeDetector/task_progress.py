@@ -1,4 +1,4 @@
-"""Passive corner status panel; it never activates or accepts mouse input on Windows."""
+"""Non-activating status panel with a separate clickable collapse handle."""
 import ctypes
 import sys
 import time
@@ -61,7 +61,7 @@ def status_top(bounds,panel_height):
 
 
 class TaskProgress:
-    def __init__(self,root,tk,ttk,rect,message,combo=None,menu=None):
+    def __init__(self,root,tk,ttk,rect,message,combo=None,menu=None,collapsible=True):
         self.root=root;self.tk=tk;self.started=time.monotonic();self.alive=True;self.after_id=None
         self.window=tk.Toplevel(root);self.window.withdraw();self.window.overrideredirect(True)
         self.window.configure(bg='#101a2b');self.window.attributes('-topmost',True)
@@ -75,9 +75,9 @@ class TaskProgress:
         self.title=tk.StringVar();self.detail=tk.StringVar(value=message);self.stage=task_stage(message)
         table_width=max(1,round(width*.56));text_width=max(1,width-table_width-12)
         self.title_label=tk.Label(self.window,textvariable=self.title,bg='#101a2b',fg='#68f5d1',font=('Microsoft JhengHei',-pixels,'bold'),anchor='w')
-        self.title_label.place(x=4,y=1,width=text_width,height=max(1,(height-4)//2))
+        self.title_label.place(x=26 if collapsible else 4,y=1,width=max(1,text_width-(22 if collapsible else 0)),height=max(1,(height-4)//2))
         self.detail_label=tk.Label(self.window,textvariable=self.detail,bg='#101a2b',fg='#edf2ff',font=('Microsoft JhengHei',-label_pixels),anchor='w')
-        self.detail_label.place(x=4,y=max(1,(height-4)//2),width=text_width,height=max(1,height//2-2))
+        self.detail_label.place(x=26 if collapsible else 4,y=max(1,(height-4)//2),width=max(1,text_width-(22 if collapsible else 0)),height=max(1,height//2-2))
         self.rate=tk.StringVar(value='讀取速率：等待首段')
         self.rate_label=tk.Label(self.window,textvariable=self.rate)
         self.counts=tk.StringVar(value='已掃描 0 股／總股數待確認｜累計完成 0 遍')
@@ -103,31 +103,56 @@ class TaskProgress:
         self.bar=ttk.Progressbar(self.window,mode='indeterminate',length=370)
         self.bar.place(x=2,y=max(0,height-3),width=max(1,width-4),height=min(2,height))
         self.bar.start(90)
-        self.window.update_idletasks()
-        self.native_hwnd=None
+        self.collapsed=bool(getattr(root,'_scan_status_collapsed',False)) if collapsible else False
+        self.toggle_window=None
+        self.native_hwnd=self.show_passive(self.window,True)
+        if collapsible:
+            self.toggle_window=tk.Toplevel(root);self.toggle_window.withdraw()
+            self.toggle_window.overrideredirect(True);self.toggle_window.attributes('-topmost',True)
+            side=min(24,height);self.toggle_window.geometry(f'{side}x{side}{left:+d}{rect[1]:+d}')
+            self.toggle_label=tk.Label(self.toggle_window,text='▶' if self.collapsed else '◀',
+                bg='#101a2b',fg='#68f5d1',font=('Microsoft JhengHei',-max(8,min(16,side-4))),cursor='hand2',bd=0)
+            self.toggle_label.pack(fill='both',expand=True)
+            self.toggle_label.bind('<Button-1>',lambda event:self.toggle_collapsed())
+            self.toggle_hwnd=self.show_passive(self.toggle_window,False)
+            if self.collapsed:self.window.withdraw()
+        self.tick()
+
+    def show_passive(self,window,click_through):
+        window.update_idletasks()
+        hwnd=None
         if sys.platform=='win32':
             from ctypes import wintypes as W
             u=ctypes.windll.user32
             u.GetAncestor.argtypes=[W.HWND,W.UINT];u.GetAncestor.restype=W.HWND
-            hwnd=u.GetAncestor(self.window.winfo_id(),2);self.native_hwnd=hwnd
+            hwnd=u.GetAncestor(window.winfo_id(),2)
             get_style=u.GetWindowLongPtrW if ctypes.sizeof(ctypes.c_void_p)==8 else u.GetWindowLongW
             set_style=u.SetWindowLongPtrW if ctypes.sizeof(ctypes.c_void_p)==8 else u.SetWindowLongW
             get_style.argtypes=[W.HWND,ctypes.c_int];get_style.restype=ctypes.c_ssize_t
             set_style.argtypes=[W.HWND,ctypes.c_int,ctypes.c_ssize_t];set_style.restype=ctypes.c_ssize_t
-            # WS_EX_NOACTIVATE | TRANSPARENT | LAYERED | TOOLWINDOW.
-            set_style(hwnd,-20,get_style(hwnd,-20)|0x08000000|0x20|0x80000|0x80)
+            # NOACTIVATE preserves scanner focus; only the handle accepts clicks.
+            set_style(hwnd,-20,get_style(hwnd,-20)|0x08000000|0x80000|0x80|(0x20 if click_through else 0))
             u.SetLayeredWindowAttributes.argtypes=[W.HWND,W.DWORD,ctypes.c_ubyte,W.DWORD]
             u.SetLayeredWindowAttributes(hwnd,0,245,2)
             # Keep the wider overlay out of OCR screenshots of the target window.
             u.SetWindowDisplayAffinity.argtypes=[W.HWND,W.DWORD]
             u.SetWindowDisplayAffinity.restype=W.BOOL
             u.SetWindowDisplayAffinity(hwnd,0x11)
-            self.window.deiconify()
+            window.deiconify()
             u.ShowWindow.argtypes=[W.HWND,ctypes.c_int];u.ShowWindow(hwnd,4)
             u.SetWindowPos.argtypes=[W.HWND,W.HWND,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,W.UINT]
             u.SetWindowPos(hwnd,W.HWND(-1),0,0,0,0,0x0010|0x0001|0x0002|0x0040)
-        else:self.window.deiconify()
-        self.tick()
+        else:window.deiconify()
+        return hwnd
+
+    def toggle_collapsed(self):
+        if not self.alive or self.toggle_window is None:return
+        self.collapsed=not self.collapsed
+        self.root._scan_status_collapsed=self.collapsed
+        self.toggle_label.configure(text='▶' if self.collapsed else '◀')
+        if self.collapsed:self.window.withdraw()
+        else:self.show_passive(self.window,True)
+        self.toggle_window.lift()
 
     def refresh_counts(self,*args):
         text=self.counts.get()
@@ -173,6 +198,7 @@ class TaskProgress:
         self.alive=False
         if self.after_id is not None:self.root.after_cancel(self.after_id)
         self.bar.stop();self.window.destroy()
+        if self.toggle_window is not None:self.toggle_window.destroy()
 
 
 class CandidateNotice(TaskProgress):
@@ -181,7 +207,7 @@ class CandidateNotice(TaskProgress):
 
     def __init__(self,root,tk,ttk,text):
         w=root.winfo_screenwidth();h=root.winfo_screenheight()
-        super().__init__(root,tk,ttk,(0,0,w,h),text)
+        super().__init__(root,tk,ttk,(0,0,w,h),text,collapsible=False)
         width=min(680,max(280,w-32));height=min(220,h-80)
         self.window.geometry(f'{width}x{height}+{max(0,w-width-16)}+{max(0,h-height-60)}')
         self.title.set('符合條件的轉強候選｜掃描持續進行')
