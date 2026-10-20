@@ -132,3 +132,33 @@ class HistoryFeedbackTests(unittest.TestCase):
         ui.steady_loaded((None,'database is locked'))
         self.assertFalse(ui.steady_ready);self.assertIn('database is locked',ui.steady_load_status)
         self.assertFalse(ui.steady_loading)
+
+class AccumulationEvidenceTests(unittest.TestCase):
+    def test_intraday_evidence_does_not_alert_early(self):
+        r=tracker(stop=60).evaluate('1234',CFG,START+3600)
+        self.assertFalse(r['passed']);self.assertEqual(r['up_volume_share'],100)
+        self.assertEqual(r['elapsed_coverage'],100);self.assertIn('非主動買量',r['detail'])
+    def test_no_volume_and_reversed_volume_never_pass(self):
+        for reverse in (False,True):
+            t=SteadyTracker()
+            for m in range(231):
+                q=quote(m);q.volume=10000-m if reverse else 10000;t.add(q,now=END)
+            r=t.evaluate('1234',CFG,END)
+            self.assertFalse(r['passed']);self.assertIsNone(r['up_volume_share'])
+    def test_volume_delta_not_repeated_cumulative_total(self):
+        from steady_trend import volume_evidence
+        e=volume_evidence([(START,100,1000),(START+300,101,1100),(START+600,100,1400)],START,10)
+        self.assertEqual(e['volume_total'],400);self.assertEqual(e['up_volume_share'],25)
+        self.assertIsNone(e['pullback_volume_ratio'])
+    def test_long_gap_not_assigned_to_one_direction(self):
+        from steady_trend import volume_evidence
+        e=volume_evidence([(START,100,1000),(START+1800,101,2000)],START,10)
+        self.assertEqual(e['volume_total'],0)
+    def test_down_volume_rate_uses_duration(self):
+        from steady_trend import volume_evidence
+        prices=[100,101,100,101,100,101,100]
+        points=[(START+i*300,p,1000+i*100) for i,p in enumerate(prices)]
+        e=volume_evidence(points,START,10)
+        self.assertEqual(e['pullback_volume_ratio'],1)
+    def test_new_threshold_validated(self):
+        with self.assertRaises(ValueError):validate_config(dict(CFG,steady_up_volume=101))

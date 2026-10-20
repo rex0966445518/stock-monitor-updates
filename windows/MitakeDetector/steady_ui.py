@@ -46,18 +46,18 @@ class SteadyUI:
     def steady_summary(self):
         if not self.steady_ready:return '盤尾緩漲：'+('歷史載入失敗，請開明細重試' if self.steady_error else '當日歷史載入中')
         counts=Counter(r['status'] for r in self.steady_reports.values())
-        return '目標：09:00–12:50持續緩漲｜'+('、'.join(f'{s} {n}檔' for s,n in counts.items()) or '等待累積實際讀值')
+        return '目標：持續記錄價量、觀察承接線索（非大戶確認）｜'+('、'.join(f'{s} {n}檔' for s,n in counts.items()) or '等待累積實際讀值')
     def show_steady_settings(self):
         top=self.tk.Toplevel(self.root);top.title('09:00–12:50 緩漲觀察｜明細與設定');top.geometry('1080x720')
-        self.ttk.Label(top,text='觀察整段緩漲，不要求每筆都上漲。12:50前持續累積；早盤缺資料則不能判定。',wraplength=1000).pack(anchor='w',padx=15,pady=8)
-        self.ttk.Label(top,text='以下為待回測的初始規則，不能確認大戶吸籌或保證上漲。保留原基礎條件；啟用時須額外通過本檢核才提醒。',wraplength=1000).pack(anchor='w',padx=15)
-        fields=[('steady_min_rise','首末採樣漲幅下限%'),('steady_max_rise','首末採樣漲幅上限%'),('steady_max_drawdown','採樣最大回撤%'),('steady_up_share','上漲5分區間比例%'),('steady_r2','趨勢平順度 R²（0–1）'),('steady_max_jump','相鄰採樣區間漲幅上限%'),('steady_coverage','5分區間覆蓋率%'),('steady_max_gap','最長資料缺口（分鐘）')]
+        self.ttk.Label(top,text='持續記錄價格與累計量，觀察緩漲、回落量速及低點變化。12:50前累積；早盤缺資料不補造。',wraplength=1000).pack(anchor='w',padx=15,pady=8)
+        self.ttk.Label(top,text='以下為待回測初始規則，55%不是已驗證最佳門檻；採樣區間成交量不是主動買量，不能確認大戶吸籌或保證上漲。保留原基礎條件；啟用時須額外通過本檢核才提醒。',wraplength=1000).pack(anchor='w',padx=15)
+        fields=[('steady_min_rise','首末採樣漲幅下限%'),('steady_max_rise','首末採樣漲幅上限%'),('steady_max_drawdown','採樣最大回撤%'),('steady_up_share','上漲5分區間比例%'),('steady_r2','趨勢平順度 R²（0–1）'),('steady_max_jump','相鄰採樣區間漲幅上限%'),('steady_coverage','5分區間覆蓋率%'),('steady_max_gap','最長資料缺口（分鐘）'),('steady_up_volume','上漲採樣區間量占比下限%')]
         form=self.ttk.Frame(top);form.pack(fill='x',padx=15,pady=8)
         for i,(key,label) in enumerate(fields):
             row,col=divmod(i,2)
             self.ttk.Label(form,text=label).grid(row=row,column=col*2,sticky='w',padx=5,pady=5)
             self.ttk.Entry(form,textvariable=self.vars[key],width=10).grid(row=row,column=col*2+1,sticky='w',padx=10)
-        self.ttk.Label(top,text='固定完整性：09:05前、12:45後須有有效讀值。單區間漲幅不超過總漲幅35%；最後30分鐘不超過40%。\n變更後暫停並重新開始套用；「重新開始」不刪除當天已保存的觀測資料。',wraplength=1000).pack(anchor='w',padx=15)
+        self.ttk.Label(top,text='價量：有至少3個回落區間時，回落量速不可高於上漲量速；低點變化僅作線索。\n固定完整性：09:05前、12:45後須有有效讀值。單區間漲幅不超過總漲幅35%；最後30分鐘不超過40%。\n變更後暫停並重新開始套用；「重新開始」不刪除當天已保存的觀測資料。',wraplength=1000).pack(anchor='w',padx=15)
         self.ttk.Label(top,text='載入本機紀錄不等於補齊歷史行情；未掃描的時段無法由此按鈕找回。點選資料列可看完整缺漏原因。',wraplength=1000).pack(anchor='w',padx=15)
         state=self.tk.StringVar();self.ttk.Label(top,textvariable=state,wraplength=1000).pack(fill='x',padx=15,pady=8)
         cols=('code','status','coverage','rise','drawdown','up','r2','reason')

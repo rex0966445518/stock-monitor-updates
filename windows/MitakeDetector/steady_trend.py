@@ -7,7 +7,7 @@ from contextlib import closing
 TAIPEI=dt.timezone(dt.timedelta(hours=8))
 DEFAULTS=dict(steady_enabled=True,steady_min_rise=1.,steady_max_rise=6.,
               steady_max_drawdown=1.5,steady_up_share=55.,steady_r2=.65,
-              steady_max_jump=1.,steady_coverage=80.,steady_max_gap=10.)
+              steady_max_jump=1.,steady_coverage=80.,steady_max_gap=10.,steady_up_volume=55.)
 BLOCK='盤尾緩漲未通過'
 PASS='盤尾緩漲通過'
 BAD=('讀值跳動','量倒退','等待第二次讀值','掃描讀值已過期','等待重新複查','引擎略過','60秒讀值未變','等待接續複查')
@@ -22,6 +22,39 @@ def session(now):
 
 def valid_quote(q):
     return all(math.isfinite(float(v)) for v in (q.ts,q.price,q.volume)) and q.price>0 and q.volume>=0
+
+
+def volume_evidence(points,start,max_gap):
+    """Sample-end direction attribution, NOT aggressor flow, VWAP or true OHLC bars."""
+    bins={}
+    for point in points:bins[min(45,int((point[0]-start)//300))]=point
+    samples=sorted(bins.values())
+    pairs=[];invalid=any(b[2]<a[2] for a,b in zip(points,points[1:]))
+    for a,b in zip(samples,samples[1:]):
+        seconds=b[0]-a[0];volume=b[2]-a[2]
+        if 0<seconds<=max_gap*60 and volume>=0:pairs.append((b[1]-a[1],volume,seconds))
+    total=sum(v for _,v,_ in pairs)
+    up=[(v,t) for change,v,t in pairs if change>0]
+    down=[(v,t) for change,v,t in pairs if change<0]
+    up_volume=sum(v for v,_ in up)
+    up_rate=up_volume/sum(t for _,t in up) if up else None
+    down_rate=sum(v for v,_ in down)/sum(t for _,t in down) if down else None
+    ratio=down_rate/up_rate if up_rate and len(down)>=3 else None
+    blocks={}
+    for ts,price,volume in points:blocks.setdefault(int((ts-start)//1800),[]).append(price)
+    lows=[min(prices) for key,prices in sorted(blocks.items()) if len(prices)>=4]
+    rising_lows=sum(b>a for a,b in zip(lows,lows[1:]))/max(1,len(lows)-1)*100 if len(lows)>=3 else None
+    return dict(up_volume_share=up_volume/total*100 if total>0 and not invalid else None,
+                pullback_volume_ratio=ratio if not invalid else None,rising_lows=rising_lows,
+                volume_intervals=len(pairs),volume_invalid=invalid,volume_total=total)
+
+
+def evidence_text(e):
+    share=e['up_volume_share'];ratio=e['pullback_volume_ratio'];lows=e['rising_lows']
+    return ('上漲採樣區間量占比 '+(f'{share:.1f}%' if share is not None else '資料不足')+
+            '；回落/上漲量速 '+(f'{ratio:.2f}倍' if ratio is not None else '回落樣本不足')+
+            '；30分採樣低點墊高比例 '+(f'{lows:.0f}%' if lows is not None else '待累積')+
+            '（採樣推估，非主動買量或大戶身分）')
 
 
 class SteadyTracker:
@@ -60,8 +93,13 @@ class SteadyTracker:
         bins={}
         for point in points:bins[min(45,int((point[0]-start)//300))]=point
         result.update(coverage=len(bins)/46*100,first=points[0][0],last=points[-1][0])
+        evidence=volume_evidence(points,start,opts['steady_max_gap']);result.update(evidence)
+        elapsed_bins=max(1,min(46,int((min(now,end)-start)//300)+1))
+        result['elapsed_coverage']=min(100.,len(bins)/elapsed_bins*100)
+        result['samples']=len(points)
+        info=evidence_text(evidence)
         if now<end:
-            result['detail']=f'累積中，完整區間覆蓋 {result["coverage"]:.0f}%；12:50才判定';return result
+            result['detail']=f'累積{len(points)}筆；已經過時段覆蓋 {result["elapsed_coverage"]:.0f}%；全段 {result["coverage"]:.0f}%；12:50才判定｜'+info;return result
         gaps=[points[0][0]-start,end-points[-1][0]]+[b[0]-a[0] for a,b in zip(points,points[1:])]
         missing=[]
         if points[0][0]>start+300:missing.append('缺少09:00～09:05首筆')
@@ -85,6 +123,9 @@ class SteadyTracker:
         earlier=[p for p in points if p[0]<=end-1800]
         tail=(values[-1]/earlier[-1][1]-1)*100 if earlier else rise
         failed=[]
+        if evidence['up_volume_share'] is None:failed.append('成交量資料不足或累計量倒退')
+        elif evidence['up_volume_share']<opts['steady_up_volume']:failed.append('上漲採樣區間量占比不足')
+        if evidence['pullback_volume_ratio'] is not None and evidence['pullback_volume_ratio']>1:failed.append('回落量速大於上漲量速')
         if not opts['steady_min_rise']<=rise<=opts['steady_max_rise']:failed.append('首末採樣漲幅不符')
         if up<opts['steady_up_share']:failed.append('上漲區間比例不足')
         if slope<=0 or r2<opts['steady_r2']:failed.append('趨勢不夠平順向上')
@@ -93,7 +134,7 @@ class SteadyTracker:
         if rise>0 and tail>rise*.40:failed.append('漲幅過度集中最後30分鐘')
         if current_price is not None and current_price<values[-1]*(1-opts['steady_max_drawdown']/100):failed.append('12:50後已轉弱')
         result.update(passed=not failed,status='緩漲觀察候選' if not failed else '未符合',rise=rise,drawdown=drawdown,up_share=up,r2=r2,jump=jump,
-                      detail='；'.join(failed) if failed else '全段緩漲規則通過；非大戶身分判定')
+                      detail=('；'.join(failed) if failed else '全段價量規則通過；仍須籌碼佐證')+'｜'+info)
         return result
 
 
@@ -147,5 +188,5 @@ def validate_config(cfg):
     o=dict(DEFAULTS,**{k:v for k,v in cfg.items() if k in DEFAULTS})
     numeric=[v for k,v in o.items() if k!='steady_enabled']
     if not all(math.isfinite(v) and v>=0 for v in numeric):raise ValueError('緩漲門檻須為非負有限數字')
-    if not (0<o['steady_min_rise']<=o['steady_max_rise'] and 0<o['steady_max_drawdown']<100 and 0<=o['steady_up_share']<=100 and 0<=o['steady_r2']<=1 and 50<=o['steady_coverage']<=100 and 0<o['steady_max_gap']<=30 and o['steady_max_jump']>0):
+    if not (0<o['steady_min_rise']<=o['steady_max_rise'] and 0<o['steady_max_drawdown']<100 and 0<=o['steady_up_share']<=100 and 0<=o['steady_r2']<=1 and 50<=o['steady_coverage']<=100 and 0<o['steady_max_gap']<=30 and o['steady_max_jump']>0 and 0<=o['steady_up_volume']<=100):
         raise ValueError('緩漲設定：漲幅上下限須大於0且順序正確；回撤0～100%之間；比例0～100%、R² 0～1、覆蓋率50～100%、缺口0～30分鐘之間')
