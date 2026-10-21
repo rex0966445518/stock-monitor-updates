@@ -138,3 +138,44 @@ class PreviewTests(unittest.TestCase):
         with self.assertRaises(AutomationStopped):s.switch('開盤強勢',menu_open=True)
         reader.assert_called_once()
         self.assertEqual(sum(a==('scroll',-120) for a in c.actions),2)
+
+import queue
+import unittest
+from unittest.mock import Mock,patch
+from auto_ui import AutoUI
+
+
+class PreviewWindowTests(unittest.TestCase):
+    def ui(self):
+        ui=AutoUI()
+        ui.config={'auto_config':{'title':'三竹熱門排行','combo':[0,0,.2,.1],'menu':[0,.1,.2,.5]}}
+        ui.idle=Mock(return_value=True);ui.dependencies=Mock(return_value=True)
+        ui.status=Mock();ui.events=queue.Queue();ui.generation=0
+        return ui
+
+    def test_preview_after_restart_without_handle_starts_worker(self):
+        ui=self.ui()
+        with patch('auto_ui.WindowsController.windows',return_value=[(42,'三竹熱門排行')]),patch('auto_ui.threading.Thread') as thread,patch('tkinter.messagebox.showerror') as error:
+            ui.preview_menu_numbers()
+        error.assert_not_called();thread.return_value.start.assert_called_once()
+        self.assertEqual(ui.auto_hwnd,42)
+
+    def test_stale_handle_replaced_not_reused(self):
+        ui=self.ui();ui.auto_hwnd=11
+        with patch('auto_ui.WindowsController.windows',return_value=[(11,'其他軟體'),(42,'三竹熱門排行')]):
+            self.assertEqual(ui.resolve_auto_window(ui.config['auto_config']),42)
+
+    def test_missing_or_ambiguous_target_does_not_start_worker(self):
+        for windows in ([],[(1,'其他軟體')],[(2,'三竹熱門排行'),(3,'三竹熱門排行')]):
+            with self.subTest(windows=windows):
+                ui=self.ui()
+                with patch('auto_ui.WindowsController.windows',return_value=windows),patch('auto_ui.threading.Thread') as thread,patch('tkinter.messagebox.showerror') as error:
+                    ui.preview_menu_numbers()
+                thread.assert_not_called();error.assert_called_once()
+                self.assertIn('選擇視窗並儲存',error.call_args.args[1])
+                self.assertNotIn('attribute',error.call_args.args[1])
+
+    def test_explicit_live_selection_resolves_duplicate_titles(self):
+        ui=self.ui();ui.auto_hwnd=3
+        with patch('auto_ui.WindowsController.windows',return_value=[(2,'三竹熱門排行'),(3,'三竹熱門排行')]):
+            self.assertEqual(ui.resolve_auto_window(ui.config['auto_config']),3)

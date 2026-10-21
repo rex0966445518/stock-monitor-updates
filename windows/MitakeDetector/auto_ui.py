@@ -698,6 +698,19 @@ class AutoUI:
             self.ttk.Entry(content,textvariable=value,width=7).grid(row=row,column=group*2+1,padx=(0,22))
         return variables
 
+    def resolve_auto_window(self,auto):
+        """Reacquire a live window after restart; never trust a persisted handle."""
+        title=auto.get('title')
+        matches=[w for w in WindowsController.windows() if title and w[1]==title]
+        current=getattr(self,'auto_hwnd',None)
+        if current not in [w[0] for w in matches]:
+            if len(matches)!=1:
+                self.auto_hwnd=None
+                raise ValueError('找不到唯一的三竹目標視窗。請先開啟三竹，再到「輪切排行與定位」選擇視窗並儲存。')
+            current=matches[0][0]
+        self.auto_hwnd=current
+        return current
+
     def preview_menu_numbers(self):
         if not self.idle() or not self.dependencies():return
         from menu_numbers import NativeMenu,PixelMenu,preview_numbers
@@ -705,8 +718,7 @@ class AutoUI:
         cfg=self.config.get('auto_config',{})
         try:
             for key in ('combo','menu'):validate_roi(cfg.get(key))
-            target=self.auto_hwnd
-            if not target:raise ValueError('請選擇三竹視窗')
+            target=self.resolve_auto_window(cfg)
         except Exception as exc:messagebox.showerror('需要設定',str(exc));return
         self.generation+=1;token=self.generation;self.stop_event=threading.Event();stop=self.stop_event
         self.status.set('排行編號預覽（非掃描）｜15秒後自動結束；F8可提前結束')
@@ -896,10 +908,7 @@ class AutoUI:
         try:
             validate_roi(auto.get('combo'));validate_roi(auto.get('menu'))
             if not test_only:validate_roi(auto.get('table'))
-            matches=[w for w in WindowsController.windows() if w[1]==auto.get('title')]
-            if getattr(self,'auto_hwnd',None) not in [w[0] for w in matches]:
-                if len(matches)!=1:raise ValueError('請在自動輪切設定重新選擇三竹視窗')
-                self.auto_hwnd=matches[0][0]
+            self.resolve_auto_window(auto)
             if not auto.get('rankings'):raise ValueError('請設定要輪切的排行')
             unknown=[n for n in auto['rankings'] if n not in RANKINGS]
             if unknown:raise ValueError('舊設定含未列於目前選單的排行：'+'、'.join(unknown)+'。請到自動輪切設定重新勾選並儲存；不會自動改選其他排行。')
