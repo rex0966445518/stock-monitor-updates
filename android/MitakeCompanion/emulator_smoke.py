@@ -113,7 +113,8 @@ assert 'FATAL EXCEPTION' not in adb('logcat','-d','-s','AndroidRuntime:E')
 adb('shell','input','swipe','450','1100','450','350','400')
 tap('語音通報',seek='up')
 assert '新訊號語音通報' in dump()
-tap('試聽');time.sleep(2)
+assert '新訊號震動提醒' in dump()
+tap('試震動＋語音');time.sleep(2)
 assert 'FATAL EXCEPTION' not in adb('logcat','-d','-s','AndroidRuntime:E')
 
 # A user can test card content and the missing-app handoff without live candidates.
@@ -159,9 +160,16 @@ with tempfile.TemporaryDirectory() as folder:
         screen('companion-card-chart.png')
         notification=adb('shell','dumpsys','notification','--noredact')
         assert 'candidate-2330' in notification,notification[-5000:]
+        alert_prefs=adb('shell','run-as','com.rex.mitakecompanion','cat','shared_prefs/pairing.xml')
+        assert 'last_signal_title' in alert_prefs and '5/6' in alert_prefs,alert_prefs
+        assert 'last_vibration_level' in alert_prefs or '沒有可用的震動馬達' in alert_prefs,alert_prefs
         promote.set();time.sleep(7)
         ui=dump();assert '6/6' in ui and '必要檢核已通過' in ui,ui
         screen('companion-6of6.png')
+        alert_prefs=adb('shell','run-as','com.rex.mitakecompanion','cat','shared_prefs/pairing.xml')
+        assert '6/6' in alert_prefs,alert_prefs
+        (out/'alert-vibrator.txt').write_text(adb('shell','dumpsys','vibrator_manager'),'utf-8')
+        (out/'alert-dispatch-log.txt').write_text(adb('logcat','-d','-s','MitakeAlert:I'),'utf-8')
         # Verify offline state preserves cards and stops presenting them as live.
         stop.set();thread.join(2);bridge.close();time.sleep(12)
         ui=dump();assert '目前非即時' in ui or '非即時／待複查' in ui,ui

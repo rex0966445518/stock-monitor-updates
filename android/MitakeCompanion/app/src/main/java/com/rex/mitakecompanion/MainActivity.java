@@ -20,7 +20,7 @@ public class MainActivity extends Activity {
     private final Map<String,StockCard> stockCards=new HashMap<>();
     private final IntradayRepository intraday=new IntradayRepository();
     boolean demoMode;TextView demoButton,demoBanner;
-    private AppUpdater updater;private SpeechAnnouncer testSpeech;
+    private AppUpdater updater;private SpeechAnnouncer testSpeech;private HapticAnnouncer testHaptics;
     LinearLayout content,cards;TextView connection,counts6,counts5,freshness;String filter="全部",last="";
     private final Runnable tick=new Runnable(){public void run(){refresh();handler.postDelayed(this,1000);}};
     int dp(float v){return Math.round(v*getResources().getDisplayMetrics().density);}
@@ -36,7 +36,7 @@ public class MainActivity extends Activity {
         scroll.setOnApplyWindowInsetsListener((v,in)->{int top,bottom;if(Build.VERSION.SDK_INT>=30){android.graphics.Insets i=in.getInsets(WindowInsets.Type.systemBars());top=i.top;bottom=i.bottom;}else{top=in.getSystemWindowInsetTop();bottom=in.getSystemWindowInsetBottom();}content.setPadding(dp(22),top+dp(20),dp(22),bottom+dp(24));return in;});
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
         TextView brand=text("◉  漲停雷達",27,TEXT,true);header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));header.addView(button("配對",this::showPairing));add(content,header,8);
-        add(content,text("MITAKE LIVE  /  雷允澤製 v0.1.6",11,MUTED,false),22);
+        add(content,text("MITAKE LIVE  /  雷允澤製 v0.1.7",11,MUTED,false),22);
         LinearLayout tools=new LinearLayout(this);
         tools.addView(button("一鍵更新",()->updater.check()),new LinearLayout.LayoutParams(0,-2,1));
         tools.addView(button("語音通報",this::showVoice),new LinearLayout.LayoutParams(0,-2,1));tools.addView(button("連線診斷",this::showDiagnosis),new LinearLayout.LayoutParams(0,-2,1));add(content,tools,10);
@@ -98,7 +98,7 @@ public class MainActivity extends Activity {
         TextView hint=text("同Wi-Fi可直接連線；外出請經私人VPN連回電腦。\n電腦須保持開機、啟用連線並執行掃描。",12,MUTED,false);fields.addView(hint);
         new AlertDialog.Builder(this).setTitle("電腦連動").setView(fields).setPositiveButton("連線",(d,w)->{try{String value=token.getText().toString().trim();if(value.startsWith("mitake:"))acceptPair(value);else connect(new Pairing(address.getText().toString(),value));}catch(Exception e){message("無法連線",e.getMessage());}}).setNeutralButton("掃描QR碼",(d,w)->scan()).setNegativeButton("取消",null).show();
     }
-    @Override public void onDestroy(){intraday.close();stockCards.clear();if(updater!=null)updater.close();if(testSpeech!=null)testSpeech.close();super.onDestroy();}
+    @Override public void onDestroy(){intraday.close();stockCards.clear();if(updater!=null)updater.close();if(testSpeech!=null)testSpeech.close();if(testHaptics!=null)testHaptics.close();super.onDestroy();}
     void showDiagnosis(){
         String address=BridgeService.prefs(this).getString("address","");
         long success=BridgeService.prefs(this).getLong("last_success",0);
@@ -108,9 +108,15 @@ public class MainActivity extends Activity {
     void showVoice(){
         LinearLayout settings=new LinearLayout(this);settings.setOrientation(LinearLayout.VERTICAL);settings.setPadding(dp(20),dp(8),dp(20),dp(8));
         Switch enabled=new Switch(this);enabled.setText("新訊號語音通報");enabled.setChecked(BridgeService.prefs(this).getBoolean("voice_enabled",true));enabled.setOnCheckedChangeListener((v,on)->BridgeService.prefs(this).edit().putBoolean("voice_enabled",on).apply());settings.addView(enabled);
+        Switch vibration=new Switch(this);vibration.setText("新訊號震動提醒");vibration.setChecked(BridgeService.prefs(this).getBoolean("vibration_enabled",true));vibration.setOnCheckedChangeListener((v,on)->BridgeService.prefs(this).edit().putBoolean("vibration_enabled",on).apply());settings.addView(vibration);
         TextView status=text(BridgeService.prefs(this).getString("voice_status","連線後啟用中文語音"),12,MUTED,false);settings.addView(status);
-        settings.addView(text("播報股名、股號、5/6 或 6/6 及檢核狀態。只播報有效新訊號；重播、過期及暫停資料不播報。音量跟隨手機媒體音量。",12,MUTED,false));
-        new AlertDialog.Builder(this).setTitle("語音通報設定").setView(settings).setPositiveButton("試聽",(d,w)->{if(testSpeech==null)testSpeech=new SpeechAnnouncer(this);testSpeech.test();}).setNeutralButton("系統語音設定",(d,w)->{try{startActivity(new Intent("com.android.settings.TTS_SETTINGS"));}catch(RuntimeException e){message("語音設定","請從手機系統設定開啟文字轉語音，下載中文語音。");}}).setNegativeButton("完成",null).show();
+        settings.addView(text(BridgeService.prefs(this).getString("vibration_status","5/6兩段短震，6/6三段震動；預設開啟"),12,MUTED,false));
+        android.media.AudioManager audio=getSystemService(android.media.AudioManager.class);int volume=audio==null?0:audio.getStreamVolume(android.media.AudioManager.STREAM_MUSIC);
+        settings.addView(text(volume==0?"手機媒體音量為0，請調高後試聽":"手機媒體音量："+volume,12,volume==0?GOLD:MUTED,false));
+        String recent=BridgeService.prefs(this).getString("last_signal_title","");if(!recent.isEmpty())settings.addView(text("最後新訊號："+recent+" · "+new SimpleDateFormat("HH:mm:ss",Locale.TAIWAN).format(new Date(BridgeService.prefs(this).getLong("last_signal_time",0))),12,MUTED,false));
+        settings.addView(text("收到有效5/6新候選及升級6/6時直接震動、播報股名股號與檢核狀態；重連、重複快照、過期、暫停及測試卡片不提醒。同時多筆訊號以較強震動合併提醒。\n震動與語音不依賴通知顯示權限；通知文字仍保留。效果受手機勿擾、媒體音量、中文語音及背景執行設定影響。試震動與試聽不影響開關。",12,MUTED,false));
+        ScrollView body=new ScrollView(this);body.addView(settings);
+        new AlertDialog.Builder(this).setTitle("震動與語音通報設定").setView(body).setPositiveButton("試震動＋語音",(d,w)->{if(testHaptics==null)testHaptics=new HapticAnnouncer(this);testHaptics.test();if(testSpeech==null)testSpeech=new SpeechAnnouncer(this);testSpeech.test();}).setNeutralButton("系統語音設定",(d,w)->{try{startActivity(new Intent("com.android.settings.TTS_SETTINGS"));}catch(RuntimeException e){message("語音設定","請從手機系統設定開啟文字轉語音，下載中文語音。");}}).setNegativeButton("完成",null).show();
     }
     void message(String title,String value){new AlertDialog.Builder(this).setTitle(title).setMessage(value==null?"請重新掃描配對碼":value).setPositiveButton("確定",null).show();}
     String clock(double seconds){return new SimpleDateFormat("HH:mm:ss",Locale.TAIWAN).format(new Date((long)(seconds*1000)));}
@@ -120,7 +126,7 @@ public class MainActivity extends Activity {
         boolean online=enabled&&!cached&&BridgeService.receivedAt>0&&SystemClock.elapsedRealtime()-BridgeService.receivedAt<10000;
         String label=enabled?BridgeService.connection:"已停止連線";
         connection.setText("●  "+label);connection.setTextColor(online?TEAL:GOLD);
-        if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)label+="｜通知未允許，僅顯示列表";
+        if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)label+="｜通知未允許，震動／語音仍依開關執行";
         freshness.setText((enabled&&!online?ConnectionDiagnosis.network(this)+"\n":"")+(data==null?"等待配對電腦資料":(online?"資料更新 ":"最後快照 ")+clock(data.optDouble("server_time"))+" · "+(online?data.optString("status"):"目前非即時"))+ (label.contains("通知未允許")?"\n通知未允許，請到系統設定開啟":""));
         String key=(data==null?"":data.toString())+filter+demoMode+online+(data!=null&&online?(long)((data.optDouble("server_time")+(SystemClock.elapsedRealtime()-BridgeService.receivedAt)/1000.0)/15):0);
         if(key.equals(last))return;last=key;cards.removeAllViews();int n5=0,n6=0;
