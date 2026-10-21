@@ -187,25 +187,39 @@ class NumberNavigator:
         self.show(None)
 
 
-def preview_numbers(c,menu_roi,combo,region,native,geometry,show,clock=None,seconds=15):
-    """Bounded preview; validate the popup before closing it, never select a row."""
-    import time,math
+def preview_numbers(c,menu_roi,combo,region,native,geometry,show,clock=None,seconds=120):
+    """Walk overlapping views to the bottom; a timeout is never completion."""
+    import time
+    from autoswitch import RANKINGS
     clock=clock or time.monotonic
-    deadline=clock()+seconds
-    while True:
+    deadline=clock()+seconds;seen=set();previous=None;unchanged=0
+    expected=native.count if native else len(RANKINGS)
+    center=(region['left']+region['width']//2,region['top']+region['height']//2)
+    for page in range(160):
         c.check()
         if native:rows=native.rows()
         else:
             image,_=c.image(menu_roi)
             if not geometry.update(image):
-                raise ValueError('選單已關閉或捲動距離過大，預覽已結束')
+                raise ValueError(f'預覽未完成：已預覽 {len(seen)} 項；選單已關閉或捲動無法銜接，請重新預覽')
             rows=geometry.rows()
-        remaining=max(0,math.ceil(deadline-clock()))
-        if not remaining:
+        numbers=tuple(number for number,_ in rows)
+        if not numbers:raise ValueError(f'預覽未完成：已預覽 {len(seen)} 項；目前沒有可確認的選單列')
+        seen.update(numbers)
+        unchanged=unchanged+1 if numbers==previous else 0
+        previous=numbers
+        label=f'已預覽 {len(seen)}/{expected} 項'
+        show(dict(region=region,rows=rows,preview_label=label))
+        if unchanged>=3:
+            if seen!=set(range(1,max(seen)+1)) or len(seen)!=expected:
+                raise ValueError(f'預覽未完成：已預覽 {len(seen)}/{expected} 項，捲動沒有進展；請檢查選單範圍或項目數，未將缺漏項目標示完成')
             c.click((combo['left']+combo['width']//2,combo['top']+combo['height']//2))
-            return
-        show(dict(region=region,rows=rows,preview_seconds=remaining))
-        c.pause(.25)
+            return len(seen)
+        if clock()>=deadline:
+            raise ValueError(f'預覽逾時：已預覽 {len(seen)}/{expected} 項，尚未確認到底；F8可重新啟動掃描')
+        c.pause(1)
+        c.scroll(center,-120);c.pause(.2)
+    raise ValueError(f'預覽未完成：已預覽 {len(seen)}/{expected} 項，已達捲動次數上限')
 
 
 class NumberOverlay:
@@ -216,13 +230,13 @@ class NumberOverlay:
         self.canvas=tk.Canvas(self.window,width=42,highlightthickness=0,bg='#102638');self.canvas.pack(fill='both',expand=True)
     def update(self,payload):
         if not payload:self.window.withdraw();return
-        region=payload['region'];preview=payload.get('preview_seconds')
-        width=80 if preview is not None else 42;header=44 if preview is not None else 0
+        region=payload['region'];preview=payload.get('preview_label')
+        width=118 if preview is not None else 42;header=56 if preview is not None else 0
         x=region['left']-width-2;y=region['top']-header;height=region['height']+header
         # Preserve negative monitor coordinates; desktop geometry is not primary-screen-only.
         self.window.geometry(f'{width}x{height}{x:+d}{y:+d}');self.canvas.delete('all')
         if preview is not None:
-            self.canvas.create_text(width//2,22,text=f'編號預覽 {preview}秒\nF8 結束',fill='#ffe08a',font=('Segoe UI',9,'bold'))
+            self.canvas.create_text(width//2,28,text=f'自動完整預覽\n{preview}\nF8 結束',fill='#ffe08a',font=('Segoe UI',9,'bold'))
         for number,center in payload['rows']:
             self.canvas.create_text(width-6,center+header,text=str(number),anchor='e',fill='#68f5d1',font=('Segoe UI',10,'bold'))
         from task_progress import TaskProgress

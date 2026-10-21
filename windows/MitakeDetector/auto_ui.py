@@ -676,7 +676,7 @@ class AutoUI:
         self.ttk.Button(buttons,text='測試輪切一次（不讀取行情）',command=test).pack(side='left',padx=10)
         def preview():
             if save():self.preview_menu_numbers()
-        self.ttk.Button(buttons,text='預覽選單編號（F8結束）',command=preview).pack(side='left',padx=10)
+        self.ttk.Button(buttons,text='完整預覽編號（自動捲動）',command=preview).pack(side='left',padx=10)
 
     def build_menu_number_settings(self,parent,cfg):
         from menu_numbers import validate_numbers
@@ -721,7 +721,7 @@ class AutoUI:
             target=self.resolve_auto_window(cfg)
         except Exception as exc:messagebox.showerror('需要設定',str(exc));return
         self.generation+=1;token=self.generation;self.stop_event=threading.Event();stop=self.stop_event
-        self.status.set('排行編號預覽（非掃描）｜15秒後自動結束；F8可提前結束')
+        self.status.set('完整編號預覽（非行情掃描）｜自動向下捲動至底部；F8可提前結束')
         def job():
             try:
                 c=WindowsController(target,stop);c.activate()
@@ -733,9 +733,11 @@ class AutoUI:
                 try:native=NativeMenu(c,region)
                 except (ValueError,AttributeError):
                     im,_=c.image(cfg['menu']);geometry=PixelMenu(im,self.read_auto_ocr(im))
-                preview_numbers(c,cfg['menu'],combo,region,native,geometry,
-                                lambda data:self.events.put((token,'menu_numbers',data)))
-                self.events.put((token,'message','編號預覽完成，已收起選單；要掃描請按「開始／繼續」或F8'))
+                def show_preview(data):
+                    self.events.put((token,'menu_numbers',data))
+                    self.events.put((token,'auto_status','完整編號預覽｜'+data['preview_label']+'｜自動向下捲動，F8結束'))
+                count=preview_numbers(c,cfg['menu'],combo,region,native,geometry,show_preview)
+                self.events.put((token,'message',f'編號預覽完成，共 {count} 項，已收起選單；要掃描請按「開始／繼續」或F8'))
             except Exception as exc:self.events.put((token,'message','編號預覽結束：'+str(exc)))
             finally:stop.set();self.events.put((token,'menu_numbers',None))
         self.worker_thread=threading.Thread(target=job,daemon=True);self.worker_thread.start()

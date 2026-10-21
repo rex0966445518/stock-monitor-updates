@@ -107,19 +107,45 @@ class NumberTests(unittest.TestCase):
             self.assertEqual(s.numbers.number('低價排行'),26)
 
 class PreviewTests(unittest.TestCase):
-    def test_timeout_closes_valid_popup_and_reports_countdown(self):
+    def test_full_pixel_preview_covers_all_44_before_closing(self):
         from menu_numbers import preview_numbers
-        c=FakeController();native=Mock();native.rows.return_value=[(1,12)]
-        shown=[];clock=Mock(side_effect=[0,0,14,15])
-        preview_numbers(c,[],dict(left=10,top=20,width=100,height=40),{},native,None,shown.append,clock=clock)
-        self.assertEqual([p['preview_seconds'] for p in shown],[15,1])
-        self.assertEqual(c.actions,[('click',(60,40))])
+        class C(FakeController):
+            def image(self,roi):return menu(min(self.page*3,36)),{}
+        c=C();shown=[]
+        count=preview_numbers(c,[],dict(left=10,top=20,width=100,height=40),dict(left=0,top=0,width=220,height=192),None,PixelMenu(menu(),tokens()),shown.append)
+        self.assertEqual(count,44)
+        self.assertEqual(set(n for payload in shown for n,_ in payload['rows']),set(range(1,45)))
+        self.assertEqual(shown[-1]['preview_label'],'已預覽 44/44 項')
+        self.assertEqual(c.actions[-1],('click',(60,40)))
+        self.assertGreaterEqual(sum(a==('scroll',-120) for a in c.actions),15)
+
+    def test_native_preview_uses_actual_count_not_catalog_length(self):
+        from menu_numbers import preview_numbers
+        c=FakeController();native=Mock();native.count=43
+        native.rows.side_effect=lambda:[(n,12+i*24) for i,n in enumerate(range(min(c.page*3,35)+1,min(c.page*3,35)+9))]
+        count=preview_numbers(c,[],dict(left=10,top=20,width=100,height=40),dict(left=0,top=0,width=220,height=192),native,None,Mock())
+        self.assertEqual(count,43)
+
+    def test_stuck_first_page_never_claims_complete_or_clicks(self):
+        from menu_numbers import preview_numbers
+        c=FakeController();native=Mock();native.count=44;native.rows.return_value=[(i,12*i) for i in range(1,11)]
+        with self.assertRaisesRegex(ValueError,'10/44'):
+            preview_numbers(c,[],{},dict(left=0,top=0,width=220,height=192),native,None,Mock())
+        self.assertFalse(any(a[0]=='click' for a in c.actions))
+
+    def test_preview_timeout_is_incomplete(self):
+        from menu_numbers import preview_numbers
+        c=FakeController();native=Mock();native.count=44;native.rows.return_value=[(1,12)]
+        with self.assertRaisesRegex(ValueError,'逾時'):
+            preview_numbers(c,[],{},dict(left=0,top=0,width=220,height=192),native,None,Mock(),clock=Mock(side_effect=[0,121]))
+        self.assertEqual(c.actions,[])
+
     def test_closed_popup_or_f8_never_clicks(self):
         from menu_numbers import preview_numbers
         for stopped in (False,True):
             c=FakeController();c.stopped=stopped;native=Mock();native.rows.side_effect=ValueError('closed')
             with self.assertRaises((ValueError,AutomationStopped)):
-                preview_numbers(c,[],{}, {},native,None,Mock())
+                preview_numbers(c,[],{}, dict(left=0,top=0,width=220,height=192),native,None,Mock())
             self.assertEqual(c.actions,[])
     def test_clear_page_outside_target_range_skips_retry(self):
         s=RankingSwitcher(FakeController(),Mock(),[0,0,.2,.1],[0,.1,.3,.5],ocr_retry=Mock())
