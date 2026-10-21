@@ -110,7 +110,12 @@ class FocusChart:
         if selection:self.code=str(self.app.tree.item(selection[0],'values')[0])
         self.invalidate()
     def enlarge(self):
-        if self.code:self.app.candidate_charts.enlarge(self.code)
+        if not self.code:return
+        if self.mode.get()=='5 分 K':
+            self.app.candidate_charts.enlarge(self.code);return
+        top=self.app.tk.Toplevel(self.app.root);top.title(self.title.get()+' · '+self.mode.get())
+        top.geometry('1000x700')
+        panel=FocusChart(self.app,top);panel.code=self.code;panel.mode.set(self.mode.get());panel.refresh()
     def refresh(self):
         rows=getattr(self.app,'display_rows',[])
         by_code={r[0].code:r[0] for r in rows}
@@ -132,6 +137,7 @@ class FocusChart:
         if key==self.key:return
         self.key=key;self.canvas.delete('all');self.volume.delete('all')
         if self.mode.get()=='5 分 K':
+            self.volume.pack_forget()
             self.note.set('來源：玩股網｜五分 K 快照；點圖可放大')
             if web.get('error'):self.message(web['error']);return
             if not web.get('directory'):self.message('五分 K 背景載入中…');return
@@ -145,6 +151,7 @@ class FocusChart:
                 self.note.set('玩股網五分 K 快照｜'+web.get('data_time','時間待核對')+'｜點圖放大')
             except (OSError,ValueError) as error:self.message('圖表暫時無法讀取：'+str(error))
             return
+        self.volume.pack(side='bottom',fill='x',padx=10,pady=(0,4),before=self.canvas)
         rows=data.get('rows',[])
         if not rows:self.message(data.get('error') or '日線快取不足；請啟用籌碼研究等待背景更新');return
         self.note.set('官方日線快取截至 '+rows[-1]['day']+'｜非即時行情')
