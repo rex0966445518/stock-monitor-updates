@@ -7,10 +7,19 @@ import time
 from autoswitch import WindowsController, RankingSwitcher, RANKINGS, absolute_roi, validate_roi, F8Toggle, AutomationStopped
 
 
+def migrate_read_interval(config):
+    """One-time upgrade of the old 15-second default; retain later user edits."""
+    auto=config.get('auto_config')
+    if not isinstance(auto,dict) or auto.get('read_interval_v2'):return False
+    if auto.get('seconds',15) in (15,'15','15.0'):auto['seconds']=2
+    auto['read_interval_v2']=True
+    return True
+
+
 def calibrated_auto(previous, **geometry):
     """Replace device geometry without replacing the user's scan preferences."""
     auto=dict(rankings=['漲幅排行','預估量增','分時買力','大單流入','連續買單'],
-              seconds=15,pages=1,full_table=True,adaptive=True)
+              seconds=2,pages=1,full_table=True,adaptive=True,read_interval_v2=True)
     auto.update(json.loads(json.dumps(previous or {})))
     auto.update(geometry)
     return auto
@@ -608,9 +617,9 @@ class AutoUI:
         numbered=self.ttk.Frame(tabs);tabs.add(numbered,text='排行編號（手動校正）')
         number_vars=self.build_menu_number_settings(numbered,cfg)
         fields=self.ttk.Frame(top);fields.pack(fill='x',padx=15,pady=10)
-        delay=self.tk.StringVar(value=str(cfg.get('seconds',15)))
+        delay=self.tk.StringVar(value=str(cfg.get('seconds',2)))
         pages=self.tk.StringVar(value=str(cfg.get('pages',1)))
-        self.ttk.Label(fields,text='每個排行讀取後停留秒數 ≥3').pack(side='left');self.ttk.Entry(fields,textvariable=delay,width=6).pack(side='left',padx=5)
+        self.ttk.Label(fields,text='每個排行讀取後停留秒數 ≥2').pack(side='left');self.ttk.Entry(fields,textvariable=delay,width=6).pack(side='left',padx=5)
         self.ttk.Label(fields,text='每個排行讀取頁數 1～20').pack(side='left',padx=10);self.ttk.Entry(fields,textvariable=pages,width=6).pack(side='left')
         full_table=self.tk.BooleanVar(value=cfg.get('full_table',True))
         self.ttk.Checkbutton(body,text='自動逐段讀取清單（建議）：重疊捲動，連續三次未移動才結束；關閉則使用指定頁數',variable=full_table).pack(anchor='w',padx=15)
@@ -629,8 +638,8 @@ class AutoUI:
                 from menu_numbers import validate_numbers
                 cfg['menu_numbers']=validate_numbers({name:var.get().strip() for name,var in number_vars.items()})
                 cfg['adaptive']=bool(adaptive.get());cfg['full_table']=bool(full_table.get())
-                cfg['seconds']=float(delay.get());cfg['pages']=int(pages.get())
-                if not 3<=cfg['seconds']<=3600 or not 1<=cfg['pages']<=20:raise ValueError('秒數需3～3600，頁數需1～20')
+                cfg['seconds']=float(delay.get());cfg['pages']=int(pages.get());cfg['read_interval_v2']=True
+                if not 2<=cfg['seconds']<=3600 or not 1<=cfg['pages']<=20:raise ValueError('秒數需2～3600，頁數需1～20')
                 cfg['rankings']=[n for n,v in rank_vars.items() if v.get()]
                 if not cfg['rankings']:raise ValueError('請至少勾選一個排行')
                 if not self.settings():return False
@@ -856,7 +865,7 @@ class AutoUI:
             if not auto.get('rankings'):raise ValueError('請設定要輪切的排行')
             unknown=[n for n in auto['rankings'] if n not in RANKINGS]
             if unknown:raise ValueError('舊設定含未列於目前選單的排行：'+'、'.join(unknown)+'。請到自動輪切設定重新勾選並儲存；不會自動改選其他排行。')
-            if not 3<=float(auto.get('seconds',0))<=3600 or not 1<=int(auto.get('pages',0))<=20:raise ValueError('輪切間隔或頁數無效')
+            if not 2<=float(auto.get('seconds',0))<=3600 or not 1<=int(auto.get('pages',0))<=20:raise ValueError('輪切間隔或頁數無效')
         except Exception as exc:messagebox.showerror('需要設定',str(exc));return
         from resume_scan import ScanCheckpoint,scan_context
         from MitakeDetector import BASE

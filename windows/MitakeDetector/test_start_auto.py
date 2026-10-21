@@ -451,7 +451,7 @@ class SavedRotationTests(unittest.TestCase):
 
     def test_first_setup_has_defaults_and_never_mutates_saved_preferences(self):
         from auto_ui import calibrated_auto
-        self.assertEqual(calibrated_auto(None)['seconds'],15)
+        self.assertEqual(calibrated_auto(None)['seconds'],2)
         old=dict(rankings=['漲幅排行'],seconds=3)
         result=calibrated_auto(old,title='new screen')
         result['rankings'].append('預估量增')

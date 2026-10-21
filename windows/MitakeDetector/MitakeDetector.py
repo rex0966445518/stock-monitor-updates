@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.83'
+VERSION = '0.3.84'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -228,6 +228,10 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
             saved = json.loads((BASE / 'settings.json').read_text('utf-8'))
             self.config.update({k: v for k, v in saved.items() if k in DEFAULT})
         except (OSError, ValueError): pass
+        from auto_ui import migrate_read_interval
+        if migrate_read_interval(self.config):
+            try:self.save()
+            except OSError:pass
         self.events, self.stop_event = queue.Queue(), threading.Event()
         self.worker_thread = None
         self.generation = 0
