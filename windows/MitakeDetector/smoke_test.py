@@ -228,20 +228,16 @@ def run_smoke_test(report):
         app.stock_names=StockNames();app.numeric_priority=True
         started=time.perf_counter()
         quick,quick_bad=app.scan_recovering_table(im,bounds)
-        assert len(quick)==2 and quick_bad==0 and all(q.name for q in quick)
-        assert {'2330','2317'}<=set(app.stock_names.names),'First scan must learn names before candidate gating'
+        assert len(quick)==2 and quick_bad==0 and {q.code for q in quick}=={'2330','2317'}
+        assert not app.stock_names.names,'Numeric-only scan must not learn stock names'
         reader=app.read_auto_ocr
         def no_extra_ocr(image):raise AssertionError('Same-view stock anchors were OCRed twice')
         app.read_auto_ocr=no_extra_ocr
         try:assert set(app.read_stock_anchors(im,bounds))=={'2330','2317'}
         finally:app.read_auto_ocr=reader
-        info.update(priority_numeric_seconds=time.perf_counter()-started,priority_name_queue=len(app.deferred_names))
-        app.name_eligible_codes=set()
-        app.learn_deferred_names()
-        assert app.stock_names.names,'Known names must remain visible below the candidate threshold'
-        app.name_eligible_codes={'2330','2317'}
-        app.learn_deferred_names()
-        assert app.stock_names.names,'Deferred names were never learned'
+        info.update(priority_numeric_seconds=time.perf_counter()-started,priority_name_queue=len(getattr(app,'deferred_names',{})))
+        assert not getattr(app,'deferred_names',{}),'Numeric-only scan must not queue name OCR'
+        app.stock_names.names={'2330':'台積電','2317':'鴻海'}
         # Real bundled OCR: reuse high-confidence cells; weak cells may be retried.
         before=time.perf_counter()
         same,same_bad=app.scan_recovering_table(im,bounds)

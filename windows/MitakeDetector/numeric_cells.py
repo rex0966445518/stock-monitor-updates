@@ -24,7 +24,7 @@ def row_bands(image,bounds):
     edges=[0]+[round((a+b)/2) for a,b in zip(centers,centers[1:])]+[image.height]
     return list(zip(edges,edges[1:]))
 
-def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,anchors_ready=None,recognize_cells=None,focus_cells=None,review_if=None,budget_ok=None):
+def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,anchors_ready=None,recognize_cells=None,focus_cells=None,review_if=None,budget_ok=None,metrics_ready=None):
     from PIL import Image
     from fast_quotes import scan_numeric_batch
     import re,unicodedata
@@ -38,6 +38,7 @@ def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,
         key=f'cell-v2:{field}:{crop.width}x{crop.height}:'+hashlib.sha256(crop.tobytes()).hexdigest()
         return dict(field=field,top=top,bottom=bottom,image=crop,key=key,tokens=None)
     metrics=dict(reused=0,changed=0,total=0,skipped=0,failed={},reviewed=0,unresolved=0,pending_codes=[])
+    if metrics_ready:metrics_ready(metrics)
     def resolve(cells):
         if not cells:return
         known={} if force else memory.lookup_many([c['key'] for c in cells]) if memory and hasattr(memory,'lookup_many') else {}
@@ -110,7 +111,9 @@ def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,
     accepted=[]
     for c in code_cells:
         tokens=c['tokens'] or []
-        if len(tokens)!=1 or tokens[0][2]<.93:return None
+        if len(tokens)!=1 or tokens[0][2]<.93:
+            metrics['unresolved']+=1
+            return None
         code=unicodedata.normalize('NFKC',str(tokens[0][1])).replace(' ','').strip()
         code=re.sub(r'^[^0-9]+','',code)
         if not re.fullmatch(r'[0-9]{4,12}[A-Za-z]{0,2}',code):return None

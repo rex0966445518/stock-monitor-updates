@@ -378,7 +378,8 @@ class AutoUI:
                 recognize_cells=self.read_numeric_cells,
                 focus_cells=lambda cells,stage:self.focus_numeric_cells(image,bounds,cells,stage),
                 review_if=self.review_candidate_cells if getattr(self,'page_review_config',None) else None,
-                budget_ok=lambda:time.monotonic()<getattr(self,'page_deadline',float('inf')))
+                budget_ok=lambda:time.monotonic()<getattr(self,'page_deadline',float('inf')),
+                metrics_ready=lambda metrics:setattr(self,'cell_metrics',metrics))
             if cells is not None and (getattr(self,'page_review_config',None) or cells[0] or excluded_only((getattr(self,'fast_code_cache',None) or (None,None,[]))[2])):
                 quotes,bad,metrics=cells
                 self.last_scan_diagnostic=f'變動格快掃｜重用{metrics["reused"]}格｜重讀{metrics["changed"]}格｜有效{len(quotes)}列｜跳過長股號{metrics.get("skipped",0)}列'
