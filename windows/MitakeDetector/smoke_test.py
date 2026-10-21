@@ -145,6 +145,16 @@ def run_smoke_test(report):
         app.update_bar.stop();app.update_bar.pack_forget();app.update_status.set('')
         root.withdraw()
         font=ImageFont.truetype('C:/Windows/Fonts/arial.ttf',24)
+        # Exercise the exact recognition-only API inside both source and frozen builds.
+        direct_samples=[]
+        for value in ('2330','100.50','+3.50%','1500','2.50%'):
+            cell=Image.new('RGB',(160,40),'#172534')
+            ImageDraw.Draw(cell).text((6,4),value,font=font,fill='white')
+            direct_samples.append(cell)
+        direct=app.read_numeric_cells(direct_samples)
+        assert [r[0] for r in direct]==['2330','100.50','+3.50%','1500','2.50%'],direct
+        assert all(r[1]>=.93 for r in direct),direct
+        info['direct_numeric_recognition']=True
         im=Image.new('RGB',(1200,260),'#101820');draw=ImageDraw.Draw(im)
         for row,values in enumerate([['2330','TESTA','100.50','2.30%','1500','1.20%'],['2317','TESTB','205.00','3.10%','2800','2.40%']]):
             for x,text in zip(DEFAULT['centers'],values):

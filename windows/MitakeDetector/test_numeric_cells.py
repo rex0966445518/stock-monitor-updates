@@ -44,3 +44,23 @@ class CellTests(unittest.TestCase):
         draw.line((0,30,19,30),fill='white');draw.line((0,0,0,89),fill='white')
         bands=row_bands(image,self.bounds);self.assertEqual(len(bands),3)
         self.assertEqual(bands[0][0],0);self.assertEqual(bands[-1][1],90)
+
+    def test_direct_recognition_skips_detection_and_caches_cells(self):
+        def recognize(images):
+            return [(self.values[im.getpixel((2,2))[0]-1],.99) for im in images]
+        cache=OrderedDict()
+        result=self.scan(self.image,cache,recognize_cells=recognize)
+        self.assertEqual(len(result[0]),2);self.assertEqual(self.calls,0)
+        self.assertEqual(result[0][0].price,100)
+        self.scan(self.image,cache,recognize_cells=lambda images:self.fail('Unchanged cells reread'))
+        self.assertEqual(self.calls,0)
+
+    def test_low_confidence_direct_cell_uses_detection_fallback(self):
+        def recognize(images):
+            return [(self.values[im.getpixel((2,2))[0]-1],.5) for im in images]
+        result=self.scan(self.image,OrderedDict(),recognize_cells=recognize)
+        self.assertEqual(len(result[0]),2);self.assertEqual(self.calls,2)
+
+    def test_bad_direct_text_is_never_cached_as_a_quote(self):
+        result=self.scan(self.image,OrderedDict(),recognize_cells=lambda images:[('garbage',.99)]*len(images))
+        self.assertEqual(result[0][0].price,100);self.assertEqual(self.calls,2)

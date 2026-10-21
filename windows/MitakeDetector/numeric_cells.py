@@ -24,7 +24,7 @@ def row_bands(image,bounds):
     edges=[0]+[round((a+b)/2) for a,b in zip(centers,centers[1:])]+[image.height]
     return list(zip(edges,edges[1:]))
 
-def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,anchors_ready=None):
+def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,anchors_ready=None,recognize_cells=None):
     from PIL import Image
     from fast_quotes import scan_numeric_batch
     import re,unicodedata
@@ -35,7 +35,7 @@ def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,
         left,right=[round(v*image.width) for v in bounds[field]]
         if right-left<5:raise ValueError('數字欄位寬度不足')
         crop=image.crop((left,top,right,bottom)).convert('RGB')
-        key=f'cell-v1:{field}:{crop.width}x{crop.height}:'+hashlib.sha256(crop.tobytes()).hexdigest()
+        key=f'cell-v2:{field}:{crop.width}x{crop.height}:'+hashlib.sha256(crop.tobytes()).hexdigest()
         return dict(field=field,top=top,bottom=bottom,image=crop,key=key,tokens=None)
     metrics=dict(reused=0,changed=0,total=0,skipped=0)
     def resolve(cells):
@@ -45,6 +45,25 @@ def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,
             if not force:c['tokens']=cache.get(c['key'],known.get(c['key']))
         missing=[c for c in cells if c['tokens'] is None]
         metrics['reused']+=len(cells)-len(missing);metrics['changed']+=len(missing);metrics['total']+=len(cells)
+        # Row/column geometry already identifies a single text line: skip detection.
+        direct=[]
+        if missing and recognize_cells and not force:
+            if focus:focus(list(dict.fromkeys(c['field'] for c in missing)),f'數字格直接辨識｜{len(missing)} 格')
+            results=recognize_cells([c['image'] for c in missing])
+            if len(results)==len(missing):
+                for c,(text,confidence) in zip(missing,results):
+                    text=unicodedata.normalize('NFKC',str(text)).replace(' ','').strip()
+                    pattern=r'[0-9]{4,12}[A-Za-z]{0,2}' if c['field']=='code' else r'[+-]?[0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?%?'
+                    if confidence>=.93 and re.fullmatch(pattern,text):
+                        w,h=c['image'].size
+                        c['tokens']=[([[0,0],[w,0],[w,h],[0,h]],text,float(confidence))]
+                        direct.append(c)
+            missing=[c for c in missing if c['tokens'] is None]
+        for c in direct:
+            cache[c['key']]=c['tokens'];cache.move_to_end(c['key'])
+        while len(cache)>4096:cache.popitem(last=False)
+        if memory and hasattr(memory,'record_many') and direct:
+            memory.record_many([(c['key'],c['tokens'],0,'數字格直接辨識') for c in direct])
         x=12;y=12;line=0;width=max(768,max(c['image'].width for c in cells)+24)
         for c in missing:
             crop=c['image']

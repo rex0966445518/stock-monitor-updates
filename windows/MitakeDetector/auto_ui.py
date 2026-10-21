@@ -339,7 +339,8 @@ class AutoUI:
             if not hasattr(self,'numeric_cell_cache'):self.numeric_cell_cache=OrderedDict()
             cells=scan_cells(image,bounds,self.read_auto_ocr,names,self.numeric_cell_cache,memory=memory,
                 force=getattr(self,'force_fresh_ocr',False),focus=lambda fields,stage:self.focus_columns(image,bounds,fields,stage),
-                anchors_ready=lambda anchors,scores:self.remember_fast_rows(image,bounds,anchors,scores))
+                anchors_ready=lambda anchors,scores:self.remember_fast_rows(image,bounds,anchors,scores),
+                recognize_cells=self.read_numeric_cells)
             if cells is not None:
                 quotes,bad,metrics=cells
                 self.last_scan_diagnostic=f'變動格快掃｜重用{metrics["reused"]}格｜重讀{metrics["changed"]}格｜有效{len(quotes)}列｜跳過長股號{metrics.get("skipped",0)}列'
@@ -759,6 +760,27 @@ class AutoUI:
             self.say('OCR辨識快取已清除，讀取紀錄保留。');top.destroy()
         self.ttk.Button(top,text='清除辨識快取（保留日誌）',command=clear).pack(anchor='w',padx=15,pady=(0,10))
         return top
+
+    def read_numeric_cells(self,images):
+        """Recognize already segmented one-line cells without text detection."""
+        from rapidocr_onnxruntime import RapidOCR
+        import numpy as np
+        from PIL import ImageOps
+        if self.ocr is None:self.ocr=RapidOCR(det_limit_type="max",det_limit_side_len=1600,intra_op_num_threads=2,inter_op_num_threads=1,use_cls=False)
+        inputs=[]
+        for image in images:
+            raw=image.convert('RGB')
+            background=raw.getpixel((min(2,raw.width-1),min(2,raw.height-1)))
+            if sum(background)<384:raw=ImageOps.invert(raw)
+            inputs.append(np.asarray(raw)[:,:,::-1].copy())
+        results=[]
+        # Bound each inference batch so F8 is checked between batches.
+        for start in range(0,len(inputs),16):
+            context=getattr(self,'scan_focus_context',None)
+            if context and context[1].is_set():raise AutomationStopped('掃描已暫停')
+            rows,_=self.ocr.text_rec(inputs[start:start+16])
+            results.extend(rows)
+        return results
 
     def read_auto_ocr(self,image):
         from rapidocr_onnxruntime import RapidOCR
