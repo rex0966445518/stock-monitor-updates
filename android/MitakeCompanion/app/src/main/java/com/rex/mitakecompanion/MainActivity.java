@@ -36,7 +36,7 @@ public class MainActivity extends Activity {
         scroll.setOnApplyWindowInsetsListener((v,in)->{int top,bottom;if(Build.VERSION.SDK_INT>=30){android.graphics.Insets i=in.getInsets(WindowInsets.Type.systemBars());top=i.top;bottom=i.bottom;}else{top=in.getSystemWindowInsetTop();bottom=in.getSystemWindowInsetBottom();}content.setPadding(dp(22),top+dp(20),dp(22),bottom+dp(24));return in;});
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
         TextView brand=text("◉  漲停雷達",27,TEXT,true);header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));header.addView(button("配對",this::showPairing));add(content,header,8);
-        add(content,text("MITAKE LIVE  /  雷允澤製 v0.1.7",11,MUTED,false),22);
+        add(content,text("MITAKE LIVE  /  雷允澤製 v0.1.8",11,MUTED,false),22);
         LinearLayout tools=new LinearLayout(this);
         tools.addView(button("一鍵更新",()->updater.check()),new LinearLayout.LayoutParams(0,-2,1));
         tools.addView(button("語音通報",this::showVoice),new LinearLayout.LayoutParams(0,-2,1));tools.addView(button("連線診斷",this::showDiagnosis),new LinearLayout.LayoutParams(0,-2,1));add(content,tools,10);
@@ -48,8 +48,8 @@ public class MainActivity extends Activity {
         LinearLayout hero=new LinearLayout(this);hero.setOrientation(LinearLayout.HORIZONTAL);hero.setPadding(dp(20),dp(20),dp(20),dp(20));hero.setBackground(box(PANEL,Color.rgb(33,56,72),20));
         LinearLayout six=new LinearLayout(this);six.setOrientation(LinearLayout.VERTICAL);six.addView(text("6 / 6 基礎條件",13,RED,true));counts6=text("—",44,TEXT,true);six.addView(counts6);six.addView(text("必要檢核另行標示",11,MUTED,false));hero.addView(six,new LinearLayout.LayoutParams(0,-2,1));
         LinearLayout five=new LinearLayout(this);five.setOrientation(LinearLayout.VERTICAL);five.addView(text("5 / 6 接近候選",13,TEAL,true));counts5=text("—",44,TEXT,true);five.addView(counts5);five.addView(text("持續追蹤變化",11,MUTED,false));hero.addView(five,new LinearLayout.LayoutParams(0,-2,1));add(content,hero,20);
-        LinearLayout tabs=new LinearLayout(this);for(String f:new String[]{"全部","6/6","5/6"}){TextView tab=button(f,()->{filter=f;last="";refresh();});LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.rightMargin=dp(6);tabs.addView(tab,p);}add(content,tabs,18);
-        add(content,text("今日訊號",18,TEXT,true),4);add(content,text("符合數優先排列 · 轉弱紀錄保留",12,MUTED,false),14);
+        LinearLayout tabs=new LinearLayout(this);for(String f:new String[]{"全部","6/6","5/6","轉弱"}){TextView tab=button(f,()->{filter=f;last="";refresh();});LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.rightMargin=dp(6);tabs.addView(tab,p);}add(content,tabs,18);
+        add(content,text("訊號與保留紀錄",18,TEXT,true),4);add(content,text("依最後掃描時間排列 · 跨日保留 · 轉弱不刪除",12,MUTED,false),14);
         cards=new LinearLayout(this);cards.setOrientation(LinearLayout.VERTICAL);add(content,cards,14);
         add(content,button("掃描電腦配對碼",this::scan),10);
         add(content,button("停止手機連線",()->{BridgeService.prefs(this).edit().putBoolean("enabled",false).apply();stopService(new Intent(this,BridgeService.class));last="";refresh();}),16);
@@ -130,23 +130,23 @@ public class MainActivity extends Activity {
         freshness.setText((enabled&&!online?ConnectionDiagnosis.network(this)+"\n":"")+(data==null?"等待配對電腦資料":(online?"資料更新 ":"最後快照 ")+clock(data.optDouble("server_time"))+" · "+(online?data.optString("status"):"目前非即時"))+ (label.contains("通知未允許")?"\n通知未允許，請到系統設定開啟":""));
         String key=(data==null?"":data.toString())+filter+demoMode+online+(data!=null&&online?(long)((data.optDouble("server_time")+(SystemClock.elapsedRealtime()-BridgeService.receivedAt)/1000.0)/15):0);
         if(key.equals(last))return;last=key;cards.removeAllViews();int n5=0,n6=0;
-        JSONArray rows=data==null?null:data.optJSONArray("rows");
+        JSONArray rows=SignalHistory.merge(BridgeService.prefs(this),data);
         double now=data==null?0:data.optDouble("server_time")+(online?(SystemClock.elapsedRealtime()-BridgeService.receivedAt)/1000.0:0);
-        if(demoMode){JSONArray examples=DemoCards.rows();for(int i=0;i<examples.length();i++){JSONObject r=examples.optJSONObject(i);int n=r.optInt("matched");if(filter.equals("6/6")&&n!=6||filter.equals("5/6")&&n!=5)continue;addCard(r,false);}}
+        if(demoMode&&!filter.equals("轉弱")){JSONArray examples=DemoCards.rows();for(int i=0;i<examples.length();i++){JSONObject r=examples.optJSONObject(i);int n=r.optInt("matched");if(filter.equals("6/6")&&n!=6||filter.equals("5/6")&&n!=5)continue;addCard(r,false);}}
         if(rows!=null)for(int i=0;i<rows.length();i++){
             JSONObject r=rows.optJSONObject(i);if(r==null)continue;
-            boolean fresh=online&&data.optBoolean("active")&&r.optBoolean("valid")&&now-r.optDouble("ts")<=15&&now>=r.optDouble("ts");
+            boolean fresh=!r.optBoolean("history_missing")&&online&&data.optBoolean("active")&&r.optBoolean("valid")&&now-r.optDouble("ts")<=15&&now>=r.optDouble("ts");
             int count=r.optInt("matched");if(count<5&&r.optInt("peak")<5)continue;if(fresh&&count==6)n6++;if(fresh&&count==5)n5++;
-            if(filter.equals("6/6")&&count!=6||filter.equals("5/6")&&count!=5)continue;
+            if(filter.equals("6/6")&&count!=6||filter.equals("5/6")&&count!=5||filter.equals("轉弱")&&count>=5)continue;
             addCard(r,fresh);
         }
-        Set<String> present=new HashSet<>();if(rows!=null)for(int i=0;i<rows.length();i++){JSONObject r=rows.optJSONObject(i);if(r!=null)present.add(r.optString("code"));}if(demoMode){present.add("demo:2330");present.add("demo:2317");}stockCards.keySet().retainAll(present);
+        Set<String> present=new HashSet<>();if(rows!=null)for(int i=0;i<rows.length();i++){JSONObject r=rows.optJSONObject(i);if(r!=null)present.add(r.optString("history_key",r.optString("code")));}if(demoMode){present.add("demo:2330");present.add("demo:2317");}stockCards.keySet().retainAll(present);
         counts6.setText(String.valueOf(n6));counts5.setText(String.valueOf(n5));
-        if(cards.getChildCount()==0){TextView empty=text(data==null?"等待與電腦配對\n\n在電腦開啟「進階工具 → 手機連動／配對」\n啟用連線後，掃描QR碼即可。":"尚無此類候選\n\n電腦需開啟全部六項條件並持續掃描。\n找到候選後會自動出現在這裡。",15,MUTED,false);empty.setPadding(dp(18),dp(28),dp(18),dp(28));empty.setBackground(box(PANEL,0,16));add(cards,empty,12);}
+        if(cards.getChildCount()==0){TextView empty=text(filter.equals("轉弱")?"尚無轉弱紀錄\n\n曾達5/6或6/6後降至4/6及以下，卡片會保留在這裡。":data==null?"等待與電腦配對\n\n在電腦開啟「進階工具 → 手機連動／配對」\n啟用連線後，掃描QR碼即可。":"尚無此類候選\n\n電腦需開啟全部六項條件並持續掃描。\n找到候選後會自動出現在這裡。",15,MUTED,false);empty.setPadding(dp(18),dp(28),dp(18),dp(28));empty.setBackground(box(PANEL,0,16));add(cards,empty,12);}
     }
     void addCard(JSONObject r,boolean fresh){
         String code=r.optString("code");
-        String key=r.optBoolean("demo")?"demo:"+code:code;
+        String key=r.optBoolean("demo")?"demo:"+code:r.optString("history_key",code);
         StockCard card=stockCards.get(key);
         if(card==null){card=new StockCard(this,code,intraday);stockCards.put(key,card);}
         card.update(r,fresh);add(cards,card,12);

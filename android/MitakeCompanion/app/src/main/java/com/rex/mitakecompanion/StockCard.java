@@ -30,14 +30,14 @@ public final class StockCard extends LinearLayout {
         TextView reason=a.button("查看判定原因",()->{if(row!=null)a.message(code+" · 判定原因",row.optString("reason")+"\n觀察訊號不代表一定漲停。");});a.add(this,reason,0);
     }
     void update(JSONObject r,boolean fresh){
-        row=r;boolean demo=r.optBoolean("demo");int matched=r.optInt("matched"),accent=demo?MainActivity.GOLD:fresh?(matched==6?MainActivity.RED:MainActivity.TEAL):MainActivity.MUTED;
+        row=r;boolean demo=r.optBoolean("demo");int matched=r.optInt("matched"),accent=demo||matched<5?MainActivity.GOLD:fresh?(matched==6?MainActivity.RED:MainActivity.TEAL):MainActivity.MUTED;
         String stockName=r.optString("name");name.setText((demo?"測試｜":"")+(stockName.isEmpty()?"股名待補":stockName)+"  "+code);
         score.setText(matched+"/6");score.setTextColor(accent);
         double p=r.optDouble("price",Double.NaN),change=r.optDouble("gain",Double.NaN);
         price.setText(Double.isFinite(p)&&p>0?String.format(Locale.US,"%.2f 元",p):"股價待確認");
         gain.setText(Double.isFinite(change)?String.format(Locale.US,"%+.2f%%",change):"—");gain.setTextColor(change>=0?MainActivity.RED:MainActivity.TEAL);
-        details.setText(demo?"示範價格／漲跌，非即時行情 · "+String.format(Locale.TAIWAN,"%,d 張",r.optInt("volume")):"電腦掃描 "+owner.clock(r.optDouble("ts"))+" · "+String.format(Locale.TAIWAN,"%,d 張",r.optInt("volume"))+" · 曾達 "+r.optInt("peak")+"/6");
-        state.setText(demo?"測試卡片 · 不列入真實訊號、不播報":!fresh?"非即時／待複查"+(matched<5?" · 已轉弱，保留紀錄":""):r.optBoolean("confirmed")?"必要檢核已通過":"觀察候選 · 必要檢核待確認");state.setTextColor(accent);
+        details.setText(demo?"示範價格／漲跌，非即時行情 · "+String.format(Locale.TAIWAN,"%,d 張",r.optInt("volume")):"掃描 "+r.optString("history_date","")+" "+owner.clock(r.optDouble("ts"))+" · "+String.format(Locale.TAIWAN,"%,d 張",r.optInt("volume"))+" · 曾達 "+r.optInt("peak")+"/6");
+        state.setText(demo?"測試卡片 · 不列入真實訊號、不播報":matched<5?"已轉弱，保留紀錄 · 最後 "+matched+"/6"+(fresh?"":" · 非即時／待複查"):r.optBoolean("history_missing")?"保留紀錄 · 本輪未更新，非即時":!fresh?"非即時／待複查":r.optBoolean("confirmed")?"必要檢核已通過":"觀察候選 · 必要檢核待確認");state.setTextColor(accent);
         setBackground(owner.box(MainActivity.PANEL,fresh?Color.rgb(42,71,79):Color.rgb(30,44,62),18));
     }
     private void expand(){

@@ -132,13 +132,13 @@ assert '顯示測試卡片' in dump()
 
 with tempfile.TemporaryDirectory() as folder:
     bridge=MobileBridge(Path(folder)/'pair.json');bridge.start()
-    stop=threading.Event();promote=threading.Event()
+    stop=threading.Event();promote=threading.Event();weaken=threading.Event()
     cfg=dict(DEFAULT,use_turnover=True,min_turnover=2,use_accel=True,accel=1.5,use_breakout=True)
     def feed():
         while not stop.is_set():
             now=time.time();hit=promote.is_set()
             bridge.set_status(True,'合成測試｜第2輪｜漲幅排行')
-            bridge.publish([(Quote('2330','測試候選',100,3,2000,4,now),2,'轉強候選' if hit else '等待觀測突破守穩',hit)],cfg,'EMULATOR-SYNTHETIC')
+            bridge.publish([(Quote('2330','測試候選',100,3,2000,4,now),1 if weaken.is_set() else 2,'已轉弱 等待觀測突破守穩' if weaken.is_set() else '轉強候選' if hit else '等待觀測突破守穩',hit and not weaken.is_set())],cfg,'EMULATOR-SYNTHETIC')
             stop.wait(1)
     thread=threading.Thread(target=feed,daemon=True);thread.start()
     try:
@@ -170,13 +170,30 @@ with tempfile.TemporaryDirectory() as folder:
         assert '6/6' in alert_prefs,alert_prefs
         (out/'alert-vibrator.txt').write_text(adb('shell','dumpsys','vibrator_manager'),'utf-8')
         (out/'alert-dispatch-log.txt').write_text(adb('logcat','-d','-s','MitakeAlert:I'),'utf-8')
+        # Real protocol downgrade, then omission/PC reset, and phone process restart.
+        weaken.set();time.sleep(7)
+        ui,_=find_ui('已轉弱，保留紀錄',contains=True)
+        assert '4/6' in ui and '曾達 6/6' in ui,ui
+        tap('轉弱',seek='up')
+        ui,_=find_ui('已轉弱，保留紀錄',contains=True)
+        screen('companion-4of6-retained.png')
+        stop.set();thread.join(2)
+        with bridge.lock:
+            bridge.rows.clear();bridge.events.clear()
+        time.sleep(7)
+        adb('shell','am','force-stop','com.rex.mitakecompanion')
+        adb('shell','am','start','-W','-n','com.rex.mitakecompanion/.MainActivity')
+        time.sleep(5)
+        ui,_=find_ui('已轉弱，保留紀錄',contains=True)
+        assert '4/6' in ui and '曾達 6/6' in ui,ui
+        screen('companion-history-after-restart.png')
         # Verify offline state preserves cards and stops presenting them as live.
         stop.set();thread.join(2);bridge.close();time.sleep(12)
         ui=dump();assert '目前非即時' in ui or '非即時／待複查' in ui,ui
         assert '測試候選' in ui
         screen('companion-offline.png')
         (out/'ui.xml').write_text(ui,'utf-8')
-        (out/'integration.json').write_text(json.dumps(dict(ok=True,synthetic=True,upgrade_notifications=True,offline_retention=True)),'utf-8')
+        (out/'integration.json').write_text(json.dumps(dict(ok=True,synthetic=True,upgrade_notifications=True,offline_retention=True,downgrade_retention=True,omission_and_restart_retention=True)),'utf-8')
     except Exception:
         screen('companion-failure.png');(out/'logcat.txt').write_text(adb('logcat','-d','-t','300'),'utf-8');raise
     finally:stop.set();bridge.close()
