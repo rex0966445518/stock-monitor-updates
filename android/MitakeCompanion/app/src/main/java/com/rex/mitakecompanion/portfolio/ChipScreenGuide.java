@@ -36,7 +36,7 @@ final class ChipScreenGuide {
             if(field==null)for(Line l:lines)if(l.box.top>height*.08&&l.box.bottom<height*.19&&l.text.trim().matches("[0-9A-Za-z]{1,8}")){field=l;break;}
             if(field!=null)return new Action("input",field.box,false);return null;
         }
-        if(!header)return null;
+        if(!header){for(Line line:lines)if(line.box.centerY()<height*.14&&ChipVideoProfile.stockTitle(line.text))return new Action("search",line.box,false);return null;}
         if(ChipVideoProfile.bodyMatches(all,target))return new Action("capture",null,false);
         List<String> visible=new ArrayList<>();Rect strip=new Rect();Line tab=null;
         for(Line l:navigation(lines,height)){visible.add(l.text);strip.union(l.box);if(ChipCaptureService.pageLabel(l.text,target))tab=l;}

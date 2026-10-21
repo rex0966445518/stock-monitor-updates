@@ -18,6 +18,6 @@ public class ChipScreenGuideTest {
     @Test public void matchingQueryAtTopIsNotMistakenForStockHeader(){assertEquals("result",plan("6277","K線",l("搜尋",330,100),l("6277",100,200),l("個股",80,310),l("6277 宏正",30,470),l("大家都在搜",30,570)).kind);}
     @Test public void questionsAndSimilarStocksAreNeverClicked(){assertNull(plan("6277","K線",l("搜尋",330,100),l("6277",100,200),l("個股",80,310),l("62770 宏正",30,470),l("大家都在搜",30,570),l("6277 宏正 最近三季的營收與毛利率趨勢如何？",30,650)));}
     @Test public void earlierKTabIsRevealedWithRightSwipe(){ChipScreenGuide.Action a=plan("6277","K線",l("宏正 6277",300,90),l("法人",20,380),l("多空",130,380),l("主力",230,380));assertEquals("swipe",a.kind);assertFalse(a.forward);}
-    @Test public void correctBodyCanBeCapturedWithoutSelectedAccessibilityFlag(){ChipScreenGuide.Action a=plan("6277","法人",l("宏正 6277",300,90),l("法人",20,380),l("多空",130,380),l("三大法人買賣超",30,650),l("外資 投信 自營商",30,700));assertEquals("capture",a.kind);assertNull(plan("2330","法人",l("宏正 6277",300,90),l("法人",20,380),l("三大法人買賣超 外資 投信",30,650)));}
+    @Test public void correctBodyCanBeCapturedWithoutSelectedAccessibilityFlag(){ChipScreenGuide.Action a=plan("6277","法人",l("宏正 6277",300,90),l("法人",20,380),l("多空",130,380),l("三大法人買賣超",30,650),l("外資 投信 自營商",30,700));assertEquals("capture",a.kind);assertEquals("search",plan("2330","法人",l("宏正 6277",300,90),l("法人",20,380),l("三大法人買賣超 外資 投信",30,650)).kind);}
     @Test public void navWordsAloneDoNotBecomeSixValidScreens(){assertEquals("tab",plan("6277","法人",l("宏正 6277",300,90),l("法人",20,380),l("多空",130,380)).kind);}
 }

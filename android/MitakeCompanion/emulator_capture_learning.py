@@ -7,6 +7,10 @@ subprocess.run(['adb','install','-r',str(base/'app/build/outputs/apk/debug/app-d
 subprocess.run(['adb','install','-r',str(apk)],check=True)
 r=subprocess.run(['adb','shell','am','instrument','-w','-r','com.rex.mitakecompanion.test/com.rex.mitakecompanion.portfolio.CaptureLearningInstrumentation'],text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,check=True)
 print(r.stdout)
+if 'INSTRUMENTATION_CODE: -1' not in r.stdout:
+    logs=subprocess.run(['adb','logcat','-d','-t','600'],text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT).stdout
+    out=base/'app/build/ui-previews';out.mkdir(parents=True,exist_ok=True)
+    (out/'capture-learning-logcat.txt').write_text(logs,encoding='utf-8')
 assert 'INSTRUMENTATION_CODE: -1' in r.stdout,r.stdout
 match=re.search(r'INSTRUMENTATION_RESULT: capture_learning=(\{[^\n]+\})',r.stdout)
 assert match,r.stdout
