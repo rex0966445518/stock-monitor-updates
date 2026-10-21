@@ -69,6 +69,20 @@ class AdaptiveLayoutTests(unittest.TestCase):
         self.assertLess(c.click.call_args.args[0][0],0) # correct monitor origin
         self.assertEqual(cfg['column_bounds'],layout['column_bounds'])
 
+    def test_missing_first_rank_after_resize_keeps_new_geometry_for_skip(self):
+        from autoswitch import AutomationStopped
+        im,tokens=headers(1366,768);layout=_layout_from_tokens(im,tokens,True)
+        app=AutoUI();app.events=queue.Queue();app.read_auto_ocr=Mock();app.read_menu_ocr_retry=Mock()
+        app.detect_layout_recovering=Mock(return_value=layout)
+        auto=dict(window_size=[1920,1080],combo=[0,0,.1,.1],menu=[0,.1,.1,.4],table=[0,.2,1,.8])
+        cfg=dict(column_bounds={});c=Mock();c.initial_rect=(0,0,1366,768);c.rect.return_value=c.initial_rect;c.image.return_value=(im,None)
+        with tempfile.TemporaryDirectory() as folder,patch('MitakeDetector.BASE',Path(folder)),patch('auto_detect.detect_menu',return_value=[.01,.1,.2,.7]),patch('auto_ui.RankingSwitcher') as switch:
+            switch.return_value.switch.side_effect=AutomationStopped('選單中找不到開盤強勢')
+            switch.return_value.menu_is_open=True
+            self.assertTrue(app.adapt_scan_layout(c,auto,cfg,1,'開盤強勢'))
+        self.assertEqual(app._startup_rank_error[0],'開盤強勢');self.assertTrue(app._scan_menu_open)
+        self.assertEqual(auto['window_size'],[1366,768]);self.assertEqual(cfg['column_bounds'],layout['column_bounds'])
+
     def test_failed_new_header_never_uses_old_click_position(self):
         app=AutoUI();app.events=queue.Queue();app.read_auto_ocr=Mock();app.detect_layout_recovering=Mock(side_effect=ValueError('missing header'))
         auto=dict(window_size=[1920,1080]);original=copy.deepcopy(auto)

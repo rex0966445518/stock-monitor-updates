@@ -33,6 +33,7 @@ class MobileBridge:
     def __init__(self,path,port=8765):
         self.path=Path(path);self.port=port;self.server=None;self.lock=threading.RLock()
         self.session=uuid.uuid4().hex;self.seq=0;self.events=deque(maxlen=300);self.rows={};self.last={};self.day=None
+        self.notices=deque(maxlen=100);self.notice_last={}
         self.active=False;self.status='等待電腦開始掃描';self.scan_time=0;self.last_seen=0
         try:self.token=json.loads(self.path.read_text('utf-8'))['token']
         except (OSError,ValueError,KeyError,TypeError):self.token=''
@@ -44,6 +45,17 @@ class MobileBridge:
         with self.lock:self.token=secrets.token_hex(24);self.save_token()
     def set_status(self,active,status):
         with self.lock:self.active=bool(active);self.status=str(status)[:500]
+    def publish_notice(self,ranking,cycle,reason,now=None):
+        now=time.time() if now is None else now
+        ranking=str(ranking)[:80]
+        with self.lock:
+            previous=self.notice_last.get(ranking)
+            if previous is not None and 0<=now-previous<300:return False
+            self.notice_last={k:v for k,v in self.notice_last.items() if 0<=now-v<300}
+            self.notice_last[ranking]=now;self.seq+=1
+            self.notices.append(dict(seq=self.seq,kind='ranking_skipped',ranking=ranking,
+                cycle=int(cycle),reason=str(reason)[:300],ts=now))
+            return True
     def publish(self,rows,cfg,version,now=None):
         from candidate_ranking import assess
         now=time.time() if now is None else now
@@ -73,9 +85,10 @@ class MobileBridge:
             now=time.time()
             events=[dict(e) for e in self.events if (session!=self.session or e['seq']>after) and 0<=now-e['ts']<=15
                 and self.rows.get(e['code'],{}).get('valid',False) and self.rows[e['code']]['matched']>=e['matched']]
+            notices=[dict(n) for n in self.notices if (session!=self.session or n['seq']>after) and 0<=now-n['ts']<=300]
             rows=sorted(self.rows.values(),key=lambda r:(-r['matched'],-r['ts'],r['code']))
             return copy.deepcopy(dict(protocol=1,session=self.session,seq=self.seq,server_time=now,day=self.day,
-                active=self.active,status=self.status,last_seen=self.last_seen,rows=rows,events=events))
+                active=self.active,status=self.status,last_seen=self.last_seen,rows=rows,events=events,notices=notices))
     def start(self,host='0.0.0.0'):
         if self.server:return
         self.save_token();bridge=self

@@ -163,6 +163,11 @@ with tempfile.TemporaryDirectory() as folder:
         alert_prefs=adb('shell','run-as','com.rex.mitakecompanion','cat','shared_prefs/pairing.xml')
         assert 'last_signal_title' in alert_prefs and '5/6' in alert_prefs,alert_prefs
         assert 'last_vibration_level' in alert_prefs or '沒有可用的震動馬達' in alert_prefs,alert_prefs
+        bridge.publish_notice('開盤強勢',2,'選單中找不到排行（合成測試）')
+        time.sleep(5)
+        operational=adb('shell','dumpsys','notification','--noredact')
+        assert 'scan-開盤強勢' in operational,operational[-5000:]
+        (out/'scan-notification.txt').write_text(operational,'utf-8')
         promote.set();time.sleep(7)
         ui=dump();assert '6/6' in ui and '必要檢核已通過' in ui,ui
         screen('companion-6of6.png')
@@ -216,7 +221,7 @@ with tempfile.TemporaryDirectory() as folder:
         assert '測試候選' in ui
         screen('companion-offline.png')
         (out/'ui.xml').write_text(ui,'utf-8')
-        (out/'integration.json').write_text(json.dumps(dict(ok=True,synthetic=True,upgrade_notifications=True,offline_retention=True,downgrade_retention=True,omission_and_restart_retention=True,auto_reconnect=True,manual_stop_and_one_tap_resume=True)),'utf-8')
+        (out/'integration.json').write_text(json.dumps(dict(ok=True,synthetic=True,upgrade_notifications=True,ranking_skip_notification=True,offline_retention=True,downgrade_retention=True,omission_and_restart_retention=True,auto_reconnect=True,manual_stop_and_one_tap_resume=True)),'utf-8')
     except Exception:
         screen('companion-failure.png');(out/'logcat.txt').write_text(adb('logcat','-d','-t','300'),'utf-8');raise
     finally:stop.set();bridge.close()

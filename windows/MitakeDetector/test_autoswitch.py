@@ -247,3 +247,18 @@ class OpeningStrongTests(unittest.TestCase):
             else:
                 with self.assertRaises(AutomationStopped):switch.switch('開盤強勢')
                 experience.record.assert_not_called();experience.forget.assert_called_once_with('開盤強勢')
+
+
+class SkipMenuTests(unittest.TestCase):
+    def test_missing_rank_reuses_open_menu_for_next_rank(self):
+        from unittest.mock import Mock
+        c=FakeController();switch=RankingSwitcher(c,lambda im:[token('低價排行')],[.1,.1,.2,.04],[.1,.15,.2,.5])
+        switch.label_matches=Mock(return_value=False)
+        switch.menu_point=Mock(return_value=None)
+        with self.assertRaises(AutomationStopped):switch.switch('開盤強勢')
+        self.assertTrue(switch.menu_is_open)
+        before=len([a for a in c.actions if a[0]=='click'])
+        switch.menu_point=Mock(return_value=(20,30));switch.verify_label=Mock(return_value=True)
+        switch.switch('漲幅排行')
+        self.assertEqual(len([a for a in c.actions if a[0]=='click'])-before,1)
+        self.assertFalse(switch.menu_is_open)

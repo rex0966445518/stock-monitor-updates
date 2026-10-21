@@ -488,3 +488,51 @@ class ScanRecoveryTests(unittest.TestCase):
         app=self.app();app.start_auto=Mock();app.worker_thread=Mock();app.worker_thread.is_alive.return_value=True
         app.schedule_scan_retry(0);app.scan_retry_timer[2]();app.start_auto.assert_not_called()
         self.assertEqual(app.scan_retry_timer[1],500)
+
+
+class RankingSkipTests(unittest.TestCase):
+    def run_worker(self,error,scan_failure=False,all_failed=False):
+        cfg=dict(DEFAULT,auto_config=dict(title='TEST RANK',window_size=[800,600],combo=[0,0,.2,.1],menu=[0,.1,.3,.5],table=[0,.2,1,.8],rankings=['開盤強勢','漲幅排行'],seconds=3,pages=1,full_table=True))
+        app=UI(cfg);visited=[];scanned=[];delays=[]
+        class C(Controller):
+            def pause(self,seconds):
+                delays.append(seconds)
+                if seconds==30:self.stop.set();raise AutomationStopped('test pause')
+                self.check()
+        class S(Switcher):
+            def switch(self,name):
+                visited.append(name)
+                if not scan_failure and (name=='開盤強勢' or all_failed):raise error
+        def scan(*args,**kwargs):
+            scanned.append(visited[-1])
+            if scan_failure and visited[-1]=='開盤強勢':raise error
+            app.stop_event.set()
+            return [],0
+        with tempfile.TemporaryDirectory() as folder,patch('MitakeDetector.BASE',Path(folder)),patch('auto_ui.WindowsController',C),patch('auto_ui.RankingSwitcher',S),patch('table_scan.scan_table',side_effect=scan):
+            app.start_auto();app.worker_thread.join(3)
+            self.assertFalse(app.worker_thread.is_alive())
+            messages=list(app.events.queue)
+            import json
+            checkpoint=json.loads((Path(folder)/'scan-checkpoint.json').read_text())
+        return visited,scanned,delays,messages,checkpoint
+    def test_missing_rank_continues_and_notifies_once(self):
+        visited,scanned,delays,messages,_=self.run_worker(AutomationStopped('選單中找不到「開盤強勢」'))
+        self.assertEqual(visited,['開盤強勢','漲幅排行']);self.assertEqual(scanned,['漲幅排行'])
+        notices=[p for _,k,p in messages if k=='ranking_skipped']
+        self.assertEqual(len(notices),1);self.assertEqual(notices[0]['ranking'],'開盤強勢')
+        self.assertFalse(any(k=='auto_failed' for _,k,_ in messages))
+    def test_exhausted_table_retry_also_skips(self):
+        from table_scan import RecoverableScanError
+        visited,scanned,delays,messages,_=self.run_worker(RecoverableScanError('讀取失敗'),scan_failure=True)
+        self.assertEqual(visited,['開盤強勢','漲幅排行'])
+        self.assertEqual(scanned.count('開盤強勢'),3)
+        self.assertTrue(any(k=='ranking_skipped' for _,k,_ in messages))
+    def test_safety_stop_does_not_skip_or_notify(self):
+        for reason in ['F8緊急停止','焦點已切換到其他軟體','操作區域被其他視窗遮住']:
+            visited,scanned,delays,messages,_=self.run_worker(AutomationStopped(reason))
+            self.assertEqual(visited,['開盤強勢']);self.assertFalse(scanned)
+            self.assertFalse(any(k in ('ranking_skipped','auto_failed') for _,k,_ in messages))
+    def test_all_missing_waits_before_next_round(self):
+        visited,scanned,delays,messages,checkpoint=self.run_worker(AutomationStopped('選單中找不到排行'),all_failed=True)
+        self.assertEqual(visited,['開盤強勢','漲幅排行']);self.assertIn(30,delays)
+        self.assertEqual(len([k for _,k,_ in messages if k=='ranking_skipped']),2)

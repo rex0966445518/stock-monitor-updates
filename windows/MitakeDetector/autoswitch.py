@@ -376,6 +376,8 @@ class RankingSwitcher:
         return False
 
     def switch(self,name,menu_open=False):
+        menu_open=menu_open or getattr(self,'menu_is_open',False)
+        self.menu_is_open=menu_open
         if name not in RANKINGS:raise ValueError('未知排行名稱')
         self.requested_title=name;self.last_title_text='無文字'
         self.c.check()
@@ -385,6 +387,7 @@ class RankingSwitcher:
         if not menu_open:
             _,combo=self.c.image(self.combo)
             self.c.click((combo['left']+combo['width']//2,combo['top']+combo['height']//2))
+            self.menu_is_open=True
             self.c.pause(.4)
         menu=absolute_roi(self.menu,self.c.rect())
         center=(menu['left']+menu['width']//2,menu['top']+menu['height']//2)
@@ -401,6 +404,7 @@ class RankingSwitcher:
             if cached:self.status(f'位置快取命中：直接選取「{name}」，核對切換結果')
             if point is not None:
                 self.c.click((region['left']+point[0],region['top']+point[1]))
+                self.menu_is_open=False
                 if self.verify_label(name):
                     self.experience.record(name,hint,point,self.menu_signature(im))
                     return
@@ -416,6 +420,7 @@ class RankingSwitcher:
             point=self.menu_point(im,tokens,name)
             if point:
                 self.c.click((region['left']+point[0],region['top']+point[1]))
+                self.menu_is_open=False
                 if self.verify_label(name):
                     if self.experience:self.experience.record(name,page,point,self.menu_signature(im))
                     return

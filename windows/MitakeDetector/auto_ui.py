@@ -419,6 +419,7 @@ class AutoUI:
 
     def adapt_scan_layout(self,c,auto,cfg,token,ranking):
         """Recalibrate at task start; never click a scaled old coordinate."""
+        self._startup_rank_error=None;self._scan_menu_open=False
         from auto_detect import cached_layout,detect_menu
         from MitakeDetector import BASE
         size=[c.initial_rect[2]-c.initial_rect[0],c.initial_rect[3]-c.initial_rect[1]]
@@ -437,8 +438,13 @@ class AutoUI:
             c.click((combo['left']+combo['width']//2,combo['top']+combo['height']//2));c.pause(.6)
             opened,_=c.image([0,0,1,1])
             menu=detect_menu(opened,layout['combo'],self.read_auto_ocr);c.check()
-            RankingSwitcher(c,self.read_auto_ocr,layout['combo'],menu,ocr_retry=self.read_menu_ocr_retry,
-                status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None)))).switch(ranking,menu_open=True)
+            picker=RankingSwitcher(c,self.read_auto_ocr,layout['combo'],menu,ocr_retry=self.read_menu_ocr_retry,
+                status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None))))
+            try:picker.switch(ranking,menu_open=True)
+            except AutomationStopped as exc:
+                if not str(exc).startswith(('選單中找不到','切換後標題')):raise
+                c.check()
+                self._startup_rank_error=(ranking,exc);self._scan_menu_open=picker.menu_is_open
         geometry_changed=resized or layout['column_bounds']!=cfg.get('column_bounds') or layout['table']!=auto.get('table') or menu_changed
         auto.update(window_size=size,combo=layout['combo'],menu=menu,table=layout['table'],discovered=1)
         cfg.update(auto_config=auto,column_bounds=layout['column_bounds'],region=absolute_roi(layout['table'],c.rect()))
@@ -835,6 +841,7 @@ class AutoUI:
                 experience=Experience(BASE/'automation-experience.json',
                     {k:auto.get(k) for k in ('title','window_size','combo','menu','table')},auto.get('adaptive',True))
                 switcher=RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu'],experience=experience,ocr_retry=self.read_menu_ocr_retry,status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None))))
+                switcher.menu_is_open=getattr(self,'_scan_menu_open',False)
                 priority_last={}
                 failed_reads=[0];saved_failure=[False]
                 cycle=saved['cycle'] if saved else 1
@@ -846,6 +853,7 @@ class AutoUI:
                 known_totals={}
                 start_index=saved['rank'] if saved else 0
                 while not stop.is_set():
+                    skipped=0
                     for rank_index in range(start_index,len(auto['rankings'])):
                         name=auto['rankings'][rank_index]
                         diagnostic.update(cycle=cycle,ranking=name,segment=0,count=0,stage='切換排行')
@@ -853,187 +861,208 @@ class AutoUI:
                         table_resume=saved.get('table') if saved and rank_index==saved['rank'] else None
                         if store:store.update(context,dict(cycle=cycle,rank=rank_index,table=table_resume,round_started=cycle_started))
                         c.check();self.events.put((token,'auto_status',f'第{cycle}輪｜排行{rank_index+1}/{len(auto["rankings"])}：正在切換{name}'))
-                        switcher.switch(name)
-                        self.events.put((token,'auto_status','已確認排行：'+name))
-                        if test_only:continue
-                        collected={};rejected=0;begin=time.monotonic();failed_reads[0]=0;saved_failure[0]=False
-                        counted=set(q['code'] for q in (table_resume or {}).get('quotes',[]))
-                        def counts(done=False):
-                            if done and auto.get('full_table',True):known_totals[name]=len(counted)
-                            total=known_totals.get(name)
-                            total_text=str(total) if total is not None and total>=len(counted) else '待完整掃描確認'
-                            text=f'{name}：已掃描 {len(counted)} 股／總股數 {total_text}'+('（上輪參考）' if total is not None and not done else '')
-                            text+=f'｜目前第 {cycle} 輪｜累計完成 {cycle-1} 遍｜{round_clock()}'
-                            self.events.put((token,'auto_counts',text))
-                        counts()
-                        table=absolute_roi(auto['table'],c.rect());center=(table['left']+table['width']//2,table['top']+table['height']//2)
-                        from table_scan import scan_table
-                        def progress(segment,count,stage):
-                            diagnostic.update(segment=segment,count=count,stage=stage,seconds_per_segment=getattr(self,"last_table_seconds",0))
-                            reused=getattr(getattr(self,'stock_names',None),'reused',0)
-                            seconds=getattr(self,'last_table_seconds',0)
-                            detail=f'第{cycle}輪｜{round_clock()}｜{getattr(self,"last_scan_diagnostic","準備讀取")}｜類目{rank_index+1}/{len(auto["rankings"])} {name}｜第{segment}段｜已讀{count}檔｜股名重用{reused}次｜{stage}｜{seconds:.1f}秒/段'
-                            self.events.put((token,'auto_progress',(detail,rank_index,len(auto['rankings']))))
-                        def read(image):
-                            started=time.monotonic();self.events.put((token,'auto_rate',dict(start=started)))
-                            from ocr_recovery import fresh_ocr
-                            from contextlib import nullcontext
-                            try:
-                                with fresh_ocr(self) if failed_reads[0] else nullcontext():
-                                    result=self.scan_recovering_table(image,cfg['column_bounds']) if auto.get('discovered') else self.scan(image,cfg['centers'])
-                            except AutomationStopped:raise
-                            except (ValueError,RuntimeError) as error:
-                                diagnostic.update(ocr_error_type=type(error).__name__,ocr_error=str(error))
-                                self.last_scan_diagnostic=f'{type(error).__name__}: {error}'
-                                result=([],1)
-                            self.events.put((token,'auto_rate',dict(elapsed=time.monotonic()-started,count=len(result[0]))))
-                            anchors=(getattr(self,'fast_code_cache',None) or (None,None,[]))[2]
-                            excluded_page=not result[0] and auto.get('discovered') and excluded_only(anchors)
-                            if result[0] or excluded_page:failed_reads[0]=0
-                            else:
-                                failed_reads[0]+=1
-                                detail=getattr(self,'last_scan_diagnostic','未取得完整數字列')
-                                diagnostic.update(ocr_detail=detail,image_size=getattr(image,'size',None),column_bounds=cfg.get('column_bounds'),table_roi=list(auto['table']),read_failures=failed_reads[0])
-                                self.events.put((token,'auto_status',f'第{diagnostic.get("segment",1)}段尚未讀到股票｜第{failed_reads[0]}次｜{detail}｜正在重新擷取、定位與複查'))
-                                if not saved_failure[0] and hasattr(image,'save'):
-                                    from scan_diagnostics import save_failed_capture
-                                    saved_failure[0]=True
-                                    diagnostic['failed_capture']=save_failed_capture(BASE/'scan-failures',image,diagnostic)
-                            return result
-                        def recover_layout():
-                            from auto_detect import detect_layout
-                            diagnostic.update(stage='掃描中重新定位表頭')
-                            self.events.put((token,'auto_status','讀不到股票資料：重新定位表頭與欄位，保留目前進度…'))
-                            c.check();full,_=c.image([0,0,1,1])
-                            try:
-                                layout=self.detect_layout_recovering(full,require_combo=False)
-                            except AutomationStopped:raise
-                            except (ValueError,RuntimeError) as error:
-                                self.events.put((token,'auto_status','表頭重定位尚未成功：'+str(error)))
-                                diagnostic.update(layout_recovery_error=str(error))
-                                return False
-                            c.check()
-                            if not switcher.label_matches(name):
-                                raise RuntimeError('表頭重定位時排行標題無法確認，進度已保留')
-                            cfg['column_bounds']=layout['column_bounds']
-                            # scan_table holds this list; mutate it so fresh captures
-                            # and overlap checks both use the new table geometry.
-                            auto['table'][:]=layout['table']
-                            auto['discovered']=True
-                            diagnostic.update(stage='表頭已重定位，重讀當前區段',column_bounds=layout['column_bounds'])
-                            self.events.put((token,'auto_status','已更新欄位位置，繼續讀取當前區段'))
-                            return True
-                        priority_budget=[3]
-                        first_batch=[not bool(table_resume)]
-                        def observed(quotes,bad):
-                            if not switcher.label_matches(name):raise RuntimeError('本段股票類目改變，未接收本段資料')
-                            c.check()
-                            current=dict(cfg,source_rank=name,source_partial=True,source_reset=first_batch[0],scan_cycle=cycle)
-                            first_batch[0]=False
-                            counted.update(q.code for q in quotes);counts()
-                            self.events.put((token,'auto_quotes',(name,quotes,bad,time.monotonic()-begin,current)))
-                            try:return prioritized_recheck(quotes,current)
-                            except AutomationStopped:raise
-                            except Exception as error:
-                                priority_budget[0]=0
-                                diagnostic.update(stage='優先複查失敗，主掃描繼續',optional_error=str(error))
+                        try:
+                            startup_error=getattr(self,'_startup_rank_error',None)
+                            self._startup_rank_error=None
+                            if startup_error and startup_error[0]==name:raise startup_error[1]
+                            switcher.switch(name)
+                            self.events.put((token,'auto_status','已確認排行：'+name))
+                            if test_only:continue
+                            collected={};rejected=0;begin=time.monotonic();failed_reads[0]=0;saved_failure[0]=False
+                            counted=set(q['code'] for q in (table_resume or {}).get('quotes',[]))
+                            def counts(done=False):
+                                if done and auto.get('full_table',True):known_totals[name]=len(counted)
+                                total=known_totals.get(name)
+                                total_text=str(total) if total is not None and total>=len(counted) else '待完整掃描確認'
+                                text=f'{name}：已掃描 {len(counted)} 股／總股數 {total_text}'+('（上輪參考）' if total is not None and not done else '')
+                                text+=f'｜目前第 {cycle} 輪｜累計完成 {cycle-1} 遍｜{round_clock()}'
+                                self.events.put((token,'auto_counts',text))
+                            counts()
+                            table=absolute_roi(auto['table'],c.rect());center=(table['left']+table['width']//2,table['top']+table['height']//2)
+                            from table_scan import scan_table
+                            def progress(segment,count,stage):
+                                diagnostic.update(segment=segment,count=count,stage=stage,seconds_per_segment=getattr(self,"last_table_seconds",0))
+                                reused=getattr(getattr(self,'stock_names',None),'reused',0)
+                                seconds=getattr(self,'last_table_seconds',0)
+                                detail=f'第{cycle}輪｜{round_clock()}｜{getattr(self,"last_scan_diagnostic","準備讀取")}｜類目{rank_index+1}/{len(auto["rankings"])} {name}｜第{segment}段｜已讀{count}檔｜股名重用{reused}次｜{stage}｜{seconds:.1f}秒/段'
+                                self.events.put((token,'auto_progress',(detail,rank_index,len(auto['rankings']))))
+                            def read(image):
+                                started=time.monotonic();self.events.put((token,'auto_rate',dict(start=started)))
+                                from ocr_recovery import fresh_ocr
+                                from contextlib import nullcontext
+                                try:
+                                    with fresh_ocr(self) if failed_reads[0] else nullcontext():
+                                        result=self.scan_recovering_table(image,cfg['column_bounds']) if auto.get('discovered') else self.scan(image,cfg['centers'])
+                                except AutomationStopped:raise
+                                except (ValueError,RuntimeError) as error:
+                                    diagnostic.update(ocr_error_type=type(error).__name__,ocr_error=str(error))
+                                    self.last_scan_diagnostic=f'{type(error).__name__}: {error}'
+                                    result=([],1)
+                                self.events.put((token,'auto_rate',dict(elapsed=time.monotonic()-started,count=len(result[0]))))
+                                anchors=(getattr(self,'fast_code_cache',None) or (None,None,[]))[2]
+                                excluded_page=not result[0] and auto.get('discovered') and excluded_only(anchors)
+                                if result[0] or excluded_page:failed_reads[0]=0
+                                else:
+                                    failed_reads[0]+=1
+                                    detail=getattr(self,'last_scan_diagnostic','未取得完整數字列')
+                                    diagnostic.update(ocr_detail=detail,image_size=getattr(image,'size',None),column_bounds=cfg.get('column_bounds'),table_roi=list(auto['table']),read_failures=failed_reads[0])
+                                    self.events.put((token,'auto_status',f'第{diagnostic.get("segment",1)}段尚未讀到股票｜第{failed_reads[0]}次｜{detail}｜正在重新擷取、定位與複查'))
+                                    if not saved_failure[0] and hasattr(image,'save'):
+                                        from scan_diagnostics import save_failed_capture
+                                        saved_failure[0]=True
+                                        diagnostic['failed_capture']=save_failed_capture(BASE/'scan-failures',image,diagnostic)
+                                return result
+                            def recover_layout():
+                                from auto_detect import detect_layout
+                                diagnostic.update(stage='掃描中重新定位表頭')
+                                self.events.put((token,'auto_status','讀不到股票資料：重新定位表頭與欄位，保留目前進度…'))
+                                c.check();full,_=c.image([0,0,1,1])
+                                try:
+                                    layout=self.detect_layout_recovering(full,require_combo=False)
+                                except AutomationStopped:raise
+                                except (ValueError,RuntimeError) as error:
+                                    self.events.put((token,'auto_status','表頭重定位尚未成功：'+str(error)))
+                                    diagnostic.update(layout_recovery_error=str(error))
+                                    return False
+                                c.check()
+                                if not switcher.label_matches(name):
+                                    raise RuntimeError('表頭重定位時排行標題無法確認，進度已保留')
+                                cfg['column_bounds']=layout['column_bounds']
+                                # scan_table holds this list; mutate it so fresh captures
+                                # and overlap checks both use the new table geometry.
+                                auto['table'][:]=layout['table']
+                                auto['discovered']=True
+                                diagnostic.update(stage='表頭已重定位，重讀當前區段',column_bounds=layout['column_bounds'])
+                                self.events.put((token,'auto_status','已更新欄位位置，繼續讀取當前區段'))
+                                return True
+                            priority_budget=[3]
+                            first_batch=[not bool(table_resume)]
+                            def observed(quotes,bad):
+                                if not switcher.label_matches(name):raise RuntimeError('本段股票類目改變，未接收本段資料')
+                                c.check()
+                                current=dict(cfg,source_rank=name,source_partial=True,source_reset=first_batch[0],scan_cycle=cycle)
+                                first_batch[0]=False
+                                counted.update(q.code for q in quotes);counts()
+                                self.events.put((token,'auto_quotes',(name,quotes,bad,time.monotonic()-begin,current)))
+                                try:return prioritized_recheck(quotes,current)
+                                except AutomationStopped:raise
+                                except Exception as error:
+                                    priority_budget[0]=0
+                                    diagnostic.update(stage='優先複查失敗，主掃描繼續',optional_error=str(error))
+                                    from scan_diagnostics import record_interruption
+                                    from MitakeDetector import VERSION
+                                    location=record_interruption(BASE/'scan-interruptions.jsonl',VERSION,diagnostic,error)
+                                    self.events.put((token,'auto_status','優先複查暫停，主掃描繼續：'+str(error)+'｜'+location))
+                                    return []
+                            def prioritized_recheck(quotes,current):
+                                # Recheck only a few near-target rows before leaving
+                                # this viewport. Full-market traversal is never skipped.
+                                if not auto.get('discovered') or priority_budget[0]<=0:return []
+                                source=getattr(self,'fast_row_source',None)
+                                if not source:return []
+                                from candidate_ranking import assess
+                                selected=[]
+                                for q in quotes:
+                                    match=assess((q,None,'等待觀測突破守穩',False),cfg)
+                                    if (q.price>=cfg['min_price'] and q.volume>=cfg['min_volume']
+                                            and cfg['min_gain']<=q.gain<=cfg['max_gain']
+                                            and match['count']>=3+int(bool(cfg['use_turnover']))
+                                            and time.monotonic()-priority_last.get(q.code,-1e20)>=20):selected.append(q.code)
+                                selected=set(selected[:3])
+                                if not selected:return []
+                                image,bounds,anchors,scores=source
+                                sections=[(code,max(0,int(y-h*.8)),min(image.height,int(y+h*.8)+1))
+                                          for code,y,h in anchors if code in selected and scores.get(code,0)>=.92]
+                                if not sections:return []
+                                priority_budget[0]-=1
+                                for code in selected:priority_last[code]=time.monotonic()
+                                self.events.put((token,'auto_status',f'候選優先複查：{len(sections)}檔｜數字快掃，股名稍後補讀'))
+                                c.check();fresh,_=c.image(auto['table'])
+                                from PIL import Image
+                                height=8+sum(bottom-top+16 for _,top,bottom in sections)
+                                sheet=Image.new('RGB',(fresh.width,height),'black');y=8
+                                for code,top,bottom in sections:
+                                    sheet.paste(fresh.crop((0,top,fresh.width,bottom)),(0,y));y+=bottom-top+16
+                                self.focus_columns(fresh,bounds,['code','price','gain','volume','turnover'],'候選小區塊優先複查',
+                                                   (min(top for _,top,bottom in sections),max(bottom for _,top,bottom in sections)))
+                                from fast_quotes import scan_numeric_batch
+                                extra,extra_bad=scan_numeric_batch(sheet,cfg['column_bounds'],self.read_auto_ocr,self.stock_names,
+                                                                  memory=self.get_ocr_learning(),defer_names=True)
+                                extra=[q for q in extra if q.code in selected]
+                                for q in extra:q.ts=fresh.info.get('captured_at',q.ts)
+                                c.check()
+                                if extra and switcher.label_matches(name):
+                                    self.events.put((token,'auto_quotes',(name,extra,extra_bad,time.monotonic()-begin,dict(current,source_reset=False))))
+                                    return extra
+                                return []
+                            table_state=[table_resume]
+                            def checkpoint(state):
+                                table_state[0]=state
+                                diagnostic.update(last_codes=state.get("codes",[]),wheel_offset=state.get("offset",0),scroll_notches=state.get("notches",1))
+                                if store:store.update(context,dict(cycle=cycle,rank=rank_index,table=state,round_started=cycle_started))
+                            from table_scan import scan_with_recovery
+                            def attempt_scan(resume):
+                                return scan_table(c,auto['table'],read,progress,observed=observed,resume=resume,checkpoint=checkpoint,
+                                                       limit_pages=None if auto.get('full_table',True) else auto['pages'],scroll_cap=experience.scroll_cap(name),
+                                                       learn_scroll=lambda cap,recovered:experience.record_scroll(name,cap,recovered),
+                                                       read_anchors=(lambda image:self.read_stock_anchors(image,cfg['column_bounds'])) if auto.get('discovered') else None,
+                                                       recover_layout=recover_layout)
+                            def recovered_error(error):
                                 from scan_diagnostics import record_interruption
                                 from MitakeDetector import VERSION
-                                location=record_interruption(BASE/'scan-interruptions.jsonl',VERSION,diagnostic,error)
-                                self.events.put((token,'auto_status','優先複查暫停，主掃描繼續：'+str(error)+'｜'+location))
-                                return []
-                        def prioritized_recheck(quotes,current):
-                            # Recheck only a few near-target rows before leaving
-                            # this viewport. Full-market traversal is never skipped.
-                            if not auto.get('discovered') or priority_budget[0]<=0:return []
-                            source=getattr(self,'fast_row_source',None)
-                            if not source:return []
-                            from candidate_ranking import assess
-                            selected=[]
-                            for q in quotes:
-                                match=assess((q,None,'等待觀測突破守穩',False),cfg)
-                                if (q.price>=cfg['min_price'] and q.volume>=cfg['min_volume']
-                                        and cfg['min_gain']<=q.gain<=cfg['max_gain']
-                                        and match['count']>=3+int(bool(cfg['use_turnover']))
-                                        and time.monotonic()-priority_last.get(q.code,-1e20)>=20):selected.append(q.code)
-                            selected=set(selected[:3])
-                            if not selected:return []
-                            image,bounds,anchors,scores=source
-                            sections=[(code,max(0,int(y-h*.8)),min(image.height,int(y+h*.8)+1))
-                                      for code,y,h in anchors if code in selected and scores.get(code,0)>=.92]
-                            if not sections:return []
-                            priority_budget[0]-=1
-                            for code in selected:priority_last[code]=time.monotonic()
-                            self.events.put((token,'auto_status',f'候選優先複查：{len(sections)}檔｜數字快掃，股名稍後補讀'))
-                            c.check();fresh,_=c.image(auto['table'])
-                            from PIL import Image
-                            height=8+sum(bottom-top+16 for _,top,bottom in sections)
-                            sheet=Image.new('RGB',(fresh.width,height),'black');y=8
-                            for code,top,bottom in sections:
-                                sheet.paste(fresh.crop((0,top,fresh.width,bottom)),(0,y));y+=bottom-top+16
-                            self.focus_columns(fresh,bounds,['code','price','gain','volume','turnover'],'候選小區塊優先複查',
-                                               (min(top for _,top,bottom in sections),max(bottom for _,top,bottom in sections)))
-                            from fast_quotes import scan_numeric_batch
-                            extra,extra_bad=scan_numeric_batch(sheet,cfg['column_bounds'],self.read_auto_ocr,self.stock_names,
-                                                              memory=self.get_ocr_learning(),defer_names=True)
-                            extra=[q for q in extra if q.code in selected]
-                            for q in extra:q.ts=fresh.info.get('captured_at',q.ts)
+                                diagnostic.update(stage='暫時中斷，正在自動恢復')
+                                record_interruption(BASE/'scan-interruptions.jsonl',VERSION,diagnostic,error)
+                            quotes,rejected=scan_with_recovery(attempt_scan,table_state,c.check,
+                                lambda detail:self.events.put((token,'auto_status',detail)),c.pause,recovered_error)
+                            saved=None
+                            collected={q.code:q for q in quotes}
+                            counted.update(collected);counts(done=True)
+                            # Verify label again after scanning, before any observations are accepted.
+                            if not switcher.label_matches(name):raise RuntimeError('讀取後排行標題改變，已停止且捨棄本次資料')
                             c.check()
-                            if extra and switcher.label_matches(name):
-                                self.events.put((token,'auto_quotes',(name,extra,extra_bad,time.monotonic()-begin,dict(current,source_reset=False))))
-                                return extra
-                            return []
-                        table_state=[table_resume]
-                        def checkpoint(state):
-                            table_state[0]=state
-                            diagnostic.update(last_codes=state.get("codes",[]),wheel_offset=state.get("offset",0),scroll_notches=state.get("notches",1))
-                            if store:store.update(context,dict(cycle=cycle,rank=rank_index,table=state,round_started=cycle_started))
-                        from table_scan import scan_with_recovery
-                        def attempt_scan(resume):
-                            return scan_table(c,auto['table'],read,progress,observed=observed,resume=resume,checkpoint=checkpoint,
-                                                   limit_pages=None if auto.get('full_table',True) else auto['pages'],scroll_cap=experience.scroll_cap(name),
-                                                   learn_scroll=lambda cap,recovered:experience.record_scroll(name,cap,recovered),
-                                                   read_anchors=(lambda image:self.read_stock_anchors(image,cfg['column_bounds'])) if auto.get('discovered') else None,
-                                                   recover_layout=recover_layout)
-                        def recovered_error(error):
+                            current=dict(cfg,source_rank=name)
+                            if store:
+                                next_rank=(rank_index+1)%len(auto['rankings'])
+                                store.update(context,dict(cycle=cycle+(1 if next_rank==0 else 0),rank=next_rank,table=None,round_started=None if next_rank==0 else cycle_started))
+                            experience.observed(name,bool(collected) and rejected==0)
+                            dwell=experience.wait(name,auto['seconds'])
+                            mode='自適應加速' if experience.enabled else '固定間隔'
+                            diagnostic.update(stage='排行讀取完成，等待下次切換',count=len(collected))
+                            wait_until=time.monotonic()+dwell
+                            if getattr(self,'deferred_names',None):
+                                self.events.put((token,'auto_status','數字篩選已完成：利用輪切等待時間批次補讀股名（最多32檔，已記錄股號不重讀）'))
+                                try:self.learn_deferred_names(c.check)
+                                except AutomationStopped:raise
+                                except Exception as error:
+                                    diagnostic.update(stage='股名補讀失敗，主掃描繼續',optional_error=str(error))
+                                    from scan_diagnostics import record_interruption
+                                    from MitakeDetector import VERSION
+                                    location=record_interruption(BASE/'scan-interruptions.jsonl',VERSION,diagnostic,error)
+                                    self.events.put((token,'auto_status','股名補讀失敗，已略過並繼續數字掃描：'+str(error)+'｜'+location))
+                            while time.monotonic()<wait_until:
+                                remaining=max(1,int(wait_until-time.monotonic()+.999))
+                                self.events.put((token,'auto_progress',(f'{name}｜已讀{len(collected)}檔｜略過{rejected}列｜{mode}｜{remaining}秒後繼續｜OCR重用{getattr(self,"ocr_cache_hits",0)}次',rank_index+1,len(auto['rankings']))))
+                                c.pause(min(1,max(0,wait_until-time.monotonic())))
+                        except (AutomationStopped,ValueError,RuntimeError) as exc:
+                            # User stops, lost focus and obstructed windows must still halt.
+                            if stop.is_set() or (isinstance(exc,AutomationStopped) and not str(exc).startswith(('選單中找不到','切換後標題'))):raise
+                            c.check()
                             from scan_diagnostics import record_interruption
                             from MitakeDetector import VERSION
-                            diagnostic.update(stage='暫時中斷，正在自動恢復')
-                            record_interruption(BASE/'scan-interruptions.jsonl',VERSION,diagnostic,error)
-                        quotes,rejected=scan_with_recovery(attempt_scan,table_state,c.check,
-                            lambda detail:self.events.put((token,'auto_status',detail)),c.pause,recovered_error)
-                        saved=None
-                        collected={q.code:q for q in quotes}
-                        counted.update(collected);counts(done=True)
-                        # Verify label again after scanning, before any observations are accepted.
-                        if not switcher.label_matches(name):raise RuntimeError('讀取後排行標題改變，已停止且捨棄本次資料')
-                        c.check()
-                        current=dict(cfg,source_rank=name)
-                        if store:
+                            diagnostic.update(stage='排行失敗，已跳過')
+                            location=record_interruption(BASE/'scan-interruptions.jsonl',VERSION,diagnostic,exc)
+                            saved=None;skipped+=1
                             next_rank=(rank_index+1)%len(auto['rankings'])
-                            store.update(context,dict(cycle=cycle+(1 if next_rank==0 else 0),rank=next_rank,table=None,round_started=None if next_rank==0 else cycle_started))
-                        experience.observed(name,bool(collected) and rejected==0)
-                        dwell=experience.wait(name,auto['seconds'])
-                        mode='自適應加速' if experience.enabled else '固定間隔'
-                        diagnostic.update(stage='排行讀取完成，等待下次切換',count=len(collected))
-                        wait_until=time.monotonic()+dwell
-                        if getattr(self,'deferred_names',None):
-                            self.events.put((token,'auto_status','數字篩選已完成：利用輪切等待時間批次補讀股名（最多32檔，已記錄股號不重讀）'))
-                            try:self.learn_deferred_names(c.check)
-                            except AutomationStopped:raise
-                            except Exception as error:
-                                diagnostic.update(stage='股名補讀失敗，主掃描繼續',optional_error=str(error))
-                                from scan_diagnostics import record_interruption
-                                from MitakeDetector import VERSION
-                                location=record_interruption(BASE/'scan-interruptions.jsonl',VERSION,diagnostic,error)
-                                self.events.put((token,'auto_status','股名補讀失敗，已略過並繼續數字掃描：'+str(error)+'｜'+location))
-                        while time.monotonic()<wait_until:
-                            remaining=max(1,int(wait_until-time.monotonic()+.999))
-                            self.events.put((token,'auto_progress',(f'{name}｜已讀{len(collected)}檔｜略過{rejected}列｜{mode}｜{remaining}秒後繼續｜OCR重用{getattr(self,"ocr_cache_hits",0)}次',rank_index+1,len(auto['rankings']))))
-                            c.pause(min(1,max(0,wait_until-time.monotonic())))
+                            if store:store.update(context,dict(cycle=cycle+(1 if next_rank==0 else 0),rank=next_rank,table=None,round_started=None if next_rank==0 else cycle_started))
+                            self.events.put((token,'ranking_skipped',dict(ranking=name,cycle=cycle,reason=str(exc)[:300])))
+                            self.events.put((token,'auto_status',f'第{cycle}輪｜{name} 掃描失敗，已跳過，繼續下一排行：{exc}｜{location}'))
+                            c.pause(.5)
                     if test_only:break
-                    self.events.put((token,'auto_counts',f'本輪排行掃描完成｜累計完成 {cycle} 遍｜準備第 {cycle+1} 輪'))
-                    self.events.put((token,'auto_phase',f'第{cycle}輪已完成｜自動開始第{cycle+1}輪'))
+                    if skipped==len(auto['rankings']):
+                        self.events.put((token,'auto_status','本輪全部排行失敗，等待30秒後重新嘗試；F8可停止'))
+                        c.pause(30)
+                    self.events.put((token,'auto_counts',f'本輪已巡查｜跳過 {skipped} 個排行｜累計完成 {cycle} 遍｜準備第 {cycle+1} 輪'))
+                    self.events.put((token,'auto_phase',f'第{cycle}輪已完成｜跳過 {skipped} 個排行｜自動開始第{cycle+1}輪'))
                     cycle+=1;start_index=0;cycle_started=time.time()
                 self.events.put((token,'auto_end','輪切測試完成' if test_only else '自動輪切已停止'))
             except Exception as exc:

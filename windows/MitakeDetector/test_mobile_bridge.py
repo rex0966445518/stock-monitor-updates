@@ -54,3 +54,22 @@ class BridgeTests(unittest.TestCase):
             b.publish([self.row(now+86400)],self.cfg(),'test',now+86400)
             self.assertEqual(len(b.rows),1);self.assertEqual(len(b.events),1)
             self.assertNotEqual(MobileBridge(path).session,b.session)
+
+
+class OperationalNoticeTests(unittest.TestCase):
+    def test_notice_cursor_cooldown_expiry_and_isolation(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as folder,patch('mobile_bridge.time.time',return_value=1000):
+            b=MobileBridge(Path(folder)/'pair.json')
+            self.assertTrue(b.publish_notice('開盤強勢',1,'找不到',now=999))
+            self.assertFalse(b.publish_notice('開盤強勢',2,'仍找不到',now=1000))
+            self.assertTrue(b.publish_notice('低價排行',1,'讀取失敗',now=1000))
+            snap=b.snapshot();self.assertEqual(len(snap['notices']),2)
+            self.assertEqual(snap['rows'],[]);self.assertEqual(snap['events'],[])
+            self.assertEqual(len(b.snapshot(1,b.session)['notices']),1)
+            self.assertEqual(b.snapshot(2,b.session)['notices'],[])
+            self.assertEqual(len(b.snapshot(99,'old-session')['notices']),2)
+        with patch('mobile_bridge.time.time',return_value=1301):
+            self.assertEqual(b.snapshot()['notices'],[])
+            self.assertTrue(b.publish_notice('開盤強勢',3,'找不到',now=1301))
+            self.assertEqual(len(b.snapshot()['notices']),1)

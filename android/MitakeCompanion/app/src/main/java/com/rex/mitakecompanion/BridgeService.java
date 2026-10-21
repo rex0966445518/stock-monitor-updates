@@ -22,6 +22,7 @@ public class BridgeService extends Service {
     @Override public void onCreate(){super.onCreate();prefs=prefs(this);speech=new SpeechAnnouncer(this);haptics=new HapticAnnouncer(this);gate=new SignalGate(prefs);NotificationManager n=getSystemService(NotificationManager.class);
         try{SignalHistory.merge(prefs,new JSONObject(prefs.getString("snapshot","{}")));}catch(org.json.JSONException ignored){}
         n.createNotificationChannel(new NotificationChannel("connection","電腦連線狀態",NotificationManager.IMPORTANCE_LOW));
+        n.createNotificationChannel(new NotificationChannel("scan_errors","排行榜掃描異常",NotificationManager.IMPORTANCE_HIGH));
         NotificationChannel signals=new NotificationChannel("signals","5/6 與 6/6 觀察提醒",NotificationManager.IMPORTANCE_HIGH);signals.enableVibration(true);n.createNotificationChannel(signals);
     }
     private PendingIntent open(){return PendingIntent.getActivity(this,0,new Intent(this,MainActivity.class),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);}
@@ -53,6 +54,7 @@ public class BridgeService extends Service {
             }
             JSONArray rows=data.optJSONArray("rows");
             if(rows!=null)for(int i=0;i<rows.length();i++){JSONObject row=rows.optJSONObject(i);if(row!=null)alert(row,data.optDouble("server_time"),data.optBoolean("active"),false);}
+            ScanNotice.notify(this,data,session,after);
             SignalHistory.merge(prefs,data);
             prefs.edit().putString("session",data.optString("session")).putLong("seq",data.optLong("seq"))
                 .putString("snapshot",data.toString()).apply();
