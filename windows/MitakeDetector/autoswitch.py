@@ -310,6 +310,14 @@ class RankingSwitcher:
             if point:
                 self.status('依分時賣力下一列定位累計買力，切換後核對計買力')
                 return point
+        # A clearly read ordered page outside the target's catalog range needs
+        # no repeated/enlarged Chinese OCR. Ambiguous or intervening rows retry.
+        visible=[(find_menu_item(tokens,label),index) for index,label in enumerate(RANKINGS)]
+        visible=sorted((point[1],index) for point,index in visible if point)
+        indices=[index for _,index in visible]
+        target=RANKINGS.index(name)
+        if len(indices)>=3 and indices==sorted(set(indices)) and not indices[0]<=target<=indices[-1]:
+            return None
         candidates=[tokens]
         if self.ocr_retry:
             self.c.check()
@@ -441,9 +449,16 @@ class RankingSwitcher:
             self.experience.forget(name)
             self.status('選單內容有變，恢復完整搜尋')
             self.c.scroll(center,120*60);self.c.pause(.35)
-        previous=None;unchanged=0
+        previous=None;unchanged=0;previous_pixels=None;still=0
         for page in range(60):
             self.c.check();im,region=self.c.image(self.menu)
+            pixels=self.menu_signature(im)
+            if pixels is not None and pixels==previous_pixels:
+                still+=1
+                if still>=2:break
+                self.c.scroll(center,-120);self.c.pause(.45)
+                continue
+            previous_pixels=pixels;still=0
             if self.numbers:self.numbers.observe(im,page)
             tokens=self.ocr(im)
             self.status(f'正在尋找「{name}」｜選單第{page+1}段')

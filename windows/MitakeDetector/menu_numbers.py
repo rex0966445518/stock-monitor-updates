@@ -187,6 +187,27 @@ class NumberNavigator:
         self.show(None)
 
 
+def preview_numbers(c,menu_roi,combo,region,native,geometry,show,clock=None,seconds=15):
+    """Bounded preview; validate the popup before closing it, never select a row."""
+    import time,math
+    clock=clock or time.monotonic
+    deadline=clock()+seconds
+    while True:
+        c.check()
+        if native:rows=native.rows()
+        else:
+            image,_=c.image(menu_roi)
+            if not geometry.update(image):
+                raise ValueError('選單已關閉或捲動距離過大，預覽已結束')
+            rows=geometry.rows()
+        remaining=max(0,math.ceil(deadline-clock()))
+        if not remaining:
+            c.click((combo['left']+combo['width']//2,combo['top']+combo['height']//2))
+            return
+        show(dict(region=region,rows=rows,preview_seconds=remaining))
+        c.pause(.25)
+
+
 class NumberOverlay:
     """Side ruler; never covers menu pixels or accepts input/focus."""
     def __init__(self,root):
@@ -195,15 +216,19 @@ class NumberOverlay:
         self.canvas=tk.Canvas(self.window,width=42,highlightthickness=0,bg='#102638');self.canvas.pack(fill='both',expand=True)
     def update(self,payload):
         if not payload:self.window.withdraw();return
-        region=payload['region'];x=region['left']-44;y=region['top'];height=region['height']
+        region=payload['region'];preview=payload.get('preview_seconds')
+        width=80 if preview is not None else 42;header=44 if preview is not None else 0
+        x=region['left']-width-2;y=region['top']-header;height=region['height']+header
         # Preserve negative monitor coordinates; desktop geometry is not primary-screen-only.
-        self.window.geometry(f'42x{height}{x:+d}{y:+d}');self.canvas.delete('all')
+        self.window.geometry(f'{width}x{height}{x:+d}{y:+d}');self.canvas.delete('all')
+        if preview is not None:
+            self.canvas.create_text(width//2,22,text=f'編號預覽 {preview}秒\nF8 結束',fill='#ffe08a',font=('Segoe UI',9,'bold'))
         for number,center in payload['rows']:
-            self.canvas.create_text(36,center,text=str(number),anchor='e',fill='#68f5d1',font=('Segoe UI',10,'bold'))
+            self.canvas.create_text(width-6,center+header,text=str(number),anchor='e',fill='#68f5d1',font=('Segoe UI',10,'bold'))
         from task_progress import TaskProgress
         handle=TaskProgress.show_passive(self,self.window,True)
         if handle:
             u=ctypes.windll.user32
             if x<u.GetSystemMetrics(76):x=region['left']+region['width']+2
-            u.SetWindowPos(handle,W.HWND(-1),x,y,42,height,0x0010|0x0040)
+            u.SetWindowPos(handle,W.HWND(-1),x,y,width,height,0x0010|0x0040)
     def close(self):self.window.destroy()

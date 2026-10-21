@@ -105,3 +105,36 @@ class NumberTests(unittest.TestCase):
             s=RankingSwitcher(FakeController(),Mock(),[0,0,.2,.1],[0,.1,.3,.5],experience=fresh,numbering=True,menu_numbers={'開盤強勢':28})
             self.assertEqual(s.numbers.number('開盤強勢'),28)
             self.assertEqual(s.numbers.number('低價排行'),26)
+
+class PreviewTests(unittest.TestCase):
+    def test_timeout_closes_valid_popup_and_reports_countdown(self):
+        from menu_numbers import preview_numbers
+        c=FakeController();native=Mock();native.rows.return_value=[(1,12)]
+        shown=[];clock=Mock(side_effect=[0,0,14,15])
+        preview_numbers(c,[],dict(left=10,top=20,width=100,height=40),{},native,None,shown.append,clock=clock)
+        self.assertEqual([p['preview_seconds'] for p in shown],[15,1])
+        self.assertEqual(c.actions,[('click',(60,40))])
+    def test_closed_popup_or_f8_never_clicks(self):
+        from menu_numbers import preview_numbers
+        for stopped in (False,True):
+            c=FakeController();c.stopped=stopped;native=Mock();native.rows.side_effect=ValueError('closed')
+            with self.assertRaises((ValueError,AutomationStopped)):
+                preview_numbers(c,[],{}, {},native,None,Mock())
+            self.assertEqual(c.actions,[])
+    def test_clear_page_outside_target_range_skips_retry(self):
+        s=RankingSwitcher(FakeController(),Mock(),[0,0,.2,.1],[0,.1,.3,.5],ocr_retry=Mock())
+        s.enlarged_reads=Mock(return_value=[])
+        self.assertIsNone(s.menu_point(menu(),tokens(),'開盤強勢'))
+        s.ocr_retry.assert_not_called();s.enlarged_reads.assert_not_called()
+    def test_missing_intervening_label_still_retries(self):
+        s=RankingSwitcher(FakeController(),Mock(),[0,0,.2,.1],[0,.1,.3,.5],ocr_retry=Mock(return_value=[token('跌停鎖住',36)]))
+        self.assertIsNotNone(s.menu_point(menu(),[token('漲停鎖住',12),token('即將漲停',60),token('即將跌停',84)],'跌停鎖住'))
+        s.ocr_retry.assert_called_once()
+    def test_unchanged_menu_pixels_not_repeatedly_recognized(self):
+        class C(FakeController):
+            def image(self,roi):return menu(),dict(left=100,top=100,width=220,height=192)
+        c=C();reader=Mock(return_value=tokens());s=RankingSwitcher(c,reader,[0,0,.2,.1],[0,.1,.3,.5])
+        s.label_matches=Mock(return_value=False)
+        with self.assertRaises(AutomationStopped):s.switch('開盤強勢',menu_open=True)
+        reader.assert_called_once()
+        self.assertEqual(sum(a==('scroll',-120) for a in c.actions),2)

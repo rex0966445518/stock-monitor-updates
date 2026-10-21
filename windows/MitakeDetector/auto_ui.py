@@ -700,7 +700,7 @@ class AutoUI:
 
     def preview_menu_numbers(self):
         if not self.idle() or not self.dependencies():return
-        from menu_numbers import NativeMenu,PixelMenu
+        from menu_numbers import NativeMenu,PixelMenu,preview_numbers
         from tkinter import messagebox
         cfg=self.config.get('auto_config',{})
         try:
@@ -709,7 +709,7 @@ class AutoUI:
             if not target:raise ValueError('請選擇三竹視窗')
         except Exception as exc:messagebox.showerror('需要設定',str(exc));return
         self.generation+=1;token=self.generation;self.stop_event=threading.Event();stop=self.stop_event
-        self.status.set('排行編號預覽｜可捲動選單查看；按F8結束後填入設定')
+        self.status.set('排行編號預覽（非掃描）｜15秒後自動結束；F8可提前結束')
         def job():
             try:
                 c=WindowsController(target,stop);c.activate()
@@ -721,14 +721,9 @@ class AutoUI:
                 try:native=NativeMenu(c,region)
                 except (ValueError,AttributeError):
                     im,_=c.image(cfg['menu']);geometry=PixelMenu(im,self.read_auto_ocr(im))
-                while not stop.is_set():
-                    if native:rows=native.rows()
-                    else:
-                        im,_=c.image(cfg['menu'])
-                        if not geometry.update(im):raise ValueError('捲動距離過大或選單已關閉；請重新預覽並逐格捲動')
-                        rows=geometry.rows()
-                    self.events.put((token,'menu_numbers',dict(region=region,rows=rows)))
-                    c.pause(.25)
+                preview_numbers(c,cfg['menu'],combo,region,native,geometry,
+                                lambda data:self.events.put((token,'menu_numbers',data)))
+                self.events.put((token,'message','編號預覽完成，已收起選單；要掃描請按「開始／繼續」或F8'))
             except Exception as exc:self.events.put((token,'message','編號預覽結束：'+str(exc)))
             finally:stop.set();self.events.put((token,'menu_numbers',None))
         self.worker_thread=threading.Thread(target=job,daemon=True);self.worker_thread.start()

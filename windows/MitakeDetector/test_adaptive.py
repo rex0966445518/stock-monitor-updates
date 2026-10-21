@@ -105,7 +105,7 @@ if __name__=='__main__':unittest.main()
 class PositionCacheTests(AdaptiveTests):
     def test_identical_menu_skips_ocr_but_still_checks_title(self):
         p=Experience();c,calls,s=self.make_switch(p)
-        s.menu_signature=lambda im:[[200,500],'a'*64]
+        s.menu_signature=lambda im:[[200,500],('a'*64 if c.page==5 else str(c.page))]
         s.switch('大單流入');self.assertEqual(len(calls),6)
         c,calls,s=self.make_switch(p);s.menu_signature=lambda im:[[200,500],'a'*64]
         s.switch('大單流入');self.assertEqual(calls,[])
