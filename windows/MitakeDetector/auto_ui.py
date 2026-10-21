@@ -467,13 +467,21 @@ class AutoUI:
             raise ValueError(f'表頭定位失敗｜視窗 {image.width}×{image.height}｜已完成原圖、分區、2倍、3倍及縮小複查。'+failures[-1])
 
     def adapt_scan_layout(self,c,auto,cfg,token,ranking):
-        """Recalibrate at task start; never click a scaled old coordinate."""
+        """Reuse saved coordinates on unchanged windows; recalibrate after resize."""
         self._startup_rank_error=None;self._scan_menu_open=False
         from auto_detect import cached_layout,detect_menu
         from MitakeDetector import BASE
         size=[c.initial_rect[2]-c.initial_rect[0],c.initial_rect[3]-c.initial_rect[1]]
         resized=size!=auto.get('window_size')
-        if not resized and not auto.get('discovered'):return False
+        if not resized:
+            bounds=cfg.get('column_bounds',{})
+            valid=isinstance(bounds,dict) and {'code','name','price','gain','volume','turnover'}.issubset(bounds) and all(isinstance(pair,(list,tuple)) and len(pair)==2 and all(type(v) in (int,float) for v in pair) and 0<=pair[0]<pair[1]<=1 for pair in bounds.values())
+            if not auto.get('discovered') or valid:
+                self.layout_coordinates_locked=True
+                cfg['region']=absolute_roi(auto['table'],c.rect())
+                self.events.put((token,'auto_status','沿用已儲存欄位座標｜略過表頭 OCR；需要變更請按「重新自動定位」'))
+                return False
+        self.layout_coordinates_locked=False
         self.events.put((token,'auto_status',f'目前視窗 {size[0]}×{size[1]}｜'+('解析度或視窗大小已變更，自動重新定位表頭與選單' if resized else '核對表頭頭尾位置，必要時自動重新定位')))
         full,_=c.image([0,0,1,1])
         layout,reused=cached_layout(full,self.read_auto_ocr,BASE/'header-layout.json',
@@ -501,6 +509,7 @@ class AutoUI:
         cfg.update(auto_config=auto,column_bounds=layout['column_bounds'],region=absolute_roi(layout['table'],c.rect()))
         self.events.put((token,'auto_layout_done',dict(auto_config=auto.copy(),column_bounds=layout['column_bounds'],region=cfg['region'])))
         self.events.put((token,'auto_status','表頭頭尾一致，已略過逐欄辨識' if reused else f'已適應 {size[0]}×{size[1]} 視窗｜表頭與操作位置已確認'))
+        self.layout_coordinates_locked=True
         return geometry_changed
 
     def show_scan_diagnostics(self):
@@ -1101,6 +1110,9 @@ class AutoUI:
                                         diagnostic['failed_capture']=save_failed_capture(BASE/'scan-failures',image,diagnostic)
                                 return result
                             def recover_layout():
+                                if getattr(self,'layout_coordinates_locked',False):
+                                    self.events.put((token,'auto_status','欄位座標已記憶｜本段讀值失敗，不重掃表頭；若欄位曾移動，請重新自動定位'))
+                                    return False
                                 from auto_detect import detect_layout
                                 diagnostic.update(stage='掃描中重新定位表頭')
                                 self.events.put((token,'auto_status','讀不到股票資料：重新定位表頭與欄位，保留目前進度…'))

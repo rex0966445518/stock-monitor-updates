@@ -205,3 +205,26 @@ class PreviewWindowTests(unittest.TestCase):
         ui=self.ui();ui.auto_hwnd=3
         with patch('auto_ui.WindowsController.windows',return_value=[(2,'三竹熱門排行'),(3,'三竹熱門排行')]):
             self.assertEqual(ui.resolve_auto_window(ui.config['auto_config']),3)
+
+class PersistentMenuTests(unittest.TestCase):
+    def test_restart_uses_saved_geometry_without_menu_ocr(self):
+        from adaptive import Experience
+        class C(FakeController):
+            def __init__(self):super().__init__();self.offset=0
+            def image(self,roi):return menu(self.offset),dict(left=100,top=100,width=220,height=192)
+            def scroll(self,point,delta):self.offset=max(0,self.offset+(3 if delta<0 else -100))
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'experience.json';region=dict(left=100,top=100,width=220,height=192)
+            for restart in (False,True):
+                ocr=Mock(side_effect=AssertionError('Repeated menu OCR')) if restart else Mock(return_value=tokens())
+                s=RankingSwitcher(C(),ocr,[0,0,.2,.1],[0,.1,.3,.5],experience=Experience(path,{'size':[900,700]}),numbering=True)
+                self.assertIsNotNone(s.numbers.locate('累計買力',region))
+                self.assertEqual(ocr.call_count,0 if restart else 1)
+
+    def test_changed_or_corrupt_geometry_rejected_without_click(self):
+        g=PixelMenu(menu(),tokens());saved=g.snapshot()
+        self.assertIsNotNone(PixelMenu.restore(menu(highlight=2),saved))
+        self.assertIsNone(PixelMenu.restore(menu(20),saved))
+        self.assertIsNone(PixelMenu.restore(Image.new('RGB',(230,192)),saved))
+        for bad in [dict(saved,pitch=0),dict(saved,pitch=float('nan')),dict(saved,initial=['bad']),dict(saved,first=-1)]:
+            self.assertIsNone(PixelMenu.restore(menu(),bad))

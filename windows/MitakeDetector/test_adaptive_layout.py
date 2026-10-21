@@ -198,3 +198,15 @@ class HeaderFragmentTests(unittest.TestCase):
             self.assertEqual(detect.call_count,4)
         with patch('auto_detect.detect_layout',side_effect=AutomationStopped('stop')):
             with self.assertRaises(AutomationStopped):app.detect_layout_recovering(Image.new('RGB',(100,50)))
+
+class FixedHeaderTests(unittest.TestCase):
+    def test_same_geometry_reuses_coordinates_without_capture_or_ocr(self):
+        ui=AutoUI();ui.events=queue.Queue();ui.read_auto_ocr=Mock(side_effect=AssertionError('Header OCR'))
+        bounds={f:[i/6,(i+1)/6] for i,f in enumerate(['code','name','price','gain','volume','turnover'])}
+        auto=dict(window_size=[1366,768],discovered=1,combo=[0,0,.2,.1],menu=[0,.1,.2,.5],table=[0,.2,1,.8])
+        c=Mock();c.initial_rect=(100,50,1466,818);c.rect.return_value=c.initial_rect
+        cfg=dict(column_bounds=bounds)
+        self.assertFalse(ui.adapt_scan_layout(c,auto,cfg,1,'漲幅排行'))
+        c.image.assert_not_called();ui.read_auto_ocr.assert_not_called()
+        self.assertTrue(ui.layout_coordinates_locked)
+        self.assertEqual(cfg['column_bounds'],bounds)

@@ -96,6 +96,32 @@ class PixelMenu:
         self.initial=features(image,self.centers,self.pitch)
         if any(sum(row)<8 for row in self.initial[:3]):raise ValueError('列影像不足')
         self.previous=self.initial;self.offset=0
+    def snapshot(self):
+        return dict(version=1,size=list(self.size),first=self.first,pitch=self.pitch,
+                    initial=[row.hex() for row in self.initial])
+    @classmethod
+    def restore(cls,image,saved):
+        """Restore only matching visible geometry; corrupt or changed profiles relearn."""
+        import math
+        try:
+            if saved.get('version')!=1 or saved['size']!=list(image.size):return None
+            first,pitch=saved['first'],saved['pitch']
+            if not all(type(v) in (int,float) and math.isfinite(v) for v in (first,pitch)):return None
+            if not 8<=pitch<=100 or not pitch*.35<=first<=pitch*1.5:return None
+            obj=cls.__new__(cls);obj.size=image.size;obj.first=first;obj.pitch=pitch
+            obj.centers=[];y=first
+            while y+pitch*.48<image.height:
+                obj.centers.append(y);y+=pitch
+            if not 3<=len(obj.centers)<=500:return None
+            rows=saved['initial']
+            if not isinstance(rows,list) or len(rows)!=len(obj.centers):return None
+            if any(not isinstance(row,str) or len(row)!=3840 for row in rows):return None
+            obj.initial=[bytes.fromhex(row) for row in rows]
+            if any(any(v not in (0,1) for v in row) for row in obj.initial):return None
+            obj.previous=obj.initial;obj.offset=0
+            return obj if obj.reset(image) else None
+        except (ValueError,KeyError,TypeError,AttributeError):return None
+
     def reset(self,image):
         if image.size!=self.size:return False
         current=features(image,self.centers,self.pitch)
@@ -143,8 +169,14 @@ class NumberNavigator:
         except (AttributeError,ValueError):pass
         image,_=s.c.image(s.menu)
         if not hasattr(image,'size'):return None
+        if self.geometry is None and s.experience and s.experience.enabled:
+            self.geometry=PixelMenu.restore(image,s.experience.data.get('menu_geometry',{}))
+            if self.geometry:s.status('已載入永久選單記憶｜依編號定位，略過選單 OCR')
         if self.geometry is None or not self.geometry.reset(image):
-            try:self.geometry=PixelMenu(image,s.ocr(image))
+            try:
+                self.geometry=PixelMenu(image,s.ocr(image))
+                if s.experience and s.experience.enabled:
+                    s.experience.data['menu_geometry']=self.geometry.snapshot();s.experience.save()
             except ValueError:
                 s.status('暫時無法確認編號列距，改用文字搜尋；可在排行編號設定中校正')
                 return None
