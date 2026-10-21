@@ -32,8 +32,8 @@ class DetectionTests(unittest.TestCase):
         region=dict(left=200,top=100,width=600,height=80)
         app.prepare_scan_capture(7,region,threading.Event())
         self.assertIsNone(shown[-1])
-        app.focus_columns(Image.new('RGB',(600,80)),{'code':[.1,.2],'name':[0,.1]},['code'],'數字')
-        self.assertEqual(shown[-1],[dict(left=260,top=100,width=60,height=80)])
+        app.focus_columns(Image.new('RGB',(600,80)),{'code':[.1,.2],'name':[0,.1]},['code'],'數字',row=(20,40))
+        self.assertEqual(shown[-1],[dict(left=260,top=120,width=60,height=20)])
         self.assertIn('股號',app.events.get()[2])
 
     def test_neon_borders_never_cover_captured_pixels(self):

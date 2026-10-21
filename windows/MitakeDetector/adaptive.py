@@ -27,7 +27,7 @@ class Experience:
                     for name,number in value.get('numbers',{}).items():
                         if type(number) is int and 1<=number<=500:self.data['numbers'][name]=number
                     for name,entry in value.get('scrolls',{}).items():
-                        if isinstance(entry,dict) and type(entry.get('cap')) is int and 1<=entry['cap']<=6:
+                        if isinstance(entry,dict) and type(entry.get('cap')) is int and 1<=entry['cap']<=12:
                             self.data['scrolls'][name]={'cap':entry['cap'],'recoveries':max(0,min(100000,int(entry.get('recoveries',0))))}
             except (OSError,ValueError,TypeError,AttributeError):pass
 
@@ -39,12 +39,12 @@ class Experience:
         self.data['numbers'].pop(name,None);self.save()
 
     def scroll_cap(self,name):
-        return self.data['scrolls'].get(name,{}).get('cap',6) if self.enabled else 6
+        return self.data['scrolls'].get(name,{}).get('cap',12) if self.enabled else 12
 
     def record_scroll(self,name,cap,recovered):
         if not self.enabled:return
-        entry=self.data['scrolls'].get(name,{'cap':6,'recoveries':0})
-        value={'cap':max(1,min(6,int(cap))),'recoveries':entry['recoveries']+int(recovered)}
+        entry=self.data['scrolls'].get(name,{'cap':12,'recoveries':0})
+        value={'cap':max(1,min(12,int(cap))),'recoveries':entry['recoveries']+int(recovered)}
         if value!=entry:self.data['scrolls'][name]=value;self.save()
 
     def hint(self,name):

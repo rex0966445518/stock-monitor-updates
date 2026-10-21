@@ -64,3 +64,13 @@ class CellTests(unittest.TestCase):
     def test_bad_direct_text_is_never_cached_as_a_quote(self):
         result=self.scan(self.image,OrderedDict(),recognize_cells=lambda images:[('garbage',.99)]*len(images))
         self.assertEqual(result[0][0].price,100);self.assertEqual(self.calls,2)
+
+    def test_focus_callback_tracks_only_current_direct_batch_cells(self):
+        shown=[]
+        def recognize(images,on_batch=None):
+            for start in range(0,len(images),2):on_batch(start,min(start+2,len(images)))
+            return [(self.values[im.getpixel((2,2))[0]-1],.99) for im in images]
+        result=self.scan(self.image,OrderedDict(),recognize_cells=recognize,focus_cells=lambda cells,stage:shown.append([(c['field'],c['top'],c['bottom']) for c in cells]))
+        self.assertEqual(len(result[0]),2)
+        self.assertTrue(all(len(batch)<=2 for batch in shown))
+        self.assertEqual(shown[0],[('code',0,30),('code',30,60)])

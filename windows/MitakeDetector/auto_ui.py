@@ -77,13 +77,26 @@ class AutoUI:
         if not source or not context or (source['width'],source['height'])!=image.size:return
         regions=[]
         labels={'code':'股號','name':'股名','price':'成交價','gain':'漲幅','volume':'成交量','turnover':'換手率'}
-        for field in fields:
+        for field in (fields if row else []):
             left,right=bounds[field]
             x=round(left*image.width);end=round(right*image.width)
             top,bottom=row if row else (0,image.height)
             regions.append(dict(left=source['left']+x,top=source['top']+top,width=end-x,height=bottom-top))
         token,stop=context
         self.events.put((token,'auto_status',stage+'：'+'、'.join(labels.get(f,f) for f in fields)))
+        self.highlight_scan(token,regions,stop)
+
+    def focus_numeric_cells(self,image,bounds,cells,stage):
+        source=getattr(self,'scan_capture_region',None);context=getattr(self,'scan_focus_context',None)
+        if not source or not context or (source['width'],source['height'])!=image.size:return
+        regions=[]
+        for cell in cells[:16]:
+            left,right=bounds[cell['field']]
+            x=round(left*image.width);end=round(right*image.width)
+            regions.append(dict(left=source['left']+x,top=source['top']+cell['top'],
+                                width=end-x,height=cell['bottom']-cell['top']))
+        token,stop=context
+        self.events.put((token,'auto_status',f'{stage}｜本批 {len(cells)} 格'+('｜框示前16格' if len(cells)>16 else '')))
         self.highlight_scan(token,regions,stop)
 
     def announce_task(self,message):
@@ -340,7 +353,8 @@ class AutoUI:
             cells=scan_cells(image,bounds,self.read_auto_ocr,names,self.numeric_cell_cache,memory=memory,
                 force=getattr(self,'force_fresh_ocr',False),focus=lambda fields,stage:self.focus_columns(image,bounds,fields,stage),
                 anchors_ready=lambda anchors,scores:self.remember_fast_rows(image,bounds,anchors,scores),
-                recognize_cells=self.read_numeric_cells)
+                recognize_cells=self.read_numeric_cells,
+                focus_cells=lambda cells,stage:self.focus_numeric_cells(image,bounds,cells,stage))
             if cells is not None:
                 quotes,bad,metrics=cells
                 self.last_scan_diagnostic=f'變動格快掃｜重用{metrics["reused"]}格｜重讀{metrics["changed"]}格｜有效{len(quotes)}列｜跳過長股號{metrics.get("skipped",0)}列'
@@ -761,7 +775,7 @@ class AutoUI:
         self.ttk.Button(top,text='清除辨識快取（保留日誌）',command=clear).pack(anchor='w',padx=15,pady=(0,10))
         return top
 
-    def read_numeric_cells(self,images):
+    def read_numeric_cells(self,images,on_batch=None):
         """Recognize already segmented one-line cells without text detection."""
         from rapidocr_onnxruntime import RapidOCR
         import numpy as np
@@ -778,6 +792,7 @@ class AutoUI:
         for start in range(0,len(inputs),16):
             context=getattr(self,'scan_focus_context',None)
             if context and context[1].is_set():raise AutomationStopped('掃描已暫停')
+            if on_batch:on_batch(start,min(start+16,len(inputs)))
             rows,_=self.ocr.text_rec(inputs[start:start+16])
             results.extend(rows)
         return results
@@ -790,7 +805,7 @@ class AutoUI:
         source=getattr(self,'scan_capture_region',None);context=getattr(self,'scan_focus_context',None)
         if source and context and image.width==source['width'] and image.height<=source['height']:
             token,stop=context
-            self.highlight_scan(token,dict(source,height=image.height),stop)
+            self.highlight_scan(token,None,stop)
         started=time.perf_counter()
         raw=image.convert('RGB')
         key=(raw.size,hashlib.sha256(raw.tobytes()).digest())

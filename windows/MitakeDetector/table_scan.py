@@ -16,7 +16,7 @@ def scan_with_recovery(run,state,check,progress,pause,on_error=lambda exc:None,a
             pause(1)
 
 
-def scan_table(controller, roi, read, progress, max_segments=2000, observed=None,resume=None,checkpoint=None,limit_pages=None,scroll_cap=6,learn_scroll=None,read_anchors=None,recover_layout=None):
+def scan_table(controller, roi, read, progress, max_segments=2000, observed=None,resume=None,checkpoint=None,limit_pages=None,scroll_cap=12,learn_scroll=None,read_anchors=None,recover_layout=None):
     from autoswitch import absolute_roi
     table=absolute_roi(roi,controller.rect())
     center=(table['left']+table['width']//2,table['top']+table['height']//2)
@@ -26,8 +26,8 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
     collected={q['code']:Quote(**q) for q in saved.get('quotes',[]) if len(q['code'])==4 and q['code'].isascii() and q['code'].isdigit()}
     previous=tuple(saved['codes']) if saved.get('codes') else None
     stable=0;rejected=saved.get('rejected',0);notches=saved.get('notches',1)
-    cap=max(1,min(6,scroll_cap,int(saved.get('cap',scroll_cap))));recovery_stalls=0
-    rebuilds=0;layout_repairs=0
+    cap=max(1,min(12,scroll_cap,int(saved.get('cap',scroll_cap))));recovery_stalls=0
+    rebuilds=0;layout_repairs=0;safe_moves=0
     offset=saved.get('offset',0);first=saved.get('segment',0)
     if not saved or saved.get('relayout'):
         controller.scroll(center,120*4000);controller.pause(.6)
@@ -93,7 +93,7 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
                         quotes,bad=read(image);codes=anchor_codes(image,quotes)
                     if reference.intersection(codes):
                         if read_anchors:quotes,bad=read(image)
-                        recovered=True;cap=1;notches=1
+                        recovered=True;cap=1;notches=1;safe_moves=0
                         if learn_scroll:learn_scroll(cap,True)
                         progress(segment+1,len(collected),'已找回重疊股票，縮小步幅接續')
                         break
@@ -128,7 +128,13 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
             shared=len(set(codes).intersection(previous))
             moved=max(1,len(previous)-shared)
             rows_per_notch=max(1,moved/notches)
-            notches=max(1,min(cap,int(max(1,len(codes)-6)/rows_per_notch)))
+            # Retain 2–3 rows for continuity, rather than six plus a low wheel cap.
+            overlap=min(3,max(2,len(codes)//10))
+            safe_moves+=1
+            if safe_moves>=2 and shared>overlap+2:
+                cap=min(12,cap+1)
+            notches=max(1,min(cap,int(max(1,len(codes)-overlap)/rows_per_notch)))
+            progress(segment+1,len(collected),f'捲動校準｜重疊{shared}列｜下一段捲動{notches}格｜保留約{overlap}列核對')
         if learn_scroll and not recovered:learn_scroll(cap,False)
         previous=codes
         if limit_pages and segment+1>=limit_pages:return list(collected.values()),rejected

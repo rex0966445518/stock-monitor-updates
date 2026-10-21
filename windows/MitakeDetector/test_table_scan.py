@@ -88,7 +88,7 @@ class TableScanTests(unittest.TestCase):
         c=Large();calls=[]
         rows,_=scan_table(c,[0,0,1,1],lambda n:(calls.append(n) or read(n)),lambda *s:None)
         self.assertEqual(len(rows),92)
-        self.assertLessEqual(len(calls),10)
+        self.assertLessEqual(len(calls),8)
         self.assertTrue(any(delta < -120 for delta in c.scrolls))
     def test_stock_batches_arrive_before_whole_ranking_finishes(self):
         controller=TableController();batches=[]
@@ -106,7 +106,8 @@ class TableScanTests(unittest.TestCase):
         rows,bad=scan_table(controller,[0,0,1,1],self.read,lambda *s:status.append(s))
         self.assertEqual({q.code for q in rows},{str(1000+i) for i in range(17)})
         self.assertEqual(bad,0);self.assertIn('複查三次',status[-1][2])
-        self.assertEqual(controller.scrolls[1:],[-120]*7)
+        self.assertEqual(len(controller.scrolls[1:]),7)
+        self.assertTrue(all(delta<0 for delta in controller.scrolls[1:]))
 
     def test_blank_ocr_three_attempts_never_claims_bottom(self):
         calls=[]
@@ -212,3 +213,17 @@ class AutomaticRecoveryTests(unittest.TestCase):
         def pause(_):raise AutomationStopped('F8 pressed')
         with self.assertRaises(AutomationStopped):scan_with_recovery(run,[None],lambda:None,lambda _:None,pause)
         self.assertEqual(len(calls),1)
+
+    def test_old_small_stride_recovers_without_skipping_rows(self):
+        class Large(TableController):
+            def scroll(self,point,delta):
+                self.check();self.scrolls.append(delta)
+                self.position=0 if delta>0 else min(170,self.position+3*abs(delta)//120)
+        c=Large();positions=[]
+        def read(pos):
+            positions.append(pos)
+            return [SimpleNamespace(code=str(1000+i)) for i in range(pos,pos+30)],0
+        rows,_=scan_table(c,[0,0,1,1],read,lambda *s:None,scroll_cap=1)
+        self.assertEqual({q.code for q in rows},{str(1000+i) for i in range(200)})
+        self.assertLess(len(positions),22)
+        self.assertTrue(any(delta<=-120*6 for delta in c.scrolls))

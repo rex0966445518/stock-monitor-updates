@@ -13,7 +13,7 @@ class AdaptiveTests(unittest.TestCase):
             path=Path(folder)/'experience.json';p=Experience(path,[1])
             p.record_scroll('漲幅排行',2,True)
             self.assertEqual(Experience(path,[1]).scroll_cap('漲幅排行'),2)
-            self.assertEqual(Experience(path,[2]).scroll_cap('漲幅排行'),6)
+            self.assertEqual(Experience(path,[2]).scroll_cap('漲幅排行'),12)
     def test_only_valid_reads_reduce_wait_and_failure_resets(self):
         p=Experience(layout=[1]);p.record('大單流入',2)
         self.assertEqual(p.wait('大單流入',15),15)

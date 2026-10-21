@@ -24,7 +24,7 @@ def row_bands(image,bounds):
     edges=[0]+[round((a+b)/2) for a,b in zip(centers,centers[1:])]+[image.height]
     return list(zip(edges,edges[1:]))
 
-def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,anchors_ready=None,recognize_cells=None):
+def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,anchors_ready=None,recognize_cells=None,focus_cells=None):
     from PIL import Image
     from fast_quotes import scan_numeric_batch
     import re,unicodedata
@@ -48,8 +48,11 @@ def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,
         # Row/column geometry already identifies a single text line: skip detection.
         direct=[]
         if missing and recognize_cells and not force:
-            if focus:focus(list(dict.fromkeys(c['field'] for c in missing)),f'數字格直接辨識｜{len(missing)} 格')
-            results=recognize_cells([c['image'] for c in missing])
+            if focus_cells:
+                results=recognize_cells([c['image'] for c in missing],on_batch=lambda start,end:focus_cells(missing[start:end],'數字格直接辨識'))
+            else:
+                if focus:focus(list(dict.fromkeys(c['field'] for c in missing)),f'數字格直接辨識｜{len(missing)} 格')
+                results=recognize_cells([c['image'] for c in missing])
             if len(results)==len(missing):
                 for c,(text,confidence) in zip(missing,results):
                     text=unicodedata.normalize('NFKC',str(text)).replace(' ','').strip()
@@ -72,7 +75,8 @@ def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,
         if not missing:return
         sheet=Image.new('RGB',(width,y+line+12),image.convert('RGB').getpixel((0,0)))
         for c in missing:sheet.paste(c['image'],c['box'][:2]);c['tokens']=[]
-        if focus:focus(list(dict.fromkeys(c['field'] for c in cells)),f'股號先行｜變動數字格 {len(missing)}｜重用 {metrics["reused"]} 格')
+        if focus_cells:focus_cells(missing,'低信心數字格複查')
+        elif focus:focus(list(dict.fromkeys(c['field'] for c in cells)),f'股號先行｜變動數字格 {len(missing)}｜重用 {metrics["reused"]} 格')
         for box,text,confidence in read(sheet):
             l=min(p[0] for p in box);t=min(p[1] for p in box);r=max(p[0] for p in box);b=max(p[1] for p in box)
             owners=[c for c in missing if c['box'][0]<=l and r<=c['box'][2] and c['box'][1]<=t and b<=c['box'][3]]
