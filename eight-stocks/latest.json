@@ -1,9 +1,9 @@
 {
   "packageName": "com.rex.sixstocks",
-  "versionCode": 5,
-  "versionName": "0.3.2",
+  "versionCode": 6,
+  "versionName": "0.4.0",
   "appName": "我愛國巨",
   "author": "雷允澤",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/eight-stocks/ILoveYageo-v0.3.2.apk",
-  "sha256": "f43bb2e0a5551230910b988a34259bec57b6926d7ebce9ddde47652bba42b160"
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/eight-stocks/ILoveYageo-v0.4.0.apk",
+  "sha256": "e64dc9913d08a6e9bd3249d620d433f96ba67abb70c66bdb1aa4c81df5c62684"
 }
