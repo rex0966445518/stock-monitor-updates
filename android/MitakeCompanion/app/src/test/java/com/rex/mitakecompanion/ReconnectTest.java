@@ -45,6 +45,7 @@ public class ReconnectTest {
         save(false);MainActivity a=Robolectric.buildActivity(MainActivity.class).setup().get();a.showPairing();
         android.app.AlertDialog dialog=org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
         dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick();
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
         assertNotNull(started());preserved();a.finish();
     }
     @Test public void newDeepLinkWaitsForConfirmationBeforeStartingSavedConnection(){
