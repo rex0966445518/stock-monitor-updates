@@ -3,6 +3,7 @@ import json,re,subprocess
 from pathlib import Path
 base=Path(__file__).resolve().parent
 apk=base/'app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk'
+subprocess.run(['adb','install','-r',str(base/'app/build/outputs/apk/debug/app-debug.apk')],check=True)
 subprocess.run(['adb','install','-r',str(apk)],check=True)
 r=subprocess.run(['adb','shell','am','instrument','-w','-r','com.rex.mitakecompanion.test/com.rex.mitakecompanion.portfolio.CaptureLearningInstrumentation'],text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,check=True)
 print(r.stdout)

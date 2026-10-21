@@ -46,7 +46,7 @@ public final class CandidateCaptureActivity extends Activity {
     private void text(LinearLayout v,String s,int size,int color){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);t.setPadding(0,dp(7),0,dp(7));t.setTextIsSelectable(true);v.addView(t);}
     private void button(LinearLayout v,String s,Runnable action){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setOnClickListener(w->action.run());v.addView(b);}
     private void show(String title,String body){if(!isFinishing()&&!isDestroyed())new AlertDialog.Builder(this).setTitle(title).setMessage(body).setPositiveButton("確定",null).show();}
-    private void render(){if(candidate==null||isFinishing())return;
+    private void render(){if(candidate==null||isFinishing()||isDestroyed())return;
         JSONObject run=null;try{if(!runId.isEmpty())run=store.run(runId);}catch(Exception ignored){}
         String state=new ChipPositionMemory(this).summary()+"|"+allowed()+"|"+ready()+"|"+ChipCaptureService.running()+"|"+(run==null?"":run.toString());if(state.equals(signature))return;signature=state;
         int y=scroll==null?0:scroll.getScrollY();scroll=new ScrollView(this);scroll.setBackgroundColor(0xff0a101b);LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);v.setPadding(dp(20),dp(30),dp(20),dp(30));scroll.addView(v);setContentView(scroll);

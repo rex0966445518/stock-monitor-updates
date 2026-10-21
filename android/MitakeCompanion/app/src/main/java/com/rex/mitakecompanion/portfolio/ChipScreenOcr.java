@@ -19,6 +19,8 @@ final class ChipScreenOcr implements AutoCloseable {
         readRegion(image,new Rect(0,0,w,h),1,result);memory.count("full_reads");
         if(!ChipScreenGuide.headerMatches(result.lines,h,code))readRegion(image,new Rect(0,0,w,(int)(h*.21)),2,result);
         if(ChipVideoProfile.bodyMatches(result.text(),page))return result;
+        ChipScreenGuide.Action visible=ChipScreenGuide.plan(result.lines,w,h,code,page);
+        if(visible!=null&&(visible.kind.equals("search")||visible.kind.equals("input")||visible.kind.equals("result")||visible.kind.equals("paste")||locate&&(visible.kind.equals("tab")||visible.kind.equals("swipe"))))return result;
         // Target is not confirmed: enlarge the quote/nav area and body separately.
         readRegion(image,new Rect(0,(int)(h*.14),w,(int)(h*.46)),2.5f,result);
         readRegion(image,new Rect(0,(int)(h*.28),w,(int)(h*.69)),2,result);
