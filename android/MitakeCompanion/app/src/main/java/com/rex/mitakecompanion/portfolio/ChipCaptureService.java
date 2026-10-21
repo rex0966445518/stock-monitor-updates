@@ -107,7 +107,7 @@ public final class ChipCaptureService extends AccessibilityService {
         for(AccessibilityNodeInfo n:list)if(n.isScrollable()&&n.isEnabled()){
             Rect b=new Rect();n.getBoundsInScreen(b);if(b.height()<screen.height()*.12&&b.contains(strip.centerX(),strip.centerY())&&n.performAction(forward?AccessibilityNodeInfo.ACTION_SCROLL_FORWARD:AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD))return true;
         }
-        float left=Math.max(screen.left+screen.width()*.07,strip.left+8),right=Math.min(screen.left+screen.width()*.85,strip.right-8);
+        float left=Math.max(screen.left+screen.width()*.07f,strip.left+8),right=Math.min(screen.left+screen.width()*.85f,strip.right-8);
         if(right-left<screen.width()*.20)return false;
         Path path=new Path();path.moveTo(forward?right:left,strip.centerY());path.lineTo(forward?left:right,strip.centerY());
         return dispatchGesture(new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription(path,0,380)).build(),null,null);
