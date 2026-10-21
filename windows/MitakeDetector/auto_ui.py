@@ -961,7 +961,7 @@ class AutoUI:
                 self.scan_phase.set('已暫停｜視窗或焦點檢查未通過｜按F8接續')
                 self.say('自動恢復暫停：'+str(exc)+'；請回到三竹後按F8接續')
                 return
-            self.say('自動恢復：重新核對表頭並接續已保存進度')
+            self.say('自動恢復：沿用已存欄位座標並接續進度')
             self.start_auto(announce=False,recovering=True)
         self.scan_retry_timer=self.root.after(delay*1000,resume)
 
@@ -1061,7 +1061,7 @@ class AutoUI:
                             self._startup_rank_error=None
                             if startup_error and startup_error[0]==name:raise startup_error[1]
                             switcher.switch(name)
-                            self.events.put((token,'auto_status','已確認排行：'+name))
+                            self.events.put((token,'auto_status','已切換 '+name+'｜沿用欄位座標，直接掃描數據'))
                             if test_only:continue
                             collected={};rejected=0;begin=time.monotonic();failed_reads[0]=0;saved_failure[0]=False
                             counted=set(q['code'] for q in (table_resume or {}).get('quotes',[]))
@@ -1103,38 +1103,12 @@ class AutoUI:
                                     failed_reads[0]+=1
                                     detail=getattr(self,'last_scan_diagnostic','未取得完整數字列')
                                     diagnostic.update(ocr_detail=detail,image_size=getattr(image,'size',None),column_bounds=cfg.get('column_bounds'),table_roi=list(auto['table']),read_failures=failed_reads[0])
-                                    self.events.put((token,'auto_status',f'第{diagnostic.get("segment",1)}段尚未讀到股票｜第{failed_reads[0]}次｜{detail}｜正在重新擷取、定位與複查'))
+                                    self.events.put((token,'auto_status',f'第{diagnostic.get("segment",1)}段尚未讀到股票｜第{failed_reads[0]}次｜{detail}｜正在重新擷取資料區與複查'))
                                     if not saved_failure[0] and hasattr(image,'save'):
                                         from scan_diagnostics import save_failed_capture
                                         saved_failure[0]=True
                                         diagnostic['failed_capture']=save_failed_capture(BASE/'scan-failures',image,diagnostic)
                                 return result
-                            def recover_layout():
-                                if getattr(self,'layout_coordinates_locked',False):
-                                    self.events.put((token,'auto_status','欄位座標已記憶｜本段讀值失敗，不重掃表頭；若欄位曾移動，請重新自動定位'))
-                                    return False
-                                from auto_detect import detect_layout
-                                diagnostic.update(stage='掃描中重新定位表頭')
-                                self.events.put((token,'auto_status','讀不到股票資料：重新定位表頭與欄位，保留目前進度…'))
-                                c.check();full,_=c.image([0,0,1,1])
-                                try:
-                                    layout=self.detect_layout_recovering(full,require_combo=False)
-                                except AutomationStopped:raise
-                                except (ValueError,RuntimeError) as error:
-                                    self.events.put((token,'auto_status','表頭重定位尚未成功：'+str(error)))
-                                    diagnostic.update(layout_recovery_error=str(error))
-                                    return False
-                                c.check()
-                                if not switcher.label_matches(name):
-                                    raise RuntimeError('表頭重定位時排行標題無法確認，進度已保留')
-                                cfg['column_bounds']=layout['column_bounds']
-                                # scan_table holds this list; mutate it so fresh captures
-                                # and overlap checks both use the new table geometry.
-                                auto['table'][:]=layout['table']
-                                auto['discovered']=True
-                                diagnostic.update(stage='表頭已重定位，重讀當前區段',column_bounds=layout['column_bounds'])
-                                self.events.put((token,'auto_status','已更新欄位位置，繼續讀取當前區段'))
-                                return True
                             priority_budget=[3]
                             first_batch=[not bool(table_resume)]
                             def observed(quotes,bad):
@@ -1207,7 +1181,7 @@ class AutoUI:
                                                        limit_pages=None if auto.get('full_table',True) else auto['pages'],scroll_cap=experience.scroll_cap(name),
                                                        learn_scroll=lambda cap,recovered:experience.record_scroll(name,cap,recovered),
                                                        read_anchors=(lambda image:self.read_stock_anchors(image,cfg['column_bounds'])) if auto.get('discovered') else None,
-                                                       recover_layout=recover_layout,
+                                                       recover_layout=None,
                                                        deferred_view=lambda:bool(getattr(self,'page_pending',False)))
                             def recovered_error(error):
                                 from scan_diagnostics import record_interruption
