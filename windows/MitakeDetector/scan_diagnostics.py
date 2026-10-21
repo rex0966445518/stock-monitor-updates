@@ -28,13 +28,13 @@ def save_failed_capture(folder,image,state):
     folder=Path(folder)
     try:
         folder.mkdir(parents=True,exist_ok=True)
-        stem=f'first-read-{time.time_ns()}'
+        stem=f'first-read-{time.time_ns():020d}-{time.perf_counter_ns():020d}'
         path=folder/(stem+'.png')
         original=image.size;preview=image.convert('RGB').copy()
         preview.thumbnail((2400,1800));preview.save(path)
         meta=dict(state,original_size=original,saved_size=preview.size,captured_at=image.info.get('captured_at'))
         path.with_suffix('.json').write_text(json.dumps(meta,ensure_ascii=False,indent=2),'utf-8')
-        for old in sorted(folder.glob('first-read-*.png'),key=lambda p:p.stat().st_mtime,reverse=True)[5:]:
+        for old in sorted(folder.glob('first-read-*.png'),key=lambda p:(p.stat().st_mtime_ns,p.name),reverse=True)[5:]:
             old.unlink(missing_ok=True);old.with_suffix('.json').unlink(missing_ok=True)
         return str(path)
     except (OSError,ValueError,TypeError):return '擷取圖保存失敗（原掃描流程繼續）'
