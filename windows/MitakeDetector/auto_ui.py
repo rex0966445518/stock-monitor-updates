@@ -548,10 +548,17 @@ class AutoUI:
         if not self.idle():return
         if __import__('os').name!='nt':
             messagebox.showinfo('Windows功能','自動輪切需要在Windows安裝版使用。');return
-        top=self.tk.Toplevel(self.root);top.title('三竹自動輪切設定');top.geometry('960x850')
+        top=self.tk.Toplevel(self.root);top.title('三竹自動輪切設定');top.geometry(f'{min(960,self.root.winfo_screenwidth()-40)}x{min(850,self.root.winfo_screenheight()-90)}')
+        buttons=self.ttk.Frame(top);buttons.pack(side='top',fill='x',padx=15,pady=8)
         tabs=self.ttk.Notebook(top);tabs.pack(fill='both',expand=True)
-        conditions=self.ttk.Frame(tabs);body=self.ttk.Frame(tabs)
-        tabs.add(conditions,text='篩選條件');tabs.add(body,text='輪切排行與定位')
+        conditions=self.ttk.Frame(tabs);rotation=self.ttk.Frame(tabs)
+        tabs.add(conditions,text='篩選條件');tabs.add(rotation,text='輪切排行與定位')
+        scroller=self.tk.Canvas(rotation,highlightthickness=0)
+        bar=self.ttk.Scrollbar(rotation,orient='vertical',command=scroller.yview)
+        scroller.configure(yscrollcommand=bar.set);bar.pack(side='right',fill='y');scroller.pack(fill='both',expand=True)
+        body=self.ttk.Frame(scroller);body_id=scroller.create_window((0,0),window=body,anchor='nw')
+        body.bind('<Configure>',lambda e:scroller.configure(scrollregion=scroller.bbox('all')))
+        scroller.bind('<Configure>',lambda e:scroller.itemconfigure(body_id,width=e.width))
         self.build_filter_settings(conditions)
         cfg=json.loads(json.dumps(self.config.get('auto_config') or {}))
         windows=[w for w in WindowsController.windows() if '漲停板探測器-雷允澤製' not in w[1] and '三竹盤中轉強偵測器' not in w[1] and '三竹自動輪切設定' not in w[1]]
@@ -615,13 +622,13 @@ class AutoUI:
                 except Exception as exc:
                     self.root.deiconify();top.deiconify();messagebox.showerror('框選失敗',str(exc))
             self.root.after(500,capture)
-        row=self.ttk.Frame(top);row.pack(fill='x',padx=15,pady=10)
+        row=self.ttk.Frame(body);row.pack(fill='x',padx=15,pady=10)
         for key,title in [('combo','框選排行下拉框'),('menu','框選展開選單'),('table','框選資料表格')]:
             self.ttk.Button(row,text=title,command=lambda k=key:region(k)).pack(side='left',padx=4)
             labels[key]=self.tk.StringVar(value='已設定' if cfg.get(key) else '未設定')
             self.ttk.Label(row,textvariable=labels[key]).pack(side='left',padx=3)
         self.ttk.Label(body,text='2. 勾選要輪切的排行。表格需沿用主畫面的六欄位置校正；各排行欄位須一致。').pack(anchor='w',padx=15,pady=5)
-        ranks=self.ttk.Frame(top);ranks.pack(fill='x',padx=15)
+        ranks=self.ttk.Frame(body);ranks.pack(fill='x',padx=15)
         enabled=set(cfg.get('rankings',['漲幅排行','預估量增','大單流入','大單匯集']))
         if enabled-set(RANKINGS):
             self.ttk.Label(body,text='舊設定含未列於錄影選單的排行：'+ '、'.join(sorted(enabled-set(RANKINGS)))+'；儲存後依目前勾選更新，單量排行請另行勾選。',wraplength=810).pack(anchor='w',padx=15)
@@ -631,7 +638,7 @@ class AutoUI:
             self.ttk.Checkbutton(ranks,text=name,variable=var).grid(row=i//5,column=i%5,sticky='w',padx=5,pady=2)
         numbered=self.ttk.Frame(tabs);tabs.add(numbered,text='排行編號（手動校正）')
         number_vars=self.build_menu_number_settings(numbered,cfg)
-        fields=self.ttk.Frame(top);fields.pack(fill='x',padx=15,pady=10)
+        fields=self.ttk.Frame(body);fields.pack(fill='x',padx=15,pady=10)
         delay=self.tk.StringVar(value=str(cfg.get('seconds',2)))
         pages=self.tk.StringVar(value=str(cfg.get('pages',1)))
         self.ttk.Label(fields,text='每個排行讀取後停留秒數 ≥2').pack(side='left');self.ttk.Entry(fields,textvariable=delay,width=6).pack(side='left',padx=5)
@@ -665,7 +672,6 @@ class AutoUI:
             except Exception as exc:messagebox.showerror('設定錯誤',str(exc));return False
         def test():
             if save():self.start_auto(test_only=True)
-        buttons=self.ttk.Frame(top);buttons.pack(fill='x',padx=15,pady=8)
         self.ttk.Button(buttons,text='儲存設定',command=save).pack(side='left')
         self.ttk.Button(buttons,text='測試輪切一次（不讀取行情）',command=test).pack(side='left',padx=10)
         def preview():
@@ -674,7 +680,7 @@ class AutoUI:
 
     def build_menu_number_settings(self,parent,cfg):
         from menu_numbers import validate_numbers
-        self.ttk.Label(parent,text='編號從選單最上方第1項開始，往下連續計數，捲動後不重新從1算。\n留空：優先使用已驗證編號，再嘗試預設順序。下方預設序號僅供參考，以「預覽選單編號」為準。\n找不到排行時，填入實際編號並儲存；選取後仍核對標題。',wraplength=860).pack(anchor='w',padx=15,pady=12)
+        self.ttk.Label(parent,text='編號從選單最上方第1項開始，往下連續計數，捲動後不重新從1算。\n欄位已填入預設編號，可直接修改；已儲存的自訂編號優先保留。\n找不到排行時，填入實際編號並儲存；選取後仍核對標題。',wraplength=860).pack(anchor='w',padx=15,pady=12)
         enabled=self.tk.BooleanVar(value=cfg.get('menu_numbering',True))
         def toggle():cfg['menu_numbering']=bool(enabled.get())
         self.ttk.Checkbutton(parent,text='啟用數字定位與選單旁編號（減少中文OCR）',variable=enabled,command=toggle).pack(anchor='w',padx=15)
@@ -688,7 +694,7 @@ class AutoUI:
             rows_per_group=(len(RANKINGS)+1)//2
             group=i//rows_per_group;row=i%rows_per_group
             self.ttk.Label(content,text=f'{name}（預設{i+1}）',width=26).grid(row=row,column=group*2,sticky='w',pady=5)
-            value=self.tk.StringVar(value=str(cfg.get('menu_numbers',{}).get(name,'')));variables[name]=value
+            value=self.tk.StringVar(value=str(cfg.get('menu_numbers',{}).get(name,i+1)));variables[name]=value
             self.ttk.Entry(content,textvariable=value,width=7).grid(row=row,column=group*2+1,padx=(0,22))
         return variables
 
