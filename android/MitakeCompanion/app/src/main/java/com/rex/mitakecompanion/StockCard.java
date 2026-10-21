@@ -11,7 +11,7 @@ import java.util.Locale;
 /** Reused across snapshots so charts do not reload every three-second poll. */
 public final class StockCard extends LinearLayout {
     private final MainActivity owner;private final String code;
-    private final TextView name,score,price,gain,state,details;
+    private final TextView name,score,price,gain,state,details,testCapture;
     private final IntradayRepository repository;private JSONObject row;
     StockCard(MainActivity a,String code,IntradayRepository repository){
         super(a);owner=a;this.code=code;this.repository=repository;setOrientation(VERTICAL);setPadding(a.dp(16),a.dp(16),a.dp(16),a.dp(14));
@@ -25,12 +25,13 @@ public final class StockCard extends LinearLayout {
             TextView note=a.text("點圖放大 · 紅漲綠跌 · K圖行情與掃描股價時間可能不同",9,MainActivity.MUTED,false);a.add(this,note,6);
         }else a.add(this,a.text("股號待確認，暫不顯示K圖",11,MainActivity.MUTED,false),6);
         setOnClickListener(v->capture());
-        a.add(this,a.text("點5/6、6/6卡片：自動收集六頁，再用Chrome查詢並帶回摘要",10,MainActivity.MUTED,false),6);
-        LinearLayout actions=new LinearLayout(a);actions.addView(a.button("開啟籌碼K線",()->ChipKLauncher.open(a,code)),new LinearLayout.LayoutParams(0,-2,1));actions.addView(a.button("複製股號",()->ChipKLauncher.copy(a,code)),new LinearLayout.LayoutParams(0,-2,1));a.add(this,actions,6);
+        a.add(this,a.text("點5/6、6/6卡片：自動收集六頁，再用Chrome的Google AI模式分析",10,MainActivity.MUTED,false),6);
+        LinearLayout actions=new LinearLayout(a);actions.addView(a.button("開啟籌碼K線",this::capture),new LinearLayout.LayoutParams(0,-2,1));actions.addView(a.button("複製股號",()->ChipKLauncher.copy(a,code)),new LinearLayout.LayoutParams(0,-2,1));a.add(this,actions,6);
+        testCapture=a.button("測試自動搜尋／六頁截圖",()->{try{owner.startActivity(com.rex.mitakecompanion.portfolio.CandidateCapture.testIntent(owner,code,row==null?"":row.optString("name")));}catch(Exception e){owner.message("無法開始截圖測試",e.getMessage());}});testCapture.setVisibility(View.GONE);a.add(this,testCapture,6);
         TextView reason=a.button("查看判定原因",()->{if(row!=null)a.message(code+" · 判定原因",row.optString("reason")+"\n觀察訊號不代表一定漲停。");});a.add(this,reason,0);
     }
     void update(JSONObject r,boolean fresh){
-        row=r;boolean demo=r.optBoolean("demo");int matched=r.optInt("matched"),accent=demo||matched<5?MainActivity.GOLD:fresh?(matched==6?MainActivity.RED:MainActivity.TEAL):MainActivity.MUTED;
+        row=r;boolean demo=r.optBoolean("demo");testCapture.setVisibility(demo?View.VISIBLE:View.GONE);int matched=r.optInt("matched"),accent=demo||matched<5?MainActivity.GOLD:fresh?(matched==6?MainActivity.RED:MainActivity.TEAL):MainActivity.MUTED;
         String stockName=r.optString("name");name.setText((demo?"測試｜":"")+(stockName.isEmpty()?"股名待補":stockName)+"  "+code);
         score.setText(matched+"/6");score.setTextColor(accent);
         double p=r.optDouble("price",Double.NaN),change=r.optDouble("gain",Double.NaN);

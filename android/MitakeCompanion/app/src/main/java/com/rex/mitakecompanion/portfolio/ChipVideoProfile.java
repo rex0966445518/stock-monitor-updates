@@ -13,7 +13,7 @@ final class ChipVideoProfile {
         int first=Integer.MAX_VALUE;for(String s:visible){int i=order(s);if(i>=0)first=Math.min(first,i);}return order(target)>=first;
     }
     static boolean stockTitle(String text){return Pattern.compile("^[\\p{IsHan}A-Za-z][\\p{IsHan}A-Za-z .・-]{0,16}\\s*[0-9]{4,6}[A-Za-z]?$",Pattern.UNICODE_CASE).matcher(text.trim()).matches();}
-    static boolean stockResult(String text,String code){String s=text.trim();return s.equals(code)||s.matches(Pattern.quote(code)+"\\s+[\\p{IsHan}A-Za-z][\\p{IsHan}A-Za-z .・-]{0,16}");}
+    static boolean stockResult(String text,String code){String s=text.trim();return s.equals(code)||s.matches(Pattern.quote(code)+"\\s*[\\p{IsHan}A-Za-z][\\p{IsHan}A-Za-z .・-]{0,16}");}
     static String[] options(String page){
         switch(page){case "K線":return new String[]{"日"};case "籌碼日報":return new String[]{"1"};case "法人":return new String[]{"三大法人"};case "主力":return new String[]{"主力買賣超"};case "大戶":return new String[]{"600","200","張數比例"};default:return new String[0];}
     }

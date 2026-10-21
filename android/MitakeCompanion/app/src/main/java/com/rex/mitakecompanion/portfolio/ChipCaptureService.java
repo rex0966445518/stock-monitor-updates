@@ -27,7 +27,8 @@ public final class ChipCaptureService extends AccessibilityService {
     private String runId="",code="",name="",lastUi="",requestedTab="";private int page,searchAttempts,token;
     private final Set<String> configured=new HashSet<>();
     private int tabScrolls;private boolean stockDetail,screenshotBusy;private long deadline,stableSince;private LinearLayout overlay;private TextView overlayText;
-    private PortfolioStore store;private GoogleSearchCapture webTask;
+    private PortfolioStore store;private GoogleSearchCapture webTask;private GoogleAiCapture aiTask;
+    private long lastOcr;private boolean clipboardPrepared;
     public static boolean available(){return instance!=null;}
     public static boolean running(){return active;}
     public static String currentRunId(){ChipCaptureService s=instance;return s==null?"":s.runId;}
@@ -39,7 +40,7 @@ public final class ChipCaptureService extends AccessibilityService {
         if(!PortfolioStore.code(code))throw new IllegalArgumentException("股號無效");
         JSONObject r=s.store.run(id);if(!r.getJSONObject("holding").getString("code").equals(code))throw new IllegalArgumentException("目標股號不符");
         Intent launch=s.getPackageManager().getLaunchIntentForPackage(PACKAGE);if(launch==null)throw new IllegalStateException("請先安裝並登入籌碼K線");
-        s.configured.clear();s.requestedTab="";s.webTask=null;s.runId=id;s.code=code;s.name=r.getJSONObject("holding").getString("name");s.page=0;s.searchAttempts=0;s.tabScrolls=0;s.stockDetail=false;s.token++;s.screenshotBusy=false;s.lastUi="";s.stableSince=SystemClock.elapsedRealtime();s.deadline=SystemClock.elapsedRealtime()+60000;
+        s.configured.clear();s.requestedTab="";s.lastOcr=0;s.clipboardPrepared=false;s.aiTask=null;s.webTask=null;s.runId=id;s.code=code;s.name=r.getJSONObject("holding").getString("name");s.page=0;s.searchAttempts=0;s.tabScrolls=0;s.stockDetail=false;s.token++;s.screenshotBusy=false;s.lastUi="";s.stableSince=SystemClock.elapsedRealtime();s.deadline=SystemClock.elapsedRealtime()+90000;
         s.showOverlay();active=true;s.store.status(id,"等待確認個股 "+code);try{s.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));s.handler.postDelayed(s.tick,1500);}catch(RuntimeException e){s.finish("無法開啟籌碼K線，未開始收集");throw new IllegalStateException("無法開啟籌碼K線");}
     }
     @Override protected void onServiceConnected(){super.onServiceConnected();store=PortfolioStore.get(this);instance=this;}
@@ -54,8 +55,9 @@ public final class ChipCaptureService extends AccessibilityService {
         try{((WindowManager)getSystemService(WINDOW_SERVICE)).addView(overlay,p);}catch(RuntimeException e){overlay=null;throw new IllegalStateException("無法顯示停止控制，未啟動收集");}
     }
     private void finish(String status){
-        boolean wasActive=active;active=false;webTask=null;token++;screenshotBusy=false;handler.removeCallbacks(tick);
+        boolean wasActive=active;active=false;webTask=null;aiTask=null;token++;screenshotBusy=false;handler.removeCallbacks(tick);
         if(overlay!=null){try{((WindowManager)getSystemService(WINDOW_SERVICE)).removeView(overlay);}catch(RuntimeException ignored){}overlay=null;}
+        if(wasActive)CaptureDocuments.close(this);
         if(wasActive&&!runId.isEmpty())try{store.status(runId,status);JSONObject run=store.run(runId);if(run.optBoolean("auto_web")&&!status.equals("收集服務已停止")&&!status.equals("輔助使用已中斷，未完成收集"))new GoogleSearchCapture(this,runId,code,name).returnToApp();}catch(Exception ignored){}
     }
     private final Runnable tick=new Runnable(){public void run(){
@@ -129,7 +131,7 @@ public final class ChipCaptureService extends AccessibilityService {
     public static void retryWeb(String id)throws Exception{
         ChipCaptureService s=instance;if(s==null)throw new IllegalStateException("請先開啟輔助使用服務");if(active)throw new IllegalStateException("已有收集或查詢任務");
         JSONObject r=s.store.run(id);if(r.getJSONObject("pages").length()!=6)throw new IllegalStateException("請先完成六頁收集或匯入");
-        s.runId=id;s.code=r.getJSONObject("holding").getString("code");s.name=r.getJSONObject("holding").optString("name");s.token++;s.showOverlay();active=true;
+        s.aiTask=null;s.webTask=null;s.runId=id;s.code=r.getJSONObject("holding").getString("code");s.name=r.getJSONObject("holding").optString("name");s.token++;s.showOverlay();active=true;
         s.page=5;s.store.status(id,"六頁打包中，接著開啟Chrome查詢");s.packAndStartWeb();
     }
     private void packAndStartWeb(){
@@ -139,11 +141,16 @@ public final class ChipCaptureService extends AccessibilityService {
         });
     }
     private void startWeb()throws Exception{
+        if("google_ai_images".equals(store.run(runId).optString("web_mode"))){
+            aiTask=new GoogleAiCapture(this,runId,code,name);webTask=null;deadline=SystemClock.elapsedRealtime()+300000;screenshotBusy=false;
+            store.status(runId,"六頁已完成，準備透過Chrome附加圖片到Google AI模式");overlayText.setText(code+" · Google AI模式\n僅附加本次六張，按停止可中止");startActivity(aiTask.launch());handler.removeCallbacks(tick);handler.postDelayed(tick,1500);return;
+        }
         webTask=new GoogleSearchCapture(this,runId,code,name);deadline=SystemClock.elapsedRealtime()+60000;screenshotBusy=false;
         store.status(runId,"六頁已打包，正在Chrome查詢公開資訊");overlayText.setText(code+" · Google搜尋中\n只帶回本次搜尋摘要，不上傳圖片");
         startActivity(webTask.launch());handler.removeCallbacks(tick);handler.postDelayed(tick,1500);
     }
     private void step()throws Exception{
+        if(aiTask!=null){GoogleAiCapture task=aiTask;if(SystemClock.elapsedRealtime()>deadline){task.fail("Google AI模式未完成：請確認登入、六張附件與送出狀態；可在APP貼回結果，不自動重送。圖片保留。");finish(store.run(runId).optString("status"));return;}if(task.step(getRootInActiveWindow()))finish(store.run(runId).optString("status"));return;}
         if(webTask!=null){GoogleSearchCapture task=webTask;
             if(SystemClock.elapsedRealtime()>deadline){task.fail("Google查詢逾時或無法核對搜尋頁，請返回APP重新查詢或貼上搜尋結果；六頁圖片仍保留。");String status=store.run(runId).optString("status");finish(status);return;}
             if(task.step(getRootInActiveWindow())){String status=store.run(runId).optString("status");finish(status);}return;
@@ -158,13 +165,13 @@ public final class ChipCaptureService extends AccessibilityService {
         // Require the code in the top part of an actual six-tab stock detail page.
         Rect screen=new Rect();root.getBoundsInScreen(screen);boolean header=false;
         for(AccessibilityNodeInfo n:list){Rect b=new Rect();n.getBoundsInScreen(b);if(b.top<screen.top+screen.height()*.30&&exactCode(label(n),code))header=true;}
-        if(!header){stockDetail=false;requestedTab="";search(list);return;}
+        if(!header){stockDetail=false;requestedTab="";search(list);recoverWithOcr(root);return;}
         if(tabs>=1)stockDetail=true;
-        if(!stockDetail){search(list);return;}
+        if(!stockDetail){search(list);recoverWithOcr(root);return;}
         String target=PortfolioStore.PAGES[page];AccessibilityNodeInfo tab=tab(list,target);
         overlayText.setText(code+" · "+(page+1)+"/6 "+target+"\n只存本機，尚未上傳");
         if(tab==null){
-            if(tabScrolls<8&&SystemClock.elapsedRealtime()-stableSince>1200&&revealTab(root,list,target)){tabScrolls++;stableSince=SystemClock.elapsedRealtime();}return;
+            if(tabScrolls<8&&SystemClock.elapsedRealtime()-stableSince>1200&&revealTab(root,list,target)){tabScrolls++;stableSince=SystemClock.elapsedRealtime();}else recoverWithOcr(root);return;
         }
         boolean ready=pageReady(root,target)||target.equals(requestedTab);
         String signature=code+"|"+target+"|"+ready;
@@ -172,7 +179,7 @@ public final class ChipCaptureService extends AccessibilityService {
         // Some CMoney tabs do not publish selected/checked. Verify the distinct body
         // instead; waiting for a selected flag alone previously stalled forever.
         if(!ready){if(SystemClock.elapsedRealtime()-stableSince>1500){if(tap(tab))requestedTab=target;stableSince=SystemClock.elapsedRealtime();}return;}
-        if(!configure(root,target))return;
+        if(!configure(root,target)){recoverWithOcr(root);return;}
         if(ui.contains("載入中")||ui.contains("加載中")||SystemClock.elapsedRealtime()-stableSince<2000)return;
         capture(root.getWindowId(),target);
     }
@@ -205,6 +212,50 @@ public final class ChipCaptureService extends AccessibilityService {
     }
     private boolean hasLabel(List<AccessibilityNodeInfo> list,String text){for(AccessibilityNodeInfo n:list)if(label(n).equals(text))return true;return false;}
 
+    private void acceptPage(File temp,String recognized,int generation,int windowId,String target)throws Exception{
+        if(!active||generation!=token)return;AccessibilityNodeInfo root=getRootInActiveWindow();
+        if(root==null||!PACKAGE.contentEquals(root.getPackageName())||root.getWindowId()!=windowId){finish("畫面已切換，未納入本次截圖");return;}
+        final String id=runId;File dest=store.imageFile(id,target);java.nio.file.Files.move(temp.toPath(),dest.toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        store.attach(id,target,dest,"輔助使用擷取；本機OCR核對股號與頁面",recognized);page++;requestedTab="";tabScrolls=0;screenshotBusy=false;
+        if(page>=PortfolioStore.PAGES.length){if(store.run(id).optBoolean("auto_web")){packAndStartWeb();return;}
+            boolean automatic=store.run(id).optBoolean("auto_analyze");finish(automatic?"六頁完成，準備依本次授權送至Gemini":"六頁收集完成，請返回股倉檢查");
+            if(automatic)worker.execute(()->{try{PortfolioAnalysis.analyze(ChipCaptureService.this,id,true);}catch(Exception ignored){}});return;}
+        deadline=SystemClock.elapsedRealtime()+60000;stableSince=SystemClock.elapsedRealtime();store.status(id,"已收集 "+page+"/6 頁");
+    }
+    private Rect windowBounds(AccessibilityNodeInfo root){Rect b=new Rect();for(AccessibilityWindowInfo w:getWindows())if(w.getId()==root.getWindowId()){w.getBoundsInScreen(b);break;}if(b.isEmpty())root.getBoundsInScreen(b);return b;}
+    private boolean gesture(Rect b,Rect viewport,int width,int height,boolean swipe,boolean forward,long duration){
+        float x1=viewport.left+(float)b.left/width*viewport.width(),x2=viewport.left+(float)b.right/width*viewport.width();float y=viewport.top+(float)b.centerY()/height*viewport.height();
+        Path path=new Path();if(swipe){path.moveTo(forward?x2:x1,y);path.lineTo(forward?x1:x2,y);}else path.moveTo((x1+x2)/2,y);
+        return dispatchGesture(new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription(path,0,duration)).build(),null,null);
+    }
+    @TargetApi(34) private void recoverWithOcr(AccessibilityNodeInfo root){
+        long now=SystemClock.elapsedRealtime();if(screenshotBusy||now-lastOcr<2800||now-stableSince<1800)return;
+        lastOcr=now;screenshotBusy=true;final int generation=token,windowId=root.getWindowId();final Rect viewport=windowBounds(root);final String target=PortfolioStore.PAGES[page],expected=code;
+        takeScreenshotOfWindow(windowId,getMainExecutor(),new TakeScreenshotCallback(){
+            public void onFailure(int error){if(generation==token){screenshotBusy=false;storeStatus("讀取畫面失敗（"+error+"）；請確認籌碼K線允許截圖");}}
+            public void onSuccess(ScreenshotResult result){HardwareBuffer buffer=result.getHardwareBuffer();Bitmap bitmap=null;
+                try{if(!active||generation!=token)return;Bitmap hardware=Bitmap.wrapHardwareBuffer(buffer,result.getColorSpace());if(hardware!=null){bitmap=hardware.copy(Bitmap.Config.ARGB_8888,false);hardware.recycle();}}
+                finally{buffer.close();}if(bitmap==null){screenshotBusy=false;return;}final Bitmap image=bitmap;
+                worker.execute(()->{File temp=new File(getCacheDir(),"guide-"+UUID.randomUUID()+".jpg");try{int width=image.getWidth(),height=image.getHeight();PortfolioImages.write(image,temp);Text text=PortfolioImages.recognize(temp);List<ChipScreenGuide.Line> lines=new ArrayList<>();
+                    for(Text.TextBlock block:text.getTextBlocks())for(Text.Line line:block.getLines()){if(line.getBoundingBox()!=null)lines.add(new ChipScreenGuide.Line(line.getText(),line.getBoundingBox()));for(Text.Element element:line.getElements())if(element.getBoundingBox()!=null)lines.add(new ChipScreenGuide.Line(element.getText(),element.getBoundingBox()));}
+                    ChipScreenGuide.Action action=ChipScreenGuide.plan(lines,width,height,expected,target);String recognized=text.getText();handler.post(()->{
+                        try{if(!active||generation!=token)return;screenshotBusy=false;AccessibilityNodeInfo current=getRootInActiveWindow();if(current==null||!PACKAGE.contentEquals(current.getPackageName())||current.getWindowId()!=windowId)return;
+                            screenshotBusy=false;if(action==null){storeStatus("正在辨識搜尋入口／"+target+"頁面，請保持畫面在前景");return;}
+                            if(action.kind.equals("capture")){acceptPage(temp,recognized,generation,windowId,target);return;}
+                            if(action.kind.equals("input")){
+                                android.content.ClipboardManager clipboard=getSystemService(android.content.ClipboardManager.class);clipboard.setPrimaryClip(ClipData.newPlainText("雷達目標股號",expected));
+                                boolean filled=false;for(AccessibilityNodeInfo n:nodes(current))if(n.isEditable()&&n.isEnabled()){Bundle args=new Bundle();args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,expected);if(n.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)){filled=true;break;}}
+                                if(!filled){gesture(action.box,viewport,width,height,false,false,clipboardPrepared?650:70);clipboardPrepared=true;}
+                                storeStatus("填入股號 "+expected+"（僅複製本次股號）");
+                            }else{gesture(action.box,viewport,width,height,action.kind.equals("swipe"),action.forward,action.kind.equals("swipe")?380:70);storeStatus(action.kind.equals("search")?"點擊左上角放大鏡":action.kind.equals("result")?"選取搜尋結果 "+expected:"切換 "+target);}
+                            stableSince=SystemClock.elapsedRealtime();
+                        }catch(Exception e){finish("畫面操作失敗，已保留截圖進度");}finally{temp.delete();}
+                    });
+                }catch(Exception e){handler.post(()->{if(generation==token){screenshotBusy=false;storeStatus("本機文字辨識未完成，正在重試");}});temp.delete();}finally{image.recycle();}});
+            }
+        });
+    }
+    private void storeStatus(String text){try{store.status(runId,text);if(overlayText!=null)overlayText.setText(code+" · "+(page+1)+"/6\n"+text);}catch(Exception ignored){}}
     @TargetApi(34) private void capture(int windowId,String target){
         final int generation=token;screenshotBusy=true;
         takeScreenshotOfWindow(windowId,getMainExecutor(),new TakeScreenshotCallback(){
@@ -227,16 +278,9 @@ public final class ChipCaptureService extends AccessibilityService {
                             if(error!=null){finish("截圖核對失敗，未納入圖片：請手動匯入「"+target+"」");return;}
                             // The saved bitmap already passed stock AND page OCR; recheck the foreground stock after OCR.
                             AccessibilityNodeInfo root=getRootInActiveWindow();if(root==null||!PACKAGE.contentEquals(root.getPackageName())){finish("畫面已切換，未納入本次截圖");return;}
-                            AccessibilityNodeInfo tab=tab(nodes(root),target);if(tab==null||!headerCode(root,expected)){finish("個股或頁面已切換，未納入本次截圖");return;}
-                            File dest=store.imageFile(id,target);java.nio.file.Files.move(temp.toPath(),dest.toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING);store.attach(id,target,dest,"輔助使用擷取；股號已由本機OCR核對",recognized);
-                            page++;requestedTab="";tabScrolls=0;screenshotBusy=false;if(page>=PortfolioStore.PAGES.length){
-                                if(store.run(id).optBoolean("auto_web")){
-                                    packAndStartWeb();return;
-                                }
-                                boolean automatic=store.run(id).optBoolean("auto_analyze");finish(automatic?"六頁完成，準備依本次授權送至Gemini":"六頁收集完成，請返回股倉檢查並送出分析");
-                                if(automatic)worker.execute(()->{try{PortfolioAnalysis.analyze(ChipCaptureService.this,id,true);}catch(Exception ignored){}});return;
-                            }
-                            deadline=SystemClock.elapsedRealtime()+45000;stableSince=SystemClock.elapsedRealtime();store.status(id,"已收集 "+page+"/6 頁");
+                            if(root.getWindowId()!=windowId){finish("個股或頁面已切換，未納入本次截圖");return;}
+                            acceptPage(temp,recognized,generation,windowId,target);
+
                         }catch(Exception e){finish("圖片儲存失敗，未完成收集");}finally{temp.delete();}
                     });
                 });

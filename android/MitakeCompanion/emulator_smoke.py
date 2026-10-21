@@ -126,6 +126,11 @@ screen('demo-card.png')
 tap('測試｜台積電  2330')
 assert '無法開啟籌碼K線' in dump()
 tap('取消')
+tap('測試自動搜尋／六頁截圖',seek='down')
+ui,_=find_ui('卡片截圖與網頁查詢',contains=True,seek='up')
+assert '手動截圖測試，非選股訊號' in ui and 'Google' in ui,ui
+assert 'API金鑰' in ui,ui
+tap('返回雷達')
 adb('shell','input','swipe','450','400','450','1600','500')
 tap('關閉測試卡片',seek='up')
 assert '顯示測試卡片' in dump()
@@ -176,7 +181,7 @@ with tempfile.TemporaryDirectory() as folder:
         (out/'alert-vibrator.txt').write_text(adb('shell','dumpsys','vibrator_manager'),'utf-8')
         (out/'alert-dispatch-log.txt').write_text(adb('logcat','-d','-s','MitakeAlert:I'),'utf-8')
         # Real candidate card routes into six-page setup, without inventing holdings
-        # or uploading before device permissions and the user's Gemini key exist.
+        # or uploading before device permissions and image-upload consent exist.
         ui,node=find_ui('測試候選',contains=True,seek='up')
         x1,y1,x2,y2=map(int,re.findall(r'\d+',node.attrib['bounds']))
         adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2));time.sleep(1)
@@ -230,7 +235,7 @@ with tempfile.TemporaryDirectory() as folder:
         assert '測試候選' in ui
         screen('companion-offline.png')
         (out/'ui.xml').write_text(ui,'utf-8')
-        (out/'integration.json').write_text(json.dumps(dict(ok=True,synthetic=True,upgrade_notifications=True,ranking_skip_notification=True,offline_retention=True,downgrade_retention=True,omission_and_restart_retention=True,candidate_capture_setup=True,auto_reconnect=True,manual_stop_and_one_tap_resume=True)),'utf-8')
+        (out/'integration.json').write_text(json.dumps(dict(ok=True,synthetic=True,upgrade_notifications=True,ranking_skip_notification=True,offline_retention=True,downgrade_retention=True,omission_and_restart_retention=True,candidate_capture_setup=True,manual_capture_test_setup=True,auto_reconnect=True,manual_stop_and_one_tap_resume=True)),'utf-8')
     except Exception:
         screen('companion-failure.png');(out/'logcat.txt').write_text(adb('logcat','-d','-t','300'),'utf-8');raise
     finally:stop.set();bridge.close()

@@ -183,4 +183,10 @@ public class CompanionTest {
         JSONObject target=new JSONObject(intent.getStringExtra("candidate"));assertEquals("2330",target.getString("code"));assertEquals(5,target.getInt("matched"));a.finish();
     }
 
+    private View buttonNamed(View v,String text){if(v instanceof android.widget.TextView&&text.contentEquals(((android.widget.TextView)v).getText()))return v;if(v instanceof android.view.ViewGroup)for(int i=0;i<((android.view.ViewGroup)v).getChildCount();i++){View found=buttonNamed(((android.view.ViewGroup)v).getChildAt(i),text);if(found!=null)return found;}return null;}
+    @Test public void realCardInnerButtonAlsoStartsAutomationInsteadOfOnlyLaunchingApp()throws Exception{
+        MainActivity a=Robolectric.buildActivity(MainActivity.class).setup().get();a.cards.removeAllViews();a.addCard(event(6,100,false).put("peak",6),false);
+        View button=buttonNamed(a.cards.getChildAt(0),"開啟籌碼K線");assertNotNull(button);assertTrue(button.performClick());Intent intent=org.robolectric.Shadows.shadowOf(a).getNextStartedActivity();assertEquals("com.rex.mitakecompanion.portfolio.CandidateCaptureActivity",intent.getComponent().getClassName());assertEquals("2330",new JSONObject(intent.getStringExtra("candidate")).getString("code"));a.finish();
+    }
+
 }

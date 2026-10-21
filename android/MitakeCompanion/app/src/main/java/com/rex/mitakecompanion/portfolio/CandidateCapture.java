@@ -17,7 +17,10 @@ public final class CandidateCapture {
     public static Intent intent(Context context,JSONObject row)throws Exception{
         target(row);return new Intent(context,CandidateCaptureActivity.class).putExtra(EXTRA,row.toString());
     }
+    public static Intent testIntent(Context context,String code,String name)throws Exception{
+        JSONObject row=new JSONObject().put("code",code).put("name",name).put("matched",5).put("total",6).put("capture_test",true);return intent(context,row);
+    }
     public static JSONObject newRun(PortfolioStore store,JSONObject row)throws Exception{
-        JSONObject run=store.newRun(target(row));run.put("candidate",new JSONObject(row.toString())).put("source","radar_candidate").put("auto_analyze",false).put("auto_web",true).put("status","準備收集六頁並查詢Google網頁");store.updateRun(run);return run;
+        JSONObject run=store.newRun(target(row));run.put("candidate",new JSONObject(row.toString())).put("source",row.optBoolean("capture_test")?"manual_capture_test":"radar_candidate").put("web_mode","google_ai_images").put("auto_analyze",false).put("auto_web",true).put("status","準備收集六頁並交由Google搜尋AI模式分析");store.updateRun(run);return run;
     }
 }
