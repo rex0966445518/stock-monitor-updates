@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.92'
+VERSION = '0.3.93'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -260,13 +260,20 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         style = ttk.Style()
         style.theme_use('clam')
         style.configure('.', background='#111a2e', foreground='#e8eefb', font=('Microsoft JhengHei', 10))
-        style.configure('TButton', padding=8)
+        style.configure('TButton', padding=(12,8),background='#20334a',borderwidth=0)
+        style.map('TButton',background=[('active','#2b4965'),('pressed','#126b78')])
+        style.configure('TNotebook',borderwidth=0)
+        style.configure('TNotebook.Tab',padding=(16,8))
+        style.map('TNotebook.Tab',background=[('selected','#203b54')],foreground=[('selected','#74e3d4')])
+        style.configure('Treeview.Heading',background='#20334a',foreground='#b9cfdf',padding=(8,8),relief='flat')
+        style.configure('Treeview',borderwidth=0)
+        style.configure('TLabelframe',borderwidth=1,relief='solid')
         style.configure('TEntry',fieldbackground='#f4f7fc',foreground='#101827',insertcolor='#101827',selectbackground='#245cbb',selectforeground='#ffffff',padding=5)
         style.map('TEntry',fieldbackground=[('disabled','#d9e1ed'),('readonly','#e6edf7')],foreground=[('disabled','#53637a'),('readonly','#101827')])
         style.configure('TCombobox',fieldbackground='#f4f7fc',foreground='#101827',selectbackground='#245cbb',selectforeground='#ffffff')
         style.map('TCombobox',fieldbackground=[('readonly','#e6edf7')],foreground=[('readonly','#101827')])
         style.configure('Treeview', background='#101a2c', fieldbackground='#101a2c', foreground='#e4eaf5', rowheight=30)
-        style.map('Treeview', background=[('selected', '#7b253c')])
+        style.map('Treeview', background=[('selected', '#245675')])
         self.build_market_header()
         tk.Label(root, text='觀察轉強候選股 · 持續複查量價與突破守穩 · 訊號不代表一定漲停', fg='#9caeca', bg='#0b1020').pack(anchor='w', padx=20)
         bar = ttk.Frame(root); bar.pack(fill='x', padx=15, pady=12)
@@ -324,7 +331,8 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         for i in range(8):
             self.tree.heading(f'history{i}',text=f'待掃描 {i+1}')
             self.tree.column(f'history{i}',width=100,anchor='e',stretch=False)
-        self.tree.configure(displaycolumns=cols[:4]+cols[9:]+cols[4:9])
+        self.tree.configure(displaycolumns=cols[:8]+cols[9:]+['state'])
+        self.tree.tag_configure('stripe',background='#152338')
         self.tree.tag_configure('hit', foreground='#fff1a8',background='#703026',font=('Microsoft JhengHei',10,'bold'))
         self.tree.tag_configure('near',foreground='#ffd36a',background='#222b3d')
         sb = ttk.Scrollbar(table_frame, orient='vertical', command=self.tree.yview)
@@ -344,6 +352,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         ttk.Label(foot, text='依畫面逐段觀察 · 保持三竹可見 · 不會自動下單').pack(side='right')
         from display_scale import DisplayScale,SCALES
         zoom=ttk.Frame(foot);zoom.pack(side='left',padx=12)
+        ttk.Button(zoom,text='展開全部欄位',command=lambda:self.display_scale.fit_tables(reset=True)).pack(side='left',padx=4)
         ttk.Label(zoom,text='介面大小').pack(side='left')
         self.display_scale_var=tk.StringVar(value='150%')
         self.display_scale_box=ttk.Combobox(zoom,textvariable=self.display_scale_var,values=[f'{n}%' for n in SCALES],state='readonly',width=6)
@@ -654,7 +663,8 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
             research=getattr(self,'research_reports',{}).get(q.code)
             if research:values[-1]+=f"｜盤後研究：{research['stage']}（收盤{research['asof']}／集保{research['weekly_asof']}）"
             values+=history.values(q.code)
-            self.tree.insert('','end',values=values,tags=('hit',) if match['hit'] else ('near',) if match['label']=='接近候選' else ())
+            self.tree.insert('','end',values=values,tags=('hit',) if match['hit'] else ('near',) if match['label']=='接近候選' else ('stripe',) if len(self.tree.get_children())%2 else ())
+        if hasattr(self,'display_scale'):self.display_scale.fit_tables()
         self.name_eligible_codes=eligible
         charts=getattr(self,"candidate_charts",None)
         if charts:charts.update(chart_rows)

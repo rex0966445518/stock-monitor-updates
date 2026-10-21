@@ -12,7 +12,7 @@ class DashboardUI:
         self.header=tk.Frame(self.root,bg='#0b1020');self.header.pack(fill='x',padx=20,pady=(15,3))
         self.header.columnconfigure(0,weight=4,uniform='header');self.header.columnconfigure(1,weight=4,uniform='header');self.header.columnconfigure(2,weight=2,uniform='header')
         from MitakeDetector import VERSION
-        self.product_title=tk.Label(self.header,text='漲停板探測器-雷允澤製 v'+VERSION,fg='#ff5879',bg='#0b1020',font=('Microsoft JhengHei',22,'bold'),justify='left',anchor='w')
+        self.product_title=tk.Label(self.header,text='漲停板探測器\n雷允澤製 · v'+VERSION,fg='#74e3d4',bg='#0b1020',font=('Microsoft JhengHei',16,'bold'),justify='left',anchor='w')
         self.product_title.grid(row=0,column=0,sticky='w')
         self.market_var=tk.StringVar(value='台股加權指數\n行情待取得')
         self.market_label=tk.Label(self.header,textvariable=self.market_var,bg='#0b1020',fg='#a6b8d2',font=('Microsoft JhengHei',12,'bold'),justify='right',anchor='e')
@@ -93,6 +93,7 @@ class DashboardUI:
             state=('待複查｜' if blocked or stale else '已轉弱｜' if weak else '')+f'曾{peak}/6 → '+(f'{matched}/{total}' if total else '待複查')
             item=self.today_tree.insert('','end',values=[code,name or '股名待補',dt.datetime.fromtimestamp(first,TAIPEI).strftime('%H:%M:%S'),f'{price:.2f}','—' if latest is None else f'{latest:.2f}',state],tags=('weak',) if weak or blocked or stale else ('near',))
             if code==selected:self.today_tree.selection_set(item)
+        if hasattr(self,'display_scale'):self.display_scale.fit_tables()
         self.today_frame.configure(text=f'今日曾達5/6｜{today[5:]}｜{len(rows)}檔（轉弱保留，雙擊明細）')
     def open_today_candidate(self,event=None):
         items=self.today_tree.selection()

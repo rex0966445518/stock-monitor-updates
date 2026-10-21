@@ -41,6 +41,32 @@ class DisplayScale:
         except (OSError,ValueError,AttributeError):value=default
         self.initial=value if type(value) is int and value in SCALES else default
 
+    def fit_tables(self,reset=False):
+        """Measure actual Tk glyphs, including bold candidate rows; never squeeze data."""
+        import tkinter.font as font
+        from tkinter import ttk
+        style=ttk.Style(self.root)
+        normal=font.Font(root=self.root,font=style.lookup('Treeview','font'))
+        bold=font.Font(root=self.root,font=style.lookup('Treeview.Heading','font'))
+        padding=round(26*self.percent/100)
+        for tree,bases in ((self.app.tree,self.widths),(getattr(self.app,'today_tree',None),self.daily_widths)):
+            if tree is None:continue
+            columns=list(tree['columns'])
+            widths={c:max(normal.measure(str(tree.heading(c,'text'))),bold.measure(str(tree.heading(c,'text'))))+padding for c in columns}
+            # Measure distinct values only; repeated prices and placeholders are common.
+            seen={c:set() for c in columns}
+            for item in tree.get_children():
+                for c,value in zip(columns,tree.item(item,'values')):
+                    text=str(value)
+                    if text in seen[c]:continue
+                    seen[c].add(text)
+                    widths[c]=max(widths[c],normal.measure(text)+padding,bold.measure(text)+padding)
+            for c in columns:
+                width=max(widths[c],round(bases.get(c,60)*self.percent/100))
+                if not reset:width=max(width,int(tree.column(c,'width')))
+                tree.column(c,width=width,minwidth=width,stretch=False)
+                if c not in ('code','name','match','state'):tree.column(c,anchor='e')
+
     def widgets(self,parent):
         for widget in parent.winfo_children():
             if widget.winfo_class()=='Toplevel':continue
@@ -87,6 +113,7 @@ class DisplayScale:
         for column,width in self.daily_widths.items():self.app.today_tree.column(column,width=round(width*factor),minwidth=round(min(width,60)*factor))
         self.app.log.configure(height=6 if value>100 else 9)
         self.percent=value
+        self.fit_tables(reset=True)
         if hasattr(self.app,'display_scale_var'):self.app.display_scale_var.set(f'{value}%')
         if resize and self.root.state() not in ('zoomed','iconic','withdrawn'):
             work=current_work_area(self.root);x,y,w,h=fit_window(window,work,value/old)

@@ -66,6 +66,21 @@ def run_smoke_test(report):
 
 
         root.update_idletasks()
+        # Real Windows glyph metrics must fit full Chinese content at every common scale.
+        import tkinter.font as tkfont
+        original_scale=app.display_scale.percent
+        for scale in (100,150,200):
+            app.display_scale.apply(scale,save=False,resize=False)
+            sample=app.tree.insert('','end',values=['2330','台灣積體電路製造','保留候選｜待盤尾檢核','1234.50'])
+            app.display_scale.fit_tables(reset=True)
+            measured=tkfont.Font(root=root,font=app.ttk.Style(root).lookup('Treeview.Heading','font'))
+            for column,text in [('name','台灣積體電路製造'),('match','保留候選｜待盤尾檢核')]:
+                assert app.tree.column(column,'width')>=measured.measure(text)+20
+                assert not app.tree.column(column,'stretch')
+            for column in app.today_tree['columns']:
+                assert app.today_tree.column(column,'width')>=measured.measure(app.today_tree.heading(column,'text'))+20
+            app.tree.delete(sample)
+        app.display_scale.apply(original_scale,save=False,resize=False)
         assert not hasattr(app,'status_label')
         assert app.log.cget('wrap')=='word'
         app.status.set('掃描已暫停\n原因：焦點離開三竹\n第22段，已讀39檔\n進度保留，按F8接續')
