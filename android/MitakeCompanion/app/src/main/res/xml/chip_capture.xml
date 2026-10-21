@@ -6,4 +6,5 @@
     android:packageNames="com.cmoney.chipk,com.android.chrome"
     android:canRetrieveWindowContent="true"
     android:canTakeScreenshot="true"
+    android:canPerformGestures="true"
     android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"/>

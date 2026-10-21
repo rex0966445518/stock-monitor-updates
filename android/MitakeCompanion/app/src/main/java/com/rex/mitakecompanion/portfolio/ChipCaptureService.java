@@ -1,6 +1,7 @@
 package com.rex.mitakecompanion.portfolio;
 
 import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.GestureDescription;
 import android.annotation.TargetApi;
 import android.content.*;
 import android.graphics.*;
@@ -16,14 +17,15 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.regex.Pattern;
 
-/** Deterministic, user-started collection. No coordinate taps and no background scanning. */
+/** Deterministic, user-started collection. Only verified stock windows and bounded tab-strip gestures; no background scanning. */
 public final class ChipCaptureService extends AccessibilityService {
     static final String PACKAGE="com.cmoney.chipk";
     private static volatile ChipCaptureService instance;
     private static volatile boolean active;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
-    private String runId="",code="",name="",lastUi="";private int page,searchAttempts,token;
+    private String runId="",code="",name="",lastUi="",requestedTab="";private int page,searchAttempts,token;
+    private final Set<String> configured=new HashSet<>();
     private int tabScrolls;private boolean stockDetail,screenshotBusy;private long deadline,stableSince;private LinearLayout overlay;private TextView overlayText;
     private PortfolioStore store;private GoogleSearchCapture webTask;
     public static boolean available(){return instance!=null;}
@@ -37,7 +39,7 @@ public final class ChipCaptureService extends AccessibilityService {
         if(!PortfolioStore.code(code))throw new IllegalArgumentException("股號無效");
         JSONObject r=s.store.run(id);if(!r.getJSONObject("holding").getString("code").equals(code))throw new IllegalArgumentException("目標股號不符");
         Intent launch=s.getPackageManager().getLaunchIntentForPackage(PACKAGE);if(launch==null)throw new IllegalStateException("請先安裝並登入籌碼K線");
-        s.webTask=null;s.runId=id;s.code=code;s.name=r.getJSONObject("holding").getString("name");s.page=0;s.searchAttempts=0;s.tabScrolls=0;s.stockDetail=false;s.token++;s.screenshotBusy=false;s.lastUi="";s.stableSince=SystemClock.elapsedRealtime();s.deadline=SystemClock.elapsedRealtime()+45000;
+        s.configured.clear();s.requestedTab="";s.webTask=null;s.runId=id;s.code=code;s.name=r.getJSONObject("holding").getString("name");s.page=0;s.searchAttempts=0;s.tabScrolls=0;s.stockDetail=false;s.token++;s.screenshotBusy=false;s.lastUi="";s.stableSince=SystemClock.elapsedRealtime();s.deadline=SystemClock.elapsedRealtime()+60000;
         s.showOverlay();active=true;s.store.status(id,"等待確認個股 "+code);try{s.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));s.handler.postDelayed(s.tick,1500);}catch(RuntimeException e){s.finish("無法開啟籌碼K線，未開始收集");throw new IllegalStateException("無法開啟籌碼K線");}
     }
     @Override protected void onServiceConnected(){super.onServiceConnected();store=PortfolioStore.get(this);instance=this;}
@@ -69,11 +71,56 @@ public final class ChipCaptureService extends AccessibilityService {
     private static AccessibilityNodeInfo clickable(AccessibilityNodeInfo n){for(int i=0;i<4&&n!=null;i++,n=n.getParent())if(n.isClickable()&&n.isEnabled())return n;return null;}
     private static boolean selected(AccessibilityNodeInfo n){for(int i=0;i<3&&n!=null;i++,n=n.getParent())if(n.isSelected()||n.isChecked())return true;return false;}
     static boolean pageLabel(String label,String page){return label.replaceAll("[\\s\u3000]+","").equals(page);}
-    private AccessibilityNodeInfo tab(List<AccessibilityNodeInfo> nodes,String target){
+    // The recording has a second set of 主力/法人/大戶 controls at the bottom.
+    // Only the horizontal navigation strip below the quote header is a page tab.
+    static boolean inTabStrip(Rect bounds,Rect screen){return bounds.width()>0&&bounds.height()>0&&bounds.centerY()>screen.top+screen.height()*.18&&bounds.centerY()<screen.top+screen.height()*.40&&bounds.height()<screen.height()*.09;}
+    private AccessibilityNodeInfo tab(List<AccessibilityNodeInfo> list,String target){
+        Rect screen=new Rect();if(list.isEmpty())return null;list.get(0).getBoundsInScreen(screen);
         AccessibilityNodeInfo found=null;
-        for(AccessibilityNodeInfo n:nodes){String t=label(n);if(!pageLabel(t,target))continue;AccessibilityNodeInfo click=clickable(n);if(click==null)continue;
-            if(found!=null&&!clickable(found).equals(click))return null;found=n;}
-        return found;
+        for(AccessibilityNodeInfo n:list){if(!pageLabel(label(n),target))continue;Rect b=new Rect();n.getBoundsInScreen(b);if(!inTabStrip(b,screen))continue;
+            if(found!=null)return null;found=n;
+        }return found;
+    }
+    private int navigationBottom(AccessibilityNodeInfo root){
+        Rect screen=new Rect();root.getBoundsInScreen(screen);int bottom=screen.top+(int)(screen.height()*.18);
+        for(AccessibilityNodeInfo n:nodes(root)){Rect b=new Rect();n.getBoundsInScreen(b);if(ChipVideoProfile.order(label(n))>=0&&inTabStrip(b,screen))bottom=Math.max(bottom,b.bottom);}return bottom;
+    }
+    private String bodyText(AccessibilityNodeInfo root){
+        Rect screen=new Rect();root.getBoundsInScreen(screen);int bottom=navigationBottom(root);
+        for(AccessibilityNodeInfo n:nodes(root)){Rect b=new Rect();n.getBoundsInScreen(b);if(ChipVideoProfile.order(label(n))>=0&&inTabStrip(b,screen))bottom=Math.max(bottom,b.bottom);}
+        StringBuilder out=new StringBuilder();for(AccessibilityNodeInfo n:nodes(root)){Rect b=new Rect();n.getBoundsInScreen(b);if(b.top>=bottom&&b.height()<screen.height()*.5)out.append(label(n)).append('\n');}return out.toString();
+    }
+    private boolean pageReady(AccessibilityNodeInfo root,String target){
+        AccessibilityNodeInfo t=tab(nodes(root),target);return t!=null&&(selected(t)||ChipVideoProfile.bodyMatches(bodyText(root),target));
+    }
+    private boolean tap(AccessibilityNodeInfo node){
+        AccessibilityNodeInfo c=clickable(node);if(c!=null&&c.performAction(AccessibilityNodeInfo.ACTION_CLICK))return true;
+        Rect b=new Rect();node.getBoundsInScreen(b);if(b.isEmpty())return false;
+        Path path=new Path();path.moveTo(b.centerX(),b.centerY());return dispatchGesture(new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription(path,0,70)).build(),null,null);
+    }
+    private boolean revealTab(AccessibilityNodeInfo root,List<AccessibilityNodeInfo> list,String target){
+        Rect screen=new Rect();root.getBoundsInScreen(screen);Rect strip=new Rect();List<String> visible=new ArrayList<>();
+        for(AccessibilityNodeInfo n:list){Rect b=new Rect();n.getBoundsInScreen(b);if(ChipVideoProfile.order(label(n))>=0&&inTabStrip(b,screen)){strip.union(b);visible.add(label(n));}}
+        if(visible.size()<2||strip.isEmpty())return false;
+        boolean forward=ChipVideoProfile.scrollForward(target,visible);
+        // Scroll only an actual tab container, never the chart or the broker list.
+        for(AccessibilityNodeInfo n:list)if(n.isScrollable()&&n.isEnabled()){
+            Rect b=new Rect();n.getBoundsInScreen(b);if(b.height()<screen.height()*.12&&b.contains(strip.centerX(),strip.centerY())&&n.performAction(forward?AccessibilityNodeInfo.ACTION_SCROLL_FORWARD:AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD))return true;
+        }
+        float left=Math.max(screen.left+screen.width()*.07,strip.left+8),right=Math.min(screen.left+screen.width()*.85,strip.right-8);
+        if(right-left<screen.width()*.20)return false;
+        Path path=new Path();path.moveTo(forward?right:left,strip.centerY());path.lineTo(forward?left:right,strip.centerY());
+        return dispatchGesture(new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription(path,0,380)).build(),null,null);
+    }
+    private boolean configure(AccessibilityNodeInfo root,String target){
+        for(String option:ChipVideoProfile.options(target)){
+            String key=target+"|"+option;if(configured.contains(key))continue;
+            Rect screen=new Rect();root.getBoundsInScreen(screen);AccessibilityNodeInfo found=null;
+            for(AccessibilityNodeInfo n:nodes(root)){Rect b=new Rect();n.getBoundsInScreen(b);if(pageLabel(label(n),option)&&b.top>=navigationBottom(root)&&b.bottom<screen.top+screen.height()*.55&&b.height()<screen.height()*.07){if(found==null){found=n;}else{Rect previous=new Rect();found.getBoundsInScreen(previous);if(b.top<previous.top)found=n;}}}
+            if(found==null)return false;
+            if(selected(found)){configured.add(key);continue;}
+            if(tap(found)){configured.add(key);stableSince=SystemClock.elapsedRealtime();}return false;
+        }return true;
     }
     private static boolean headerCode(AccessibilityNodeInfo root,String code){
         Rect screen=new Rect();root.getBoundsInScreen(screen);
@@ -111,43 +158,53 @@ public final class ChipCaptureService extends AccessibilityService {
         // Require the code in the top part of an actual six-tab stock detail page.
         Rect screen=new Rect();root.getBoundsInScreen(screen);boolean header=false;
         for(AccessibilityNodeInfo n:list){Rect b=new Rect();n.getBoundsInScreen(b);if(b.top<screen.top+screen.height()*.30&&exactCode(label(n),code))header=true;}
-        if(!header){stockDetail=false;search(list);return;}
-        if(tabs>=2)stockDetail=true;
+        if(!header){stockDetail=false;requestedTab="";search(list);return;}
+        if(tabs>=1)stockDetail=true;
         if(!stockDetail){search(list);return;}
         String target=PortfolioStore.PAGES[page];AccessibilityNodeInfo tab=tab(list,target);
         overlayText.setText(code+" · "+(page+1)+"/6 "+target+"\n只存本機，尚未上傳");
         if(tab==null){
-            if(tabScrolls<4&&SystemClock.elapsedRealtime()-stableSince>1200)for(AccessibilityNodeInfo n:list)if(n.isScrollable()&&n.isEnabled()){
-                Rect bounds=new Rect();n.getBoundsInScreen(bounds);int known=0;for(AccessibilityNodeInfo child:nodes(n))for(String p:PortfolioStore.PAGES)if(pageLabel(label(child),p))known++;
-                if(known>0&&bounds.top<screen.top+screen.height()*.45&&n.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)){tabScrolls++;stableSince=SystemClock.elapsedRealtime();return;}
-            }return;
+            if(tabScrolls<8&&SystemClock.elapsedRealtime()-stableSince>1200&&revealTab(root,list,target)){tabScrolls++;stableSince=SystemClock.elapsedRealtime();}return;
         }
-        String signature=code+"|"+target+"|"+selected(tab);
+        boolean ready=pageReady(root,target)||target.equals(requestedTab);
+        String signature=code+"|"+target+"|"+ready;
         if(!signature.equals(lastUi)){lastUi=signature;stableSince=SystemClock.elapsedRealtime();}
-        if(!selected(tab)){if(SystemClock.elapsedRealtime()-stableSince>1200){clickable(tab).performAction(AccessibilityNodeInfo.ACTION_CLICK);stableSince=SystemClock.elapsedRealtime();}return;}
-        if(ui.contains("載入中")||ui.contains("加載中")||SystemClock.elapsedRealtime()-stableSince<1800)return;
+        // Some CMoney tabs do not publish selected/checked. Verify the distinct body
+        // instead; waiting for a selected flag alone previously stalled forever.
+        if(!ready){if(SystemClock.elapsedRealtime()-stableSince>1500){if(tap(tab))requestedTab=target;stableSince=SystemClock.elapsedRealtime();}return;}
+        if(!configure(root,target))return;
+        if(ui.contains("載入中")||ui.contains("加載中")||SystemClock.elapsedRealtime()-stableSince<2000)return;
         capture(root.getWindowId(),target);
     }
     private void search(List<AccessibilityNodeInfo> list){
         overlayText.setText("確認個股 "+code+"\n若未自動搜尋，請在籌碼K線手動選股");
-        if(searchAttempts>=3)return;
+        if(searchAttempts>=8||list.isEmpty())return;
         // Only fill a single text input explicitly labelled as a stock search; never generic fields.
         List<AccessibilityNodeInfo> editors=new ArrayList<>();
         for(AccessibilityNodeInfo n:list)if(n.isEditable()&&n.isEnabled())editors.add(n);
         if(editors.size()==1){AccessibilityNodeInfo e=editors.get(0);String hint=label(e)+" "+(e.getHintText()==null?"":e.getHintText());
-            if(hint.contains("搜尋")||hint.contains("股號")||hint.contains("股票")){
+            if(hint.contains("搜尋")||hint.contains("股號")||hint.contains("股票")||hint.contains("代號")||(hasLabel(list,"搜尋")&&hasLabel(list,"個股"))){
                 if(!code.equals(e.getText()==null?"":e.getText().toString())){Bundle b=new Bundle();b.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,code);if(e.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,b)){searchAttempts++;stableSince=SystemClock.elapsedRealtime();return;}}
                 if(SystemClock.elapsedRealtime()-stableSince<1200)return;
-                AccessibilityNodeInfo result=null;
-                for(AccessibilityNodeInfo n:list)if(!n.isEditable()&&exactCode(label(n),code)){
-                    AccessibilityNodeInfo row=clickable(n);if(row==null)continue;String text=allText(row);if(text.isEmpty())continue;
+                int suggestions=Integer.MAX_VALUE;for(AccessibilityNodeInfo n:list)if(label(n).contains("大家都在搜")){Rect b=new Rect();n.getBoundsInScreen(b);suggestions=Math.min(suggestions,b.top);}
+                Rect editBounds=new Rect();e.getBoundsInScreen(editBounds);AccessibilityNodeInfo result=null;
+                for(AccessibilityNodeInfo n:list)if(!n.isEditable()&&ChipVideoProfile.stockResult(label(n),code)){
+                    Rect candidateBounds=new Rect();n.getBoundsInScreen(candidateBounds);if(candidateBounds.top<editBounds.bottom||candidateBounds.bottom>=suggestions)continue;
+                    AccessibilityNodeInfo row=clickable(n);if(row==null||allText(row).contains("大家都在搜"))continue;String text=allText(row);if(text.isEmpty())continue;
                     if(result!=null&&!result.equals(row))return;result=row;
                 }
-                if(result!=null){result.performAction(AccessibilityNodeInfo.ACTION_CLICK);searchAttempts++;stableSince=SystemClock.elapsedRealtime();}
+                if(result!=null){tap(result);searchAttempts++;stableSince=SystemClock.elapsedRealtime();}
             }return;
         }
-        if(editors.isEmpty())for(AccessibilityNodeInfo n:list)if(label(n).equals("搜尋")||label(n).equals("搜尋股票")){AccessibilityNodeInfo c=clickable(n);if(c!=null){c.performAction(AccessibilityNodeInfo.ACTION_CLICK);searchAttempts++;stableSince=SystemClock.elapsedRealtime();return;}}
+        if(editors.isEmpty()){
+            for(AccessibilityNodeInfo n:list)if(label(n).equals("搜尋")||label(n).equals("搜尋股票")){if(tap(n)){searchAttempts++;stableSince=SystemClock.elapsedRealtime();return;}}
+            // In the supplied video the stock name/code itself opens search.
+            Rect screen=new Rect();list.get(0).getBoundsInScreen(screen);
+            for(AccessibilityNodeInfo n:list){Rect b=new Rect();n.getBoundsInScreen(b);if(ChipVideoProfile.stockTitle(label(n))&&b.centerY()<screen.top+screen.height()*.14&&b.height()<screen.height()*.07&&b.centerX()>screen.left+screen.width()*.20&&b.centerX()<screen.left+screen.width()*.76){if(tap(n)){searchAttempts++;stableSince=SystemClock.elapsedRealtime();return;}}}
+        }
     }
+    private boolean hasLabel(List<AccessibilityNodeInfo> list,String text){for(AccessibilityNodeInfo n:list)if(label(n).equals(text))return true;return false;}
+
     @TargetApi(34) private void capture(int windowId,String target){
         final int generation=token;screenshotBusy=true;
         takeScreenshotOfWindow(windowId,getMainExecutor(),new TakeScreenshotCallback(){
@@ -161,24 +218,25 @@ public final class ChipCaptureService extends AccessibilityService {
                     try{PortfolioImages.write(bitmap,temp);Text text=PortfolioImages.recognize(temp);ocr=text.getText();
                         boolean stock=false;for(Text.TextBlock block:text.getTextBlocks())for(Text.Line line:block.getLines())if(line.getBoundingBox()!=null&&line.getBoundingBox().top<bitmap.getHeight()*.30&&exactCode(line.getText(),expected))stock=true;
                         if(!stock)throw new IOException("截圖股號未通過文字核對");
+                        if(!ChipVideoProfile.bodyMatches(ocr,target))throw new IOException("截圖頁面未通過文字核對");
                     }catch(Exception e){failure=e;}finally{bitmap.recycle();}
                     Exception error=failure;String recognized=ocr;
                     handler.post(()->{
                         try{
                             if(!active||generation!=token)return;
                             if(error!=null){finish("截圖核對失敗，未納入圖片：請手動匯入「"+target+"」");return;}
-                            // Recheck foreground and selected page after the asynchronous OCR.
+                            // The saved bitmap already passed stock AND page OCR; recheck the foreground stock after OCR.
                             AccessibilityNodeInfo root=getRootInActiveWindow();if(root==null||!PACKAGE.contentEquals(root.getPackageName())){finish("畫面已切換，未納入本次截圖");return;}
-                            AccessibilityNodeInfo tab=tab(nodes(root),target);if(tab==null||!selected(tab)||!headerCode(root,expected)){finish("個股或頁面已切換，未納入本次截圖");return;}
+                            AccessibilityNodeInfo tab=tab(nodes(root),target);if(tab==null||!headerCode(root,expected)){finish("個股或頁面已切換，未納入本次截圖");return;}
                             File dest=store.imageFile(id,target);java.nio.file.Files.move(temp.toPath(),dest.toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING);store.attach(id,target,dest,"輔助使用擷取；股號已由本機OCR核對",recognized);
-                            page++;tabScrolls=0;screenshotBusy=false;if(page>=PortfolioStore.PAGES.length){
+                            page++;requestedTab="";tabScrolls=0;screenshotBusy=false;if(page>=PortfolioStore.PAGES.length){
                                 if(store.run(id).optBoolean("auto_web")){
                                     packAndStartWeb();return;
                                 }
                                 boolean automatic=store.run(id).optBoolean("auto_analyze");finish(automatic?"六頁完成，準備依本次授權送至Gemini":"六頁收集完成，請返回股倉檢查並送出分析");
                                 if(automatic)worker.execute(()->{try{PortfolioAnalysis.analyze(ChipCaptureService.this,id,true);}catch(Exception ignored){}});return;
                             }
-                            deadline=SystemClock.elapsedRealtime()+30000;stableSince=SystemClock.elapsedRealtime();store.status(id,"已收集 "+page+"/6 頁");
+                            deadline=SystemClock.elapsedRealtime()+45000;stableSince=SystemClock.elapsedRealtime();store.status(id,"已收集 "+page+"/6 頁");
                         }catch(Exception e){finish("圖片儲存失敗，未完成收集");}finally{temp.delete();}
                     });
                 });
