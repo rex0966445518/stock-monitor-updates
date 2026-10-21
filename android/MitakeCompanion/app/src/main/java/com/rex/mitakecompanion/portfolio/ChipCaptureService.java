@@ -167,7 +167,7 @@ public final class ChipCaptureService extends AccessibilityService {
                             File dest=store.imageFile(id,target);java.nio.file.Files.move(temp.toPath(),dest.toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING);store.attach(id,target,dest,"輔助使用擷取；股號已由本機OCR核對",recognized);
                             page++;tabScrolls=0;screenshotBusy=false;if(page>=PortfolioStore.PAGES.length){
                                 if(store.run(id).optBoolean("auto_web")){
-                                    screenshotBusy=true;worker.execute(()->{Exception error=null;try{AnalysisBundle.create(store,id);}catch(Exception e){error=e;}final Exception problem=error;handler.post(()->{if(!active||generation!=token)return;if(problem!=null){finish("六頁打包失敗，未啟動Google查詢");return;}try{startWeb();}catch(Exception e){finish("無法開啟Chrome，六頁已保留，請返回APP重新查詢");}});});return;
+                                    screenshotBusy=true;worker.execute(()->{Exception packingFailure=null;try{AnalysisBundle.create(store,id);}catch(Exception e){packingFailure=e;}final Exception problem=packingFailure;handler.post(()->{if(!active||generation!=token)return;if(problem!=null){finish("六頁打包失敗，未啟動Google查詢");return;}try{startWeb();}catch(Exception e){finish("無法開啟Chrome，六頁已保留，請返回APP重新查詢");}});});return;
                                 }
                                 boolean automatic=store.run(id).optBoolean("auto_analyze");finish(automatic?"六頁完成，準備依本次授權送至Gemini":"六頁收集完成，請返回股倉檢查並送出分析");
                                 if(automatic)worker.execute(()->{try{PortfolioAnalysis.analyze(ChipCaptureService.this,id,true);}catch(Exception ignored){}});return;
