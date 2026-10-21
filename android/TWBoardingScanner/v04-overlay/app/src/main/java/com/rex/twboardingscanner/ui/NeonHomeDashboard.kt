@@ -125,7 +125,7 @@ internal class NeonHomeDashboard(
         val body=vertical().apply{
             setPadding(dp(10),dp(8),dp(10),dp(24))
         }
-        scroll.addView(body,ScrollView.LayoutParams(-1,-2))
+        scroll.addView(body,FrameLayout.LayoutParams(-1,-2))
         view.addView(scroll,FrameLayout.LayoutParams(-1,-1))
 
         val header=horizontal().apply{gravity=Gravity.CENTER_VERTICAL}
