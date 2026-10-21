@@ -51,7 +51,7 @@ final class GoogleAiCapture {
             }
             // If the user submitted manually, accept only an identifiable response for this exact marker.
             if(responseControls(text)){sent=true;sentAt=now;changed=now;status("偵測到本次AI回覆，圖片附加狀態未能自動核對");return false;}
-            if(stage==1){if(click(page,"新增檔案和圖片","Add files and images","新增圖片","Add images","新增檔案","Add files","新增附件","新增","Add","上傳圖片","Upload image")){stage=2;pickerPending=true;lastAction=now;status("請在選檔器選擇「"+CaptureDocuments.ROOT+"」中的六張圖片");}return false;}
+            if(stage==1){if(click(page,"新增檔案和圖片","新增圖片和檔案","Add files and images","新增圖片","Add images","新增檔案","Add files","新增附件","新增","Add","上傳圖片","Upload image")){stage=2;pickerPending=true;lastAction=now;status("請在選檔器選擇「"+CaptureDocuments.ROOT+"」中的六張圖片");}return false;}
             if(stage==2&&click(page,"上傳檔案","Upload files","選擇檔案","Choose files","上傳圖片","Upload image","從裝置上傳","Upload from device")){stage=3;pickerPending=true;lastAction=now;return false;}
             status("等待附加六張圖片；若未自動選取，請選「"+CaptureDocuments.ROOT+"」六張，再送出AI問題");return false;
         }
@@ -78,6 +78,6 @@ final class GoogleAiCapture {
             boolean ok=selected.isEmpty()?c.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK):c.performAction(AccessibilityNodeInfo.ACTION_CLICK);if(ok){selected.add(name);lastAction=now;}return false;}
         if(click(page,"開啟","選取","Open","Select")){pickerPending=false;stage=4;lastAction=now;status("已在選檔器選取六張，等待Google顯示附件名稱");}return false;
     }
-    private boolean save(String address)throws Exception{if(answer.isEmpty())return false;JSONObject result=new JSONObject().put("kind","google_ai_images").put("query",prompt).put("source_url","https://www.google.com/ai").put("queried",System.currentTimeMillis()).put("images_verified",uploadVerified).put("snippets",new JSONArray(answer)).put("note","Google搜尋AI模式的可見回覆；"+(uploadVerified?"送出前已核對六個附件檔名。":"未能核對六個附件檔名，請在Google核對圖片是否附上。")+"請核對股號、資料日期、來源與推論。並非經驗證的投資結論。");JSONObject run=store.run(id);run.put("web_result",result).put("status","已帶回Google AI模式可見回覆");store.updateRun(run);return true;}
+    private boolean save(String address)throws Exception{if(answer.isEmpty())return false;JSONObject result=new JSONObject().put("kind","google_ai_images").put("query",prompt).put("source_url",aiAddress(address)?(address.contains("://")?address:"https://"+address):"https://www.google.com/ai").put("queried",System.currentTimeMillis()).put("images_verified",uploadVerified).put("snippets",new JSONArray(answer)).put("note","Google搜尋AI模式的可見回覆；"+(uploadVerified?"送出前已核對六個附件檔名。":"未能核對六個附件檔名，請在Google核對圖片是否附上。")+"請核對股號、資料日期、來源與推論。並非經驗證的投資結論。");JSONObject run=store.run(id);run.put("web_result",result).put("status","已帶回Google AI模式可見回覆");store.updateRun(run);return true;}
     void fail(String message)throws Exception{store.status(id,message);}
 }

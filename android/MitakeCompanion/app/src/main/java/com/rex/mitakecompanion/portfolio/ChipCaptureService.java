@@ -235,6 +235,7 @@ public final class ChipCaptureService extends AccessibilityService {
             public void onFailure(int error){if(generation==token){screenshotBusy=false;storeStatus("讀取畫面失敗（"+error+"）；請確認籌碼K線允許截圖");}}
             public void onSuccess(ScreenshotResult result){HardwareBuffer buffer=result.getHardwareBuffer();Bitmap bitmap=null;
                 try{if(!active||generation!=token)return;Bitmap hardware=Bitmap.wrapHardwareBuffer(buffer,result.getColorSpace());if(hardware!=null){bitmap=hardware.copy(Bitmap.Config.ARGB_8888,false);hardware.recycle();}}
+                catch(RuntimeException e){if(generation==token)storeStatus("畫面讀取失敗，正在重試");}
                 finally{buffer.close();}if(bitmap==null){screenshotBusy=false;return;}final Bitmap image=bitmap;
                 worker.execute(()->{File temp=new File(getCacheDir(),"guide-"+UUID.randomUUID()+".jpg");try{int width=image.getWidth(),height=image.getHeight();PortfolioImages.write(image,temp);Text text=PortfolioImages.recognize(temp);List<ChipScreenGuide.Line> lines=new ArrayList<>();
                     for(Text.TextBlock block:text.getTextBlocks())for(Text.Line line:block.getLines()){if(line.getBoundingBox()!=null)lines.add(new ChipScreenGuide.Line(line.getText(),line.getBoundingBox()));for(Text.Element element:line.getElements())if(element.getBoundingBox()!=null)lines.add(new ChipScreenGuide.Line(element.getText(),element.getBoundingBox()));}
