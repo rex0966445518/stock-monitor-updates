@@ -536,3 +536,45 @@ class RankingSkipTests(unittest.TestCase):
         visited,scanned,delays,messages,checkpoint=self.run_worker(AutomationStopped('選單中找不到排行'),all_failed=True)
         self.assertEqual(visited,['開盤強勢','漲幅排行']);self.assertIn(30,delays)
         self.assertEqual(len([k for _,k,_ in messages if k=='ranking_skipped']),2)
+
+class SetupValidationTests(unittest.TestCase):
+    def test_retry_recaptures_short_band_and_restores_force(self):
+        from PIL import Image
+        from unittest.mock import Mock
+        ui=AutoUI();ui.events=queue.Queue();ui.force_fresh_ocr=False
+        c=Mock();c.image.side_effect=[(Image.new('RGB',(1200,1000)),{}),(Image.new('RGB',(1200,1000)),{})]
+        sizes=[]
+        def scan(image,bounds):
+            sizes.append((image.size,ui.force_fresh_ocr))
+            return ([],1) if len(sizes)==1 else (['valid'],0)
+        ui.scan_recovering_table=scan
+        self.assertEqual(ui.validate_setup_table(c,{'table':[0,0,1,1]}, {},1),['valid'])
+        self.assertEqual(sizes,[((1200,1000),False),((1200,384),True)])
+        self.assertFalse(ui.force_fresh_ocr);self.assertEqual(c.image.call_count,2)
+
+    def test_failure_bounded_and_includes_actual_diagnostic(self):
+        from PIL import Image
+        from unittest.mock import Mock
+        ui=AutoUI();ui.events=queue.Queue();ui.last_scan_diagnostic='股號文字3、成交價0'
+        ui.scan_recovering_table=Mock(return_value=([],3))
+        c=Mock();c.image.return_value=(Image.new('RGB',(900,700)),{})
+        with self.assertRaisesRegex(ValueError,'股號文字3、成交價0'):
+            ui.validate_setup_table(c,{'table':[0,0,1,1]}, {},1)
+        self.assertEqual(c.image.call_count,3)
+        self.assertFalse(ui.force_fresh_ocr)
+
+    def test_stop_propagates_without_retry(self):
+        from unittest.mock import Mock
+        ui=AutoUI();ui.events=queue.Queue();c=Mock();c.check.side_effect=AutomationStopped('F8')
+        with self.assertRaises(AutomationStopped):ui.validate_setup_table(c,{}, {},1)
+        c.image.assert_not_called()
+
+    def test_empty_fast_cells_fall_through_to_numeric_batch(self):
+        from PIL import Image
+        from unittest.mock import Mock
+        from fast_quotes import StockNames
+        ui=AutoUI();ui.numeric_priority=True;ui.stock_names=StockNames()
+        ui.get_ocr_learning=Mock(return_value=None)
+        with patch('numeric_cells.scan_cells',return_value=([],0,{})),patch('fast_quotes.scan_numeric_batch',return_value=(['valid'],0)) as fallback:
+            self.assertEqual(ui._scan_recovering_table(Image.new('RGB',(900,300)),{}),(['valid'],0))
+        fallback.assert_called_once()

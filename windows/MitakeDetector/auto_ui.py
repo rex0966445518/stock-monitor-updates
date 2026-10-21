@@ -188,11 +188,7 @@ class AutoUI:
                 # The popup is known to be open after detect_menu: select directly.
                 RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu'],ocr_retry=self.read_menu_ocr_retry,status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None)))).switch('漲幅排行',menu_open=True)
                 self.events.put((token,'auto_status','正在讀取股票資料並驗證欄位…'))
-                table,_=c.image(auto['table'])
-                quotes,bad=self.scan_recovering_table(table,discovered['column_bounds'])
-                c.check()
-                nav=(getattr(self,'fast_code_cache',None) or (None,None,[]))[2]
-                if not quotes and not (excluded_only(nav)):raise ValueError('自動定位完成，但尚未讀到完整股票資料，未儲存；請保持資料列可見。')
+                quotes=self.validate_setup_table(c,auto,discovered['column_bounds'],token)
                 cfg.update(auto_config=auto,column_bounds=discovered['column_bounds'],region=absolute_roi(auto['table'],c.rect()))
                 self.events.put((token,'auto_setup_done',(cfg,target,len(quotes),start_after)))
             except Exception as exc:self.events.put((token,'auto_end','自動設定未完成：'+str(exc)+'；可使用手動設定。'))
@@ -202,6 +198,29 @@ class AutoUI:
             if token!=self.generation:return
             self.worker_thread=threading.Thread(target=job,daemon=True);self.worker_thread.start()
         self.root.after(700,launch)
+
+    def validate_setup_table(self,c,auto,bounds,token):
+        """Retry fresh, small samples before rejecting a newly calibrated device."""
+        from ocr_recovery import fresh_ocr
+        diagnostics=[]
+        for attempt in range(3):
+            c.check()
+            if attempt:c.pause(.5)
+            image,_=c.image(auto['table'])
+            if attempt:
+                # Keep X coordinates/column bounds intact. Short bands avoid
+                # shrinking tall columns on a new screen or DPI configuration.
+                top=0 if attempt==1 else min(256,max(0,image.height-384))
+                image=image.crop((0,top,image.width,min(image.height,top+384)))
+                self.events.put((token,'auto_status',f'表頭定位已完成｜資料列驗證重試 {attempt}/2：重新擷取並分區辨識'))
+                with fresh_ocr(self):quotes,bad=self.scan_recovering_table(image,bounds)
+            else:quotes,bad=self.scan_recovering_table(image,bounds)
+            c.check()
+            nav=(getattr(self,'fast_code_cache',None) or (None,None,[]))[2]
+            if quotes or excluded_only(nav):return quotes
+            diagnostics.append(getattr(self,'last_scan_diagnostic','未辨識到完整資料列'))
+        raise ValueError('表頭定位已完成；資料列驗證3次仍未通過，尚未儲存新設定。'+
+                         diagnostics[-1]+'。請確認股號、成交價、漲幅、成交量、換手率均完整可見，且清單已有行情資料。')
 
     def remember_fast_rows(self,image,bounds,anchors,scores):
         import hashlib
@@ -355,7 +374,7 @@ class AutoUI:
                 anchors_ready=lambda anchors,scores:self.remember_fast_rows(image,bounds,anchors,scores),
                 recognize_cells=self.read_numeric_cells,
                 focus_cells=lambda cells,stage:self.focus_numeric_cells(image,bounds,cells,stage))
-            if cells is not None:
+            if cells is not None and (cells[0] or excluded_only((getattr(self,'fast_code_cache',None) or (None,None,[]))[2])):
                 quotes,bad,metrics=cells
                 self.last_scan_diagnostic=f'變動格快掃｜重用{metrics["reused"]}格｜重讀{metrics["changed"]}格｜有效{len(quotes)}列｜跳過長股號{metrics.get("skipped",0)}列'
                 self.cell_metrics=metrics
