@@ -227,3 +227,13 @@ class AutomaticRecoveryTests(unittest.TestCase):
         self.assertEqual({q.code for q in rows},{str(1000+i) for i in range(200)})
         self.assertLess(len(positions),22)
         self.assertTrue(any(delta<=-120*6 for delta in c.scrolls))
+
+class DeferredPageTests(unittest.TestCase):
+    def test_known_codes_with_pending_values_scroll_without_full_page_retries(self):
+        c=TableController();calls=[];repair=[];messages=[]
+        def read(n):calls.append(n);return [],6
+        rows,bad=scan_table(c,[0,0,1,1],read,lambda *args:messages.append(args[-1]),
+            read_anchors=lambda n:[str(1000+i) for i in range(n,n+6)],
+            recover_layout=lambda:repair.append(True),deferred_view=lambda:True)
+        self.assertEqual(rows,[]);self.assertGreater(bad,0);self.assertEqual(repair,[])
+        self.assertEqual(calls[:3],[0,3,6]);self.assertTrue(any('待補' in m for m in messages))

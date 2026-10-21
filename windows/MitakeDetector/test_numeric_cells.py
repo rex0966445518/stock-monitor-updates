@@ -74,3 +74,21 @@ class CellTests(unittest.TestCase):
         self.assertEqual(len(result[0]),2)
         self.assertTrue(all(len(batch)<=2 for batch in shown))
         self.assertEqual(shown[0],[('code',0,30),('code',30,60)])
+
+    def test_selective_review_keeps_unverified_values_out_of_quotes(self):
+        def recognize(images):
+            return [(self.values[im.getpixel((2,2))[0]-1],.8 if im.getpixel((2,2))[0] in (2,7) else .99) for im in images]
+        checked=[]
+        def review(code,values):checked.append(code);return code=='2330'
+        result=self.scan(self.image,OrderedDict(),recognize_cells=recognize,review_if=review,budget_ok=lambda:True)
+        self.assertEqual([q.code for q in result[0]],['2330'])
+        self.assertEqual(result[1],1);self.assertEqual(result[2]['failed'],{'price':2})
+        self.assertEqual(result[2]['reviewed'],1);self.assertEqual(result[2]['pending_codes'],['2317'])
+        self.assertEqual(self.calls,1)
+
+    def test_expired_budget_defers_even_candidate_without_second_ocr(self):
+        def recognize(images):
+            return [(self.values[im.getpixel((2,2))[0]-1],.8 if im.getpixel((2,2))[0] in (2,7) else .99) for im in images]
+        result=self.scan(self.image,OrderedDict(),recognize_cells=recognize,review_if=lambda *args:True,budget_ok=lambda:False)
+        self.assertEqual(result[0],[]);self.assertEqual(result[1],2)
+        self.assertEqual(result[2]['unresolved'],2);self.assertEqual(self.calls,0)

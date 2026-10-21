@@ -194,10 +194,10 @@ class CandidateRankingTests(unittest.TestCase):
         self.assertEqual(m['missing'],['換手率','量速','突破守穩'])
 
 class OptionalLearningRecoveryTests(unittest.TestCase):
-    def test_name_learning_failure_does_not_stop_next_scan_cycle(self):
+    def test_numeric_scan_never_starts_name_learning(self):
         cfg=dict(DEFAULT,auto_config=dict(title='TEST RANK',window_size=[800,600],combo=[0,0,.2,.1],menu=[0,.1,.3,.5],table=[0,.2,1,.8],rankings=['漲幅排行'],seconds=3,pages=1,full_table=True))
         app=UI(cfg);calls=[];app.deferred_names={'2330':None}
-        def fail_learning(check):raise RuntimeError('simulated optional name failure')
+        def fail_learning(check):self.fail('numeric scan must not read names')
         app.learn_deferred_names=fail_learning
         def scan(*args,**kwargs):
             calls.append(True)
@@ -208,9 +208,8 @@ class OptionalLearningRecoveryTests(unittest.TestCase):
             self.assertFalse(app.worker_thread.is_alive());self.assertEqual(len(calls),2)
             messages=[]
             while not app.events.empty():messages.append(app.events.get())
-            self.assertTrue(any(kind=='auto_status' and '股名補讀失敗' in value for _,kind,value in messages))
+            self.assertFalse(any(kind=='auto_status' and '股名補讀' in value for _,kind,value in messages))
             self.assertTrue(any(kind=='auto_phase' and '第2輪' in value for _,kind,value in messages))
-            self.assertTrue((Path(folder)/'scan-interruptions.jsonl').exists())
 
 class PriorDayStartTests(unittest.TestCase):
     def test_f8_start_archives_prior_day_and_enters_today_scan_without_dialog(self):
@@ -578,3 +577,21 @@ class SetupValidationTests(unittest.TestCase):
         with patch('numeric_cells.scan_cells',return_value=([],0,{})),patch('fast_quotes.scan_numeric_batch',return_value=(['valid'],0)) as fallback:
             self.assertEqual(ui._scan_recovering_table(Image.new('RGB',(900,300)),{}),(['valid'],0))
         fallback.assert_called_once()
+
+class SelectiveReviewTests(unittest.TestCase):
+    def test_four_conditions_required_and_missing_values_not_assumed_true(self):
+        ui=AutoUI();ui.page_review_config=dict(DEFAULT,use_turnover=True,min_turnover=1,use_accel=True,use_breakout=True,min_price=50,min_volume=1000,min_gain=3,max_gain=6)
+        values=dict(price='100',gain='4%',volume='2000',turnover='2%')
+        self.assertTrue(ui.review_candidate_cells('2330',values))
+        self.assertFalse(ui.review_candidate_cells('2330',dict(values,turnover='.1%')))
+        self.assertFalse(ui.review_candidate_cells('2330',dict(values,price=None)))
+
+    def test_failure_counts_and_pending_codes_are_audited(self):
+        ui=AutoUI();ui.cell_metrics=dict(failed={'price':2},reviewed=1,unresolved=1,pending_codes=['2330']);ui.last_scan_diagnostic='test'
+        with tempfile.TemporaryDirectory() as folder,patch('MitakeDetector.BASE',Path(folder)):
+            ui.record_cell_failures(9.5);ui.record_cell_failures(10.2)
+            import json
+            records=[json.loads(line) for line in (Path(folder)/'ocr-field-failures.jsonl').read_text().splitlines()]
+            self.assertEqual(records[-1]['cumulative'],{'price':4})
+            self.assertEqual(records[-1]['pending_codes'],['2330'])
+            self.assertEqual(ui.ocr_reviewed,2);self.assertTrue(ui.page_pending)

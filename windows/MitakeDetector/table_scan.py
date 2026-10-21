@@ -16,7 +16,7 @@ def scan_with_recovery(run,state,check,progress,pause,on_error=lambda exc:None,a
             pause(1)
 
 
-def scan_table(controller, roi, read, progress, max_segments=2000, observed=None,resume=None,checkpoint=None,limit_pages=None,scroll_cap=12,learn_scroll=None,read_anchors=None,recover_layout=None):
+def scan_table(controller, roi, read, progress, max_segments=2000, observed=None,resume=None,checkpoint=None,limit_pages=None,scroll_cap=12,learn_scroll=None,read_anchors=None,recover_layout=None,deferred_view=None):
     from autoswitch import absolute_roi
     table=absolute_roi(roi,controller.rect())
     center=(table['left']+table['width']//2,table['top']+table['height']//2)
@@ -45,6 +45,8 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
         codes=anchor_codes(image,quotes)
         from stock_codes import excluded_only
         return excluded_only(codes)
+    def pending_view(image,quotes):
+        return bool(deferred_view and deferred_view() and anchor_codes(image,quotes))
     for segment in range(first,min(max_segments,limit_pages) if limit_pages else max_segments):
         controller.check()
         progress(segment+1,len(collected),'擷取股票資料')
@@ -52,7 +54,7 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
         quotes,bad=read(image)
         # Repair geometry before repeating OCR against the same stale columns.
         excluded=excluded_view(image,quotes)
-        if not quotes and not excluded and recover_layout and layout_repairs<3:
+        if not quotes and not excluded and not pending_view(image,quotes) and recover_layout and layout_repairs<3:
             layout_repairs+=1
             progress(segment+1,len(collected),f'資料欄位失效，重新定位表頭 {layout_repairs}/3')
             controller.check()
@@ -64,11 +66,12 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
                 progress(segment+1,len(collected),'表頭已重新定位，重讀當前區段並核對重疊')
         # A blank OCR result cannot establish the bottom; retry fresh captures.
         for retry in range(2):
-            if quotes or excluded_view(image,quotes):break
+            if quotes or excluded_view(image,quotes) or pending_view(image,quotes):break
             progress(segment+1,len(collected),f'複查辨識 {retry+1}/2')
             controller.pause(.5);image,_=controller.image(roi);quotes,bad=read(image)
-        if not quotes and not excluded_view(image,quotes):raise RecoverableScanError('股票資料連續三次無法辨識，未宣稱已讀完整清單')
-        if not quotes:progress(segment+1,len(collected),'本段皆為超過四位股號，跳過並繼續捲動')
+        if not quotes and not excluded_view(image,quotes) and not pending_view(image,quotes):raise RecoverableScanError('股票資料連續三次無法辨識，未宣稱已讀完整清單')
+        if not quotes:
+            progress(segment+1,len(collected),'本段數字欄位待補，已記錄失敗並繼續捲動' if pending_view(image,quotes) else '本段皆為超過四位股號，跳過並繼續捲動')
         codes=anchor_codes(image,quotes)
         if saved and previous and not set(codes).intersection(previous):
             progress(segment+1,len(collected),'定位前次捲動位置，保留已讀資料')
@@ -119,7 +122,7 @@ def scan_table(controller, roi, read, progress, max_segments=2000, observed=None
                 for q in extra:
                     if q.code in collected and q.ts>collected[q.code].ts:collected[q.code]=q
         save(segment+1,codes)
-        progress(segment+1,len(collected),'本段已讀取，繼續複查')
+        progress(segment+1,len(collected),'本段含待補欄位，繼續捲動' if pending_view(image,quotes) else '本段已讀取，繼續複查')
         stable=stable+1 if codes==previous and not recovered else 0
         if stable>=3:
             progress(segment+1,len(collected),'複查三次未移動，推定清單末端')

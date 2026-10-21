@@ -24,7 +24,7 @@ def row_bands(image,bounds):
     edges=[0]+[round((a+b)/2) for a,b in zip(centers,centers[1:])]+[image.height]
     return list(zip(edges,edges[1:]))
 
-def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,anchors_ready=None,recognize_cells=None,focus_cells=None):
+def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,anchors_ready=None,recognize_cells=None,focus_cells=None,review_if=None,budget_ok=None):
     from PIL import Image
     from fast_quotes import scan_numeric_batch
     import re,unicodedata
@@ -37,7 +37,7 @@ def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,
         crop=image.crop((left,top,right,bottom)).convert('RGB')
         key=f'cell-v2:{field}:{crop.width}x{crop.height}:'+hashlib.sha256(crop.tobytes()).hexdigest()
         return dict(field=field,top=top,bottom=bottom,image=crop,key=key,tokens=None)
-    metrics=dict(reused=0,changed=0,total=0,skipped=0)
+    metrics=dict(reused=0,changed=0,total=0,skipped=0,failed={},reviewed=0,unresolved=0,pending_codes=[])
     def resolve(cells):
         if not cells:return
         known={} if force else memory.lookup_many([c['key'] for c in cells]) if memory and hasattr(memory,'lookup_many') else {}
@@ -57,6 +57,7 @@ def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,
                 for c,(text,confidence) in zip(missing,results):
                     text=unicodedata.normalize('NFKC',str(text)).replace(' ','').strip()
                     pattern=r'[0-9]{4,12}[A-Za-z]{0,2}' if c['field']=='code' else r'[+-]?[0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?%?'
+                    if re.fullmatch(pattern,text):c['tentative']=text
                     if confidence>=.93 and re.fullmatch(pattern,text):
                         w,h=c['image'].size
                         c['tokens']=[([[0,0],[w,0],[w,h],[0,h]],text,float(confidence))]
@@ -67,6 +68,19 @@ def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,
         while len(cache)>4096:cache.popitem(last=False)
         if memory and hasattr(memory,'record_many') and direct:
             memory.record_many([(c['key'],c['tokens'],0,'數字格直接辨識') for c in direct])
+        for c in missing:
+            metrics['failed'][c['field']]=metrics['failed'].get(c['field'],0)+1
+        if review_if and cells[0]['field']!='code':
+            selected=set()
+            for code_cell in accepted:
+                group=[c for c in cells if c['top']==code_cell['top']]
+                values={c['field']:(c['tokens'][0][1] if c['tokens'] and len(c['tokens'])==1 else c.get('tentative')) for c in group}
+                code=code_cell['tokens'][0][1]
+                if review_if(code,values):selected.add(code_cell['top'])
+            deferred=[c for c in missing if c['top'] not in selected or (budget_ok and not budget_ok())]
+            for c in deferred:c['tokens']=[]
+            missing=[c for c in missing if c not in deferred]
+        metrics['reviewed']+=len(missing)
         x=12;y=12;line=0;width=max(768,max(c['image'].width for c in cells)+24)
         for c in missing:
             crop=c['image']
@@ -104,12 +118,32 @@ def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,
         else:metrics['skipped']+=1
     numeric=[make(field,c['top'],c['bottom']) for c in accepted for field in fields[1:]]
     resolve(numeric)
+    if review_if:
+        valid_tops=set()
+        for code_cell in accepted:
+            group=[c for c in numeric if c['top']==code_cell['top']]
+            failures=[c for c in group if not c['tokens'] or len(c['tokens'])!=1 or c['tokens'][0][2]<.93]
+            if failures:
+                metrics['unresolved']+=len(failures);metrics['pending_codes'].append(code_cell['tokens'][0][1])
+            else:valid_tops.add(code_cell['top'])
+        if anchors_ready:
+            anchors_ready([(c['tokens'][0][1],(c['top']+c['bottom'])/2,c['bottom']-c['top']) for c in code_cells],
+                          {c['tokens'][0][1]:c['tokens'][0][2] for c in code_cells})
     by_field={f:[] for f in fields}
     for c in code_cells+numeric:
+        if review_if and c['top'] not in valid_tops:continue
         by_field[c['field']].extend(([[x,y+c['top']] for x,y in box],text,confidence) for box,text,confidence in c['tokens'])
     class Columns:
         def lookup(self,key):return by_field[key.split(':')[1]]
         def record(self,*args):pass
-    rows,bad=scan_numeric_batch(image,bounds,lambda im:[],names,memory=Columns(),defer_names=True,anchors_ready=anchors_ready)
+    rows,bad=scan_numeric_batch(image,bounds,lambda im:[],names,memory=Columns(),defer_names=True,anchors_ready=None if review_if else anchors_ready)
+    if review_if:
+        found={q.code for q in rows}
+        for c in accepted:
+            code=c['tokens'][0][1]
+            if code not in found and code not in metrics['pending_codes']:
+                metrics['pending_codes'].append(code);metrics['unresolved']+=1
+                metrics['failed']['row_validation']=metrics['failed'].get('row_validation',0)+1
+        return rows,len(metrics['pending_codes']),metrics
     if bad or len(rows)!=len(accepted):return None
     return rows,bad,metrics

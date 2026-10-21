@@ -163,6 +163,7 @@ class AutoUI:
         from task_progress import SCAN_GOAL,goal_conditions
         self.say(SCAN_GOAL+'｜'+goal_conditions(cfg))
         self.numeric_priority=True
+        self.page_review_config=None
         self.auto_active=True
         stop=self.stop_event
         # Keep the main dashboard visible on the user's secondary display.
@@ -227,6 +228,7 @@ class AutoUI:
         self.fast_row_source=(image,bounds,anchors,scores)
         self.fast_code_cache=(hashlib.sha256(image.tobytes()).digest(),bounds,
                               [code for code,y,h in anchors if scores.get(code,0)>=.90])
+        if getattr(self,'numeric_priority',False):return
         pending=getattr(self,'deferred_names',{})
         tried=getattr(self,'deferred_name_tried',{})
         names=getattr(self,'stock_names',None)
@@ -305,6 +307,7 @@ class AutoUI:
         import re,unicodedata
         tokens=[]
         for i,field in enumerate(FIELDS):
+            if field=='name' and getattr(self,'numeric_priority',False):continue
             if field=='name':
                 names=getattr(self,'stock_names',None)
                 codes=[(box,str(text),score) for box,text,score in tokens if sum(p[0] for p in box)/4==50 and re.fullmatch(r'[0-9]{4}',str(text))]
@@ -338,7 +341,7 @@ class AutoUI:
             result=self._scan_recovering_table(image,bounds)
             names=getattr(self,'stock_names',None)
             unknown=[q.code for q in result[0] if names and q.code not in names.names]
-            if unknown:
+            if unknown and not getattr(self,'numeric_priority',False):
                 def check():
                     if getattr(self,'stop_event',None) and self.stop_event.is_set():
                         from autoswitch import AutomationStopped
@@ -373,8 +376,10 @@ class AutoUI:
                 force=getattr(self,'force_fresh_ocr',False),focus=lambda fields,stage:self.focus_columns(image,bounds,fields,stage),
                 anchors_ready=lambda anchors,scores:self.remember_fast_rows(image,bounds,anchors,scores),
                 recognize_cells=self.read_numeric_cells,
-                focus_cells=lambda cells,stage:self.focus_numeric_cells(image,bounds,cells,stage))
-            if cells is not None and (cells[0] or excluded_only((getattr(self,'fast_code_cache',None) or (None,None,[]))[2])):
+                focus_cells=lambda cells,stage:self.focus_numeric_cells(image,bounds,cells,stage),
+                review_if=self.review_candidate_cells if getattr(self,'page_review_config',None) else None,
+                budget_ok=lambda:time.monotonic()<getattr(self,'page_deadline',float('inf')))
+            if cells is not None and (getattr(self,'page_review_config',None) or cells[0] or excluded_only((getattr(self,'fast_code_cache',None) or (None,None,[]))[2])):
                 quotes,bad,metrics=cells
                 self.last_scan_diagnostic=f'變動格快掃｜重用{metrics["reused"]}格｜重讀{metrics["changed"]}格｜有效{len(quotes)}列｜跳過長股號{metrics.get("skipped",0)}列'
                 self.cell_metrics=metrics
@@ -809,6 +814,36 @@ class AutoUI:
         self.ttk.Button(top,text='清除辨識快取（保留日誌）',command=clear).pack(anchor='w',padx=15,pady=(0,10))
         return top
 
+    def review_candidate_cells(self,code,values):
+        from MitakeDetector import number,Quote
+        from candidate_ranking import assess
+        cfg=self.page_review_config
+        # Previously verified >=4 candidates retain priority even if a new cell
+        # is missing. This does not promote or write provisional quote values.
+        for row in list(getattr(self,'display_rows',[]) or []):
+            if row[0].code==code and assess(row,cfg)['count']>=4:return True
+        try:
+            q=Quote(code,'',number(values['price']),number(values['gain']),number(values['volume']),number(values['turnover']),time.time())
+        except (KeyError,TypeError,ValueError):return False
+        return assess((q,None,'等待觀測突破守穩',False),cfg)['count']>=4
+
+    def record_cell_failures(self,elapsed):
+        metrics=getattr(self,'cell_metrics',None)
+        if not metrics:return
+        from collections import Counter
+        counts=getattr(self,'ocr_failed_fields',Counter())
+        counts.update(metrics.get('failed',{}));self.ocr_failed_fields=counts
+        self.ocr_reviewed=getattr(self,'ocr_reviewed',0)+metrics.get('reviewed',0)
+        self.ocr_unresolved=getattr(self,'ocr_unresolved',0)+metrics.get('unresolved',0)
+        self.page_pending=bool(metrics.get('pending_codes'))
+        self.last_scan_diagnostic+=f'｜失敗欄位累計{sum(counts.values())}次｜複查{self.ocr_reviewed}格｜未解決{self.ocr_unresolved}格｜本頁待補{len(metrics.get("pending_codes",[]))}檔｜目標10秒'
+        if metrics.get('failed') or self.page_pending:
+            from MitakeDetector import BASE
+            record=dict(time=dt.datetime.now().isoformat(),elapsed=round(elapsed,2),failed=metrics.get('failed',{}),reviewed=metrics.get('reviewed',0),unresolved=metrics.get('unresolved',0),pending_codes=metrics.get('pending_codes',[]),cumulative=dict(counts))
+            try:
+                with (BASE/'ocr-field-failures.jsonl').open('a',encoding='utf-8') as f:f.write(json.dumps(record,ensure_ascii=False)+'\n')
+            except OSError as exc:self.last_scan_diagnostic+='｜失敗紀錄寫入失敗：'+str(exc)
+
     def read_numeric_cells(self,images,on_batch=None):
         """Recognize already segmented one-line cells without text detection."""
         from rapidocr_onnxruntime import RapidOCR
@@ -1034,6 +1069,7 @@ class AutoUI:
                                 self.events.put((token,'auto_progress',(detail,rank_index,len(auto['rankings']))))
                             def read(image):
                                 started=time.monotonic();self.events.put((token,'auto_rate',dict(start=started)))
+                                self.page_deadline=started+10;self.page_review_config=cfg;self.cell_metrics=None;self.page_pending=False
                                 from ocr_recovery import fresh_ocr
                                 from contextlib import nullcontext
                                 try:
@@ -1044,10 +1080,11 @@ class AutoUI:
                                     diagnostic.update(ocr_error_type=type(error).__name__,ocr_error=str(error))
                                     self.last_scan_diagnostic=f'{type(error).__name__}: {error}'
                                     result=([],1)
+                                self.record_cell_failures(time.monotonic()-started)
                                 self.events.put((token,'auto_rate',dict(elapsed=time.monotonic()-started,count=len(result[0]))))
                                 anchors=(getattr(self,'fast_code_cache',None) or (None,None,[]))[2]
                                 excluded_page=not result[0] and auto.get('discovered') and excluded_only(anchors)
-                                if result[0] or excluded_page:failed_reads[0]=0
+                                if result[0] or excluded_page or self.page_pending:failed_reads[0]=0
                                 else:
                                     failed_reads[0]+=1
                                     detail=getattr(self,'last_scan_diagnostic','未取得完整數字列')
@@ -1103,6 +1140,7 @@ class AutoUI:
                             def prioritized_recheck(quotes,current):
                                 # Recheck only a few near-target rows before leaving
                                 # this viewport. Full-market traversal is never skipped.
+                                if getattr(self,'page_review_config',None):return []
                                 if not auto.get('discovered') or priority_budget[0]<=0:return []
                                 source=getattr(self,'fast_row_source',None)
                                 if not source:return []
@@ -1152,7 +1190,8 @@ class AutoUI:
                                                        limit_pages=None if auto.get('full_table',True) else auto['pages'],scroll_cap=experience.scroll_cap(name),
                                                        learn_scroll=lambda cap,recovered:experience.record_scroll(name,cap,recovered),
                                                        read_anchors=(lambda image:self.read_stock_anchors(image,cfg['column_bounds'])) if auto.get('discovered') else None,
-                                                       recover_layout=recover_layout)
+                                                       recover_layout=recover_layout,
+                                                       deferred_view=lambda:bool(getattr(self,'page_pending',False)))
                             def recovered_error(error):
                                 from scan_diagnostics import record_interruption
                                 from MitakeDetector import VERSION
@@ -1175,7 +1214,7 @@ class AutoUI:
                             mode='自適應加速' if experience.enabled else '固定間隔'
                             diagnostic.update(stage='排行讀取完成，等待下次切換',count=len(collected))
                             wait_until=time.monotonic()+dwell
-                            if getattr(self,'deferred_names',None):
+                            if getattr(self,'deferred_names',None) and not getattr(self,'numeric_priority',False):
                                 self.events.put((token,'auto_status','數字篩選已完成：利用輪切等待時間批次補讀股名（最多32檔，已記錄股號不重讀）'))
                                 try:self.learn_deferred_names(c.check)
                                 except AutomationStopped:raise
