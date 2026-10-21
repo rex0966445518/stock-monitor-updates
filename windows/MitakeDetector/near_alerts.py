@@ -3,11 +3,12 @@ from candidate_ranking import assess
 
 
 def near_alerts(rows,cfg,last):
+    if not cfg.get("voice_enabled",True):return []
     result=[]
     for row in rows:
         q,ratio,reason,hit=row
         match=assess(row,cfg)
-        if hit or match['total']!=6 or match['count']!=5 or match['label'] in ('待複查','已轉弱','待盤尾檢核'):continue
+        if hit or match['total']!=6 or match['count']!=5 or match['label'] in ('待複查','已轉弱'):continue
         if q.ts-last.get(q.code,-1e20)<cfg['cooldown']:continue
         last[q.code]=q.ts
         result.append(q)

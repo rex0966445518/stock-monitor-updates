@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.78'
+VERSION = '0.3.79'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -729,7 +729,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         for q, reason in alerts:
             self.say(f'【{self.mode}】{q.code} {q.name} {q.price:.2f} / {q.gain:+.2f}%：{reason}')
         from near_alerts import near_alerts,voice_text
-        near=near_alerts(rows,cfg,self.near_alert_times)
+        near=near_alerts(rows,cfg,self.near_alert_times) if persist else []
         if persist:
             try:
                 from signal_review import SignalReview

@@ -322,6 +322,16 @@ class LiveConditionOrderTests(unittest.TestCase):
 
 
 class NearVoiceTests(unittest.TestCase):
+    def test_muted_does_not_consume_cooldown(self):
+        from near_alerts import near_alerts
+        cfg=dict(DEFAULT,use_turnover=True,min_turnover=3,use_accel=True,use_breakout=True,voice_enabled=False)
+        q=Quote('2330','台積電',100,3,2000,4,100)
+        rows=[(q,2,'等待觀測突破守穩',False)];last={}
+        self.assertEqual(near_alerts(rows,cfg,last),[])
+        self.assertEqual(last,{})
+        cfg['voice_enabled']=True
+        self.assertEqual(near_alerts(rows,cfg,last),[q])
+
     def test_five_conditions_only_and_shared_cooldown(self):
         from near_alerts import near_alerts,voice_text
         cfg=dict(DEFAULT,use_turnover=True,min_turnover=3,use_accel=True,use_breakout=True)

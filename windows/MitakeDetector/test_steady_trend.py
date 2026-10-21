@@ -61,14 +61,17 @@ class SteadyTests(unittest.TestCase):
         self.assertTrue(t.evaluate('1234',CFG,END)['passed'])
         t.reset_day(END+86400);t.merge(tracker())
         self.assertFalse(t.points)
-    def test_gate_blocks_desktop_near_and_mobile(self):
+    def test_gate_allows_observation_voice_but_blocks_mobile_hit(self):
         from near_alerts import near_alerts
         from candidate_ranking import assess
         cfg=dict(CFG,use_breakout=True,use_accel=True,use_turnover=True,min_turnover=1,accel=1)
         rows,_=gate_rows([(quote(230),2,'等待觀測突破守穩',False)],cfg,SteadyTracker(),END)
         self.assertEqual(assess(rows[0],cfg)['count'],5)
         self.assertEqual(assess(rows[0],cfg)['label'],'待盤尾檢核')
-        self.assertFalse(near_alerts(rows,cfg,{}))
+        observed=near_alerts(rows,cfg,{})
+        self.assertEqual(len(observed),1)
+        from near_alerts import voice_text
+        self.assertIn("盤尾緩漲檢核",voice_text(observed,rows,cfg))
         from mobile_bridge import MobileBridge
         with tempfile.TemporaryDirectory() as d:
             bridge=MobileBridge(Path(d)/'pair.json');bridge.publish(rows,cfg,'test')
