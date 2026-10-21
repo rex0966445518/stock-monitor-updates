@@ -48,6 +48,8 @@ import java.util.concurrent.atomic.AtomicLong
 
 class MainActivity: AppCompatActivity() {
     private lateinit var b: ActivityMainBinding
+    private var dashboard: NeonHomeDashboard? = null
+    private var returnHomeChip: TextView? = null
     private lateinit var paperLoop: com.rex.twboardingscanner.paper.PaperLoop
     private lateinit var trendHoldCheck:CheckBox
     private lateinit var posterExport: PosterExport
@@ -253,9 +255,132 @@ class MainActivity: AppCompatActivity() {
         b.progressCount.text="設定好條件後，請按「開始掃描」"
         b.etaText.text="待命中"
         b.scanProgress.isIndeterminate=false
+        installHomeDashboard()
         render()
         syncBackgroundScan()
         restoreLatestScan()
+    }
+
+
+    /** A separate, scrollable home preserves the original scanner views and event handlers. */
+    private fun installHomeDashboard() {
+        val home=NeonHomeDashboard(
+            activity=this,
+            openScanner={ openScannerView() },
+            openBacktest={ b.backtestButton.performClick() },
+            openRobot={ b.robotButton.performClick() },
+            openUpdate={ b.updateButton.performClick() },
+            openCondition={ type-> showRadarConditions(type) },
+            openDiagnostics={
+                coordinator.submit {
+                    val diagnostic=runCatching {
+                        com.rex.twboardingscanner.data.BackgroundScanDiagnostics.collect(applicationContext)
+                    }.getOrElse { "背景工作診斷失敗：" + it.message }
+                    runOnUiThread {
+                        if (!isFinishing && !isDestroyed) {
+                            val clip=android.content.ClipData.newPlainText("背景掃描診斷",diagnostic)
+                            getSystemService(android.content.ClipboardManager::class.java).setPrimaryClip(clip)
+                            Toast.makeText(this,"掃描診斷已複製，可貼上分析",Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            },
+            openPermissions={
+                startActivity(android.content.Intent(
+                    android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    android.net.Uri.parse("package:" + packageName)))
+            },
+            openCsv={ startActivity(android.content.Intent(this,TradeSideVolumeImportActivity::class.java)) },
+            openChangelog={ b.changelogButton.performClick() }
+        )
+        val host=findViewById<android.widget.FrameLayout>(android.R.id.content)
+        val chip=TextView(this).apply {
+            text="⌂ 返回首頁"
+            textSize=12f
+            setTextColor(Color.WHITE)
+            gravity=android.view.Gravity.CENTER
+            setPadding(dp(7),dp(4),dp(7),dp(4))
+            background=android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(106,27,180),Color.rgb(32,10,76))
+            ).apply {
+                cornerRadius=dp(12).toFloat()
+                setStroke(dp(1),Color.rgb(211,93,255))
+            }
+            isFocusable=true
+            contentDescription="返回首頁儀表板"
+            setOnClickListener { showDashboard() }
+        }
+        host.addView(chip,android.widget.FrameLayout.LayoutParams(dp(94),dp(37),
+            android.view.Gravity.TOP or android.view.Gravity.END).apply {
+            topMargin=dp(10);marginEnd=dp(12)
+        })
+        host.addView(home.view,android.widget.FrameLayout.LayoutParams(-1,-1))
+        dashboard=home
+        returnHomeChip=chip
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(home.view) { target,insets->
+            val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            target.setPadding(bars.left,dp(5)+bars.top,bars.right,bars.bottom)
+            insets
+        }
+        onBackPressedDispatcher.addCallback(this,object:androidx.activity.OnBackPressedCallback(true){
+            override fun handleOnBackPressed(){
+                if(dashboard?.view?.visibility==android.view.View.GONE)showDashboard()
+                else {
+                    isEnabled=false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
+        showDashboard()
+    }
+
+    private fun openScannerView(){
+        b.root.visibility=android.view.View.VISIBLE
+        dashboard?.view?.visibility=android.view.View.GONE
+        returnHomeChip?.visibility=android.view.View.VISIBLE
+    }
+
+    private fun showDashboard(){
+        b.root.visibility=android.view.View.GONE
+        returnHomeChip?.visibility=android.view.View.GONE
+        dashboard?.view?.visibility=android.view.View.VISIBLE
+        window.statusBarColor=Color.rgb(20,5,39)
+        window.navigationBarColor=Color.rgb(10,3,28)
+        updateHomeDashboard()
+    }
+
+    private fun updateHomeDashboard(){
+        val home=dashboard?:return
+        val state=runCatching{BackgroundScanState.read(this)}.getOrNull()
+        val visible=admitted().filter{it.light!=SignalLight.NONE}
+        val distinct=visible.distinctBy{it.code}
+        // A 5/6 count has meaning only when exactly six checks were selected.
+        // Do not fabricate six-check scores for strategies with a different rule count.
+        val sixChecks=visible.filter{row->row.checks.count{it.selected}==6}.distinctBy{it.code}
+        val five=if(sixChecks.isEmpty())null else sixChecks.count{row->
+            row.checks.count{it.selected&&it.state==com.rex.twboardingscanner.domain.CheckState.PASS}==5
+        }
+        val six=if(sixChecks.isEmpty())null else sixChecks.count{row->
+            row.checks.count{it.selected&&it.state==com.rex.twboardingscanner.domain.CheckState.PASS}==6
+        }
+        val hasData=(state?.id?.isNotBlank()==true)||(latestScanAt>0)
+        val title=when{
+            state?.active==true->"系統掃描中"
+            state?.state=="ERROR"->"掃描異常，請查看診斷"
+            state?.state=="DONE"->"掃描完成 · 結果已保存"
+            else->"系統待命中"
+        }
+        home.update(NeonHomeDashboard.Stats(
+            scanned=state?.takeIf{it.id.isNotBlank()}?.done,
+            matched=if(hasData)distinct.size else null,
+            fiveOfSix=if(hasData)five else null,
+            sixOfSix=if(hasData)six else null,
+            timestampMs=latestScanAt.takeIf{it>0L}?:state?.heartbeatAt?.takeIf{it>0L},
+            title=title,
+            details=state?.message?.takeIf{it.isNotBlank()}?:b.progressTitle.text.toString(),
+            running=state?.active==true
+        ))
     }
 
     private fun restoreLatestScan(){
@@ -458,6 +583,7 @@ class MainActivity: AppCompatActivity() {
             s.state=="ERROR"->"背景執行失敗 · 複製診斷檢查原因"
             else->"背景掃描已停止"
         }
+        updateHomeDashboard()
         if(s.state=="DONE"&&s.folderId.isNotBlank()&&backgroundLoadedFolder!=s.folderId&&!backgroundResultLoading){
             backgroundLoadedFolder=s.folderId
             backgroundResultLoading=true
@@ -874,6 +1000,7 @@ class MainActivity: AppCompatActivity() {
             latestScanAt>0->"目前沒有符合已勾選條件的股票；可在條件與工具中調整。"
             else->"請開始掃描；預設「全部入選」顯示 ABCDEFG 所有通過的股票。"
         }
+        updateHomeDashboard()
     }
 
     private fun loadScanSettings() {
