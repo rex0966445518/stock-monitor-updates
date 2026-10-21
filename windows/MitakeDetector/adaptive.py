@@ -13,6 +13,7 @@ class Experience:
             try:
                 value=json.loads(self.path.read_text(encoding='utf-8'))
                 if value.get('version')==1 and value.get('layout')==self.key and isinstance(value.get('ranks'),dict):
+                    if value.get('menu_wheel') in (40,120):self.data['menu_wheel']=value['menu_wheel']
                     if isinstance(value.get('menu_geometry'),dict):self.data['menu_geometry']=value['menu_geometry']
                     # Whitelist and clamp every value: a broken profile cannot drive inputs.
                     for name,entry in value['ranks'].items():

@@ -422,7 +422,9 @@ class RankingSwitcher:
             if point is not None:
                 self.c.click((menu['left']+point[0],menu['top']+point[1]));self.menu_is_open=False
                 if self.verify_label(name):
-                    self.numbers.verified(name);return
+                    self.numbers.verified(name)
+                    self.status(f'數字定位完成：{name} 第 {self.numbers.number(name)} 項｜標題核對通過')
+                    return
                 self.numbers.rejected(name)
                 self.status(f'第 {self.numbers.number(name)} 項不是「{name}」，本次停用該編號並改用文字搜尋；請核對手動編號')
                 return self._switch(name,False,False)

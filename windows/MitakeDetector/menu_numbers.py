@@ -181,16 +181,27 @@ class NumberNavigator:
                 s.status('暫時無法確認編號列距，改用文字搜尋；可在排行編號設定中校正')
                 return None
         geometry=self.geometry;unchanged=0
-        for page in range(60):
+        step=40 if s.experience and s.experience.data.get("menu_wheel")==40 else 120
+        center=(region["left"]+region["width"]//2,region["top"]+region["height"]//2)
+        for page in range(180):
             self.display(region,geometry.rows());point=geometry.point(number)
-            if point:return point
+            if point:
+                s.status(f'數字定位命中：{name} 第 {number} 項｜可見 {geometry.offset+1}～{geometry.offset+len(geometry.centers)} 項')
+                if s.experience and s.experience.enabled and s.experience.data.get('menu_wheel')!=step:
+                    s.experience.data['menu_wheel']=step;s.experience.save()
+                return point
             old=geometry.offset
-            s.c.scroll((region['left']+region['width']//2,region['top']+region['height']//2),-120)
+            s.c.scroll(center,-step)
             s.c.pause(.12);image,_=s.c.image(s.menu)
             if not geometry.update(image):
+                if step==120:
+                    s.status('選單捲動跨度過大｜回到首項，改小步數字定位，不重新 OCR')
+                    s.c.scroll(center,120*60);s.c.pause(.2);image,_=s.c.image(s.menu)
+                    if geometry.reset(image):
+                        step=40;unchanged=0;continue
                 s.status('捲動編號無法可靠銜接，退回文字核對');self.show(None);return None
             unchanged=unchanged+1 if geometry.offset==old else 0
-            if unchanged>=2:return None
+            if unchanged>=(4 if step==40 else 2):return None
         return None
     def observe(self,image,page):
         self.text_tracking=False;self.native_rows=[]

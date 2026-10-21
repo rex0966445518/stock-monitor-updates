@@ -228,3 +228,37 @@ class PersistentMenuTests(unittest.TestCase):
         self.assertIsNone(PixelMenu.restore(Image.new('RGB',(230,192)),saved))
         for bad in [dict(saved,pitch=0),dict(saved,pitch=float('nan')),dict(saved,initial=['bad']),dict(saved,first=-1)]:
             self.assertIsNone(PixelMenu.restore(menu(),bad))
+
+class BuyStrengthTests(unittest.TestCase):
+    def test_all_44_numbers_and_buy_strength_35_without_repeated_menu_ocr(self):
+        from autoswitch import RANKINGS
+        class C(FakeController):
+            def __init__(self):super().__init__();self.offset=0
+            def image(self,roi):return menu(self.offset,count=10),dict(left=100,top=100,width=220,height=240)
+            def scroll(self,point,delta):self.offset=0 if delta>0 else min(34,self.offset+3)
+        c=C();ocr=Mock(return_value=tokens());s=RankingSwitcher(c,ocr,[0,0,.2,.1],[0,.1,.3,.5],numbering=True)
+        region=dict(left=100,top=100,width=220,height=240)
+        for number,name in enumerate(RANKINGS,1):
+            c.offset=0;point=s.numbers.locate(name,region)
+            self.assertIsNotNone(point,name)
+            self.assertEqual(c.offset+int(point[1]//24)+1,number,name)
+        self.assertEqual(RANKINGS[34],'買氣強大');self.assertEqual(ocr.call_count,1)
+
+    def test_large_wheel_jump_retries_numeric_small_steps_and_remembers(self):
+        from adaptive import Experience
+        class C(FakeController):
+            def __init__(self):super().__init__();self.offset=0;self.steps=[]
+            def image(self,roi):return menu(self.offset,count=10),dict(left=100,top=100,width=220,height=240)
+            def scroll(self,point,delta):
+                self.steps.append(delta)
+                self.offset=0 if delta>0 else min(34,self.offset+(9 if delta==-120 else 3))
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'e.json';region=dict(left=100,top=100,width=220,height=240)
+            for restart in (False,True):
+                c=C();ocr=Mock(side_effect=AssertionError('Repeated OCR')) if restart else Mock(return_value=tokens())
+                s=RankingSwitcher(c,ocr,[0,0,.2,.1],[0,.1,.3,.5],experience=Experience(path,[1]),numbering=True)
+                point=s.numbers.locate('買氣強大',region)
+                self.assertEqual(c.offset+int(point[1]//24)+1,35)
+                self.assertIn(-40,c.steps)
+                self.assertEqual(ocr.call_count,0 if restart else 1)
+                if restart:self.assertNotIn(-120,c.steps)
