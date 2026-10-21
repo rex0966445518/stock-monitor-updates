@@ -39,9 +39,12 @@ class OCRLearning:
         result={}
         try:
             with closing(sqlite3.connect(self.path)) as db:
-                for key in dict.fromkeys(keys):
-                    row=db.execute('SELECT tokens FROM cache WHERE key=?',(PROFILE+key,)).fetchone()
-                    if row:result[key]=clean_tokens(json.loads(row[0]))
+                keys=list(dict.fromkeys(keys))
+                for start in range(0,len(keys),400):
+                    batch=[PROFILE+key for key in keys[start:start+400]]
+                    placeholders=','.join('?' for _ in batch)
+                    for key,payload in db.execute('SELECT key,tokens FROM cache WHERE key IN ('+placeholders+')',batch):
+                        result[key[len(PROFILE):]]=clean_tokens(json.loads(payload))
         except (sqlite3.Error,OSError,ValueError,TypeError) as exc:self.last_error=str(exc)
         return result
 
@@ -59,7 +62,7 @@ class OCRLearning:
                     db.execute('INSERT INTO reads(ts,key,source,elapsed,count,tokens) VALUES (?,?,?,?,?,?)',(now.isoformat(),PROFILE+key,source,max(0,float(elapsed)),len(tokens),payload))
                     if cacheable:db.execute('INSERT OR REPLACE INTO cache VALUES (?,?,?)',(PROFILE+key,payload,now.timestamp()))
                 db.execute('DELETE FROM reads WHERE id NOT IN (SELECT id FROM reads ORDER BY id DESC LIMIT 2000)')
-                db.execute('DELETE FROM cache WHERE key NOT IN (SELECT key FROM cache ORDER BY touched DESC LIMIT 512)')
+                db.execute('DELETE FROM cache WHERE key NOT IN (SELECT key FROM cache ORDER BY touched DESC LIMIT 4096)')
                 db.commit()
         except (sqlite3.Error,OSError,ValueError,TypeError) as exc:self.last_error=str(exc)
 

@@ -92,3 +92,21 @@ class CellTests(unittest.TestCase):
         result=self.scan(self.image,OrderedDict(),recognize_cells=recognize,review_if=lambda *args:True,budget_ok=lambda:False)
         self.assertEqual(result[0],[]);self.assertEqual(result[1],2)
         self.assertEqual(result[2]['unresolved'],2);self.assertEqual(self.calls,0)
+
+    def test_long_low_confidence_code_never_reads_or_reviews_its_numbers(self):
+        self.values[0]='123456'
+        seen=[]
+        def recognize(images):
+            seen.extend(im.getpixel((2,2))[0] for im in images)
+            return [(self.values[im.getpixel((2,2))[0]-1],.6 if im.getpixel((2,2))[0]==1 else .99) for im in images]
+        result=self.scan(self.image,OrderedDict(),recognize_cells=recognize,review_if=lambda *args:True)
+        self.assertEqual([q.code for q in result[0]],['2317'])
+        self.assertEqual(result[2]['skipped'],1)
+        self.assertFalse(set(seen)&{2,3,4,5});self.assertEqual(self.calls,0)
+
+    def test_uncertain_identity_deferred_without_whole_page_fallback(self):
+        def recognize(images):
+            return [(self.values[im.getpixel((2,2))[0]-1],.6 if im.getpixel((2,2))[0]==1 else .99) for im in images]
+        result=self.scan(self.image,OrderedDict(),recognize_cells=recognize,review_if=lambda *args:True)
+        self.assertEqual([q.code for q in result[0]],['2317'])
+        self.assertEqual(result[2]['unknown_codes'],1);self.assertEqual(self.calls,0)

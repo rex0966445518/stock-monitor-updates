@@ -579,10 +579,14 @@ class SetupValidationTests(unittest.TestCase):
         fallback.assert_called_once()
 
 class SelectiveReviewTests(unittest.TestCase):
-    def test_four_conditions_required_and_missing_values_not_assumed_true(self):
+    def test_five_conditions_required_and_missing_values_not_assumed_true(self):
         ui=AutoUI();ui.page_review_config=dict(DEFAULT,use_turnover=True,min_turnover=1,use_accel=True,use_breakout=True,min_price=50,min_volume=1000,min_gain=3,max_gain=6)
         values=dict(price='100',gain='4%',volume='2000',turnover='2%')
+        self.assertFalse(ui.review_candidate_cells('2330',values))
+        from unittest.mock import Mock
+        ui.volume_rates=Mock();ui.volume_rates.result.return_value.value=10
         self.assertTrue(ui.review_candidate_cells('2330',values))
+        self.assertFalse(ui.review_candidate_cells('123456',values))
         self.assertFalse(ui.review_candidate_cells('2330',dict(values,turnover='.1%')))
         self.assertFalse(ui.review_candidate_cells('2330',dict(values,price=None)))
 

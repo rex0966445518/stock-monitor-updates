@@ -818,15 +818,19 @@ class AutoUI:
     def review_candidate_cells(self,code,values):
         from MitakeDetector import number,Quote
         from candidate_ranking import assess
+        import re
+        if not re.fullmatch(r'[0-9]{4}',str(code)):return False
         cfg=self.page_review_config
-        # Previously verified >=4 candidates retain priority even if a new cell
+        # Previously verified >=5 candidates retain priority even if a new cell
         # is missing. This does not promote or write provisional quote values.
         for row in list(getattr(self,'display_rows',[]) or []):
-            if row[0].code==code and assess(row,cfg)['count']>=4:return True
+            if row[0].code==code and assess(row,cfg)['count']>=5:return True
         try:
             q=Quote(code,'',number(values['price']),number(values['gain']),number(values['volume']),number(values['turnover']),time.time())
         except (KeyError,TypeError,ValueError):return False
-        return assess((q,None,'等待觀測突破守穩',False),cfg)['count']>=4
+        rates=getattr(self,'volume_rates',None)
+        ratio=rates.result(code,q.ts).value if rates else None
+        return assess((q,ratio,'等待觀測突破守穩',False),cfg)['count']>=5
 
     def record_cell_failures(self,elapsed):
         metrics=getattr(self,'cell_metrics',None)
@@ -836,8 +840,8 @@ class AutoUI:
         counts.update(metrics.get('failed',{}));self.ocr_failed_fields=counts
         self.ocr_reviewed=getattr(self,'ocr_reviewed',0)+metrics.get('reviewed',0)
         self.ocr_unresolved=getattr(self,'ocr_unresolved',0)+metrics.get('unresolved',0)
-        self.page_pending=bool(metrics.get('pending_codes'))
-        self.last_scan_diagnostic+=f'｜失敗欄位累計{sum(counts.values())}次｜複查{self.ocr_reviewed}格｜未解決{self.ocr_unresolved}格｜本頁待補{len(metrics.get("pending_codes",[]))}檔｜目標10秒'
+        self.page_pending=bool(metrics.get('pending_codes') or metrics.get('unknown_codes'))
+        self.last_scan_diagnostic+=f'｜失敗欄位累計{sum(counts.values())}次｜複查{self.ocr_reviewed}格｜未解決{self.ocr_unresolved}格｜本頁待補{len(metrics.get("pending_codes",[]))}檔｜重用{metrics.get("reused",0)}/{metrics.get("total",0)}格｜略過{metrics.get("skipped",0)}列｜目標10秒'
         if metrics.get('failed') or self.page_pending:
             from MitakeDetector import BASE
             record=dict(time=dt.datetime.now().isoformat(),elapsed=round(elapsed,2),failed=metrics.get('failed',{}),reviewed=metrics.get('reviewed',0),unresolved=metrics.get('unresolved',0),pending_codes=metrics.get('pending_codes',[]),cumulative=dict(counts))

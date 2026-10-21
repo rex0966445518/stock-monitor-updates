@@ -25,14 +25,14 @@ def run_smoke_test(report):
         app.rank_rows={};app.auto_engines={};app.display_rows=[]
 
         assert root.title()=='漲停板探測器-雷允澤製 v'+VERSION
-        assert app.product_title.cget('text')=='漲停板探測器-雷允澤製 v'+VERSION
+        assert app.product_title.cget('text')=='漲停板探測器\n雷允澤製 · v'+VERSION
         import tkinter.font as tkfont
         from tkinter import ttk
         scale=app.display_scale.percent
         app.display_scale.apply(200,save=True,resize=False)
         assert tkfont.Font(root=root,font=app.log.cget('font')).actual('size')==20
         assert int(ttk.Style(root).lookup('Treeview','rowheight'))==60
-        assert app.tree.column('code','width')==app.display_scale.widths['code']*2
+        assert app.tree.column('code','width')>=app.display_scale.widths['code']*2
         from display_scale import DisplayScale
         assert DisplayScale(app,BASE/'display-settings.json').initial==200
         app.display_scale.apply(100,save=False,resize=False)

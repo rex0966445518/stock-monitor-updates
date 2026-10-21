@@ -37,11 +37,11 @@ def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,
         crop=image.crop((left,top,right,bottom)).convert('RGB')
         key=f'cell-v2:{field}:{crop.width}x{crop.height}:'+hashlib.sha256(crop.tobytes()).hexdigest()
         return dict(field=field,top=top,bottom=bottom,image=crop,key=key,tokens=None)
-    metrics=dict(reused=0,changed=0,total=0,skipped=0,failed={},reviewed=0,unresolved=0,pending_codes=[])
+    metrics=dict(reused=0,changed=0,total=0,skipped=0,failed={},reviewed=0,unresolved=0,pending_codes=[],unknown_codes=0)
     if metrics_ready:metrics_ready(metrics)
     def resolve(cells):
         if not cells:return
-        known={} if force else memory.lookup_many([c['key'] for c in cells]) if memory and hasattr(memory,'lookup_many') else {}
+        known={} if force else memory.lookup_many([c['key'] for c in cells if c['key'] not in cache]) if memory and hasattr(memory,'lookup_many') else {}
         for c in cells:
             if not force:c['tokens']=cache.get(c['key'],known.get(c['key']))
         missing=[c for c in cells if c['tokens'] is None]
@@ -71,6 +71,12 @@ def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,
             memory.record_many([(c['key'],c['tokens'],0,'數字格直接辨識') for c in direct])
         for c in missing:
             metrics['failed'][c['field']]=metrics['failed'].get(c['field'],0)+1
+        if review_if and cells[0]['field']=='code' and recognize_cells and not force:
+            # An uncertain identity is deferred, never reread or used to read its row.
+            for c in missing:
+                c['tokens']=[]
+                c['excluded']=bool(re.fullmatch(r'[0-9]{5,12}[A-Za-z]{0,2}',c.get('tentative','')))
+            missing=[]
         if review_if and cells[0]['field']!='code':
             selected=set()
             for code_cell in accepted:
@@ -110,9 +116,13 @@ def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,
     resolve(code_cells)
     accepted=[]
     for c in code_cells:
+        if c.get('excluded'):
+            metrics['skipped']+=1;continue
         tokens=c['tokens'] or []
         if len(tokens)!=1 or tokens[0][2]<.93:
             metrics['unresolved']+=1
+            if review_if:
+                metrics['unknown_codes']+=1;continue
             return None
         code=unicodedata.normalize('NFKC',str(tokens[0][1])).replace(' ','').strip()
         code=re.sub(r'^[^0-9]+','',code)
@@ -130,8 +140,8 @@ def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,
                 metrics['unresolved']+=len(failures);metrics['pending_codes'].append(code_cell['tokens'][0][1])
             else:valid_tops.add(code_cell['top'])
         if anchors_ready:
-            anchors_ready([(c['tokens'][0][1],(c['top']+c['bottom'])/2,c['bottom']-c['top']) for c in code_cells],
-                          {c['tokens'][0][1]:c['tokens'][0][2] for c in code_cells})
+            anchors_ready([(c['tokens'][0][1],(c['top']+c['bottom'])/2,c['bottom']-c['top']) for c in code_cells if c['tokens'] and c['tokens'][0][2]>=.93],
+                          {c['tokens'][0][1]:c['tokens'][0][2] for c in code_cells if c['tokens'] and c['tokens'][0][2]>=.93})
     by_field={f:[] for f in fields}
     for c in code_cells+numeric:
         if review_if and c['top'] not in valid_tops:continue
