@@ -28,7 +28,7 @@ public final class GoogleSearchCapture {
     static boolean sameQuery(String a,String b){return a.replaceAll("\\s+"," ").trim().equals(b.replaceAll("\\s+"," ").trim());}
     static List<String> excerpts(Collection<String> labels,String query){
         LinkedHashSet<String> clean=new LinkedHashSet<>();int total=0;
-        for(String raw:labels){String s=raw.replaceAll("\\s+"," ").trim();if(s.length()<24||sameQuery(s,query)||s.startsWith("https://www.google.com/search")||s.contains("Cookie")||s.contains("隱私權政策"))continue;
+        for(String raw:labels){String s=raw.replaceAll("\\s+"," ").trim();if(s.length()<24||sameQuery(s,query)||s.startsWith("https://www.google.com/search")||s.contains("Cookie")||s.contains("隱私權政策")||s.contains("Google 帳戶")||s.contains("Google帳戶")||s.contains("Google Account")||s.contains("@")||s.contains("你的投資組合")||s.contains("您的投資組合")||s.contains("Your portfolio"))continue;
             if(s.length()>1600)s=s.substring(0,1600);if(total+s.length()>12000)break;if(clean.add(s))total+=s.length();if(clean.size()>=12)break;
         }return new ArrayList<>(clean);
     }

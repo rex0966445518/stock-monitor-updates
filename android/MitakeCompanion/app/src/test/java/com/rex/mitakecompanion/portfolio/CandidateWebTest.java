@@ -45,7 +45,7 @@ public class CandidateWebTest {
     }
     @Test public void excerptsAreBoundedAndNeverFabricateAConclusion(){
         String text="2330台積電公開搜尋摘要，應以原始公告及網頁資料日期核對。";
-        List<String> got=GoogleSearchCapture.excerpts(Arrays.asList("Google","全部",text,text,"2330 台積電"),"2330 台積電");assertEquals(Collections.singletonList(text),got);
+        List<String> got=GoogleSearchCapture.excerpts(Arrays.asList("Google","全部",text,text,"2330 台積電","Google 帳戶：使用者及私人信箱 user@example.com","您的投資組合包含私人持股以及成本，不是公開搜尋摘要"),"2330 台積電");assertEquals(Collections.singletonList(text),got);
         List<String> many=new ArrayList<>();for(int i=0;i<100;i++)many.add(i+"資料"+"x".repeat(2000));List<String> bounded=GoogleSearchCapture.excerpts(many,"");assertTrue(bounded.stream().mapToInt(String::length).sum()<=12000);assertTrue(bounded.size()<=12);
     }
     @Test public void firstUseWithoutPermissionsDoesNotCreateRunOrNeedApiKey()throws Exception{
