@@ -23,7 +23,7 @@ def menu(start=0,count=8,highlight=-1):
     return image
 
 
-def tokens():return [token('漲幅排行',12),token('跌幅排行',36),token('成量排行',60)]
+def tokens():return [token('漲停鎖住',12),token('跌停鎖住',36),token('即將漲停',60)]
 
 
 class NumberTests(unittest.TestCase):
@@ -54,17 +54,17 @@ class NumberTests(unittest.TestCase):
             def __init__(self):super().__init__();self.offset=0
             def image(self,roi):return menu(self.offset),dict(left=100,top=100,width=220,height=192)
             def scroll(self,point,delta):self.offset=max(0,self.offset+(3 if delta<0 else -100))
-        c=C();s=RankingSwitcher(c,Mock(return_value=tokens()),[0,0,.2,.1],[0,.1,.3,.5],numbering=True,menu_numbers={'開盤強勢':21})
+        c=C();s=RankingSwitcher(c,Mock(return_value=tokens()),[0,0,.2,.1],[0,.1,.3,.5],numbering=True)
         region=dict(left=100,top=100,width=220,height=192)
         point=s.numbers.locate('開盤強勢',region)
-        self.assertIsNotNone(point);self.assertEqual(c.offset,15);self.assertEqual(s.ocr.call_count,1)
+        self.assertIsNotNone(point);self.assertEqual(c.offset,21);self.assertEqual(s.ocr.call_count,1)
         c.offset=0;self.assertIsNotNone(s.numbers.locate('開盤強勢',region));self.assertEqual(s.ocr.call_count,1)
     def test_native_index_path_needs_no_menu_ocr(self):
         s=RankingSwitcher(FakeController(),Mock(),[0,0,.2,.1],[0,.1,.3,.5],numbering=True)
         with patch('menu_numbers.NativeMenu') as native:
             native.return_value.point.return_value=(50,30);native.return_value.rows.return_value=[(21,30)]
             self.assertEqual(s.numbers.locate('開盤強勢',{}),(50,30))
-            native.return_value.point.assert_called_once_with(21);s.ocr.assert_not_called()
+            native.return_value.point.assert_called_once_with(27);s.ocr.assert_not_called()
     def test_wrong_manual_number_falls_back_and_never_records_success(self):
         from adaptive import Experience
         c=FakeController();e=Experience()
@@ -83,4 +83,25 @@ class NumberTests(unittest.TestCase):
             if stop:
                 with self.assertRaises(AutomationStopped):s.switch('開盤強勢')
                 self.assertIsNone(e.number('開盤強勢'))
-            else:s.switch('開盤強勢');self.assertEqual(e.number('開盤強勢'),21)
+            else:s.switch('開盤強勢');self.assertEqual(e.number('開盤強勢'),27)
+
+    def test_recorded_catalog_and_all_default_numbers(self):
+        from autoswitch import RANKINGS
+        expected="漲停鎖住 跌停鎖住 即將漲停 即將跌停 瞬間拉抬 瞬間殺盤 漲幅排行 跌幅排行 成量排行 成值排行 估量排行 預估量增 大單流入 大單流出 大單匯集 大單渙散 分時買力 分時賣力 累計買力 累計賣力 價漲動能 價跌動能 單量排行 量增排行 高價排行 低價排行 開盤強勢 開盤弱勢 開高走低 開低走高 週轉排行 大幅震盪 連續買單 連續賣單 買氣強大 賣壓沉重 現股當沖 注意股 處置股 異常推介 特殊異常 暫停交易 延後開盤 延後收盤".split()
+        self.assertEqual(RANKINGS,expected)
+        s=RankingSwitcher(FakeController(),Mock(),[0,0,.2,.1],[0,.1,.3,.5],numbering=True)
+        for index,name in enumerate(expected,1):self.assertEqual(s.numbers.number(name),index)
+        self.assertNotIn('量縮排行',RANKINGS)
+        with self.assertRaises(ValueError):PixelMenu(menu(),[token('漲幅排行',12),token('跌幅排行',36),token('成量排行',60)])
+
+    def test_catalog_change_discards_learned_positions_preserves_manual(self):
+        from adaptive import Experience
+        from autoswitch import RANKINGS
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'experience.json';old=Experience(path,{'size':[100,200]})
+            old.record_number('開盤強勢',21)
+            fresh=Experience(path,{'size':[100,200],'menu_catalog':RANKINGS})
+            self.assertIsNone(fresh.number('開盤強勢'))
+            s=RankingSwitcher(FakeController(),Mock(),[0,0,.2,.1],[0,.1,.3,.5],experience=fresh,numbering=True,menu_numbers={'開盤強勢':28})
+            self.assertEqual(s.numbers.number('開盤強勢'),28)
+            self.assertEqual(s.numbers.number('低價排行'),26)

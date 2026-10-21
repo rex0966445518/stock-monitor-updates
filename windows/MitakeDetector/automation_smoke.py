@@ -184,7 +184,7 @@ def run_automation_smoke(root,app):
             if ruler:ruler.close()
             u.DestroyWindow(child)
         editor=tk.Toplevel(root);number_vars=app.build_menu_number_settings(editor,{'menu_numbers':{'開盤強勢':21}})
-        root.update_idletasks();assert number_vars['開盤強勢'].get()=='21' and len(number_vars)==39
+        root.update_idletasks();assert number_vars['開盤強勢'].get()=='21' and len(number_vars)==44
         editor.destroy()
         return {'menu_switches':3,'selected_label':label.get(),'stop_blocks_input':True,'menu_auto_detected':True,'current_rank_no_click':True,'open_popup_one_click':True,'progress_visible':True,'progress_no_focus':True,'native_number_21':True,'number_overlay_no_focus':True,'manual_number_editor':True}
     finally:

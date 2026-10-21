@@ -82,10 +82,8 @@ def distance(a,b):return sum(x!=y for x,y in zip(a,b))/len(a)
 
 class PixelMenu:
     def __init__(self,image,tokens):
-        from autoswitch import find_menu_item
-        first=find_menu_item(tokens,'漲幅排行')
-        second=find_menu_item(tokens,'跌幅排行')
-        third=find_menu_item(tokens,'成量排行')
+        from autoswitch import find_menu_item,RANKINGS
+        first,second,third=(find_menu_item(tokens,name) for name in RANKINGS[:3])
         if not first or not second or not third:raise ValueError('第一頁前三列尚未校準')
         self.pitch=second[1]-first[1];self.first=first[1]
         if not 8<=self.pitch<=100 or abs(third[1]-second[1]-self.pitch)>self.pitch*.15:

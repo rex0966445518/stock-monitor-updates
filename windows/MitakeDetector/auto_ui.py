@@ -599,6 +599,8 @@ class AutoUI:
         self.ttk.Label(body,text='2. 勾選要輪切的排行。表格需沿用主畫面的六欄位置校正；各排行欄位須一致。').pack(anchor='w',padx=15,pady=5)
         ranks=self.ttk.Frame(top);ranks.pack(fill='x',padx=15)
         enabled=set(cfg.get('rankings',['漲幅排行','預估量增','大單流入','大單匯集']))
+        if enabled-set(RANKINGS):
+            self.ttk.Label(body,text='舊設定含未列於錄影選單的排行：'+ '、'.join(sorted(enabled-set(RANKINGS)))+'；儲存後依目前勾選更新，單量排行請另行勾選。',wraplength=810).pack(anchor='w',padx=15)
         rank_vars={}
         for i,name in enumerate(RANKINGS):
             var=self.tk.BooleanVar(value=name in enabled);rank_vars[name]=var
@@ -659,7 +661,8 @@ class AutoUI:
         content.bind('<Configure>',lambda event:canvas.configure(scrollregion=canvas.bbox('all')))
         variables={}
         for i,name in enumerate(RANKINGS):
-            group=i//20;row=i%20
+            rows_per_group=(len(RANKINGS)+1)//2
+            group=i//rows_per_group;row=i%rows_per_group
             self.ttk.Label(content,text=f'{name}（預設{i+1}）',width=26).grid(row=row,column=group*2,sticky='w',pady=5)
             value=self.tk.StringVar(value=str(cfg.get('menu_numbers',{}).get(name,'')));variables[name]=value
             self.ttk.Entry(content,textvariable=value,width=7).grid(row=row,column=group*2+1,padx=(0,22))
@@ -850,7 +853,9 @@ class AutoUI:
             if getattr(self,'auto_hwnd',None) not in [w[0] for w in matches]:
                 if len(matches)!=1:raise ValueError('請在自動輪切設定重新選擇三竹視窗')
                 self.auto_hwnd=matches[0][0]
-            if not auto.get('rankings') or any(n not in RANKINGS for n in auto['rankings']):raise ValueError('請設定要輪切的排行')
+            if not auto.get('rankings'):raise ValueError('請設定要輪切的排行')
+            unknown=[n for n in auto['rankings'] if n not in RANKINGS]
+            if unknown:raise ValueError('舊設定含未列於目前選單的排行：'+'、'.join(unknown)+'。請到自動輪切設定重新勾選並儲存；不會自動改選其他排行。')
             if not 3<=float(auto.get('seconds',0))<=3600 or not 1<=int(auto.get('pages',0))<=20:raise ValueError('輪切間隔或頁數無效')
         except Exception as exc:messagebox.showerror('需要設定',str(exc));return
         from resume_scan import ScanCheckpoint,scan_context
@@ -902,7 +907,7 @@ class AutoUI:
                 from adaptive import Experience
                 from MitakeDetector import BASE
                 experience=Experience(BASE/'automation-experience.json',
-                    {k:auto.get(k) for k in ('title','window_size','combo','menu','table')},auto.get('adaptive',True))
+                    dict({k:auto.get(k) for k in ('title','window_size','combo','menu','table')},menu_catalog=RANKINGS),auto.get('adaptive',True))
                 switcher=RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu'],experience=experience,ocr_retry=self.read_menu_ocr_retry,status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None))),
                     numbering=auto.get('menu_numbering',True),menu_numbers=auto.get('menu_numbers',{}),show_numbers=lambda data:self.events.put((token,'menu_numbers',data)))
                 switcher.menu_is_open=getattr(self,'_scan_menu_open',False)
