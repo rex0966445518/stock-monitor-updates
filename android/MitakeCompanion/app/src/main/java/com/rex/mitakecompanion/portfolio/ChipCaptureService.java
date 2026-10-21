@@ -145,7 +145,7 @@ public final class ChipCaptureService extends AccessibilityService {
     private void startWeb()throws Exception{
         if("google_ai_images".equals(store.run(runId).optString("web_mode"))){
             aiTask=new GoogleAiCapture(this,runId,code,name);webTask=null;deadline=SystemClock.elapsedRealtime()+300000;screenshotBusy=false;
-            store.status(runId,"六頁已完成，準備透過Chrome附加圖片到Google AI模式");overlayText.setText(code+" · Google AI附圖中");WindowManager.LayoutParams control=(WindowManager.LayoutParams)overlay.getLayoutParams();control.gravity=Gravity.TOP|Gravity.END;control.y=90;((WindowManager)getSystemService(WINDOW_SERVICE)).updateViewLayout(overlay,control);startActivity(aiTask.launch());handler.removeCallbacks(tick);handler.postDelayed(tick,1500);return;
+            store.status(runId,"六頁已完成，準備透過Chrome附加圖片到Google AI模式");overlayText.setText(code+" · Google AI附圖中");overlayText.setVisibility(View.GONE);WindowManager.LayoutParams control=(WindowManager.LayoutParams)overlay.getLayoutParams();control.gravity=Gravity.TOP|Gravity.CENTER_HORIZONTAL;control.y=0;((WindowManager)getSystemService(WINDOW_SERVICE)).updateViewLayout(overlay,control);startActivity(aiTask.launch());handler.removeCallbacks(tick);handler.postDelayed(tick,1500);return;
         }
         webTask=new GoogleSearchCapture(this,runId,code,name);deadline=SystemClock.elapsedRealtime()+60000;screenshotBusy=false;
         store.status(runId,"六頁已打包，正在Chrome查詢公開資訊");overlayText.setText(code+" · Google搜尋中\n只帶回本次搜尋摘要，不上傳圖片");
