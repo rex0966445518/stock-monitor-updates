@@ -14,7 +14,7 @@ public final class GoogleSearchCapture {
     public static final String CHROME="com.android.chrome";
     private final Context context;private final PortfolioStore store;private final String id,query,url;
     private final LinkedHashSet<String> snippets=new LinkedHashSet<>();
-    private String last="";private long changed;private int scrolls;private boolean done;
+    private String last="";private long changed;private final long opened=SystemClock.elapsedRealtime();private int scrolls;private boolean done;
     GoogleSearchCapture(Context context,String id,String code,String name){this.context=context;store=PortfolioStore.get(context);this.id=id;query=query(code,name);url=url(code,name);changed=SystemClock.elapsedRealtime();}
     public static String query(String code,String name){if(!PortfolioStore.code(code))throw new IllegalArgumentException("股號無效");String clean=name==null?"":name.replaceAll("[\\r\\n\\t]"," ").trim();if(clean.length()>40)clean=clean.substring(0,40);return code+" "+clean+" K線 籌碼日報 法人 多空 主力 大戶";}
     public static String url(String code,String name){return "https://www.google.com/search?hl=zh-TW&q="+Uri.encode(query(code,name));}
@@ -39,20 +39,23 @@ public final class GoogleSearchCapture {
         if(done)return true;if(root==null||!CHROME.contentEquals(root.getPackageName()))return false;
         List<AccessibilityNodeInfo> nodes=new ArrayList<>();walk(root,nodes,0);String address="";
         for(AccessibilityNodeInfo n:nodes){String view=n.getViewIdResourceName();if(view!=null&&view.equals(CHROME+":id/url_bar"))address=label(n);}
-        if(!googleAddress(address))return false;
+        if(!googleAddress(address))return snippets.isEmpty()?false:save();
         // A trusted hostname alone is insufficient: require the exact visible stock query.
         boolean expected=false;for(AccessibilityNodeInfo n:nodes)if(sameQuery(label(n),query))expected=true;
-        if(!expected)return false;
+        if(!expected)return snippets.isEmpty()?false:save();
         List<String> labels=new ArrayList<>();for(AccessibilityNodeInfo n:nodes){String s=label(n);if(!s.isEmpty())labels.add(s);}
-        if(!searchPage(address,labels))return false;
+        if(!searchPage(address,labels))return snippets.isEmpty()?false:save();
         String visible=String.join("\n",labels);
         if(visible.contains("不是機器人")||visible.contains("異常流量")||visible.contains("unusual traffic")||visible.contains("驗證您是人類")){fail("Google要求驗證，請在Chrome手動處理後重新查詢；未擷取結果。");return true;}
         if(visible.contains("沒有符合")||visible.contains("找不到任何結果")){fail("Google沒有找到符合的公開搜尋結果。");return true;}
-        long now=SystemClock.elapsedRealtime();if(!visible.equals(last)){last=visible;changed=now;return false;}if(now-changed<2500)return false;
+        long now=SystemClock.elapsedRealtime();if(!visible.equals(last)){last=visible;changed=now;if(now-opened<7000)return false;}if(now-changed<2500&&now-opened<7000)return false;
         snippets.addAll(excerpts(labels,query));
         android.graphics.Rect viewport=new android.graphics.Rect();root.getBoundsInScreen(viewport);
         if(scrolls<2)for(AccessibilityNodeInfo n:nodes)if(n.isScrollable()&&n.isEnabled()&&pageSized(n,viewport)&&n.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)){scrolls++;changed=now;last="";return false;}
         if(snippets.isEmpty())return false;
+        return save();
+    }
+    private boolean save()throws Exception{
         JSONObject result=new JSONObject().put("query",query).put("source_url",url).put("queried",System.currentTimeMillis()).put("kind","google_search_excerpt").put("snippets",new JSONArray(excerpts(snippets,query))).put("note","Chrome中可讀的公開搜尋摘要；非六張截圖的AI分析，須開啟來源核對日期與內容。");
         JSONObject run=store.run(id);run.put("web_result",result).put("status","Google網頁查詢完成，已帶回可見摘要");store.updateRun(run);done=true;return true;
     }
