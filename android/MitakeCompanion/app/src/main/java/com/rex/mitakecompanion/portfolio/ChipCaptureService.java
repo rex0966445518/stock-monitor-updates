@@ -145,14 +145,14 @@ public final class ChipCaptureService extends AccessibilityService {
     private void startWeb()throws Exception{
         if("google_ai_images".equals(store.run(runId).optString("web_mode"))){
             aiTask=new GoogleAiCapture(this,runId,code,name);webTask=null;deadline=SystemClock.elapsedRealtime()+300000;screenshotBusy=false;
-            store.status(runId,"六頁已完成，準備透過Chrome附加圖片到Google AI模式");overlayText.setText(code+" · Google AI附圖中");overlayText.setVisibility(View.GONE);WindowManager.LayoutParams control=(WindowManager.LayoutParams)overlay.getLayoutParams();control.gravity=Gravity.TOP|Gravity.CENTER_HORIZONTAL;control.y=0;((WindowManager)getSystemService(WINDOW_SERVICE)).updateViewLayout(overlay,control);startActivity(aiTask.launch());handler.removeCallbacks(tick);handler.postDelayed(tick,1500);return;
+            store.status(runId,"六頁已完成，準備透過Chrome附加圖片到Google AI模式");overlayText.setText(code+" · Google AI附圖中");overlayText.setVisibility(View.VISIBLE);overlayText.setSingleLine(true);overlayText.setTextSize(11);overlayText.setMaxWidth((int)(getResources().getDisplayMetrics().density*155));WindowManager.LayoutParams control=(WindowManager.LayoutParams)overlay.getLayoutParams();control.gravity=Gravity.TOP|Gravity.CENTER_HORIZONTAL;control.y=0;((WindowManager)getSystemService(WINDOW_SERVICE)).updateViewLayout(overlay,control);startActivity(aiTask.launch());handler.removeCallbacks(tick);handler.postDelayed(tick,1500);return;
         }
         webTask=new GoogleSearchCapture(this,runId,code,name);deadline=SystemClock.elapsedRealtime()+60000;screenshotBusy=false;
         store.status(runId,"六頁已打包，正在Chrome查詢公開資訊");overlayText.setText(code+" · Google搜尋中\n只帶回本次搜尋摘要，不上傳圖片");
         startActivity(webTask.launch());handler.removeCallbacks(tick);handler.postDelayed(tick,1500);
     }
     private void step()throws Exception{
-        if(aiTask!=null){GoogleAiCapture task=aiTask;if(SystemClock.elapsedRealtime()>deadline){task.fail("Google AI模式未完成：請確認登入、六張附件與送出狀態；可在APP貼回結果，不自動重送。圖片保留。");finish(store.run(runId).optString("status"));return;}if(task.step(getRootInActiveWindow()))finish(store.run(runId).optString("status"));return;}
+        if(aiTask!=null){GoogleAiCapture task=aiTask;if(SystemClock.elapsedRealtime()>deadline){task.fail("Google AI模式未完成：請確認登入、六張附件與送出狀態；可在APP貼回結果，不自動重送。圖片保留。");finish(store.run(runId).optString("status"));return;}boolean done=task.step(getRootInActiveWindow());if(overlayText!=null)overlayText.setText(task.progress());if(done)finish(store.run(runId).optString("status"));return;}
         if(webTask!=null){GoogleSearchCapture task=webTask;
             if(SystemClock.elapsedRealtime()>deadline){task.fail("Google查詢逾時或無法核對搜尋頁，請返回APP重新查詢或貼上搜尋結果；六頁圖片仍保留。");String status=store.run(runId).optString("status");finish(status);return;}
             if(task.step(getRootInActiveWindow())){String status=store.run(runId).optString("status");finish(status);}return;
@@ -228,6 +228,22 @@ public final class ChipCaptureService extends AccessibilityService {
         deadline=SystemClock.elapsedRealtime()+120000;stableSince=SystemClock.elapsedRealtime();lastOcr=0;store.status(id,"已收集 "+store.run(id).getJSONObject("pages").length()+"/6 頁，準備辨識「"+PortfolioStore.PAGES[page]+"」");
     }
     private Rect windowBounds(AccessibilityNodeInfo root){Rect b=new Rect();for(AccessibilityWindowInfo w:getWindows())if(w.getId()==root.getWindowId()){w.getBoundsInScreen(b);break;}if(b.isEmpty())root.getBoundsInScreen(b);return b;}
+    @TargetApi(34) void inspectGoogleComposer(GoogleAiCapture task,AccessibilityNodeInfo root,boolean send){
+        if(!active||aiTask!=task||screenshotBusy||!task.visualAllowed(root,send))return;
+        final int generation=token,windowId=root.getWindowId();final Rect viewport=windowBounds(root);screenshotBusy=true;
+        takeScreenshotOfWindow(windowId,getMainExecutor(),new TakeScreenshotCallback(){
+            public void onFailure(int error){if(generation==token){screenshotBusy=false;try{task.fail("Google按鈕畫面讀取失敗（"+error+"），六張圖片已保留，可回APP重新上傳。");}catch(Exception ignored){}}}
+            public void onSuccess(ScreenshotResult result){HardwareBuffer buffer=result.getHardwareBuffer();Bitmap image=null;
+                try{if(!active||generation!=token||aiTask!=task)return;Bitmap hardware=Bitmap.wrapHardwareBuffer(buffer,result.getColorSpace());if(hardware!=null){image=hardware.copy(Bitmap.Config.ARGB_8888,false);hardware.recycle();}}catch(RuntimeException e){try{task.fail("Google畫面暫時無法讀取，六張已保留，可重新上傳。");}catch(Exception ignored){}}finally{buffer.close();}
+                if(image==null){if(generation==token)screenshotBusy=false;return;}final Bitmap capture=image;
+                worker.execute(()->{int[] icons=null;int width=capture.getWidth(),height=capture.getHeight();Bitmap scaled=null;
+                    try{if(width>900){scaled=Bitmap.createScaledBitmap(capture,900,Math.round((float)height*900/width),true);width=scaled.getWidth();height=scaled.getHeight();}Bitmap source=scaled==null?capture:scaled;int[] pixels=new int[width*height];source.getPixels(pixels,0,width,0,0,width,height);icons=GoogleComposerVision.find(pixels,width,height);}
+                    catch(RuntimeException ignored){icons=null;}finally{if(scaled!=null)scaled.recycle();capture.recycle();}
+                    final int[] found=icons;final int w=width,h=height;handler.post(()->{if(!active||generation!=token||aiTask!=task)return;screenshotBusy=false;AccessibilityNodeInfo current=getRootInActiveWindow();if(current==null||current.getWindowId()!=windowId||!task.visualAllowed(current,send))return;try{task.visualResult(found,viewport,w,h,send);}catch(Exception e){finish("Google附件操作失敗，六張圖片已保留");}});
+                });
+            }
+        });
+    }
     private boolean gesture(Rect b,Rect viewport,int width,int height,boolean swipe,boolean forward,long duration){
         float x1=viewport.left+(float)b.left/width*viewport.width(),x2=viewport.left+(float)b.right/width*viewport.width();float y=viewport.top+(float)b.centerY()/height*viewport.height();
         Path path=new Path();if(swipe){path.moveTo(forward?x2:x1,y);path.lineTo(forward?x1:x2,y);}else path.moveTo((x1+x2)/2,y);
