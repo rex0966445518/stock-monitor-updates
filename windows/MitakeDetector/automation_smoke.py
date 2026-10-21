@@ -158,14 +158,16 @@ def run_automation_smoke(root,app):
         u.CreateWindowExW.restype=W.HWND
         u.SendMessageW.argtypes=[W.HWND,W.UINT,W.WPARAM,W.LPARAM];u.SendMessageW.restype=W.LPARAM
         u.DestroyWindow.argtypes=[W.HWND]
-        child=u.CreateWindowExW(0,'LISTBOX','',0x50000000|0x00200000|0x40|0x100,300,180,180,180,hwnd,None,None,None)
+        child=u.CreateWindowExW(0,'LISTBOX','',0x50000000|0x00200000|0x40|0x100,300,180,180,180,win.winfo_id(),None,None,None)
         assert child,'Native menu fixture creation failed'
         ruler=None
         try:
             for i in range(39):
                 text=ctypes.create_unicode_buffer('Ranking '+str(i+1))
                 assert u.SendMessageW(child,0x0180,0,ctypes.addressof(text))>=0
-            root.update();r=W.RECT();u.GetWindowRect(child,ctypes.byref(r))
+            root.update()
+            u.SetWindowPos(child,W.HWND(0),0,0,0,0,0x0010|0x0001|0x0002|0x0040)
+            r=W.RECT();u.GetWindowRect(child,ctypes.byref(r))
             native_region=dict(left=r.left,top=r.top,width=r.right-r.left,height=r.bottom-r.top)
             from menu_numbers import NativeMenu,NumberOverlay
             native=NativeMenu(controller,native_region)
