@@ -316,7 +316,13 @@ def run_smoke_test(report):
         assert 'min_turnover' in view.text.get('1.0','end')
         view.choose((today-dt.timedelta(days=10000)).isoformat());assert not view.tree.get_children()
         view.choose(today.isoformat());assert view.tree.get_children()
+        CandidateDiary(BASE/'observations.sqlite3').update_quotes([dict(code='9089',price=123.45,ts=now+2,source='GUI測試行情')])
+        view.refresh(force=True)
+        updated=next(view.tree.item(i,'values') for i in view.tree.get_children() if view.tree.item(i,'values')[0]=='9089')
+        assert updated[5]=='123.45' and 'GUI測試行情' in updated[7],updated
+        assert updated[3]=='100.00',updated
         diary_top.destroy()
+        assert view.quote_stop.is_set()
         # The daily panel survives weaker readings and invalid OCR spikes.
         CandidateDiary(BASE/'observations.sqlite3').observe([(Quote('9089','DIARY',20,2,2200,4,now+1),2,'已轉弱；股價不足；等待觀測突破守穩',False)],diary_cfg,VERSION)
         CandidateDiary(BASE/'observations.sqlite3').observe([(Quote('9089','DIARY',9999,2,2200,4,now+2),2,'讀值跳動／量倒退',False)],diary_cfg,VERSION)

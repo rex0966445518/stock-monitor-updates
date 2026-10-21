@@ -120,6 +120,25 @@ def find_cumulative_buy_below_sell(tokens,height):
     return (anchor[0],y)
 
 
+def find_opening_strong_below_low(tokens,height):
+    """Use verified row pitch and the user's low-price -> opening-strong relation."""
+    anchor=find_menu_item(tokens,'低價排行')
+    if not anchor:return None
+    high=find_menu_item(tokens,'高價排行');weak=find_menu_item(tokens,'開盤弱勢')
+    pitches=[]
+    if high and abs(high[0]-anchor[0])<20:pitches.append(anchor[1]-high[1])
+    if weak and abs(weak[0]-anchor[0])<20:pitches.append((weak[1]-anchor[1])/2)
+    if not pitches or any(p<6 for p in pitches):return None
+    pitch=pitches[0]
+    if any(abs(p-pitch)>pitch*.2 for p in pitches):return None
+    y=anchor[1]+pitch
+    if y+pitch*.4>=height:return None
+    for box,text,score in tokens or []:
+        cy=sum(p[1] for p in box)/4
+        if score>=.65 and abs(cy-y)<pitch*.4 and normalized(text) in {normalized(n) for n in RANKINGS if n!='開盤強勢'}:return None
+    return anchor[0],y
+
+
 class WindowsController:
     def __init__(self, hwnd, stop):
         if os.name!='nt':raise RuntimeError('自動操作僅支援Windows')
@@ -269,6 +288,11 @@ class RankingSwitcher:
     def menu_point(self,im,tokens,name):
         point=find_menu_item(tokens,name)
         if point:return point
+        if name=='開盤強勢':
+            point=find_opening_strong_below_low(tokens,getattr(im,'height',0))
+            if point:
+                self.status('依低價排行下一列定位開盤強勢；驗證標題後儲存位置')
+                return point
         if name=='累計買力':
             point=cumulative_buy_suffix(tokens) or find_cumulative_buy_below_sell(tokens,getattr(im,'height',0))
             if point:
@@ -284,6 +308,10 @@ class RankingSwitcher:
             candidates.append(enlarged)
             point=find_menu_item(enlarged,name)
             if point:return point
+        if name=='開盤強勢':
+            for candidate in candidates:
+                point=find_opening_strong_below_low(candidate,getattr(im,'height',0))
+                if point:return point
         if name=='分時買力':
             for candidate in candidates:
                 point=find_buy_power_between_neighbors(candidate)

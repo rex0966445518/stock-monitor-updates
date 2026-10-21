@@ -73,3 +73,25 @@ class CandidateDiaryTests(unittest.TestCase):
             self.assertEqual([r[1] for r in records],[10200,10000])
             self.assertEqual(d.stocks('1970-01-01')[0][2],10000)
             self.assertEqual(d.events('1970-01-01','2330',records[0][0])[0][1],10000)
+
+class LatestQuoteTests(unittest.TestCase):
+    def test_cross_day_price_updates_without_rewriting_history(self):
+        with tempfile.TemporaryDirectory() as folder:
+            d=CandidateDiary(Path(folder)/'scan.sqlite3');d.observe([row()],CFG,'old')
+            before=d.events('1970-01-01','2330')
+            d.observe([row(10000+86400,price=20,reason='已轉弱；股價不足；等待觀測突破守穩')],CFG,'new')
+            self.assertEqual(d.latest_quotes('1970-01-01')['2330']['price'],20)
+            self.assertEqual(d.events('1970-01-01','2330'),before)
+            self.assertEqual(d.stocks('1970-01-02'),[])
+            d.update_quotes([dict(code='2330',price=150,ts=10000+86400+1,source='test')])
+            d.update_quotes([dict(code='2330',price=999,ts=10000,source='older')])
+            self.assertEqual(d.latest_quotes('1970-01-01')['2330']['price'],150)
+            self.assertEqual(d.stocks('1970-01-01')[0][3],100)
+    def test_mis_rejects_missing_trade_future_and_ambiguous_markets(self):
+        from diary_quotes import parse_quotes
+        base=dict(c='2330',ex='tse',z='123.5',d='20261020',t='13:30:00')
+        now=dt.datetime(2026,10,21,tzinfo=TAIPEI).timestamp()
+        self.assertEqual(parse_quotes(dict(rtcode='0000',msgArray=[base]),['2330'],now)[0]['price'],123.5)
+        for delta in [dict(z='-'),dict(z='nan'),dict(z='0'),dict(d='20990101')]:
+            self.assertEqual(parse_quotes(dict(rtcode='0000',msgArray=[dict(base,**delta)]),['2330'],now),[])
+        self.assertEqual(parse_quotes(dict(rtcode='0000',msgArray=[base,dict(base,ex='otc')]),['2330'],now),[])

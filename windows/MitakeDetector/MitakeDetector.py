@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.79'
+VERSION = '0.3.80'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -601,6 +601,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         tick()
 
     def stop(self):
+        self.cancel_scan_retry()
         self.save_daily_table()
         self.restore_scan_cursor()
         self.scan_phase.set('已暫停｜停止請求已送出，進度保留')
@@ -806,7 +807,9 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
                 elif kind == 'auto_rate':
                     self.scan_rate.update(payload)
                     panel=getattr(self,'task_panel',None)
-                    if payload.get('count',0)>0 and panel and panel.alive:panel.mark_success()
+                    if payload.get('count',0)>0:
+                        if time.monotonic()-getattr(self,'scan_run_started',time.monotonic())>=60:self.scan_retry_count=0
+                        if panel and panel.alive:panel.mark_success()
                 elif kind == 'auto_status':
                     self.status.set(payload); self.say(payload); self.update_task_progress(payload)
                 elif kind == 'auto_progress':
@@ -825,7 +828,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
                         self.update_task_progress('自動設定完成，準備啟動輪切掃描…')
                         self.root.after(300,lambda:self.start_auto(announce=False))
                     else:self.announce_task('自動設定完成');self.close_task_progress();self.root.deiconify()
-                elif kind == 'auto_end':
+                elif kind in ('auto_end','auto_failed'):
                     self.scan_phase.set('測試完成｜按 F8 開始連續掃描' if payload=='輪切測試完成' else '已暫停｜進度已保留，按 F8 接續')
                     self.phase_label.configure(fg='#ffb45e')
                     self.scan_rate.stop()
@@ -833,6 +836,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
                     self.announce_task('任務執行失敗，請查看訊息' if '未完成' in payload or '：' in payload else '任務已停止')
                     self.close_task_progress()
                     self.auto_active=False; self.status.set(format_feedback(payload)); self.say(payload); self.root.deiconify()
+                    if kind=='auto_failed':self.schedule_scan_retry(token)
                 elif kind == 'auto_quotes':
                     name, quotes, rejected, elapsed, cfg = payload
                     self.mode='自動輪切／'+name
@@ -1010,6 +1014,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         text.insert('1.0', HELP); text.configure(state='disabled')
 
     def close(self):
+        self.cancel_scan_retry()
         charts=getattr(self,"candidate_charts",None)
         if charts:charts.close()
         bridge=getattr(self,'mobile_bridge',None)

@@ -456,3 +456,35 @@ class SavedRotationTests(unittest.TestCase):
         result=calibrated_auto(old,title='new screen')
         result['rankings'].append('預估量增')
         self.assertEqual(old['rankings'],['漲幅排行'])
+
+class ScanRecoveryTests(unittest.TestCase):
+    def app(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        app=UI({});app.worker_thread=None;app.scan_phase=Mock();app.root=Mock()
+        app.root.after.side_effect=lambda delay,callback:('timer',delay,callback)
+        return app
+    def test_three_bounded_delays_and_cancel(self):
+        app=self.app()
+        for delay in [5000,15000,30000]:
+            app.schedule_scan_retry(0);self.assertEqual(app.scan_retry_timer[1],delay)
+        app.schedule_scan_retry(0);self.assertIsNone(app.scan_retry_timer)
+        self.assertEqual(app.scan_retry_count,3)
+    def test_stale_generation_and_foreground_failure_never_start(self):
+        from unittest.mock import Mock
+        app=self.app();app.start_auto=Mock();app.schedule_scan_retry(0)
+        callback=app.scan_retry_timer[2];app.generation=1;callback();app.start_auto.assert_not_called()
+        app.generation=0;app.schedule_scan_retry(0)
+        with patch('auto_ui.WindowsController',side_effect=AutomationStopped('焦點已切換')):
+            app.scan_retry_timer[2]()
+        app.start_auto.assert_not_called()
+    def test_recovery_preserves_resume_mode_and_checks_previous_worker(self):
+        from unittest.mock import Mock
+        app=self.app();app.start_auto=Mock();app.schedule_scan_retry(0)
+        with patch('auto_ui.WindowsController') as controller:
+            app.scan_retry_timer[2]()
+            controller.return_value.check.assert_called_once()
+        app.start_auto.assert_called_once_with(announce=False,recovering=True)
+        app=self.app();app.start_auto=Mock();app.worker_thread=Mock();app.worker_thread.is_alive.return_value=True
+        app.schedule_scan_retry(0);app.scan_retry_timer[2]();app.start_auto.assert_not_called()
+        self.assertEqual(app.scan_retry_timer[1],500)

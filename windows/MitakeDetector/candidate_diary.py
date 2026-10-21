@@ -3,6 +3,8 @@ from contextlib import closing
 import datetime as dt
 import hashlib
 import json
+import math
+import time
 import sqlite3
 from candidate_ranking import assess
 
@@ -13,10 +15,12 @@ class CandidateDiary:
     def connect(self):
         c=sqlite3.connect(self.path,timeout=5)
         c.execute('CREATE TABLE IF NOT EXISTS candidate_diary(day TEXT,code TEXT,name TEXT,first_ts REAL,first_price REAL,PRIMARY KEY(day,code))')
+        c.execute('CREATE INDEX IF NOT EXISTS diary_code ON candidate_diary(code)')
         c.execute('CREATE TABLE IF NOT EXISTS candidate_diary_configs(hash TEXT PRIMARY KEY,body TEXT)')
         c.execute('CREATE TABLE IF NOT EXISTS candidate_diary_events(id INTEGER PRIMARY KEY,day TEXT,code TEXT,ts REAL,price REAL,gain REAL,volume REAL,turnover REAL,ratio REAL,matched INTEGER,total INTEGER,hit INTEGER,blocked INTEGER,reason TEXT,source TEXT,version TEXT,config_hash TEXT,UNIQUE(day,code,ts,source,config_hash))')
         c.execute('CREATE INDEX IF NOT EXISTS diary_event_time ON candidate_diary_events(day,code,ts DESC)')
         c.execute('CREATE TABLE IF NOT EXISTS candidate_diary_meta(key TEXT PRIMARY KEY,value TEXT)')
+        c.execute("CREATE TABLE IF NOT EXISTS candidate_latest_quotes(code TEXT PRIMARY KEY,ts REAL,price REAL,source TEXT)")
         return c
     def observe(self,rows,cfg,version):
         encoded=json.dumps(cfg,sort_keys=True,ensure_ascii=False,allow_nan=False)
@@ -30,6 +34,8 @@ class CandidateDiary:
                 if qualifies:
                     c.execute('INSERT OR IGNORE INTO candidate_diary VALUES (?,?,?,?,?)',(day,q.code,q.name,q.ts,q.price))
                     c.execute('UPDATE candidate_diary SET first_price=CASE WHEN ?<first_ts THEN ? ELSE first_price END,first_ts=MIN(first_ts,?) WHERE day=? AND code=?',(q.ts,q.price,q.ts,day,q.code))
+                if not blocked and c.execute('SELECT 1 FROM candidate_diary WHERE code=? LIMIT 1',(q.code,)).fetchone():
+                    self._save_quote(c,dict(code=q.code,ts=q.ts,price=q.price,source='三竹有效掃描'))
                 if not c.execute('SELECT 1 FROM candidate_diary WHERE day=? AND code=?',(day,q.code)).fetchone():continue
                 if q.name:c.execute('UPDATE candidate_diary SET name=? WHERE day=? AND code=?',(q.name,day,q.code))
                 c.execute('INSERT OR IGNORE INTO candidate_diary_configs VALUES (?,?)',(digest,encoded))
@@ -37,6 +43,18 @@ class CandidateDiary:
                           (day,q.code,q.ts,q.price,q.gain,q.volume,q.turnover,ratio,match['count'],match['total'],int(bool(hit)),int(blocked),reason,cfg.get('source_rank') or '手動掃描',version,digest))
                 changed+=cur.rowcount
         return changed
+    @staticmethod
+    def _save_quote(c,q):
+        if not all(math.isfinite(float(q[k])) for k in ('ts','price')) or q['price']<=0 or q['ts']>time.time()+60:return
+        c.execute("INSERT INTO candidate_latest_quotes VALUES (?,?,?,?) ON CONFLICT(code) DO UPDATE SET ts=excluded.ts,price=excluded.price,source=excluded.source WHERE excluded.ts>candidate_latest_quotes.ts",(q['code'],q['ts'],q['price'],q['source']))
+    def update_quotes(self,quotes):
+        with closing(self.connect()) as c,c:
+            for q in quotes:
+                if c.execute('SELECT 1 FROM candidate_diary WHERE code=? LIMIT 1',(q['code'],)).fetchone():self._save_quote(c,q)
+    def latest_quotes(self,day):
+        with closing(self.connect()) as c:
+            rows=c.execute("SELECT q.code,q.ts,q.price,q.source FROM candidate_latest_quotes q JOIN candidate_diary d ON d.code=q.code WHERE d.day=?",(day,)).fetchall()
+            return {code:dict(ts=ts,price=price,source=source) for code,ts,price,source in rows}
     def days(self,month):
         with closing(self.connect()) as c:return dict(c.execute('SELECT day,COUNT(*) FROM candidate_diary WHERE day LIKE ? GROUP BY day',(month+'-%',)))
     def stocks(self,day):

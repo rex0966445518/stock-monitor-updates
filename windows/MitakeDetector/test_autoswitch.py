@@ -223,3 +223,27 @@ class CumulativeBuyTests(unittest.TestCase):
         self.assertIsNone(cumulative_buy_suffix([token('分時買力')]))
         self.assertIsNone(cumulative_buy_suffix([token('計賣力')]))
         self.assertIsNone(cumulative_buy_suffix([token('買力')]))
+
+class OpeningStrongTests(unittest.TestCase):
+    def test_anchor_pitch_clipping_and_contradiction(self):
+        from autoswitch import find_opening_strong_below_low as locate
+        tokens=[token('高價排行',20),token('低價排行',40)]
+        self.assertEqual(locate(tokens,100),(55,60))
+        self.assertIsNone(locate(tokens,65))
+        self.assertIsNone(locate([token('低價排行',40)],100))
+        self.assertIsNone(locate(tokens+[token('開盤弱勢',60)],100))
+        self.assertEqual(locate([token('低價排行',40),token('開盤弱勢',80)],100),(55,60))
+    def test_save_position_only_after_title_verification(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        class C(FakeController):
+            def image(self,roi):return SimpleNamespace(height=120),absolute_roi(roi,self.rect())
+        for verified in [True,False]:
+            c=C();experience=Mock();experience.hint.return_value=None
+            switch=RankingSwitcher(c,lambda im:[token('高價排行',20),token('低價排行',40)],[.1,.1,.2,.04],[.1,.15,.2,.5],experience=experience)
+            switch.label_matches=lambda name:False;switch.verify_label=lambda name:verified
+            if verified:
+                switch.switch('開盤強勢');self.assertEqual(experience.record.call_args.args[:3],('開盤強勢',0,(55,60)))
+            else:
+                with self.assertRaises(AutomationStopped):switch.switch('開盤強勢')
+                experience.record.assert_not_called();experience.forget.assert_called_once_with('開盤強勢')

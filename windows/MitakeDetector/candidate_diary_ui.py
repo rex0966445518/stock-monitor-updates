@@ -3,11 +3,15 @@ import calendar
 import datetime as dt
 import json
 import time
+import queue
+import threading
+import sys
 from candidate_diary import CandidateDiary,TAIPEI
 
 class DiaryView:
     def __init__(self,app,path):
         self.app=app;self.store=CandidateDiary(path);self.importing=False;self.last_refresh=0;self.current_code=None;self.before=None
+        self.quote_queue=queue.Queue();self.quote_stop=threading.Event();self.quote_busy=False;self.next_quote=0;self.quote_note='';self.timer=None
         self.window=app.tk.Toplevel(app.root);self.window.title('5/6候選歷史日誌');self.window.geometry('1300x850')
         today=dt.datetime.now(TAIPEI).date();self.month=today.replace(day=1)
         self.day=app.tk.StringVar(value=today.isoformat());self.status=app.tk.StringVar()
@@ -23,9 +27,9 @@ class DiaryView:
         body=app.ttk.Frame(self.window);body.pack(fill='both',expand=True,padx=12,pady=10)
         self.calendar=app.ttk.Frame(body);self.calendar.pack(side='left',anchor='n',padx=(0,12))
         table=app.ttk.Frame(body);table.pack(side='left',fill='both',expand=True)
-        columns=('code','name','first','price','last','latest','peak','current','n')
+        columns=('code','name','first','price','last','latest','quote_time','quote_source','peak','current','n')
         self.tree=app.ttk.Treeview(table,columns=columns,show='headings',height=12)
-        for key,title,width in zip(columns,['股號','股名','首次發現','首次價','最近有效讀取','最近價','最高符合','最近符合','觀測筆數'],[65,105,100,80,115,80,85,85,85]):
+        for key,title,width in zip(columns,['股號','股名','首次發現','首次價','當日最後讀取','最近價','最近價時間','行情狀態／來源','當日最高符合','當日最後符合','觀測筆數'],[65,105,100,80,115,80,155,195,100,100,85]):
             self.tree.heading(key,text=title);self.tree.column(key,width=width,stretch=False)
         v=app.ttk.Scrollbar(table,orient='vertical',command=self.tree.yview);v.pack(side='right',fill='y')
         h=app.ttk.Scrollbar(table,orient='horizontal',command=self.tree.xview);h.pack(side='bottom',fill='x')
@@ -35,7 +39,9 @@ class DiaryView:
         app.ttk.Button(self.window,text='載入較早的200筆',command=lambda:self.details(older=True)).pack(anchor='w',padx=12)
         from tkinter.scrolledtext import ScrolledText
         self.text=ScrolledText(self.window,wrap='word',height=16);self.text.pack(fill='both',expand=True,padx=12,pady=8)
+        self.window.bind('<Destroy>',self.destroyed,add='+')
         self.choose(today.isoformat())
+        self.timer=self.window.after(1000,self.tick)
     def move(self,direction):
         index=self.month.year*12+self.month.month-1+direction;y,m=divmod(index,12)
         self.month=dt.date(y,m+1,1);self.draw_calendar()
@@ -54,18 +60,51 @@ class DiaryView:
         try:self.choose(dt.date.fromisoformat(self.day.get()).isoformat())
         except ValueError:self.status.set('日期格式請填YYYY-MM-DD')
     def choose(self,day):
+        self.next_quote=0
         self.day.set(day);self.month=dt.date.fromisoformat(day).replace(day=1);self.current_code=None;self.before=None
         self.text.delete('1.0','end');self.refresh(force=True)
     def refresh(self,force=False):
         if not self.window.winfo_exists() or (not force and time.monotonic()-self.last_refresh<3):return
         self.last_refresh=time.monotonic();self.draw_calendar();selected=self.current_code
         self.tree.delete(*self.tree.get_children())
-        rows=self.store.stocks(self.day.get())
+        rows=self.store.stocks(self.day.get());live=self.store.latest_quotes(self.day.get())
         def clock(ts):return dt.datetime.fromtimestamp(ts,TAIPEI).strftime('%H:%M:%S') if ts is not None else '—'
         for code,name,first,price,last,latest,matched,total,reason,peak,n in rows:
-            item=self.tree.insert('','end',values=[code,name or '股名待補',clock(first),f'{price:.2f}',clock(last),'—' if latest is None else f'{latest:.2f}',f'{peak}/6',f'{matched}/{total}' if total else '—',n])
+            q=live.get(code,{})
+            stamp=q.get('ts',last);value=q.get('price',latest);source=q.get('source','歷史掃描快取')
+            quote_time=dt.datetime.fromtimestamp(stamp,TAIPEI).strftime('%m/%d %H:%M:%S') if stamp is not None else '—'
+            state='來源近期讀值' if stamp is not None and -10<=time.time()-stamp<=90 else '非即時／保留前值'
+            item=self.tree.insert('','end',values=[code,name or '股名待補',clock(first),f'{price:.2f}',clock(last),'—' if value is None else f'{value:.2f}',quote_time,state+'／'+source,f'{peak}/6',f'{matched}/{total}' if total else '—',n])
             if code==selected:self.tree.selection_set(item)
-        self.status.set(f'{self.day.get()}｜曾達5/6或6/6：{len(rows)}檔｜日曆綠色日期有紀錄；需啟用全部六項條件才會新收集5/6。' + ('｜正在整理舊紀錄' if self.importing else ''))
+        self.status.set(f'{self.day.get()}｜曾達5/6或6/6：{len(rows)}檔｜日曆綠色日期有紀錄；需啟用全部六項條件才會新收集5/6。' + ('｜正在整理舊紀錄' if self.importing else '')+'｜最近價每30秒背景更新；符合數為所選當日紀錄｜'+self.quote_note)
+    def destroyed(self,event):
+        if event.widget!=self.window:return
+        self.quote_stop.set()
+        if self.timer:
+            self.window.after_cancel(self.timer);self.timer=None
+    def tick(self):
+        if self.quote_stop.is_set():return
+        try:
+            day,quotes,note=self.quote_queue.get_nowait()
+        except queue.Empty:pass
+        else:
+            self.quote_busy=False
+            self.quote_note=note if day==self.day.get() else ''
+            self.refresh(force=True)
+        if not self.quote_busy and time.monotonic()>=self.next_quote and '--smoke-test' not in sys.argv:
+            day=self.day.get();codes=[r[0] for r in self.store.stocks(day)]
+            self.next_quote=time.monotonic()+30
+            if codes:
+                self.quote_busy=True
+                def job():
+                    try:
+                        from diary_quotes import fetch_quotes
+                        quotes,note=fetch_quotes(codes,self.quote_stop)
+                        if not self.quote_stop.is_set():self.store.update_quotes(quotes)
+                    except Exception as exc:quotes=[];note='更新失敗／保留前值：'+str(exc)
+                    self.quote_queue.put((day,quotes,note))
+                threading.Thread(target=job,daemon=True,name='diary-quotes').start()
+        self.timer=self.window.after(1000,self.tick)
     def select(self,event=None):
         items=self.tree.selection()
         if not items:return

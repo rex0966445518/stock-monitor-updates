@@ -477,7 +477,7 @@ class AutoUI:
 
     def poll_f8(self):
         import ctypes
-        busy=self.auto_active or bool(self.worker_thread and self.worker_thread.is_alive())
+        busy=bool(getattr(self,'scan_retry_timer',None)) or self.auto_active or bool(self.worker_thread and self.worker_thread.is_alive())
         action=self.f8_toggle.update(bool(ctypes.windll.user32.GetAsyncKeyState(0x77)&0x8000),busy)
         if action=='stop':self.stop()
         elif action=='start':
@@ -725,7 +725,49 @@ class AutoUI:
             while len(cache)>24:cache.popitem(last=False)
         return tokens
 
-    def start_auto(self,test_only=False,announce=True):
+    def cancel_scan_retry(self):
+        timer=getattr(self,'scan_retry_timer',None)
+        if timer:
+            self.root.after_cancel(timer)
+        self.scan_retry_timer=None
+
+    def schedule_scan_retry(self,token):
+        self.cancel_scan_retry()
+        count=getattr(self,'scan_retry_count',0)
+        if count>=3:
+            self.scan_phase.set('已暫停｜自動恢復已達3次｜按F8接續')
+            self.say('自動恢復已達3次，停止重試並保留進度；請查看診斷後按F8接續')
+            return
+        self.scan_retry_count=count+1
+        delay=(5,15,30)[count]
+        self.scan_phase.set(f'掃描失敗｜{delay}秒後自動恢復（{count+1}/3）｜F8可取消')
+        self.say(self.scan_phase.get())
+        deadline=time.monotonic()+60
+        def resume():
+            self.scan_retry_timer=None
+            if token!=self.generation:return
+            worker=getattr(self,'worker_thread',None)
+            if worker and worker.is_alive():
+                if time.monotonic()<deadline:self.scan_retry_timer=self.root.after(500,resume)
+                else:
+                    self.scan_phase.set('已暫停｜前次辨識尚未結束，取消自動恢復')
+                    self.say('前次辨識尚未結束，已取消自動恢復，避免重複啟動')
+                return
+            try:
+                # Never activate another application's window during a retry.
+                WindowsController(self.auto_hwnd,threading.Event()).check()
+            except Exception as exc:
+                self.scan_phase.set('已暫停｜視窗或焦點檢查未通過｜按F8接續')
+                self.say('自動恢復暫停：'+str(exc)+'；請回到三竹後按F8接續')
+                return
+            self.say('自動恢復：重新核對表頭並接續已保存進度')
+            self.start_auto(announce=False,recovering=True)
+        self.scan_retry_timer=self.root.after(delay*1000,resume)
+
+    def start_auto(self,test_only=False,announce=True,recovering=False):
+        self.cancel_scan_retry()
+        if not recovering:self.scan_retry_count=0
+        self.scan_run_started=time.monotonic()
         self.numeric_priority=True
         from tkinter import messagebox
         if not self.idle() or not self.dependencies():return
@@ -998,7 +1040,8 @@ class AutoUI:
                 from scan_diagnostics import record_interruption
                 from MitakeDetector import BASE,VERSION
                 location=record_interruption(BASE/'scan-interruptions.jsonl',VERSION,diagnostic,exc)
-                self.events.put((token,'auto_end','掃描已暫停，進度保留：'+str(exc)+'｜'+location))
+                recoverable=not test_only and not stop.is_set() and (not isinstance(exc,AutomationStopped) or str(exc).startswith(('選單中找不到','切換後標題')))
+                self.events.put((token,'auto_failed' if recoverable else 'auto_end','掃描已暫停，進度保留：'+str(exc)+'｜'+location))
             finally:
                 self.restore_scan_cursor();stop.set()
         def launch():
