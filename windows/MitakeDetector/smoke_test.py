@@ -373,7 +373,9 @@ def run_smoke_test(report):
 
         # Verify the actual GUI has only the everyday action buttons.
         actions=[child.cget('text') for child in app.main_actions.winfo_children() if child.winfo_class()=='TButton']
-        assert actions==['開始／繼續（F8）','暫停（F8）','重新開始','掃描設定','一鍵更新','緩漲明細／設定'],actions
+        assert actions==['▶ 開始掃描 F8','Ⅱ 暫停','掃描設定','排行定位'],actions
+        menu_labels=[app.advanced_menu.entrycget(i,'label') for i in range(app.advanced_menu.index('end')+1)]
+        assert {'重新開始','緩漲明細／設定','手機連動／配對','使用說明'}<=set(menu_labels)
         from tkinter import ttk
         style=ttk.Style()
         assert style.lookup('TEntry','foreground')=='#101827'

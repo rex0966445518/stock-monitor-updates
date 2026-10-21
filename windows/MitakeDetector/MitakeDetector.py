@@ -287,6 +287,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         menu = tk.Menu(advanced, tearoff=False)
         for label, action in [('重新開始',self.restart_observation),('緩漲明細／設定',self.show_steady_settings),('手機連動／配對', self.show_mobile_pairing), ('重新自動定位', self.auto_setup), ('清除股名記憶', self.clear_stock_names), ('手動框選排行榜', self.select_region), ('手動校正欄位', self.calibrate), ('圖片辨識測試', self.image_test), ('合成資料示範', self.demo), ('辨識元件檢查', self.install), ('資料資料夾', self.open_folder), ('OCR學習紀錄', self.show_ocr_learning), ('中斷診斷', self.show_scan_diagnostics), ('版本日誌', self.show_version_history), ('訊號驗證紀錄', self.show_signal_reviews), ('進場檢核設定', self.show_guard_settings), ('籌碼觀察／研究', self.show_research), ('每日紀錄／重播驗證', self.show_scan_archive), ('5/6候選歷史日誌', self.show_candidate_diary), ('使用說明', self.help)]:
             menu.add_command(label=label, command=action)
+        self.advanced_menu=menu
         advanced.configure(menu=menu);advanced.grid(row=1,column=1,sticky='e',padx=10)
         self.main_actions=bar
         auto_bar = ttk.Frame(root);auto_bar.pack(fill='x',padx=20,pady=(0,6))
@@ -338,7 +339,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         self.focus_chart=FocusChart(self,chart_host)
         cols = ['code','name','match','price','gain','volume','turnover','ratio','state']+[f'history{i}' for i in range(8)]+['signal','score']
         self.tree = ttk.Treeview(table_frame, columns=cols, show='headings')
-        for key, label, width in zip(cols, LABELS[:2] + ['符合條件'] + LABELS[2:] + ['5分量速比', '觀察原因／尚缺條件'], [65,90,70,90,80,100,85,120,380]):
+        for key, label, width in zip(cols, LABELS[:2] + ['符合條件'] + LABELS[2:] + ['5分量速比', '觀察原因／尚缺條件'], [65,90,70,90,80,100,85,190,380]):
             self.tree.heading(key, text=label); self.tree.column(key, width=width, stretch=key == 'state')
         for i in range(8):
             self.tree.heading(f'history{i}',text=f'待掃描 {i+1}')
