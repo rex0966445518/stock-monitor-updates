@@ -19,9 +19,9 @@ public class MainActivity extends Activity {
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final Map<String,StockCard> stockCards=new HashMap<>();
     private final IntradayRepository intraday=new IntradayRepository();
-    boolean demoMode;TextView demoButton,demoBanner;
+    boolean pairingPrompt;boolean demoMode;TextView demoButton,demoBanner;
     private AppUpdater updater;private SpeechAnnouncer testSpeech;private HapticAnnouncer testHaptics;
-    LinearLayout content,cards;TextView connection,counts6,counts5,freshness;String filter="全部",last="";
+    LinearLayout content,cards;TextView connection,counts6,counts5,freshness,savedComputer;String filter="全部",last="";
     private final Runnable tick=new Runnable(){public void run(){refresh();handler.postDelayed(this,1000);}};
     int dp(float v){return Math.round(v*getResources().getDisplayMetrics().density);}
     GradientDrawable box(int color,int stroke,int radius){GradientDrawable b=new GradientDrawable();b.setColor(color);b.setCornerRadius(dp(radius));if(stroke!=0)b.setStroke(dp(1),stroke);return b;}
@@ -36,7 +36,7 @@ public class MainActivity extends Activity {
         scroll.setOnApplyWindowInsetsListener((v,in)->{int top,bottom;if(Build.VERSION.SDK_INT>=30){android.graphics.Insets i=in.getInsets(WindowInsets.Type.systemBars());top=i.top;bottom=i.bottom;}else{top=in.getSystemWindowInsetTop();bottom=in.getSystemWindowInsetBottom();}content.setPadding(dp(22),top+dp(20),dp(22),bottom+dp(24));return in;});
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
         TextView brand=text("◉  漲停雷達",27,TEXT,true);header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));header.addView(button("配對",this::showPairing));add(content,header,8);
-        add(content,text("MITAKE LIVE  /  雷允澤製 v0.1.8",11,MUTED,false),22);
+        add(content,text("MITAKE LIVE  /  雷允澤製 v0.1.9",11,MUTED,false),22);
         LinearLayout tools=new LinearLayout(this);
         tools.addView(button("一鍵更新",()->updater.check()),new LinearLayout.LayoutParams(0,-2,1));
         tools.addView(button("語音通報",this::showVoice),new LinearLayout.LayoutParams(0,-2,1));tools.addView(button("連線診斷",this::showDiagnosis),new LinearLayout.LayoutParams(0,-2,1));add(content,tools,10);
@@ -44,7 +44,9 @@ public class MainActivity extends Activity {
         demoButton=button(demoMode?"關閉測試卡片":"顯示測試卡片（5/6、6/6）",this::toggleDemo);add(content,demoButton,6);
         demoBanner=text("測試模式：示範卡片置頂，價格與條件非行情；不計入真實訊號、不播報、不存檔。五分K另取公開來源。",11,GOLD,false);demoBanner.setVisibility(demoMode?View.VISIBLE:View.GONE);add(content,demoBanner,10);
         connection=text("●  尚未連線",14,TEAL,true);add(content,connection,6);
-        freshness=text("由電腦持續掃描，手機同步觀察候選",12,MUTED,false);add(content,freshness,20);
+        freshness=text("由電腦持續掃描，手機同步觀察候選",12,MUTED,false);add(content,freshness,8);
+        savedComputer=text("",11,MUTED,false);add(content,savedComputer,6);
+        add(content,button("連回上次電腦",()->resumeSaved(true)),20);
         LinearLayout hero=new LinearLayout(this);hero.setOrientation(LinearLayout.HORIZONTAL);hero.setPadding(dp(20),dp(20),dp(20),dp(20));hero.setBackground(box(PANEL,Color.rgb(33,56,72),20));
         LinearLayout six=new LinearLayout(this);six.setOrientation(LinearLayout.VERTICAL);six.addView(text("6 / 6 基礎條件",13,RED,true));counts6=text("—",44,TEXT,true);six.addView(counts6);six.addView(text("必要檢核另行標示",11,MUTED,false));hero.addView(six,new LinearLayout.LayoutParams(0,-2,1));
         LinearLayout five=new LinearLayout(this);five.setOrientation(LinearLayout.VERTICAL);five.addView(text("5 / 6 接近候選",13,TEAL,true));counts5=text("—",44,TEXT,true);five.addView(counts5);five.addView(text("持續追蹤變化",11,MUTED,false));hero.addView(five,new LinearLayout.LayoutParams(0,-2,1));add(content,hero,20);
@@ -54,12 +56,12 @@ public class MainActivity extends Activity {
         add(content,button("掃描電腦配對碼",this::scan),10);
         add(content,button("停止手機連線",()->{BridgeService.prefs(this).edit().putBoolean("enabled",false).apply();stopService(new Intent(this,BridgeService.class));last="";refresh();}),16);
         add(content,text("5/6 與 6/6 是觀察條件，並非買進指令。\n價格來自電腦 OCR；請在下單前核對原始行情。",11,MUTED,false),4);
-        if(getIntent().getData()!=null)acceptPair(getIntent().getData().toString());
+        if(getIntent().getData()!=null){String pairLink=getIntent().getData().toString();getIntent().setData(null);acceptPair(pairLink);}
     }
     @Override protected void onSaveInstanceState(Bundle state){state.putBoolean("demo_mode",demoMode);super.onSaveInstanceState(state);}
     void toggleDemo(){demoMode=!demoMode;demoButton.setText(demoMode?"關閉測試卡片":"顯示測試卡片（5/6、6/6）");demoBanner.setVisibility(demoMode?View.VISIBLE:View.GONE);last="";refresh();}
-    @Override public void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);if(intent.getData()!=null)acceptPair(intent.getData().toString());}
-    @Override public void onResume(){super.onResume();handler.post(tick);if(updater!=null)updater.resume();}
+    @Override public void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);if(intent.getData()!=null){String pairLink=intent.getData().toString();intent.setData(null);acceptPair(pairLink);}}
+    @Override public void onResume(){super.onResume();if(!pairingPrompt)resumeSaved(false);handler.post(tick);if(updater!=null)updater.resume();}
     @Override public void onPause(){handler.removeCallbacks(tick);if(updater!=null)updater.pause();super.onPause();}
     static final int CAMERA_REQUEST=11;
     void scan(){
@@ -86,24 +88,41 @@ public class MainActivity extends Activity {
         }
     }
     @Override public void onActivityResult(int request,int result,Intent data){IntentResult scan=IntentIntegrator.parseActivityResult(request,result,data);if(scan!=null){if(scan.getContents()!=null)acceptPair(scan.getContents());return;}super.onActivityResult(request,result,data);}
-    void acceptPair(String value){try{Pairing pair=Pairing.parse(value);new AlertDialog.Builder(this).setTitle("連接這台電腦？").setMessage(pair.address+"\n接收5/6、6/6觀察通知，直到手動停止。").setPositiveButton("連線",(d,w)->connect(pair)).setNegativeButton("取消",null).show();}catch(Exception e){message("配對失敗",e.getMessage());}}
-    void connect(Pairing pair){stopService(new Intent(this,BridgeService.class));BridgeService.latest=null;BridgeService.receivedAt=0;BridgeService.connection="正在連接電腦…";
+    void acceptPair(String value){try{Pairing pair=Pairing.parse(value);pairingPrompt=true;new AlertDialog.Builder(this).setTitle("連接這台電腦？").setMessage(pair.address+"\n接收5/6、6/6觀察通知；保存配對，之後自動重連，直到手動停止。")
+        .setPositiveButton("連線",(d,w)->connect(pair)).setNegativeButton("取消",null).setOnDismissListener(d->pairingPrompt=false).show();}catch(Exception e){pairingPrompt=false;message("配對失敗",e.getMessage());}}
+    boolean resumeSaved(boolean manual){
+        android.content.SharedPreferences prefs=BridgeService.prefs(this);Pairing pair=Pairing.saved(prefs);
+        if(pair==null){if(manual)showPairing();return false;}
+        if(!manual&&(!prefs.getBoolean("enabled",false)||!prefs.getBoolean("auto_reconnect",true)))return false;
+        prefs.edit().putBoolean("enabled",true).apply();
+        if(BridgeService.receivedAt==0)BridgeService.connection="正在連回上次電腦…";
+        try{
+            startForegroundService(new Intent(this,BridgeService.class).setAction(manual?BridgeService.RETRY:null));
+            last="";return true;
+        }catch(RuntimeException e){
+            BridgeService.connection="請按「連回上次電腦」恢復連線";
+            if(manual)message("連線尚未啟動","請保持APP在前景，再按一次「連回上次電腦」。");
+            return false;
+        }
+    }
+    void connect(Pairing pair){Pairing saved=Pairing.saved(BridgeService.prefs(this));if(saved!=null&&saved.address.equals(pair.address)&&saved.token.equals(pair.token)){resumeSaved(true);last="";refresh();return;}stopService(new Intent(this,BridgeService.class));BridgeService.latest=null;BridgeService.receivedAt=0;BridgeService.connection="正在連接電腦…";
         BridgeService.prefs(this).edit().putString("address",pair.address).putString("token",pair.token).putString("session","").putLong("seq",0).remove("snapshot").putBoolean("enabled",true).apply();
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},10);
         startForegroundService(new Intent(this,BridgeService.class));last="";refresh();
     }
     void showPairing(){LinearLayout fields=new LinearLayout(this);fields.setOrientation(LinearLayout.VERTICAL);fields.setPadding(dp(20),dp(8),dp(20),0);
         EditText address=new EditText(this);address.setText(BridgeService.prefs(this).getString("address",""));address.setHint("電腦位址，例如 http://192.168.1.10:8765");address.setInputType(17);fields.addView(address);
-        EditText token=new EditText(this);token.setHint("配對碼，或貼上完整 mitake://pair 連結");token.setInputType(129);fields.addView(token);
-        TextView hint=text("同Wi-Fi可直接連線；外出請經私人VPN連回電腦。\n電腦須保持開機、啟用連線並執行掃描。",12,MUTED,false);fields.addView(hint);
-        new AlertDialog.Builder(this).setTitle("電腦連動").setView(fields).setPositiveButton("連線",(d,w)->{try{String value=token.getText().toString().trim();if(value.startsWith("mitake:"))acceptPair(value);else connect(new Pairing(address.getText().toString(),value));}catch(Exception e){message("無法連線",e.getMessage());}}).setNeutralButton("掃描QR碼",(d,w)->scan()).setNegativeButton("取消",null).show();
+        EditText token=new EditText(this);token.setHint(Pairing.saved(BridgeService.prefs(this))==null?"配對碼，或貼上完整 mitake://pair 連結":"已儲存配對碼；同一電腦可留空直接連線");token.setInputType(129);fields.addView(token);
+        Switch automatic=new Switch(this);automatic.setText("開啟APP時自動重連");automatic.setChecked(BridgeService.prefs(this).getBoolean("auto_reconnect",true));automatic.setOnCheckedChangeListener((v,on)->BridgeService.prefs(this).edit().putBoolean("auto_reconnect",on).apply());fields.addView(automatic);
+        TextView hint=text("已配對的同一位址可留空配對碼，直接連線。\n同Wi-Fi或私人VPN可連回電腦；電腦須保持開機並啟用手機連線。\n手動停止後不自動重連，可按「連回上次電腦」恢復。",12,MUTED,false);fields.addView(hint);
+        new AlertDialog.Builder(this).setTitle("電腦連動").setView(fields).setPositiveButton("連線",(d,w)->{try{String value=token.getText().toString().trim();if(value.startsWith("mitake:"))acceptPair(value);else connect(Pairing.fromForm(BridgeService.prefs(this),address.getText().toString(),value));}catch(Exception e){message("無法連線",e.getMessage());}}).setNeutralButton("掃描QR碼",(d,w)->scan()).setNegativeButton("取消",null).show();
     }
     @Override public void onDestroy(){intraday.close();stockCards.clear();if(updater!=null)updater.close();if(testSpeech!=null)testSpeech.close();if(testHaptics!=null)testHaptics.close();super.onDestroy();}
     void showDiagnosis(){
         String address=BridgeService.prefs(this).getString("address","");
         long success=BridgeService.prefs(this).getLong("last_success",0);
         String text="電腦位址："+(address.isEmpty()?"尚未配對":address)+"\n\n"+ConnectionDiagnosis.network(this)+"\n\n最後成功連線："+(success==0?"尚無成功紀錄":new SimpleDateFormat("MM/dd HH:mm:ss",Locale.TAIWAN).format(new Date(success)))+"\n\n"+(BridgeService.connectionReason.isEmpty()?BridgeService.connection:BridgeService.connectionReason)+"\n\n電腦需開啟「進階工具 → 手機連動／配對 → 啟用／顯示配對碼」。Windows 防火牆需允許私人網路。電腦換 IP 或重設配對碼後，請重新掃碼。";
-        new AlertDialog.Builder(this).setTitle("連線診斷").setMessage(text).setPositiveButton("立即重連",(d,w)->{if(BridgeService.prefs(this).getBoolean("enabled",false))startForegroundService(new Intent(this,BridgeService.class).setAction(BridgeService.RETRY));else showPairing();}).setNegativeButton("關閉",null).show();
+        new AlertDialog.Builder(this).setTitle("連線診斷").setMessage(text).setPositiveButton("立即重連",(d,w)->{resumeSaved(true);}).setNegativeButton("關閉",null).show();
     }
     void showVoice(){
         LinearLayout settings=new LinearLayout(this);settings.setOrientation(LinearLayout.VERTICAL);settings.setPadding(dp(20),dp(8),dp(20),dp(8));
@@ -124,6 +143,8 @@ public class MainActivity extends Activity {
         if(data==null)try{data=new JSONObject(BridgeService.prefs(this).getString("snapshot",""));cached=true;}catch(Exception ignored){}
         boolean enabled=BridgeService.prefs(this).getBoolean("enabled",false);
         boolean online=enabled&&!cached&&BridgeService.receivedAt>0&&SystemClock.elapsedRealtime()-BridgeService.receivedAt<10000;
+        Pairing remembered=Pairing.saved(BridgeService.prefs(this));
+        savedComputer.setText(remembered==null?"尚未保存電腦配對":"上次電腦："+remembered.address+" · "+(enabled?(BridgeService.prefs(this).getBoolean("auto_reconnect",true)?"自動重連已開啟":"開啟APP自動重連已關閉"):"已手動停止，可按下方恢復"));
         String label=enabled?BridgeService.connection:"已停止連線";
         connection.setText("●  "+label);connection.setTextColor(online?TEAL:GOLD);
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)label+="｜通知未允許，震動／語音仍依開關執行";

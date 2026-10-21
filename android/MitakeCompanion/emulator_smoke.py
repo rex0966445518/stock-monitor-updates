@@ -170,6 +170,29 @@ with tempfile.TemporaryDirectory() as folder:
         assert '6/6' in alert_prefs,alert_prefs
         (out/'alert-vibrator.txt').write_text(adb('shell','dumpsys','vibrator_manager'),'utf-8')
         (out/'alert-dispatch-log.txt').write_text(adb('logcat','-d','-s','MitakeAlert:I'),'utf-8')
+        # Reopen after process death: no QR or token entry; service must receive again.
+        before_reopen=time.time()
+        adb('shell','am','force-stop','com.rex.mitakecompanion')
+        adb('shell','am','start','-W','-n','com.rex.mitakecompanion/.MainActivity')
+        time.sleep(8)
+        ui,_=find_ui('已連線',contains=True,seek='up')
+        assert '上次電腦：http://10.0.2.2:8765' in ui,ui
+        ui,_=find_ui('必要檢核已通過',contains=True)
+        prefs_xml=adb('shell','run-as','com.rex.mitakecompanion','cat','shared_prefs/pairing.xml')
+        prefs_root=ET.fromstring(prefs_xml)
+        last_success=next(int(n.attrib['value']) for n in prefs_root if n.attrib.get('name')=='last_success')
+        assert last_success>before_reopen*1000,prefs_xml
+        screen('companion-auto-reconnected.png')
+        # Explicit stop survives reopen; one tap resumes the same pairing.
+        tap('停止手機連線')
+        adb('shell','am','force-stop','com.rex.mitakecompanion')
+        adb('shell','am','start','-W','-n','com.rex.mitakecompanion/.MainActivity')
+        time.sleep(4)
+        ui,_=find_ui('已停止連線',contains=True,seek='up')
+        tap('連回上次電腦',seek='up')
+        time.sleep(7)
+        ui,_=find_ui('已連線',contains=True,seek='up')
+        assert '上次電腦：http://10.0.2.2:8765' in ui,ui
         # Real protocol downgrade, then omission/PC reset, and phone process restart.
         weaken.set();time.sleep(7)
         ui,_=find_ui('已轉弱，保留紀錄',contains=True)
@@ -193,7 +216,7 @@ with tempfile.TemporaryDirectory() as folder:
         assert '測試候選' in ui
         screen('companion-offline.png')
         (out/'ui.xml').write_text(ui,'utf-8')
-        (out/'integration.json').write_text(json.dumps(dict(ok=True,synthetic=True,upgrade_notifications=True,offline_retention=True,downgrade_retention=True,omission_and_restart_retention=True)),'utf-8')
+        (out/'integration.json').write_text(json.dumps(dict(ok=True,synthetic=True,upgrade_notifications=True,offline_retention=True,downgrade_retention=True,omission_and_restart_retention=True,auto_reconnect=True,manual_stop_and_one_tap_resume=True)),'utf-8')
     except Exception:
         screen('companion-failure.png');(out/'logcat.txt').write_text(adb('logcat','-d','-t','300'),'utf-8');raise
     finally:stop.set();bridge.close()

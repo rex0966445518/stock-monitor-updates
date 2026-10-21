@@ -12,6 +12,19 @@ public final class Pairing {
         if(!token.matches("[a-f0-9]{48}"))throw new IllegalArgumentException("配對碼格式不正確，請重新掃碼");
         this.address=address;this.token=token;
     }
+    public static Pairing saved(android.content.SharedPreferences prefs) {
+        try{return new Pairing(prefs.getString("address",""),prefs.getString("token",""));}
+        catch(RuntimeException ignored){return null;}
+    }
+    public static Pairing fromForm(android.content.SharedPreferences prefs,String address,String token) {
+        if(!token.trim().isEmpty())return new Pairing(address,token);
+        Pairing saved=saved(prefs);
+        if(saved!=null){
+            Pairing proposed=new Pairing(address,saved.token);
+            if(proposed.address.equals(saved.address))return proposed;
+        }
+        throw new IllegalArgumentException("電腦位址已變更或尚未配對，請輸入新配對碼或重新掃碼");
+    }
     public static boolean privateHost(String host) {
         if(host==null||!host.matches("\\d{1,3}(\\.\\d{1,3}){3}"))return false;
         String[] parts=host.split("\\.");int[] n=new int[4];for(int i=0;i<4;i++){n[i]=Integer.parseInt(parts[i]);if(n[i]>255)return false;}
