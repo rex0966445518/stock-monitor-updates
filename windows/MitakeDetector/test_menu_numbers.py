@@ -262,3 +262,36 @@ class BuyStrengthTests(unittest.TestCase):
                 self.assertIn(-40,c.steps)
                 self.assertEqual(ocr.call_count,0 if restart else 1)
                 if restart:self.assertNotIn(-120,c.steps)
+
+class CumulativeBuyIntegrationTests(unittest.TestCase):
+    def test_number_19_click_and_simplified_title_confirm_without_text_fallback(self):
+        from adaptive import Experience
+        from autoswitch import absolute_roi
+        combo=[0,0,.22,.04];popup=[0,.04,.22,.3]
+        class C(FakeController):
+            def __init__(self):super().__init__();self.offset=0;self.selected=7
+            def image(self,roi):
+                region=absolute_roi(roi,self.rect())
+                if roi==combo:
+                    image=Image.new('RGB',(220,32),(self.selected,0,0));image.info['title']=self.selected
+                else:image=menu(self.offset,count=10)
+                return image,region
+            def scroll(self,point,delta):self.check();self.offset=0 if delta>0 else min(34,self.offset+3)
+            def click(self,point):
+                super().click(point)
+                top=absolute_roi(popup,self.rect())['top']
+                if point[1]>=top:self.selected=self.offset+int((point[1]-top)//24)+1
+        c=C();calls=[];status=[]
+        def ocr(image):
+            if 'title' in image.info:return [token('累计买力' if image.info['title']==19 else '漲幅排行')]
+            calls.append(c.offset)
+            self.assertEqual(c.offset,0,'Must not search lower menu pages by Chinese OCR')
+            return tokens()
+        experience=Experience()
+        for repeat in range(2):
+            c.selected=7
+            s=RankingSwitcher(c,ocr,combo,popup,experience=experience,numbering=True,status=status.append)
+            s.menu_point=Mock(side_effect=AssertionError('Slow Chinese search used'))
+            s.switch('累計買力')
+            self.assertEqual(c.selected,19);self.assertEqual(experience.number('累計買力'),19)
+        self.assertEqual(calls,[0]);self.assertTrue(any('第 19 項｜標題核對通過' in line for line in status))

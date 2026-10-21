@@ -18,7 +18,7 @@ RANKINGS = [
     '現股當沖','注意股','處置股','異常推介','特殊異常','暫停交易',
     '延後開盤','延後收盤',
 ]
-TRANSLATE = str.maketrans('漲預單匯買賣盤轉強連續鎖處暫開壓氣異後價縮當沖震盪實時總','涨预单汇买卖盘转强连续锁处暂开压气异后价缩当冲震荡实时总')
+TRANSLATE = str.maketrans('漲預單匯買賣盤轉強連續鎖處暫開壓氣異後價縮當沖震盪實時總計','涨预单汇买卖盘转强连续锁处暂开压气异后价缩当冲震荡实时总计')
 
 class AutomationStopped(RuntimeError): pass
 
@@ -114,7 +114,9 @@ def cumulative_buy_suffix(tokens):
         text=normalized(text)
         if score>=.85 and text not in {normalized(n) for n in RANKINGS if n!='累計買力'} and len(text) in (3,4) and text.endswith(normalized('計買力')):
             return (sum(p[0] for p in box)/4,sum(p[1] for p in box)/4)
-    return None
+    # The distinctive suffix can be split into adjacent high-confidence pieces.
+    # Reuse the same-row/gap checks; never accept bare 買力 or join different rows.
+    return find_menu_item([t for t in tokens or [] if t[2]>=.85],'計買力')
 
 
 def find_cumulative_buy_below_sell(tokens,height):

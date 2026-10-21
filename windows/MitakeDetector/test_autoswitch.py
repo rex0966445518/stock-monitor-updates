@@ -262,3 +262,12 @@ class SkipMenuTests(unittest.TestCase):
         switch.switch('漲幅排行')
         self.assertEqual(len([a for a in c.actions if a[0]=='click'])-before,1)
         self.assertFalse(switch.menu_is_open)
+
+class CumulativeTitleFormsTests(unittest.TestCase):
+    def test_simplified_and_split_suffix_but_not_sell_or_cross_row(self):
+        s=RankingSwitcher(FakeController(),lambda image:[],[0,0,.2,.1],[0,.1,.2,.5])
+        def piece(text,x,y=20):return ([[x,y-5],[x+10,y-5],[x+10,y+5],[x,y+5]],text,.99)
+        self.assertTrue(s.title_tokens_match([token('累计买力')],'累計買力'))
+        self.assertTrue(s.title_tokens_match([piece('计',10),piece('买',22),piece('力',34)],'累計買力'))
+        for rows in [[token('累计卖力')],[token('分时买力')],[piece('计',10),piece('买力',22,45)],[token('買力')]]:
+            self.assertFalse(s.title_tokens_match(rows,'累計買力'))
