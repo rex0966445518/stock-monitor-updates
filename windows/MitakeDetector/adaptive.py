@@ -8,7 +8,7 @@ class Experience:
         self.path=Path(path) if path else None
         self.key=json.dumps(layout,sort_keys=True,separators=(',',':'))
         self.enabled=enabled
-        self.data={'version':1,'layout':self.key,'ranks':{},'scrolls':{}}
+        self.data={'version':1,'layout':self.key,'ranks':{},'scrolls':{},'numbers':{}}
         if self.path and enabled:
             try:
                 value=json.loads(self.path.read_text(encoding='utf-8'))
@@ -24,10 +24,19 @@ class Experience:
                                 self.data['ranks'][name].update(signature=sig,point=point)
                                 if self.position(name,sig) is None:
                                     self.data['ranks'][name].pop('point',None);self.data['ranks'][name].pop('signature',None)
+                    for name,number in value.get('numbers',{}).items():
+                        if type(number) is int and 1<=number<=500:self.data['numbers'][name]=number
                     for name,entry in value.get('scrolls',{}).items():
                         if isinstance(entry,dict) and type(entry.get('cap')) is int and 1<=entry['cap']<=6:
                             self.data['scrolls'][name]={'cap':entry['cap'],'recoveries':max(0,min(100000,int(entry.get('recoveries',0))))}
             except (OSError,ValueError,TypeError,AttributeError):pass
+
+    def number(self,name):return self.data['numbers'].get(name) if self.enabled else None
+    def record_number(self,name,number):
+        if self.enabled and type(number) is int and 1<=number<=500:
+            self.data['numbers'][name]=number;self.save()
+    def forget_number(self,name):
+        self.data['numbers'].pop(name,None);self.save()
 
     def scroll_cap(self,name):
         return self.data['scrolls'].get(name,{}).get('cap',6) if self.enabled else 6

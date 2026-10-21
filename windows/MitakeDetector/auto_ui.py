@@ -175,7 +175,7 @@ class AutoUI:
                 self.events.put((token,'auto_setup_done',(cfg,target,len(quotes),start_after)))
             except Exception as exc:self.events.put((token,'auto_end','自動設定未完成：'+str(exc)+'；可使用手動設定。'))
             finally:
-                self.restore_scan_cursor();stop.set()
+                self.events.put((token,'menu_numbers',None));self.restore_scan_cursor();stop.set()
         def launch():
             if token!=self.generation:return
             self.worker_thread=threading.Thread(target=job,daemon=True);self.worker_thread.start()
@@ -439,7 +439,9 @@ class AutoUI:
             opened,_=c.image([0,0,1,1])
             menu=detect_menu(opened,layout['combo'],self.read_auto_ocr);c.check()
             picker=RankingSwitcher(c,self.read_auto_ocr,layout['combo'],menu,ocr_retry=self.read_menu_ocr_retry,
-                status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None))))
+                status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None))),
+                numbering=auto.get('menu_numbering',True),menu_numbers=auto.get('menu_numbers',{}),
+                show_numbers=lambda data:self.events.put((token,'menu_numbers',data)))
             try:picker.switch(ranking,menu_open=True)
             except AutomationStopped as exc:
                 if not str(exc).startswith(('選單中找不到','切換後標題')):raise
@@ -601,6 +603,8 @@ class AutoUI:
         for i,name in enumerate(RANKINGS):
             var=self.tk.BooleanVar(value=name in enabled);rank_vars[name]=var
             self.ttk.Checkbutton(ranks,text=name,variable=var).grid(row=i//5,column=i%5,sticky='w',padx=5,pady=2)
+        numbered=self.ttk.Frame(tabs);tabs.add(numbered,text='排行編號（手動校正）')
+        number_vars=self.build_menu_number_settings(numbered,cfg)
         fields=self.ttk.Frame(top);fields.pack(fill='x',padx=15,pady=10)
         delay=self.tk.StringVar(value=str(cfg.get('seconds',15)))
         pages=self.tk.StringVar(value=str(cfg.get('pages',1)))
@@ -616,10 +620,12 @@ class AutoUI:
             except OSError as exc:messagebox.showerror('清除失敗',str(exc));return
             self.say('操作經驗已清除，下次重新學習')
         self.ttk.Button(body,text='清除操作經驗',command=clear_experience).pack(anchor='w',padx=15)
-        self.ttk.Label(body,text='優先重用已驗證搜尋路徑，失敗時回頂端找文字，再確認切換後標題；找不到或視窗縮放時停止。\n多頁使用滑鼠滾輪向下讀取並依股號合併；不是官方全市場資料。\n首次先按「測試輪切一次」，確認切換正確後再開始持續輪切。',wraplength=810).pack(anchor='w',padx=15,pady=7)
+        self.ttk.Label(body,text='優先依編號定位並核對標題；無法可靠定位時回到文字搜尋，單一排行失敗會跳過並通知手機。\n多頁使用滑鼠滾輪向下讀取並依股號合併；不是官方全市場資料。\n首次先按「測試輪切一次」，確認切換正確後再開始持續輪切。',wraplength=810).pack(anchor='w',padx=15,pady=7)
         def save(close=True):
             try:
                 if combo.current()>=0:hwnd()
+                from menu_numbers import validate_numbers
+                cfg['menu_numbers']=validate_numbers({name:var.get().strip() for name,var in number_vars.items()})
                 cfg['adaptive']=bool(adaptive.get());cfg['full_table']=bool(full_table.get())
                 cfg['seconds']=float(delay.get());cfg['pages']=int(pages.get())
                 if not 3<=cfg['seconds']<=3600 or not 1<=cfg['pages']<=20:raise ValueError('秒數需3～3600，頁數需1～20')
@@ -636,6 +642,63 @@ class AutoUI:
         buttons=self.ttk.Frame(top);buttons.pack(fill='x',padx=15,pady=8)
         self.ttk.Button(buttons,text='儲存設定',command=save).pack(side='left')
         self.ttk.Button(buttons,text='測試輪切一次（不讀取行情）',command=test).pack(side='left',padx=10)
+        def preview():
+            if save():self.preview_menu_numbers()
+        self.ttk.Button(buttons,text='預覽選單編號（F8結束）',command=preview).pack(side='left',padx=10)
+
+    def build_menu_number_settings(self,parent,cfg):
+        from menu_numbers import validate_numbers
+        self.ttk.Label(parent,text='編號從選單最上方第1項開始，往下連續計數，捲動後不重新從1算。\n留空：優先使用已驗證編號，再嘗試預設順序。下方預設序號僅供參考，以「預覽選單編號」為準。\n找不到排行時，填入實際編號並儲存；選取後仍核對標題。',wraplength=860).pack(anchor='w',padx=15,pady=12)
+        enabled=self.tk.BooleanVar(value=cfg.get('menu_numbering',True))
+        def toggle():cfg['menu_numbering']=bool(enabled.get())
+        self.ttk.Checkbutton(parent,text='啟用數字定位與選單旁編號（減少中文OCR）',variable=enabled,command=toggle).pack(anchor='w',padx=15)
+        frame=self.ttk.Frame(parent);frame.pack(fill='both',expand=True,padx=15,pady=10)
+        canvas=self.tk.Canvas(frame,highlightthickness=0);scroll=self.ttk.Scrollbar(frame,orient='vertical',command=canvas.yview)
+        canvas.configure(yscrollcommand=scroll.set);scroll.pack(side='right',fill='y');canvas.pack(side='left',fill='both',expand=True)
+        content=self.ttk.Frame(canvas);canvas.create_window((0,0),window=content,anchor='nw')
+        content.bind('<Configure>',lambda event:canvas.configure(scrollregion=canvas.bbox('all')))
+        variables={}
+        for i,name in enumerate(RANKINGS):
+            group=i//20;row=i%20
+            self.ttk.Label(content,text=f'{name}（預設{i+1}）',width=26).grid(row=row,column=group*2,sticky='w',pady=5)
+            value=self.tk.StringVar(value=str(cfg.get('menu_numbers',{}).get(name,'')));variables[name]=value
+            self.ttk.Entry(content,textvariable=value,width=7).grid(row=row,column=group*2+1,padx=(0,22))
+        return variables
+
+    def preview_menu_numbers(self):
+        if not self.idle() or not self.dependencies():return
+        from menu_numbers import NativeMenu,PixelMenu
+        from tkinter import messagebox
+        cfg=self.config.get('auto_config',{})
+        try:
+            for key in ('combo','menu'):validate_roi(cfg.get(key))
+            target=self.auto_hwnd
+            if not target:raise ValueError('請選擇三竹視窗')
+        except Exception as exc:messagebox.showerror('需要設定',str(exc));return
+        self.generation+=1;token=self.generation;self.stop_event=threading.Event();stop=self.stop_event
+        self.status.set('排行編號預覽｜可捲動選單查看；按F8結束後填入設定')
+        def job():
+            try:
+                c=WindowsController(target,stop);c.activate()
+                threading.Thread(target=c.monitor_hotkey,daemon=True).start()
+                _,combo=c.image(cfg['combo']);c.click((combo['left']+combo['width']//2,combo['top']+combo['height']//2));c.pause(.4)
+                region=absolute_roi(cfg['menu'],c.rect());center=(region['left']+region['width']//2,region['top']+region['height']//2)
+                c.scroll(center,120*60);c.pause(.3)
+                native=None;geometry=None
+                try:native=NativeMenu(c,region)
+                except (ValueError,AttributeError):
+                    im,_=c.image(cfg['menu']);geometry=PixelMenu(im,self.read_auto_ocr(im))
+                while not stop.is_set():
+                    if native:rows=native.rows()
+                    else:
+                        im,_=c.image(cfg['menu'])
+                        if not geometry.update(im):raise ValueError('捲動距離過大或選單已關閉；請重新預覽並逐格捲動')
+                        rows=geometry.rows()
+                    self.events.put((token,'menu_numbers',dict(region=region,rows=rows)))
+                    c.pause(.25)
+            except Exception as exc:self.events.put((token,'message','編號預覽結束：'+str(exc)))
+            finally:stop.set();self.events.put((token,'menu_numbers',None))
+        self.worker_thread=threading.Thread(target=job,daemon=True);self.worker_thread.start()
 
     def read_menu_ocr_retry(self,image):
         from PIL import ImageOps
@@ -840,7 +903,8 @@ class AutoUI:
                 from MitakeDetector import BASE
                 experience=Experience(BASE/'automation-experience.json',
                     {k:auto.get(k) for k in ('title','window_size','combo','menu','table')},auto.get('adaptive',True))
-                switcher=RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu'],experience=experience,ocr_retry=self.read_menu_ocr_retry,status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None))))
+                switcher=RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu'],experience=experience,ocr_retry=self.read_menu_ocr_retry,status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None))),
+                    numbering=auto.get('menu_numbering',True),menu_numbers=auto.get('menu_numbers',{}),show_numbers=lambda data:self.events.put((token,'menu_numbers',data)))
                 switcher.menu_is_open=getattr(self,'_scan_menu_open',False)
                 priority_last={}
                 failed_reads=[0];saved_failure=[False]
@@ -1072,7 +1136,7 @@ class AutoUI:
                 recoverable=not test_only and not stop.is_set() and (not isinstance(exc,AutomationStopped) or str(exc).startswith(('選單中找不到','切換後標題')))
                 self.events.put((token,'auto_failed' if recoverable else 'auto_end','掃描已暫停，進度保留：'+str(exc)+'｜'+location))
             finally:
-                self.restore_scan_cursor();stop.set()
+                self.events.put((token,'menu_numbers',None));self.restore_scan_cursor();stop.set()
         def launch():
             if token!=self.generation:return
             self.worker_thread=threading.Thread(target=job,daemon=True);self.worker_thread.start()

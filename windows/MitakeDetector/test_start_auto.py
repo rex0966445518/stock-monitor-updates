@@ -430,13 +430,13 @@ class SavedRotationTests(unittest.TestCase):
         from auto_ui import calibrated_auto
         from autoswitch import RANKINGS
         prefs=dict(rankings=list(RANKINGS)[:12],seconds=3,pages=7,
-                   full_table=False,adaptive=False,combo=[0,0,.2,.1])
+                   full_table=False,adaptive=False,combo=[0,0,.2,.1],menu_numbering=True,menu_numbers={'開盤強勢':21})
         ui=UI(copy.deepcopy(DEFAULT));ui.save=lambda:app.App.save(ui)
         with tempfile.TemporaryDirectory() as folder,patch.object(app,'BASE',Path(folder)):
             ui.persist_auto_preferences(prefs)
             loaded=json.loads((Path(folder)/'settings.json').read_text('utf-8'))
             result=calibrated_auto(loaded['auto_config'],combo=[.1,.1,.3,.1],discovered=1)
-            for key in ('rankings','seconds','pages','full_table','adaptive'):
+            for key in ('rankings','seconds','pages','full_table','adaptive','menu_numbering','menu_numbers'):
                 self.assertEqual(result[key],prefs[key])
             self.assertNotEqual(result['combo'],prefs['combo'])
             ui.persist_auto_preferences(result)

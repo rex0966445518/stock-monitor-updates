@@ -152,6 +152,38 @@ def run_automation_smoke(root,app):
         else:stop.set();raise RuntimeError('Automation fixture timed out')
         if not ok:raise RuntimeError('Automation fixture: '+error)
         assert label.get()=='漲幅排行'
-        return {'menu_switches':3,'selected_label':label.get(),'stop_blocks_input':True,'menu_auto_detected':True,'current_rank_no_click':True,'open_popup_one_click':True,'progress_visible':True,'progress_no_focus':True}
+        # Exercise real native ListBox indices and passive numbering on Windows.
+        stop.clear();app.close_task_progress();win.lift();win.focus_force();root.update()
+        u.CreateWindowExW.argtypes=[W.DWORD,W.LPCWSTR,W.LPCWSTR,W.DWORD,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,W.HWND,W.HMENU,W.HINSTANCE,W.LPVOID]
+        u.CreateWindowExW.restype=W.HWND
+        u.SendMessageW.argtypes=[W.HWND,W.UINT,W.WPARAM,W.LPARAM];u.SendMessageW.restype=W.LPARAM
+        u.DestroyWindow.argtypes=[W.HWND]
+        child=u.CreateWindowExW(0,'LISTBOX','',0x50000000|0x00200000|0x40|0x100,300,180,180,180,hwnd,None,None,None)
+        assert child,'Native menu fixture creation failed'
+        ruler=None
+        try:
+            for i in range(39):
+                text=ctypes.create_unicode_buffer('Ranking '+str(i+1))
+                assert u.SendMessageW(child,0x0180,0,ctypes.addressof(text))>=0
+            root.update();r=W.RECT();u.GetWindowRect(child,ctypes.byref(r))
+            native_region=dict(left=r.left,top=r.top,width=r.right-r.left,height=r.bottom-r.top)
+            from menu_numbers import NativeMenu,NumberOverlay
+            native=NativeMenu(controller,native_region)
+            assert native.count==39
+            point=native.point(21);assert point is not None and native.rows()[0][0]==21
+            foreground=u.GetForegroundWindow();ruler=NumberOverlay(root)
+            ruler.update(dict(region=native_region,rows=native.rows()));root.update()
+            assert ruler.window.winfo_ismapped() and u.GetForegroundWindow()==foreground,'Number ruler stole focus'
+            assert '21' in [ruler.canvas.itemcget(i,'text') for i in ruler.canvas.find_all()]
+            hit=u.WindowFromPoint(W.POINT(round(r.left+point[0]),round(r.top+point[1])))
+            assert hit==child,'Number overlay blocked menu input'
+            ruler.update(None);root.update();assert not ruler.window.winfo_ismapped()
+        finally:
+            if ruler:ruler.close()
+            u.DestroyWindow(child)
+        editor=tk.Toplevel(root);number_vars=app.build_menu_number_settings(editor,{'menu_numbers':{'開盤強勢':21}})
+        root.update_idletasks();assert number_vars['開盤強勢'].get()=='21' and len(number_vars)==39
+        editor.destroy()
+        return {'menu_switches':3,'selected_label':label.get(),'stop_blocks_input':True,'menu_auto_detected':True,'current_rank_no_click':True,'open_popup_one_click':True,'progress_visible':True,'progress_no_focus':True,'native_number_21':True,'number_overlay_no_focus':True,'manual_number_editor':True}
     finally:
         stop.set();thread.join(timeout=1);app.close_task_progress();win.destroy();root.update()

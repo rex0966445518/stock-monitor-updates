@@ -261,10 +261,12 @@ class WindowsController:
 
 
 class RankingSwitcher:
-    def __init__(self,controller,ocr,combo_roi,menu_roi,ocr_retry=None,status=None,experience=None):
+    def __init__(self,controller,ocr,combo_roi,menu_roi,ocr_retry=None,status=None,experience=None,numbering=False,menu_numbers=None,show_numbers=None):
         self.experience=experience
         self.c=controller;self.ocr=ocr;self.ocr_retry=ocr_retry;self.status=status or (lambda text:None)
         self.combo=validate_roi(combo_roi);self.menu=validate_roi(menu_roi)
+        from menu_numbers import NumberNavigator
+        self.numbers=NumberNavigator(self,menu_numbers,show_numbers) if numbering else None
 
     @staticmethod
     def menu_signature(im):
@@ -376,6 +378,11 @@ class RankingSwitcher:
         return False
 
     def switch(self,name,menu_open=False):
+        try:return self._switch(name,menu_open)
+        finally:
+            if self.numbers:self.numbers.show(None)
+
+    def _switch(self,name,menu_open=False,allow_numbers=True):
         menu_open=menu_open or getattr(self,'menu_is_open',False)
         self.menu_is_open=menu_open
         if name not in RANKINGS:raise ValueError('未知排行名稱')
@@ -392,6 +399,17 @@ class RankingSwitcher:
         menu=absolute_roi(self.menu,self.c.rect())
         center=(menu['left']+menu['width']//2,menu['top']+menu['height']//2)
         self.c.scroll(center,120*60);self.c.pause(.35)
+        if self.numbers and allow_numbers:
+            point=self.numbers.locate(name,menu)
+            if point is not None:
+                self.c.click((menu['left']+point[0],menu['top']+point[1]));self.menu_is_open=False
+                if self.verify_label(name):
+                    self.numbers.verified(name);return
+                self.numbers.rejected(name)
+                self.status(f'第 {self.numbers.number(name)} 項不是「{name}」，本次停用該編號並改用文字搜尋；請核對手動編號')
+                return self._switch(name,False,False)
+            self.numbers.show(None)
+            self.c.scroll(center,120*60);self.c.pause(.15)
         # Reproduce a learned scroll path, but OCR the target again before clicking.
         hint=self.experience.hint(name) if self.experience else None
         if hint is not None:
@@ -415,7 +433,9 @@ class RankingSwitcher:
             self.c.scroll(center,120*60);self.c.pause(.35)
         previous=None;unchanged=0
         for page in range(60):
-            self.c.check();im,region=self.c.image(self.menu);tokens=self.ocr(im)
+            self.c.check();im,region=self.c.image(self.menu)
+            if self.numbers:self.numbers.observe(im,page)
+            tokens=self.ocr(im)
             self.status(f'正在尋找「{name}」｜選單第{page+1}段')
             point=self.menu_point(im,tokens,name)
             if point:
@@ -423,6 +443,7 @@ class RankingSwitcher:
                 self.menu_is_open=False
                 if self.verify_label(name):
                     if self.experience:self.experience.record(name,page,point,self.menu_signature(im))
+                    if self.numbers:self.numbers.text_verified(name,point)
                     return
                 if self.experience:self.experience.forget(name)
                 raise AutomationStopped(self.title_failure())

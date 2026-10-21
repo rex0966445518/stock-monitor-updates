@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.81'
+VERSION = '0.3.82'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -601,6 +601,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         tick()
 
     def stop(self):
+        if getattr(self,'number_overlay',None):self.number_overlay.update(None)
         self.cancel_scan_retry()
         self.save_daily_table()
         self.restore_scan_cursor()
@@ -810,6 +811,11 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
                     if payload.get('count',0)>0:
                         if time.monotonic()-getattr(self,'scan_run_started',time.monotonic())>=60:self.scan_retry_count=0
                         if panel and panel.alive:panel.mark_success()
+                elif kind == 'menu_numbers':
+                    if not getattr(self,'number_overlay',None):
+                        from menu_numbers import NumberOverlay
+                        self.number_overlay=NumberOverlay(self.root)
+                    self.number_overlay.update(payload)
                 elif kind == 'ranking_skipped':
                     bridge=getattr(self,'mobile_bridge',None)
                     if bridge:bridge.publish_notice(**payload)
