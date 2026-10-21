@@ -3,11 +3,11 @@ import time
 
 
 class ScanRate:
-    def __init__(self):self.started=None;self.last='讀取速率：等待首段'
+    def __init__(self):self.started=None;self.last_seconds=None;self.last='讀取速率：等待首段'
     def update(self,state):
         if state.get('start') is not None:self.started=state['start']
         else:
-            elapsed=max(.001,state['elapsed']);count=state['count']
+            elapsed=max(.001,state['elapsed']);count=state['count'];self.last_seconds=elapsed
             self.last=f'{elapsed:.1f} 秒／段｜{count/elapsed:.2f} 檔／秒';self.started=None
     def text(self,now=None):
         if self.started is None:return self.last

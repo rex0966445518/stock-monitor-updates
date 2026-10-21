@@ -128,6 +128,7 @@ class DisplayScale:
                 u.SetWindowPos.argtypes=[W.HWND,W.HWND,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,W.UINT]
                 u.SetWindowPos(u.GetAncestor(self.root.winfo_id(),2),None,x,y,w,h,0x0010|0x0004)
             else:self.root.geometry(f'{w}x{h}{x:+d}{y:+d}')
+        if hasattr(self.app,'fit_terminal'):self.app.fit_terminal()
         if save:
             try:
                 self.path.parent.mkdir(parents=True,exist_ok=True)

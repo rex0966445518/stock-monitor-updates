@@ -11,7 +11,6 @@ class SteadyUI:
         for key,value in DEFAULTS.items():
             if key!='steady_enabled':self.vars[key]=self.tk.StringVar(value=str(self.config.get(key,value)))
         self.ttk.Checkbutton(parent,text='09:00–12:50 盤尾緩漲檢核',variable=self.vars['steady_enabled']).pack(side='left',padx=8)
-        self.ttk.Button(self.main_actions,text='緩漲明細／設定',command=self.show_steady_settings).pack(side='left',padx=4)
     def init_steady(self):
         self.steady_tracker=SteadyTracker();self.steady_tracker.reset_day(time.time())
         self.steady_report_day=self.steady_tracker.day

@@ -25,7 +25,7 @@ def run_smoke_test(report):
         app.rank_rows={};app.auto_engines={};app.display_rows=[]
 
         assert root.title()=='漲停板探測器-雷允澤製 v'+VERSION
-        assert app.product_title.cget('text')=='漲停板探測器\n雷允澤製 · v'+VERSION
+        assert app.product_title.cget('text')=='漲停板探測器'
         import tkinter.font as tkfont
         from tkinter import ttk
         scale=app.display_scale.percent
@@ -96,7 +96,9 @@ def run_smoke_test(report):
         assert app.log.winfo_height()>=100
         assert app.phase_label.master==app.header_status
         assert app.summary_label.master==app.header_status
-        assert app.header_status.winfo_rootx()>app.product_title.winfo_rootx()
+        assert app.header_status.winfo_rooty()>app.main_actions.winfo_rooty()
+        assert app.focus_chart.frame.winfo_rootx()>app.tree.winfo_rootx()
+        assert app.focus_chart.canvas.winfo_width()>150
         assert app.tree.winfo_rooty()>app.main_actions.winfo_rooty()
         settings_preview=app.tk.Toplevel(root)
         app.build_filter_settings(settings_preview)
@@ -107,14 +109,14 @@ def run_smoke_test(report):
         settings_preview.destroy()
         assert app.market_label.winfo_rootx()>app.product_title.winfo_rootx()
         assert app.log.winfo_rootx()>app.today_tree.winfo_rootx()
-        assert app.market_label.winfo_rootx()+app.market_label.winfo_width()<=root.winfo_rootx()+root.winfo_width()
+        assert app.market_label.winfo_rootx()+app.market_label.winfo_width()<=app.ui_root.winfo_rootx()+app.ui_root.winfo_width()
         app.update_market_index(dict(quote=dict(price=10000,change=-10,percent=-.1,ts=dt.datetime.now().timestamp()),error=''))
         assert '10,000.00' in app.market_var.get()
         assert app.market_label.cget('fg')=='#59d99d'
         app.update_market_index(dict(error='fixture offline'))
         assert '保留前值' in app.market_var.get()
 
-        assert app.log.winfo_rooty()+app.log.winfo_height()<=root.winfo_rooty()+root.winfo_height()
+        assert app.log.winfo_rooty()+app.log.winfo_height()<=app.ui_root.winfo_rooty()+app.ui_root.winfo_height()
         app.set_update_progress(dict(stage='downloading',version='99.0.0',percent=42,downloaded=42*1048576,total=100*1048576,elapsed=4,message='CI download'))
         root.update()
         assert float(app.update_panel.bar['value'])==42
@@ -208,6 +210,22 @@ def run_smoke_test(report):
         assert '至少需要 34' in str(charts.cards['2330'][0][3].itemcget(charts.cards['2330'][0][3].find_all()[-1],'text'))
         charts.update([])
         info['candidate_four_panel_smoke']=True
+        from terminal_ui import refresh
+        saved_rows=getattr(app,'display_rows',[])
+        q=Quote('2330','台積電',101,3.5,1500,6,dt.datetime.now().timestamp())
+        app.display_rows=[(q,1.5,'等待觀測突破守穩',False)]
+        app.scan_rate.update({'elapsed':8.6,'count':1})
+        app._terminal_refresh=0;refresh(app);root.update_idletasks()
+        assert app.metric_vars['scanned'].get()=='1'
+        assert app.metric_vars['seconds'].get()=='8.6 秒'
+        app.focus_chart.mode.set('日 K');app.focus_chart.invalidate();root.update_idletasks()
+        assert '2330' in app.focus_chart.title.get()
+        assert len(app.focus_chart.canvas.find_all())>30
+        app.focus_chart.mode.set('日 MACD');app.focus_chart.invalidate()
+        assert any('至少需要' in str(app.focus_chart.canvas.itemcget(i,'text')) for i in app.focus_chart.canvas.find_all() if app.focus_chart.canvas.type(i)=='text')
+        app.display_rows=saved_rows
+        info['terminal_selection_and_measured_metrics']=True
+
         # Test bundled browser driver, Edge launch and period validation without relying on external network.
         import subprocess,os
         target=report.parent/'chart-fixture'

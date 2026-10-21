@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.98'
+VERSION = '0.3.99'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -256,7 +256,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         root.title('漲停板探測器-雷允澤製 v' + VERSION)
         root.geometry(f'{min(1540,root.winfo_screenwidth()-40)}x{min(1000,root.winfo_screenheight()-70)}')
         root.minsize(min(1100,root.winfo_screenwidth()-40),min(800,root.winfo_screenheight()-70))
-        root.configure(bg='#0b1020')
+        root.configure(bg='#071827')
         style = ttk.Style()
         style.theme_use('clam')
         style.configure('.', background='#111a2e', foreground='#e8eefb', font=('Microsoft JhengHei', 10))
@@ -274,18 +274,22 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         style.map('TCombobox',fieldbackground=[('readonly','#e6edf7')],foreground=[('readonly','#101827')])
         style.configure('Treeview', background='#101a2c', fieldbackground='#101a2c', foreground='#e4eaf5', rowheight=30)
         style.map('Treeview', background=[('selected', '#245675')])
+        from terminal_ui import theme,metrics,FocusChart,shell
+        theme(style)
+        root=shell(self)
         self.build_market_header()
-        tk.Label(root, text='觀察轉強候選股 · 持續複查量價與突破守穩 · 訊號不代表一定漲停', fg='#9caeca', bg='#0b1020').pack(anchor='w', padx=20)
-        bar = ttk.Frame(root); bar.pack(fill='x', padx=15, pady=12)
-        for label, action in [('開始／繼續（F8）', self.begin_observation), ('暫停（F8）', self.stop), ('重新開始', self.restart_observation), ('掃描設定', self.configure_auto), ('一鍵更新', self.check_update)]:
-            ttk.Button(bar, text=label, command=action).pack(side='left', padx=4)
-        advanced = ttk.Menubutton(bar, text='進階工具 ▾')
+        bar = ttk.Frame(root); bar.pack(fill='x', padx=18, pady=(0,10))
+        metric_bar=ttk.Frame(bar);metric_bar.pack(side='right',fill='both',expand=True,padx=(14,0))
+        metrics(self,metric_bar)
+        for label, action in [('▶ 開始掃描 F8', self.begin_observation), ('Ⅱ 暫停', self.stop), ('掃描設定', self.configure_auto), ('排行定位', self.preview_menu_numbers)]:
+            ttk.Button(bar, text=label, command=action,style='Gold.TButton' if action==self.begin_observation else 'TButton').pack(side='left', padx=4,fill='y')
+        advanced = ttk.Menubutton(self.header, text='進階工具 ▾')
         menu = tk.Menu(advanced, tearoff=False)
-        for label, action in [('手機連動／配對', self.show_mobile_pairing), ('重新自動定位', self.auto_setup), ('清除股名記憶', self.clear_stock_names), ('手動框選排行榜', self.select_region), ('手動校正欄位', self.calibrate), ('圖片辨識測試', self.image_test), ('合成資料示範', self.demo), ('辨識元件檢查', self.install), ('資料資料夾', self.open_folder), ('OCR學習紀錄', self.show_ocr_learning), ('中斷診斷', self.show_scan_diagnostics), ('版本日誌', self.show_version_history), ('訊號驗證紀錄', self.show_signal_reviews), ('進場檢核設定', self.show_guard_settings), ('籌碼觀察／研究', self.show_research), ('每日紀錄／重播驗證', self.show_scan_archive), ('5/6候選歷史日誌', self.show_candidate_diary), ('使用說明', self.help)]:
+        for label, action in [('重新開始',self.restart_observation),('緩漲明細／設定',self.show_steady_settings),('手機連動／配對', self.show_mobile_pairing), ('重新自動定位', self.auto_setup), ('清除股名記憶', self.clear_stock_names), ('手動框選排行榜', self.select_region), ('手動校正欄位', self.calibrate), ('圖片辨識測試', self.image_test), ('合成資料示範', self.demo), ('辨識元件檢查', self.install), ('資料資料夾', self.open_folder), ('OCR學習紀錄', self.show_ocr_learning), ('中斷診斷', self.show_scan_diagnostics), ('版本日誌', self.show_version_history), ('訊號驗證紀錄', self.show_signal_reviews), ('進場檢核設定', self.show_guard_settings), ('籌碼觀察／研究', self.show_research), ('每日紀錄／重播驗證', self.show_scan_archive), ('5/6候選歷史日誌', self.show_candidate_diary), ('使用說明', self.help)]:
             menu.add_command(label=label, command=action)
-        advanced.configure(menu=menu); advanced.pack(side='left', padx=4)
+        advanced.configure(menu=menu);advanced.grid(row=1,column=1,sticky='e',padx=10)
         self.main_actions=bar
-        auto_bar = ttk.Frame(self.header); auto_bar.grid(row=1,column=0,columnspan=3,sticky='ew',pady=(4,0))
+        auto_bar = ttk.Frame(root);auto_bar.pack(fill='x',padx=20,pady=(0,6))
         self.voice_var=tk.BooleanVar(value=self.config.get('voice_enabled',True))
         ttk.Checkbutton(auto_bar,text='語音提醒',variable=self.voice_var,command=self.toggle_task_voice).pack(side='left',padx=5)
         ttk.Label(auto_bar, text='F8 開始／暫停 · 三竹畫面保持可見').pack(side='left', padx=8)
@@ -299,42 +303,58 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         for key in ['guard_warmup','guard_window','guard_hold','guard_max_gap','guard_min_rise','guard_max_pullback']:
             self.vars[key]=tk.StringVar(value=str(self.config[key]))
         self.scan_phase=tk.StringVar(value='待機｜按 F8 開始連續掃描')
-        self.phase_label=tk.Label(self.header_status,textvariable=self.scan_phase,bg='#12243a',fg='#68f5d1',font=('Microsoft JhengHei',14,'bold'),anchor='w',justify='left')
-        self.phase_label.pack(fill='x')
+        self.header_status.pack(fill='x',padx=18,pady=(0,10))
+        self.scan_progress=ttk.Progressbar(self.header_status,mode='indeterminate',length=230)
+        self.scan_progress.pack(side='right',padx=12,pady=12)
+        self.phase_label=tk.Label(self.header_status,textvariable=self.scan_phase,bg='#12243a',fg='#68f5d1',font=('Microsoft JhengHei',11,'bold'),anchor='w',justify='left')
+        self.phase_label.pack(fill='x',padx=10,pady=8)
         self.phase_label.bind('<Configure>',lambda event:self.phase_label.configure(wraplength=max(80,event.width-8)))
         self.status = tk.StringVar(value='開啟三竹「熱門排行」，按 F8 或「開始掃描」。首次會自動定位；再次按 F8 停止。')
         from scan_rate import ScanRate
         self.scan_rate=ScanRate();self.scan_rate_var=tk.StringVar(value=self.scan_rate.text())
         self.observation_summary=tk.StringVar(value='尚未讀取股票資料｜轉強候選待判斷')
         self.summary_label=tk.Label(self.header_status,textvariable=self.observation_summary,bg='#0b1020',fg='#edf2ff',anchor='w',justify='left',wraplength=1400)
-        self.summary_label.pack(fill='x',pady=(2,3))
+        # Full diagnostic text stays in the log instead of expanding the header.
         self.summary_label.bind('<Configure>',lambda event:self.summary_label.configure(wraplength=max(80,event.width-8)))
-        filters=ttk.Frame(self.header_status);filters.pack(fill='x')
+        filters=ttk.Frame(auto_bar);filters.pack(side='right')
         ttk.Label(filters,text='隱藏結果：').grid(row=0,column=0,sticky='w')
         self.result_filters={}
         saved_filters=self.config.get('result_filters',{})
         for index,(key,label) in enumerate([('gain','漲幅不符'),('turnover','換手率不足'),('price','股價不足')]):
             var=tk.BooleanVar(value=bool(saved_filters.get(key,False)))
             self.result_filters[key]=var
-            ttk.Checkbutton(filters,text=label,variable=var,command=self.change_result_filters).grid(row=1+index//2,column=index%2,sticky='w',padx=2)
+            ttk.Checkbutton(filters,text=label,variable=var,command=self.change_result_filters).grid(row=0,column=index+1,sticky='w',padx=2)
         table_frame = ttk.Frame(root); table_frame.pack(fill='both', expand=True, padx=18)
         table_outer=table_frame
-        notebook=ttk.Notebook(table_outer);notebook.pack(fill='both',expand=True)
+        self.workspace_split=ttk.Panedwindow(table_outer,orient='horizontal');self.workspace_split.pack(fill='both',expand=True)
+        table_host=ttk.Frame(self.workspace_split);chart_host=tk.Frame(self.workspace_split,bg='#0c2236',highlightthickness=1,highlightbackground='#29465e')
+        self.workspace_split.add(table_host,weight=3);self.workspace_split.add(chart_host,weight=2)
+        self.workspace_split.bind('<Configure>',lambda e:self.workspace_split.sashpos(0,round(e.width*.60)))
+        notebook=ttk.Notebook(table_host);notebook.pack(fill='both',expand=True)
         table_frame=ttk.Frame(notebook);charts_frame=ttk.Frame(notebook)
         notebook.add(table_frame,text='數據列表');notebook.add(charts_frame,text='5/6・6/6 四格圖表')
         from candidate_charts import CandidateCharts
         self.candidate_charts=CandidateCharts(self,charts_frame)
-        cols = ['code','name','match','price','gain','volume','turnover','ratio','state']+[f'history{i}' for i in range(8)]
+        self.focus_chart=FocusChart(self,chart_host)
+        cols = ['code','name','match','price','gain','volume','turnover','ratio','state']+[f'history{i}' for i in range(8)]+['signal','score']
         self.tree = ttk.Treeview(table_frame, columns=cols, show='headings')
-        for key, label, width in zip(cols, LABELS[:2] + ['符合條件'] + LABELS[2:] + ['5分量速比', '觀察原因／尚缺條件'], [75,100,125,90,75,100,85,190,380]):
+        for key, label, width in zip(cols, LABELS[:2] + ['符合條件'] + LABELS[2:] + ['5分量速比', '觀察原因／尚缺條件'], [65,90,70,90,80,100,85,120,380]):
             self.tree.heading(key, text=label); self.tree.column(key, width=width, stretch=key == 'state')
         for i in range(8):
             self.tree.heading(f'history{i}',text=f'待掃描 {i+1}')
             self.tree.column(f'history{i}',width=100,anchor='e',stretch=False)
-        self.tree.configure(displaycolumns=cols[:8]+cols[9:]+['state'])
+        self.tree.heading('score',text='條件');self.tree.column('score',width=65,stretch=False)
+        self.tree.heading('signal',text='狀態');self.tree.column('signal',width=90,stretch=False)
+        self.table_view=tk.StringVar(value='行情總覽')
+        view_bar=ttk.Frame(table_frame);view_bar.pack(fill='x',pady=(0,4))
+        for label,columns in [('行情總覽',['code','name','score','price','gain','volume','signal']),('8 次價格',cols[:2]+cols[9:17]),('完整欄位',cols[:8]+cols[9:17]+['state'])]:
+            ttk.Radiobutton(view_bar,text=label,variable=self.table_view,value=label,command=lambda c=columns:self.tree.configure(displaycolumns=c)).pack(side='left',padx=6)
+        self.tree.configure(displaycolumns=['code','name','score','price','gain','volume','signal'])
+        self.tree.bind('<<TreeviewSelect>>',self.focus_chart.select)
+        self.tree.bind('<Double-1>',lambda e:self.show_selected_details())
         self.tree.tag_configure('stripe',background='#152338')
-        self.tree.tag_configure('hit', foreground='#fff1a8',background='#703026',font=('Microsoft JhengHei',10,'bold'))
-        self.tree.tag_configure('near',foreground='#ffd36a',background='#222b3d')
+        self.tree.tag_configure('hit', foreground='#fff1a8',background='#3e3d30',font=('Microsoft JhengHei',10,'bold'))
+        self.tree.tag_configure('near',foreground='#ffd36a',background='#142b3d')
         sb = ttk.Scrollbar(table_frame, orient='vertical', command=self.tree.yview)
         self.tree.configure(yscrollcommand=sb.set)
         self.tree.pack(side='left', fill='both', expand=True); sb.pack(side='right', fill='y')
@@ -349,7 +369,8 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         ttk.Button(foot, text='匯出本輪 CSV', command=self.export).pack(side='left')
         self.update_bar=ttk.Progressbar(foot,mode='determinate',maximum=100,length=150)
         ttk.Label(foot, textvariable=self.update_status).pack(side='left',padx=8)
-        ttk.Label(foot, text='依畫面逐段觀察 · 保持三竹可見 · 不會自動下單').pack(side='right')
+        self.terminal_status=tk.StringVar(value='欄位座標待設定｜訊號不代表一定漲停')
+        ttk.Label(foot,textvariable=self.terminal_status).pack(side='right')
         from display_scale import DisplayScale,SCALES
         zoom=ttk.Frame(foot);zoom.pack(side='left',padx=12)
         ttk.Button(zoom,text='展開全部欄位',command=lambda:self.display_scale.fit_tables(reset=True)).pack(side='left',padx=4)
@@ -367,7 +388,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         self.init_dashboard()
         self.init_steady()
         self.load_daily_table()
-        root.protocol('WM_DELETE_WINDOW', self.close)
+        self.root.protocol('WM_DELETE_WINDOW', self.close)
         self.init_f8()
         root.after(150, self.poll)
 
@@ -646,6 +667,8 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         from price_history import PriceHistory
         history=getattr(self,'price_history',None) or PriceHistory()
         for i,label in enumerate(history.headings()):self.tree.heading(f'history{i}',text=label)
+        selected=self.tree.selection()
+        selected_code=str(self.tree.item(selected[0],'values')[0]) if selected else None
         for item in self.tree.get_children():self.tree.delete(item)
         cfg=getattr(self,'display_cfg',self.config)
         filters={key:var.get() for key,var in getattr(self,'result_filters',{}).items()}
@@ -662,12 +685,22 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
             values=[q.code,(q.name or '股名待補') if show_name else '',match['text'],f'{q.price:.2f}',f'{q.gain:+.2f}',f'{q.volume:,.0f}','—' if q.turnover is None else f'{q.turnover:.2f}',self.volume_ratio_text(q,ratio,reason),reason]
             research=getattr(self,'research_reports',{}).get(q.code)
             if research:values[-1]+=f"｜盤後研究：{research['stage']}（收盤{research['asof']}／集保{research['weekly_asof']}）"
-            values+=history.values(q.code)
+            values+=history.values(q.code)+['符合條件' if match['hit'] else '保留候選' if retained else '接近候選' if match['count']>=5 else '待觀察',f"{match['count']}/{match['total']}"]
             self.tree.insert('','end',values=values,tags=('hit',) if match['hit'] else ('near',) if match['label']=='接近候選' else ('stripe',) if len(self.tree.get_children())%2 else ())
+        if selected_code:
+            for item in self.tree.get_children():
+                if str(self.tree.item(item,'values')[0])==selected_code:self.tree.selection_set(item);break
         if hasattr(self,'display_scale'):self.display_scale.fit_tables()
         self.name_eligible_codes=eligible
         charts=getattr(self,"candidate_charts",None)
         if charts:charts.update(chart_rows)
+
+    def show_selected_details(self):
+        selected=self.tree.selection()
+        if not selected:return
+        values=self.tree.item(selected[0],'values')
+        from tkinter import messagebox
+        messagebox.showinfo(str(values[0])+' '+str(values[1]),str(values[8]),parent=self.root)
 
     def render(self, quotes, rejected, elapsed, cfg, persist):
         from tkinter import messagebox
@@ -876,6 +909,9 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         bridge=getattr(self,'mobile_bridge',None)
         if bridge:bridge.set_status(self.auto_active,self.scan_phase.get())
         self.scan_rate_var.set(self.scan_rate.text())
+        if hasattr(self,'metric_vars'):
+            from terminal_ui import refresh
+            refresh(self)
         panel=getattr(self,'task_panel',None)
         if panel and panel.alive:panel.rate.set(self.scan_rate.text())
         self.refresh_index_label()

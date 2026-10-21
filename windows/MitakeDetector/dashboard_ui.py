@@ -8,25 +8,12 @@ from market_index import MarketIndex,presentation
 
 class DashboardUI:
     def build_market_header(self):
-        tk=self.tk
-        self.header=tk.Frame(self.root,bg='#0b1020');self.header.pack(fill='x',padx=20,pady=(15,3))
-        self.header.columnconfigure(0,weight=4,uniform='header');self.header.columnconfigure(1,weight=4,uniform='header');self.header.columnconfigure(2,weight=2,uniform='header')
-        from MitakeDetector import VERSION
-        self.product_title=tk.Label(self.header,text='漲停板探測器\n雷允澤製 · v'+VERSION,fg='#74e3d4',bg='#0b1020',font=('Microsoft JhengHei',16,'bold'),justify='left',anchor='w')
-        self.product_title.grid(row=0,column=0,sticky='w')
-        self.market_var=tk.StringVar(value='台股加權指數\n行情待取得')
-        self.market_label=tk.Label(self.header,textvariable=self.market_var,bg='#0b1020',fg='#a6b8d2',font=('Microsoft JhengHei',12,'bold'),justify='right',anchor='e')
-        self.market_label.grid(row=0,column=2,sticky='ne')
-        self.header_status=tk.Frame(self.header,bg='#0b1020');self.header_status.grid(row=0,column=1,sticky='nsew',padx=12)
-        def resize(event):
-            self.product_title.configure(wraplength=max(100,int(event.width*.39)))
-            self.market_label.configure(wraplength=max(100,int(event.width*.19)))
-        self.header.bind('<Configure>',resize)
-        self.index_quote=None;self.index_error=''
+        from terminal_ui import header
+        header(self)
     def build_daily_bottom(self):
         from MitakeDetector import BASE
         ttk=self.ttk;tk=self.tk
-        bottom=ttk.Frame(self.root);bottom.pack(fill='x',padx=18,pady=8)
+        bottom=ttk.Frame(self.ui_root);bottom.pack(fill='x',padx=18,pady=8)
         bottom.rowconfigure(0,weight=1)
         bottom.columnconfigure(0,weight=3,uniform='bottom');bottom.columnconfigure(1,weight=2,uniform='bottom')
         self.today_frame=ttk.LabelFrame(bottom,text='今日曾達5/6（轉弱仍保留）');self.today_frame.grid(row=0,column=0,sticky='nsew',padx=(0,8))
@@ -39,7 +26,7 @@ class DashboardUI:
         self.today_tree.configure(yscrollcommand=v.set,xscrollcommand=h.set);self.today_tree.pack(fill='both',expand=True)
         self.today_tree.tag_configure('weak',foreground='#aebed3');self.today_tree.tag_configure('near',foreground='#ffd36a')
         self.today_tree.bind('<Double-1>',self.open_today_candidate)
-        diagnostic=ttk.LabelFrame(bottom,text='辨識／執行訊息');diagnostic.grid(row=0,column=1,sticky='nsew')
+        diagnostic=ttk.LabelFrame(bottom,text='掃描紀錄');diagnostic.grid(row=0,column=1,sticky='nsew')
         self.rate_label=tk.Label(diagnostic,textvariable=self.scan_rate_var,bg='#0a1322',fg='#68f5d1',anchor='w')
         self.rate_label.pack(side='bottom',fill='x')
         self.log=tk.Text(diagnostic,width=35,height=9,wrap='word',bg='#0a1322',fg='#a6b8d2',font=('Microsoft JhengHei',10),state='disabled')
@@ -47,6 +34,7 @@ class DashboardUI:
         self.log.pack(side='left',fill='both',expand=True);scroll.pack(side='right',fill='y')
         # Keep detailed progress in the bounded diagnostic pane, never above the table.
         self.status.trace_add('write',lambda *_:self.say(self.status.get()))
+        self.observation_summary.trace_add('write',lambda *_:self.say(self.observation_summary.get()))
         self.say(self.status.get())
         self.diary_store=CandidateDiary(BASE/'observations.sqlite3');self.daily_refresh=0
         return bottom
