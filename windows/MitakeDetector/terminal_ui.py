@@ -50,7 +50,7 @@ def header(app):
 def metrics(app,bar):
     tk=app.tk
     app.metric_vars={}
-    for key,title in [('scanned','已掃描股數'),('near','5/6 候選'),('hit','6/6 候選'),('seconds','單頁耗時')]:
+    for key,title in [('scanned','已掃描股數'),('near','5/6 候選'),('hit','6/6 候選'),('seconds','讀取耗時')]:
         card=tk.Frame(bar,bg=PANEL,highlightthickness=1,highlightbackground='#29465e')
         card.pack(side='left',fill='both',expand=True,padx=5)
         tk.Label(card,text=title,bg=PANEL,fg=MUTED,font=('Microsoft JhengHei',10)).pack(padx=12,pady=(6,0))

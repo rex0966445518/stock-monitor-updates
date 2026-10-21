@@ -300,9 +300,9 @@ def run_smoke_test(report):
         app.display_rows=[(Quote('9090','HISTORY',109,3,2000,1,1770000090),None,'待複查',False)]
         app.draw_results()
         values=app.tree.item(app.tree.get_children()[0],'values')
-        assert len(values)==17 and values[9:]==tuple(f'{v:.2f}' for v in range(109,101,-1)),values
+        assert len(values)==19 and values[9:17]==tuple(f'{v:.2f}' for v in range(109,101,-1)),values
         assert app.tree.heading('history0','text')==app.price_history.headings()[0]
-        assert len(app.display_scale.widths)==17
+        assert len(app.display_scale.widths)==19
         app.price_history=PriceHistory()
         from retained_candidates import RetainedCandidates
         app.retained_candidates=RetainedCandidates()
@@ -446,7 +446,7 @@ def run_smoke_test(report):
             app.restore_scan_snapshot(saved)
         from automation_smoke import run_automation_smoke
         automation=run_automation_smoke(root,app)
-        app.demo();root.geometry('1180x900');root.deiconify()
+        app.demo();app.display_scale.apply(100,save=False,resize=False);root.geometry('1540x1000');root.deiconify()
         def finish():
             try:
                 root.update_idletasks()
