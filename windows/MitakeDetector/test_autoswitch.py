@@ -271,3 +271,12 @@ class CumulativeTitleFormsTests(unittest.TestCase):
         self.assertTrue(s.title_tokens_match([piece('计',10),piece('买',22),piece('力',34)],'累計買力'))
         for rows in [[token('累计卖力')],[token('分时买力')],[piece('计',10),piece('买力',22,45)],[token('買力')]]:
             self.assertFalse(s.title_tokens_match(rows,'累計買力'))
+
+    def test_all_44_simplified_titles_match_only_their_own_rank(self):
+        from autoswitch import RANKINGS
+        simplified='涨停锁住 跌停锁住 即将涨停 即将跌停 瞬间拉抬 瞬间杀盘 涨幅排行 跌幅排行 成量排行 成值排行 估量排行 预估量增 大单流入 大单流出 大单汇集 大单涣散 分时买力 分时卖力 累计买力 累计卖力 价涨动能 价跌动能 单量排行 量增排行 高价排行 低价排行 开盘强势 开盘弱势 开高走低 开低走高 周转排行 大幅震荡 连续买单 连续卖单 买气强大 卖压沉重 现股当冲 注意股 处置股 异常推介 特殊异常 暂停交易 延后开盘 延后收盘'.split()
+        s=RankingSwitcher(FakeController(),lambda image:[],[0,0,.2,.1],[0,.1,.2,.5])
+        self.assertEqual(len(simplified),len(RANKINGS))
+        for title,expected in zip(simplified,RANKINGS):
+            for name in RANKINGS:
+                self.assertEqual(s.title_tokens_match([token(title)],name),name==expected,(title,name))
