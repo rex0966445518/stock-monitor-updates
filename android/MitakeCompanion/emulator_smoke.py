@@ -40,7 +40,12 @@ def find_ui(label,contains=False,seek='down'):
             values=(n.attrib.get('text',''),n.attrib.get('content-desc',''))
             if any(label in v if contains else label==v for v in values):
                 bounds=list(map(int,re.findall(r'\d+',n.attrib.get('bounds',''))))
-                if len(bounds)==4 and bounds[2]>bounds[0] and bounds[3]>bounds[1]:return last,n
+                if len(bounds)==4 and bounds[2]>bounds[0] and bounds[3]>bounds[1]:
+                    viewport=list(map(int,re.findall(r'\d+',next(root.iter('node')).attrib['bounds'])))
+                    # UIAutomator reports clipped text at y=0 as visible; its centre
+                    # can still be inside the status bar. Scroll it fully into reach.
+                    centre=(bounds[1]+bounds[3])//2
+                    if viewport[1]+(viewport[3]-viewport[1])*.045<centre<viewport[3]-(viewport[3]-viewport[1])*.04:return last,n
         bounds=list(map(int,re.findall(r'\d+',next(root.iter('node')).attrib['bounds'])))
         width,height=bounds[2],bounds[3]
         down=(seek=='down') if attempt<4 else (seek!='down')
