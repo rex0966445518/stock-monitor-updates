@@ -231,13 +231,19 @@ adb('shell','input','swipe','400','400','400','1500','450')
 tap('個人股倉分析',seek='up')
 assert '尚無持股' in dump()
 tap('手動新增持股')
-fields=[n for n in ET.fromstring(dump()).iter('node') if n.attrib.get('class')=='android.widget.EditText']
-assert len(fields)==5
-x1,y1,x2,y2=map(int,re.findall(r'\d+',fields[0].attrib['bounds']))
-adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2))
+# Tap each field from fresh geometry: TAB can move into the soft keyboard on
+# Android 16 and silently leave the numeric fields empty.
 for index,value in enumerate(['2330','QA-TSMC','1000','100','110']):
+    if re.search(r'mInputShown=true|mIsInputViewShown=true',adb('shell','dumpsys','input_method')):
+        adb('shell','input','keyevent','4');time.sleep(.4)
+    fields=[n for n in ET.fromstring(dump()).iter('node') if n.attrib.get('class')=='android.widget.EditText']
+    assert len(fields)==5
+    x1,y1,x2,y2=map(int,re.findall(r'\d+',fields[index].attrib['bounds']))
+    assert x2>x1 and y2>y1,fields[index].attrib
+    adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2));time.sleep(.3)
     adb('shell','input','text',value)
-    if index<4:adb('shell','input','keyevent','61')
+    focused=[n for n in ET.fromstring(dump()).iter('node') if n.attrib.get('class')=='android.widget.EditText' and n.attrib.get('focused')=='true']
+    assert len(focused)==1 and focused[0].attrib.get('text')==value,(index,value,[n.attrib for n in focused])
 if re.search(r'mInputShown=true|mIsInputViewShown=true',adb('shell','dumpsys','input_method')):
     adb('shell','input','keyevent','4')
 tap('確認儲存')
