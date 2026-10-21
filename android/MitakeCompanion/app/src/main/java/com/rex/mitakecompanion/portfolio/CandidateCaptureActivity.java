@@ -16,17 +16,17 @@ public final class CandidateCaptureActivity extends Activity {
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private JSONObject candidate;private String runId="",signature="";private PortfolioStore store;
-    private boolean starting;private ScrollView scroll;
+    private boolean starting;private ScrollView scroll;private String learningPage="";private ProgressDialog learningDialog;private boolean learningBusy;
     private static final String CONSENT="candidate_auto_ai_images";
     private final Runnable tick=new Runnable(){public void run(){maybeStart();render();handler.postDelayed(this,1200);}};
     @Override public void onCreate(Bundle state){super.onCreate(state);getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);store=PortfolioStore.get(this);
-        try{loadTarget(getIntent());if(state!=null)runId=state.getString("run","");render();}
+        try{loadTarget(getIntent());if(state!=null){runId=state.getString("run","");learningPage=state.getString("learningPage","");}render();}
         catch(Exception e){candidate=null;new AlertDialog.Builder(this).setTitle("無法啟動卡片分析").setMessage("候選資料無效，請返回雷達重新點擊真實5/6或6/6卡片。").setPositiveButton("返回",(d,w)->finish()).setOnCancelListener(d->finish()).show();}
     }
-    @Override protected void onSaveInstanceState(Bundle state){state.putString("run",runId);super.onSaveInstanceState(state);}
+    @Override protected void onSaveInstanceState(Bundle state){state.putString("run",runId);state.putString("learningPage",learningPage);super.onSaveInstanceState(state);}
     @Override public void onResume(){super.onResume();if(candidate!=null){handler.post(tick);}}
     @Override public void onPause(){handler.removeCallbacks(tick);super.onPause();}
-    @Override public void onDestroy(){handler.removeCallbacksAndMessages(null);worker.shutdown();super.onDestroy();}
+    @Override public void onDestroy(){handler.removeCallbacksAndMessages(null);if(learningDialog!=null)learningDialog.dismiss();worker.shutdown();super.onDestroy();}
     private void loadTarget(Intent intent)throws Exception{
         if(intent.hasExtra(CandidateCapture.RUN)){runId=intent.getStringExtra(CandidateCapture.RUN);candidate=store.run(runId).getJSONObject("candidate");}
         else candidate=new JSONObject(intent.getStringExtra(CandidateCapture.EXTRA));CandidateCapture.target(candidate);
@@ -48,7 +48,7 @@ public final class CandidateCaptureActivity extends Activity {
     private void show(String title,String body){if(!isFinishing()&&!isDestroyed())new AlertDialog.Builder(this).setTitle(title).setMessage(body).setPositiveButton("確定",null).show();}
     private void render(){if(candidate==null||isFinishing())return;
         JSONObject run=null;try{if(!runId.isEmpty())run=store.run(runId);}catch(Exception ignored){}
-        String state=allowed()+"|"+ready()+"|"+ChipCaptureService.running()+"|"+(run==null?"":run.toString());if(state.equals(signature))return;signature=state;
+        String state=new ChipPositionMemory(this).summary()+"|"+allowed()+"|"+ready()+"|"+ChipCaptureService.running()+"|"+(run==null?"":run.toString());if(state.equals(signature))return;signature=state;
         int y=scroll==null?0:scroll.getScrollY();scroll=new ScrollView(this);scroll.setBackgroundColor(0xff0a101b);LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);v.setPadding(dp(20),dp(30),dp(20),dp(30));scroll.addView(v);setContentView(scroll);
         scroll.setOnApplyWindowInsetsListener((view,in)->{int top,bottom;if(Build.VERSION.SDK_INT>=30){android.graphics.Insets x=in.getInsets(WindowInsets.Type.systemBars());top=x.top;bottom=x.bottom;}else{top=in.getSystemWindowInsetTop();bottom=in.getSystemWindowInsetBottom();}v.setPadding(dp(20),top+dp(18),dp(20),bottom+dp(24));return in;});
         text(v,"卡片截圖與網頁查詢",23,0xff65e6c4);text(v,candidate.optString("name")+"  "+candidate.optString("code")+(candidate.optBoolean("capture_test")?" · 手動截圖測試，非選股訊號":" · "+candidate.optInt("matched")+"/6"),20,0xffeef4fb);
@@ -68,9 +68,13 @@ public final class CandidateCaptureActivity extends Activity {
             if(run.has("bundle"))button(v,"匯出本次六頁ZIP",()->{try{startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/zip").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,candidate.optString("code")+"-six-pages.zip"),61);}catch(Exception e){show("無法匯出",PortfolioActivity.safe(e));}});
             if("google_ai_images".equals(run.optString("web_mode"))){button(v,"複製本次AI分析問題",()->{getSystemService(android.content.ClipboardManager.class).setPrimaryClip(ClipData.newPlainText("本次AI分析問題",GoogleAiCapture.prompt(id,candidate.optString("code"),candidate.optString("name"))));show("已複製","可貼到Google搜尋AI模式，並選取本次六張圖片。");});}
             if(run.has("web_result")){JSONObject result=run.optJSONObject("web_result");text(v,result.optString("kind").contains("google_ai")?"Google AI模式分析回覆":"Google網頁查詢結果",19,0xff65e6c4);text(v,webText(result),14,0xffeef4fb);button(v,"開啟Google搜尋來源",()->startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(result.optString("source_url"))).setPackage(GoogleSearchCapture.CHROME)));}
-            if(!ChipCaptureService.running()){button(v,"再次開啟本次Chrome任務",()->{try{ChipCaptureService.retryWeb(id);}catch(Exception e){show("無法查詢",PortfolioActivity.safe(e));}});button(v,"貼回Google AI分析／搜尋結果",()->pasteResult(id));
+            if(!ChipCaptureService.running()){if(run.optJSONObject("pages").length()<6)button(v,"從未完成頁繼續截圖",()->{try{if(!allowed())throw new IllegalStateException("請先開啟上方的收集與圖片上傳開關");ChipCaptureService.begin(id,candidate.getString("code"));}catch(Exception e){show("無法繼續",PortfolioActivity.safe(e));}});button(v,"再次開啟本次Chrome任務",()->{try{ChipCaptureService.retryWeb(id);}catch(Exception e){show("無法查詢",PortfolioActivity.safe(e));}});button(v,"貼回Google AI分析／搜尋結果",()->pasteResult(id));
                 button(v,"重新收集此股六頁",()->{try{startActivity(CandidateCapture.intent(this,candidate));finish();}catch(Exception e){show("無法重新收集",PortfolioActivity.safe(e));}});}
         }
+        text(v,"本機位置學習",18,0xff65e6c4);text(v,new ChipPositionMemory(this).summary(),13,0xff8fa3ba);
+        text(v,"成功核對並存圖後記住頁籤位置；同版面兩次成功後優先做小區域辨識。位置不符會重新尋找。匯入的學習畫面只在本機處理。",12,0xff8fa3ba);
+        button(v,"匯入畫面學習頁籤位置",this::learnPosition);
+        button(v,"清除已學習位置",()->{if(ChipCaptureService.running()){show("請先停止收集","停止本次任務後可重設位置學習。");return;}new ChipPositionMemory(this).clear();signature="";render();});
         text(v,"收集時保持籌碼K線在前景，不操作手機。存圖前以本機OCR核對股號與頁面；圖示與頁籤不可讀時使用畫面辨識備援。Chrome僅處理本次Google AI問題與可見回覆，選檔器只提供本次六張圖15分鐘。未核對附件或未送出時會顯示未完成，不會將一般搜尋當成圖片分析。舊的一般搜尋紀錄仍不傳圖片。若需要登入、訂閱或APP禁止截圖，請先在籌碼K線處理。",12,0xff8fa3ba);
         button(v,"返回雷達",this::finish);scroll.post(()->scroll.scrollTo(0,y));
     }
@@ -80,7 +84,14 @@ public final class CandidateCaptureActivity extends Activity {
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("貼回Google回覆").setView(input).setPositiveButton("保存",(d,w)->savePasted(id,input.getText().toString())).setNegativeButton("取消",null).create();dialog.show();
     }
     private void savePasted(String id,String value){try{value=value.trim();if(value.isEmpty()||value.length()>12000)throw new IllegalArgumentException("請輸入1至12000字摘要");JSONObject run=store.run(id);boolean ai="google_ai_images".equals(run.optString("web_mode"));run.put("web_result",new JSONObject().put("kind",ai?"manual_google_ai":"manual_search_excerpt").put("query",GoogleSearchCapture.query(candidate.optString("code"),candidate.optString("name"))).put("source_url",ai?"https://www.google.com/ai":GoogleSearchCapture.url(candidate.optString("code"),candidate.optString("name"))).put("queried",System.currentTimeMillis()).put("snippets",new JSONArray().put(value)).put("note","使用者手動貼回的Google內容，未自動核對附件與來源，請自行核對。")).put("status","已保存手動查詢摘要");store.updateRun(run);signature="";render();}catch(Exception e){show("未保存",PortfolioActivity.safe(e));}}
-    @Override public void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request!=61||result!=RESULT_OK||data==null||data.getData()==null)return;
+    private void learnPosition(){
+        if(learningBusy){show("學習進行中","請等候本次圖片辨識完成。");return;}
+        if(ChipCaptureService.running()){show("請先停止收集","停止本次任務後，可選擇籌碼K線截圖來學習頁籤位置。");return;}
+        new AlertDialog.Builder(this).setTitle("選擇畫面所屬頁面").setItems(PortfolioStore.PAGES,(d,which)->{learningPage=PortfolioStore.PAGES[which];try{startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE),63);}catch(Exception e){show("無法選取圖片",PortfolioActivity.safe(e));}}).show();
+    }
+    @Override public void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);
+        if(request==63&&result==RESULT_OK&&data!=null&&data.getData()!=null){Uri uri=data.getData();String page=learningPage,code=candidate.optString("code");if(page.isEmpty())return;learningBusy=true;learningDialog=new ProgressDialog(this);learningDialog.setMessage("本機放大辨識中，正在核對股號與頁籤位置…");learningDialog.setIndeterminate(true);learningDialog.setCancelable(true);learningDialog.show();worker.execute(()->{try{String message=ChipPositionTrainer.learn(getApplicationContext(),uri,code,page);handler.post(()->{learningBusy=false;if(learningDialog!=null)learningDialog.dismiss();show("位置學習完成",message);signature="";render();});}catch(Exception e){handler.post(()->{learningBusy=false;if(learningDialog!=null)learningDialog.dismiss();show("畫面尚未通過核對",PortfolioActivity.safe(e));});}});return;}
+        if(request!=61||result!=RESULT_OK||data==null||data.getData()==null)return;
         Uri uri=data.getData();String id=runId;worker.execute(()->{try{JSONObject r=store.run(id);File bundle=new File(store.imageFile(id,PortfolioStore.PAGES[0]).getParentFile(),"six-pages.zip");if(!r.has("bundle")||!bundle.isFile())throw new IOException("圖片已變更，請重新打包");
             try(InputStream in=new FileInputStream(bundle);OutputStream out=getContentResolver().openOutputStream(uri)){if(out==null)throw new IOException("無法寫入選取位置");byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))!=-1)out.write(buffer,0,n);}handler.post(()->show("已匯出","六頁圖片與分類清單已保存。"));
         }catch(Exception e){handler.post(()->show("匯出失敗",PortfolioActivity.safe(e)));}});

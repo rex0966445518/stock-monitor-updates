@@ -130,6 +130,10 @@ tap('測試自動搜尋／六頁截圖',seek='down')
 ui,_=find_ui('卡片截圖與網頁查詢',contains=True,seek='up')
 assert '手動截圖測試，非選股訊號' in ui and 'Google' in ui,ui
 assert 'API金鑰' in ui,ui
+find_ui('本機位置學習',seek='down')
+tap('匯入畫面學習頁籤位置',seek='down')
+assert '選擇畫面所屬頁面' in dump()
+adb('shell','input','keyevent','4')
 tap('返回雷達')
 adb('shell','input','swipe','450','400','450','1600','500')
 tap('關閉測試卡片',seek='up')

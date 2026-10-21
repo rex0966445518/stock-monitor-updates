@@ -30,7 +30,7 @@ jobs:
           cp android/TWBoardingScanner/signing/debug.keystore "$HOME/.android/debug.keystore"
       - name: Verify UI, protocol and APK
         working-directory: android/MitakeCompanion
-        run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
+        run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
       - name: Verify packaged scanner dependencies
         run: python3 android/MitakeCompanion/verify_apk.py android/MitakeCompanion/app/build/outputs/apk/debug/app-debug.apk
       - name: Enable emulator acceleration
@@ -44,7 +44,9 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back emulated
-          script: python3 android/MitakeCompanion/emulator_smoke.py
+          script: |
+            python3 android/MitakeCompanion/emulator_smoke.py
+            python3 android/MitakeCompanion/emulator_capture_learning.py
       - name: Preserve diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -60,11 +62,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp android/MitakeCompanion/app/build/outputs/apk/debug/app-debug.apk MitakeCompanion-v0.1.13.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs MitakeCompanion-v0.1.13.apk
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging MitakeCompanion-v0.1.13.apk | head -8
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs MitakeCompanion-v0.1.13.apk | grep -F '60704cfc2efe84748087d8beaf66be317e6ad1b273030c7c08ac27773d6582fe'
-          sha256sum MitakeCompanion-v0.1.13.apk > MitakeCompanion-SHA256SUMS.txt
-          gh release create mitake-companion-v0.1.13 MitakeCompanion-v0.1.13.apk MitakeCompanion-SHA256SUMS.txt --target "$GITHUB_SHA" --title '漲停雷達 Android 電腦連動 v0.1.13' --notes-file android/MitakeCompanion/README.md --latest=false
-          curl --fail --location --retry 3 --max-time 90 'https://github.com/rex0966445518/stock-monitor-updates/releases/download/mitake-companion-v0.1.13/MitakeCompanion-v0.1.13.apk' --output verified.apk
-          cmp verified.apk MitakeCompanion-v0.1.13.apk
+          cp android/MitakeCompanion/app/build/outputs/apk/debug/app-debug.apk MitakeCompanion-v0.1.14.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs MitakeCompanion-v0.1.14.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging MitakeCompanion-v0.1.14.apk | head -8
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs MitakeCompanion-v0.1.14.apk | grep -F '60704cfc2efe84748087d8beaf66be317e6ad1b273030c7c08ac27773d6582fe'
+          sha256sum MitakeCompanion-v0.1.14.apk > MitakeCompanion-SHA256SUMS.txt
+          gh release create mitake-companion-v0.1.14 MitakeCompanion-v0.1.14.apk MitakeCompanion-SHA256SUMS.txt --target "$GITHUB_SHA" --title '漲停雷達 Android 電腦連動 v0.1.14' --notes-file android/MitakeCompanion/README.md --latest=false
+          curl --fail --location --retry 3 --max-time 90 'https://github.com/rex0966445518/stock-monitor-updates/releases/download/mitake-companion-v0.1.14/MitakeCompanion-v0.1.14.apk' --output verified.apk
+          cmp verified.apk MitakeCompanion-v0.1.14.apk

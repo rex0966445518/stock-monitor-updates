@@ -2,7 +2,7 @@ plugins { id 'com.android.application' }
 android {
     namespace 'com.rex.mitakecompanion'
     compileSdk 35
-    defaultConfig { applicationId 'com.rex.mitakecompanion'; minSdk 26; targetSdk 35; versionCode 14; versionName '0.1.13' }
+    defaultConfig { applicationId 'com.rex.mitakecompanion'; minSdk 26; targetSdk 35; versionCode 15; versionName '0.1.14'; testInstrumentationRunner 'com.rex.mitakecompanion.portfolio.CaptureLearningInstrumentation' }
     signingConfigs {
         companionBeta {
             storeFile rootProject.file('../TWBoardingScanner/signing/debug.keystore')

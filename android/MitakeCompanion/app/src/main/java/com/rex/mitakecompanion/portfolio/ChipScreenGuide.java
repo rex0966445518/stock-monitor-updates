@@ -7,6 +7,15 @@ import java.util.*;
 final class ChipScreenGuide {
     static final class Line {final String text;final Rect box;Line(String text,Rect box){this.text=text;this.box=new Rect(box);}}
     static final class Action {final String kind;final Rect box;final boolean forward;Action(String kind,Rect box,boolean forward){this.kind=kind;this.box=box;this.forward=forward;}}
+    static boolean headerMatches(List<Line> lines,int height,String code){for(Line l:lines)if(l.box.top<height*.18&&ChipCaptureService.exactCode(l.text,code))return true;return false;}
+    static List<Line> navigation(List<Line> lines,int height){
+        List<Line> best=new ArrayList<>();int bestCount=0;float bestY=Float.MAX_VALUE;
+        for(Line seed:lines){if(seed.box.centerY()<height*.14||seed.box.centerY()>height*.48||ChipVideoProfile.order(seed.text)<0)continue;
+            LinkedHashMap<String,Line> row=new LinkedHashMap<>();for(Line l:lines)if(ChipVideoProfile.order(l.text)>=0&&Math.abs(l.box.centerY()-seed.box.centerY())<Math.max(18,seed.box.height()*.75)){String key=ChipVideoProfile.canonical(l.text);Line old=row.get(key);if(old==null||l.box.width()<old.box.width())row.put(key,l);}
+            if(row.size()>=2&&(row.size()>bestCount||row.size()==bestCount&&seed.box.centerY()<bestY)){bestCount=row.size();bestY=seed.box.centerY();best=new ArrayList<>(row.values());}
+        }best.sort(Comparator.comparingInt(l->l.box.left));return best;
+    }
+    static Rect anchor(List<Line> lines,int height,String target){for(Line l:navigation(lines,height))if(ChipVideoProfile.tabLabel(l.text,target))return new Rect(l.box);return null;}
     static Action plan(List<Line> lines,int width,int height,String code,String target){
         StringBuilder text=new StringBuilder();boolean header=false;int menu=0;Line homeAnchor=null,field=null,paste=null;int suggestions=height;
         for(Line l:lines){text.append(l.text).append('\n');String clean=ChipVideoProfile.clean(l.text);
@@ -28,10 +37,10 @@ final class ChipScreenGuide {
             if(field!=null)return new Action("input",field.box,false);return null;
         }
         if(!header)return null;
-        List<String> visible=new ArrayList<>();Rect strip=new Rect();Line tab=null;
-        for(Line l:lines)if(l.box.centerY()>height*.19&&l.box.centerY()<height*.34&&ChipVideoProfile.order(l.text)>=0){visible.add(l.text);strip.union(l.box);if(ChipCaptureService.pageLabel(l.text,target))tab=l;}
-        if(visible.isEmpty())return null;
         if(ChipVideoProfile.bodyMatches(all,target))return new Action("capture",null,false);
+        List<String> visible=new ArrayList<>();Rect strip=new Rect();Line tab=null;
+        for(Line l:navigation(lines,height)){visible.add(l.text);strip.union(l.box);if(ChipCaptureService.pageLabel(l.text,target))tab=l;}
+        if(visible.isEmpty())return null;
         if(tab!=null)return new Action("tab",tab.box,false);
         if(visible.size()<2)return null;
         return new Action("swipe",new Rect((int)(width*.12),strip.top,(int)(width*.82),strip.bottom),ChipVideoProfile.scrollForward(target,visible));
