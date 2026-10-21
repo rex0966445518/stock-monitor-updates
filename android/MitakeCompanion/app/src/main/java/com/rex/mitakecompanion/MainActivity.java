@@ -36,7 +36,7 @@ public class MainActivity extends Activity {
         scroll.setOnApplyWindowInsetsListener((v,in)->{int top,bottom;if(Build.VERSION.SDK_INT>=30){android.graphics.Insets i=in.getInsets(WindowInsets.Type.systemBars());top=i.top;bottom=i.bottom;}else{top=in.getSystemWindowInsetTop();bottom=in.getSystemWindowInsetBottom();}content.setPadding(dp(22),top+dp(20),dp(22),bottom+dp(24));return in;});
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
         TextView brand=text("◉  漲停雷達",27,TEXT,true);header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));header.addView(button("配對",this::showPairing));add(content,header,8);
-        add(content,text("MITAKE LIVE  /  雷允澤製 v0.1.9",11,MUTED,false),22);
+        add(content,text("MITAKE LIVE  /  雷允澤製 v"+appVersion(),11,MUTED,false),22);
         LinearLayout tools=new LinearLayout(this);
         tools.addView(button("一鍵更新",()->updater.check()),new LinearLayout.LayoutParams(0,-2,1));
         tools.addView(button("語音通報",this::showVoice),new LinearLayout.LayoutParams(0,-2,1));tools.addView(button("連線診斷",this::showDiagnosis),new LinearLayout.LayoutParams(0,-2,1));add(content,tools,10);
@@ -137,6 +137,7 @@ public class MainActivity extends Activity {
         ScrollView body=new ScrollView(this);body.addView(settings);
         new AlertDialog.Builder(this).setTitle("震動與語音通報設定").setView(body).setPositiveButton("試震動＋語音",(d,w)->{if(testHaptics==null)testHaptics=new HapticAnnouncer(this);testHaptics.test();if(testSpeech==null)testSpeech=new SpeechAnnouncer(this);testSpeech.test();}).setNeutralButton("系統語音設定",(d,w)->{try{startActivity(new Intent("com.android.settings.TTS_SETTINGS"));}catch(RuntimeException e){message("語音設定","請從手機系統設定開啟文字轉語音，下載中文語音。");}}).setNegativeButton("完成",null).show();
     }
+    String appVersion(){try{return getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception ignored){return "";}}
     void message(String title,String value){new AlertDialog.Builder(this).setTitle(title).setMessage(value==null?"請重新掃描配對碼":value).setPositiveButton("確定",null).show();}
     String clock(double seconds){return new SimpleDateFormat("HH:mm:ss",Locale.TAIWAN).format(new Date((long)(seconds*1000)));}
     void refresh(){JSONObject data=BridgeService.latest;boolean cached=false;

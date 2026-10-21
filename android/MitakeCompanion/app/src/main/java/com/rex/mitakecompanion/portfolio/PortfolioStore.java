@@ -67,7 +67,7 @@ public final class PortfolioStore {
     public synchronized void attach(String id,String page,File image,String source,String ocr)throws Exception{
         if(!image.getCanonicalFile().equals(imageFile(id,page).getCanonicalFile()))throw new IllegalArgumentException("圖片位置無效");
         JSONObject r=run(id);r.getJSONObject("pages").put(page,new JSONObject().put("path",image.getAbsolutePath()).put("source",source).put("saved",System.currentTimeMillis()).put("ocr",ocr));
-        r.remove("analysis");r.remove("analyzed");r.put("status","圖片已更新，請檢查日期與股號");updateRun(r);
+        r.remove("analysis");r.remove("analyzed");if(r.has("bundle")){new File(image.getParentFile(),"six-pages.zip").delete();r.remove("bundle");r.remove("bundled");}r.put("status","圖片已更新，請檢查日期與股號");updateRun(r);
     }
     public synchronized void deleteRun(String id)throws Exception{
         if(!id.matches("[a-f0-9-]{36}"))throw new IllegalArgumentException("分析識別碼無效");

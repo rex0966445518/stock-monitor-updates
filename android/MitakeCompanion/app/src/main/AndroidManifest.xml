@@ -3,13 +3,14 @@
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
-    <queries><package android:name="com.cmoney.chipk"/><intent><action android:name="android.intent.action.TTS_SERVICE"/></intent></queries>
+    <queries><package android:name="com.cmoney.chipk"/><package android:name="com.android.chrome"/><intent><action android:name="android.intent.action.TTS_SERVICE"/></intent></queries>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application android:label="漲停雷達" android:icon="@drawable/ic_radar" android:theme="@style/AppTheme" android:allowBackup="false" android:usesCleartextTraffic="true" android:supportsRtl="true">
+        <activity android:name=".portfolio.CandidateCaptureActivity" android:exported="false"/>
         <activity android:name=".portfolio.PortfolioActivity" android:exported="false"/>
         <service android:name=".portfolio.ChipCaptureService" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="true">
             <intent-filter><action android:name="android.accessibilityservice.AccessibilityService"/></intent-filter>

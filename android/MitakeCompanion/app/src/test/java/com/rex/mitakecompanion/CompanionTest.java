@@ -176,4 +176,11 @@ public class CompanionTest {
         a.cards.removeAllViews();a.addCard(DemoCards.rows().getJSONObject(0),false);assertTrue(a.cards.getChildAt(0).performClick());
         assertEquals(ChipKLauncher.PACKAGE,org.robolectric.Shadows.shadowOf(a).getNextStartedActivity().getComponent().getPackageName());a.finish();
     }
+    @Test public void realSignalCardStartsSixPageWebFlowWithExactStock()throws Exception{
+        MainActivity a=Robolectric.buildActivity(MainActivity.class).setup().get();a.cards.removeAllViews();
+        a.addCard(event(5,100,false).put("peak",5),false);assertTrue(a.cards.getChildAt(0).performClick());
+        Intent intent=org.robolectric.Shadows.shadowOf(a).getNextStartedActivity();assertEquals("com.rex.mitakecompanion.portfolio.CandidateCaptureActivity",intent.getComponent().getClassName());
+        JSONObject target=new JSONObject(intent.getStringExtra("candidate"));assertEquals("2330",target.getString("code"));assertEquals(5,target.getInt("matched"));a.finish();
+    }
+
 }

@@ -24,7 +24,8 @@ public class PortfolioActivity extends Activity {
     private final Runnable refreshCapture=new Runnable(){public void run(){if(!busy&&!selectedRun.isEmpty()&&ChipCaptureService.running())render();handler.postDelayed(this,2000);}};
     @Override public void onCreate(Bundle state){super.onCreate(state);getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         store=PortfolioStore.get(this);gemini=new GeminiClient(this);
-        if(state!=null){selectedRun=state.getString("run","");pickPage=state.getString("page","");pickHolding=state.getBoolean("holding");}render();}
+        if(getIntent().hasExtra(CandidateCapture.RUN))selectedRun=getIntent().getStringExtra(CandidateCapture.RUN);
+        if(state!=null){selectedRun=state.getString("run","");pickPage=state.getString("page","");pickHolding=state.getBoolean("holding");}render();if(getIntent().getBooleanExtra("gemini_settings",false))settings();}
     @Override protected void onSaveInstanceState(Bundle state){state.putString("run",selectedRun);state.putString("page",pickPage);state.putBoolean("holding",pickHolding);super.onSaveInstanceState(state);}
     @Override protected void onResume(){super.onResume();if(content!=null)render();handler.post(refreshCapture);}
     @Override protected void onPause(){handler.removeCallbacks(refreshCapture);super.onPause();}
@@ -116,17 +117,18 @@ public class PortfolioActivity extends Activity {
     }
     void details(JSONObject r)throws Exception{
         JSONObject h=r.getJSONObject("holding"),pages=r.getJSONObject("pages");
-        add(content,text(h.optString("name")+"  "+h.optString("code"),22,TEAL));add(content,text(h.optString("shares")+" 股 · 成本 "+shown(h,"cost")+"\n建立 "+time(r.optLong("created"))+" · "+r.optString("status"),13,TEXT));
+        add(content,text(h.optString("name")+"  "+h.optString("code"),22,TEAL));add(content,text(("radar_candidate".equals(r.optString("source"))?"雷達觀察候選 · 未提供持股與成本":h.optString("shares")+" 股 · 成本 "+shown(h,"cost"))+"\n建立 "+time(r.optLong("created"))+" · "+r.optString("status"),13,TEXT));
         add(content,text("每次分析使用獨立圖片組。請確認六頁屬於同一檔股票及相容日期；匯入時間不代表行情日期。",12,GOLD));
         boolean running=ChipCaptureService.running();
         if(running)button(content,"停止本次自動收集",()->{ChipCaptureService.cancel();render();});
-        else button(content,"開啟籌碼K線並嘗試收集六頁",()->beginCapture(r));
+        else if(!r.optBoolean("auto_web"))button(content,"開啟籌碼K線並嘗試收集六頁",()->beginCapture(r));
+        if(r.optBoolean("auto_web")){button(content,"返回卡片網頁查詢",()->startActivity(new Intent(this,CandidateCaptureActivity.class).putExtra(CandidateCapture.RUN,r.optString("id"))));if(r.has("web_result")){add(content,text("Google網頁查詢結果",19,TEAL));add(content,text(CandidateCaptureActivity.webText(r.getJSONObject("web_result")),14,TEXT));}}
         add(content,text("自動收集測試版：需Android 14以上及你手動開啟輔助使用權限。只辨識明確可讀的股號與頁籤，無法確認就停止。尚未取得你的操作影片，實機適配未驗證；可逐頁匯入截圖完成分析。",12,MUTED));
         for(String page:PortfolioStore.PAGES){LinearLayout p=panel(content);JSONObject image=pages.optJSONObject(page);add(p,text(page+(image==null?" · 缺圖":" · 已加入"),17,image==null?GOLD:TEAL));
             if(image!=null){add(p,preview(new File(image.getString("path"))));add(p,text("儲存 "+time(image.optLong("saved"))+" · "+image.optString("source"),11,MUTED));}
             if(!running)button(p,image==null?"匯入「"+page+"」截圖":"更換「"+page+"」截圖",()->pick(false,page));
         }
-        if(!running)button(content,"送至Gemini分析",()->confirmAnalysis(r));
+        if(!running&&!r.optBoolean("auto_web"))button(content,"送至Gemini分析",()->confirmAnalysis(r));
         if(r.has("analysis")){add(content,text("Gemini分析 · "+time(r.optLong("analyzed")),18,TEAL));add(content,text("AI根據圖片判讀，可能有誤。請核對來源數據；結果不是自動交易指令。",12,GOLD));add(content,text(r.getString("analysis"),15,TEXT));}
         button(content,"返回股倉",()->{selectedRun="";render();});
         if(!running)button(content,"刪除此分析與圖片",()->new AlertDialog.Builder(this).setTitle("刪除此分析？").setMessage("將刪除本機六類圖片與分析結果。").setPositiveButton("刪除",(d,w)->{try{store.deleteRun(r.optString("id"));selectedRun="";render();}catch(Exception e){message("刪除失敗",safe(e));}}).setNegativeButton("取消",null).show());

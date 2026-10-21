@@ -175,6 +175,15 @@ with tempfile.TemporaryDirectory() as folder:
         assert '6/6' in alert_prefs,alert_prefs
         (out/'alert-vibrator.txt').write_text(adb('shell','dumpsys','vibrator_manager'),'utf-8')
         (out/'alert-dispatch-log.txt').write_text(adb('logcat','-d','-s','MitakeAlert:I'),'utf-8')
+        # Real candidate card routes into six-page setup, without inventing holdings
+        # or uploading before device permissions and the user's Gemini key exist.
+        ui,node=find_ui('測試候選',contains=True,seek='up')
+        x1,y1,x2,y2=map(int,re.findall(r'\d+',node.attrib['bounds']))
+        adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2));time.sleep(1)
+        ui,_=find_ui('卡片截圖與網頁查詢',contains=True,seek='up')
+        assert '2330' in ui and 'Google' in ui and '首次設定' in ui,ui
+        assert 'FATAL EXCEPTION' not in adb('logcat','-d','-s','AndroidRuntime:E')
+        tap('返回雷達')
         # Reopen after process death: no QR or token entry; service must receive again.
         before_reopen=time.time()
         adb('shell','am','force-stop','com.rex.mitakecompanion')
@@ -221,7 +230,7 @@ with tempfile.TemporaryDirectory() as folder:
         assert '測試候選' in ui
         screen('companion-offline.png')
         (out/'ui.xml').write_text(ui,'utf-8')
-        (out/'integration.json').write_text(json.dumps(dict(ok=True,synthetic=True,upgrade_notifications=True,ranking_skip_notification=True,offline_retention=True,downgrade_retention=True,omission_and_restart_retention=True,auto_reconnect=True,manual_stop_and_one_tap_resume=True)),'utf-8')
+        (out/'integration.json').write_text(json.dumps(dict(ok=True,synthetic=True,upgrade_notifications=True,ranking_skip_notification=True,offline_retention=True,downgrade_retention=True,omission_and_restart_retention=True,candidate_capture_setup=True,auto_reconnect=True,manual_stop_and_one_tap_resume=True)),'utf-8')
     except Exception:
         screen('companion-failure.png');(out/'logcat.txt').write_text(adb('logcat','-d','-t','300'),'utf-8');raise
     finally:stop.set();bridge.close()

@@ -24,8 +24,8 @@ public final class StockCard extends LinearLayout {
             MiniCandleView chart=new MiniCandleView(a,code,repository);chart.expandWith(this::expand);addView(chart,new LinearLayout.LayoutParams(-1,a.dp(210)));
             TextView note=a.text("點圖放大 · 紅漲綠跌 · K圖行情與掃描股價時間可能不同",9,MainActivity.MUTED,false);a.add(this,note,6);
         }else a.add(this,a.text("股號待確認，暫不顯示K圖",11,MainActivity.MUTED,false),6);
-        setOnClickListener(v->ChipKLauncher.open(a,code));
-        a.add(this,a.text("點卡片開啟籌碼K線 App 主頁；個股可用複製股號搜尋",10,MainActivity.MUTED,false),6);
+        setOnClickListener(v->capture());
+        a.add(this,a.text("點5/6、6/6卡片：自動收集六頁，再用Chrome查詢並帶回摘要",10,MainActivity.MUTED,false),6);
         LinearLayout actions=new LinearLayout(a);actions.addView(a.button("開啟籌碼K線",()->ChipKLauncher.open(a,code)),new LinearLayout.LayoutParams(0,-2,1));actions.addView(a.button("複製股號",()->ChipKLauncher.copy(a,code)),new LinearLayout.LayoutParams(0,-2,1));a.add(this,actions,6);
         TextView reason=a.button("查看判定原因",()->{if(row!=null)a.message(code+" · 判定原因",row.optString("reason")+"\n觀察訊號不代表一定漲停。");});a.add(this,reason,0);
     }
@@ -39,6 +39,12 @@ public final class StockCard extends LinearLayout {
         details.setText(demo?"示範價格／漲跌，非即時行情 · "+String.format(Locale.TAIWAN,"%,d 張",r.optInt("volume")):"掃描 "+r.optString("history_date","")+" "+owner.clock(r.optDouble("ts"))+" · "+String.format(Locale.TAIWAN,"%,d 張",r.optInt("volume"))+" · 曾達 "+r.optInt("peak")+"/6");
         state.setText(demo?"測試卡片 · 不列入真實訊號、不播報":matched<5?"已轉弱，保留紀錄 · 最後 "+matched+"/6"+(fresh?"":" · 非即時／待複查"):r.optBoolean("history_missing")?"保留紀錄 · 本輪未更新，非即時":!fresh?"非即時／待複查":r.optBoolean("confirmed")?"必要檢核已通過":"觀察候選 · 必要檢核待確認");state.setTextColor(accent);
         setBackground(owner.box(MainActivity.PANEL,fresh?Color.rgb(42,71,79):Color.rgb(30,44,62),18));
+    }
+    private void capture(){
+        if(row==null)return;
+        if(row.optBoolean("demo")||row.optInt("matched")<5){ChipKLauncher.open(owner,code);return;}
+        try{owner.startActivity(com.rex.mitakecompanion.portfolio.CandidateCapture.intent(owner,row));}
+        catch(Exception e){owner.message("無法啟動卡片分析",e.getMessage());}
     }
     private void expand(){
         Dialog dialog=new Dialog(owner);LinearLayout content=new LinearLayout(owner);content.setOrientation(VERTICAL);content.setPadding(owner.dp(12),owner.dp(12),owner.dp(12),owner.dp(12));content.setBackgroundColor(MainActivity.BG);

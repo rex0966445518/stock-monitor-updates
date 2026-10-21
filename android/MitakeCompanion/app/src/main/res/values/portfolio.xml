@@ -1,1 +1,1 @@
-<resources><string name="capture_description">由你啟動單次個股收集後，只在籌碼K線讀取畫面、輸入股號、切換六類頁面並擷取圖片。可隨時按停止；不操作交易、不讀取其他App。圖片先保存在本機。只有本次勾選自動分析或手動按送出，才傳至Google Gemini。</string></resources>
+<resources><string name="capture_description">由你啟動單次個股任務後，在籌碼K線讀取股號、切換六頁並截圖。若本次選擇Chrome網頁查詢，接著僅讀取Chrome中與該股查詢相符的Google搜尋結果摘要，保存並返回APP；其他瀏覽網頁不收集。截圖保留在本機，不由網頁查詢模式上傳。可隨時按停止，不操作交易。舊有股倉功能只有明確選擇Gemini分析才傳送圖片。</string></resources>
