@@ -242,12 +242,13 @@ def run_smoke_test(report):
         app.name_eligible_codes={'2330','2317'}
         app.learn_deferred_names()
         assert app.stock_names.names,'Deferred names were never learned'
-        # Real bundled OCR: repeat identical cells without invoking OCR again.
+        # Real bundled OCR: reuse high-confidence cells; weak cells may be retried.
         before=time.perf_counter()
         same,same_bad=app.scan_recovering_table(im,bounds)
         info['unchanged_cells_seconds']=time.perf_counter()-before
         if hasattr(app,'cell_metrics'):
-            assert app.cell_metrics['changed']==0,app.cell_metrics
+            assert app.cell_metrics['reused']>=9,app.cell_metrics
+            assert [(q.code,q.price,q.gain,q.volume,q.turnover) for q in same]==[(q.code,q.price,q.gain,q.volume,q.turnover) for q in quick]
             info['numeric_cells_reused']=app.cell_metrics['reused']
         assert len(same)==2 and same_bad==0
         excluded=Image.new('RGB',(1200,260),'#101820');draw=ImageDraw.Draw(excluded)
