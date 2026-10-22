@@ -77,15 +77,16 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
         h.b.root.contentDescription = "${r.code} ${r.name}，點擊開啟籌碼K線 App 查看日K"
         val accent = NeonUi.radarColor(r.radarType)
 
-        h.b.root.strokeColor = NeonUi.border
-        h.b.root.strokeWidth = (1 * h.b.root.resources.displayMetrics.density).toInt()
+        h.b.root.strokeColor = NeonUi.tint(accent,.80f)
+        h.b.root.strokeWidth = (1.2f * h.b.root.resources.displayMetrics.density).toInt().coerceAtLeast(1)
         h.b.root.animate().cancel()
         h.b.root.alpha = 1f
         h.b.badge.text = r.radarType.label
         h.b.badge.setTextColor(accent)
-        h.b.badge.background = GradientDrawable().apply {
-            cornerRadius = 20f
-            setColor(Color.argb(35,Color.red(accent),Color.green(accent),Color.blue(accent)))
+        h.b.badge.background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+            intArrayOf(NeonUi.tint(accent,.34f),NeonUi.surface)).apply {
+            cornerRadius = 16f * h.b.root.resources.displayMetrics.density
+            setStroke((1f*h.b.root.resources.displayMetrics.density).toInt().coerceAtLeast(1),accent)
         }
 
         h.b.codeName.text = "${s.code}  ${s.name}"
@@ -165,8 +166,15 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
             chipMinHeight = 28 * h.b.root.resources.displayMetrics.density
             setEnsureMinTouchTargetSize(false)
             contentDescription = label
-            chipBackgroundColor = ColorStateList.valueOf(Color.parseColor(if (state == CheckState.PASS) "#103A38" else "#13293F"))
-            setTextColor(Color.parseColor(if (state == CheckState.PASS) "#69F0C2" else "#8CA6C0"))
+            val accent=when(state){
+                CheckState.PASS->NeonUi.mint
+                CheckState.FAIL->NeonUi.neonRed
+                CheckState.PENDING->NeonUi.amber
+            }
+            chipBackgroundColor = ColorStateList.valueOf(NeonUi.tint(accent,.20f))
+            chipStrokeColor = ColorStateList.valueOf(NeonUi.tint(accent,.65f))
+            chipStrokeWidth = 1f * h.b.root.resources.displayMetrics.density
+            setTextColor(accent)
             if (android.os.Build.VERSION.SDK_INT >= 26) tooltipText = label
         }
         h.b.indicatorChips.addView(chip)
