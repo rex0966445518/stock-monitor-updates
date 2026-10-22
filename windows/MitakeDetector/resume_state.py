@@ -51,7 +51,8 @@ def restore(app,data):
     for q,ratio,reason,hit in latest.values():
         app.tree.insert('','end',values=[q.code,q.name,'待複查',f'{q.price:.2f}',f'{q.gain:+.2f}',f'{q.volume:,.0f}','—' if q.turnover is None else f'{q.turnover:.2f}','待累積' if ratio is None else f'{ratio:.2f}',reason]+app.price_history.values(q.code))
     app.display_rows=list(latest.values())
-    app.display_cfg=data.get('display_cfg') or getattr(app,'config',{})
+    from candidate_ranking import restored_display_config
+    app.display_cfg=restored_display_config(data.get('display_cfg'),getattr(app,'config',{}))
     if hasattr(app,'draw_results'):app.draw_results()
     app.observation_summary.set(f'已還原 {len(latest)} 檔觀察資料｜等待接續複查，不將舊讀值當成新訊號')
 

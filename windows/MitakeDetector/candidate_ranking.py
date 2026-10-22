@@ -44,3 +44,19 @@ def hidden_result(q,cfg,filters):
                 or (filters.get('price') and q.price<cfg['min_price'])
                 or (filters.get('turnover') and cfg['use_turnover']
                     and (q.turnover is None or q.turnover<cfg['min_turnover'])))
+
+
+def migrate_six_conditions(config):
+    """One-time restoration of the product's six-check profile; preserve later choices."""
+    if config.get('condition_profile_version',0)>=1:return False
+    for key in ('use_turnover','use_accel','use_breakout'):config[key]=True
+    config['condition_profile_version']=1
+    return True
+
+
+def restored_display_config(saved,current):
+    cfg=dict(saved or current)
+    if current.get('condition_profile_version',0)>=1:
+        for key in ('use_turnover','use_accel','use_breakout','min_price','min_volume','min_gain','max_gain','min_turnover','accel','condition_profile_version'):
+            if key in current:cfg[key]=current[key]
+    return cfg

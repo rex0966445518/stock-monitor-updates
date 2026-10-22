@@ -24,6 +24,7 @@ def run_smoke_test(report):
                 assert app.tree.get_children(),'Startup failed to restore today table'
         app.rank_rows={};app.auto_engines={};app.display_rows=[]
 
+        assert all(app.config[k] for k in ('use_turnover','use_accel','use_breakout'))
         assert 'ratio' in app.tree['displaycolumns'],'Five-minute volume rate must appear in the default overview'
         assert app.tree.heading('ratio','text')=='5分量速比'
         overview=tuple(app.tree['displaycolumns'])

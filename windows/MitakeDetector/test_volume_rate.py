@@ -114,3 +114,26 @@ class RoundClockTests(unittest.TestCase):
             self.assertTrue(second);self.assertIn('本輪耗時',second[0])
             cursor=ScanCheckpoint(Path(folder)/'scan-checkpoint.json').data['cursor']
             self.assertEqual(cursor['cycle'],2);self.assertIsInstance(cursor['round_started'],float)
+
+
+class SixConditionProfileTests(unittest.TestCase):
+    def test_migration_restores_six_checks_once_without_changing_thresholds(self):
+        from candidate_ranking import migrate_six_conditions,assess
+        from MitakeDetector import DEFAULT,Quote
+        cfg=dict(DEFAULT,min_turnover=3,accel=1.8)
+        self.assertTrue(migrate_six_conditions(cfg))
+        result=assess((Quote('2330','台積電',100,3,2000,None),None,'等待觀測突破守穩',False),cfg)
+        self.assertEqual((result['count'],result['total']),(3,6))
+        self.assertEqual((cfg['min_turnover'],cfg['accel']),(3,1.8))
+        cfg['use_accel']=False
+        self.assertFalse(migrate_six_conditions(cfg))
+        self.assertFalse(cfg['use_accel'])
+    def test_restored_old_snapshot_uses_current_six_conditions(self):
+        from candidate_ranking import restored_display_config,migrate_six_conditions
+        from MitakeDetector import DEFAULT
+        current=dict(DEFAULT);migrate_six_conditions(current)
+        old=dict(DEFAULT,source_rank='預估量增')
+        restored=restored_display_config(old,current)
+        self.assertTrue(all(restored[k] for k in ('use_turnover','use_accel','use_breakout')))
+        self.assertEqual(restored['source_rank'],'預估量增')
+        self.assertFalse(old['use_accel'])

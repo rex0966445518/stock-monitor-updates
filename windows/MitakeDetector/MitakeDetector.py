@@ -15,11 +15,11 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.100'
+VERSION = '0.3.101'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
-DEFAULT = dict(interval=5, min_price=50, min_volume=1000, min_gain=1,
+DEFAULT = dict(condition_profile_version=0,interval=5, min_price=50, min_volume=1000, min_gain=1,
                max_gain=8.5, min_turnover=0, use_turnover=False,
                use_accel=False, accel=1.5, use_breakout=True, cooldown=300,
                research_enabled=True,guard_enabled=True,guard_warmup=180,guard_window=60,guard_hold=30,guard_max_gap=30,guard_max_age=15,guard_min_rise=.2,guard_max_pullback=1,
@@ -228,6 +228,11 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
             saved = json.loads((BASE / 'settings.json').read_text('utf-8'))
             self.config.update({k: v for k, v in saved.items() if k in DEFAULT})
         except (OSError, ValueError): pass
+        from candidate_ranking import migrate_six_conditions
+        self.conditions_migrated=migrate_six_conditions(self.config)
+        if self.conditions_migrated:
+            try:self.save()
+            except OSError:pass
         from auto_ui import migrate_read_interval
         if migrate_read_interval(self.config):
             try:self.save()
@@ -386,6 +391,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         from version_history import record_launch
         try:record_launch(BASE,VERSION)
         except sqlite3.Error as exc:self.say('版本啟用紀錄寫入失敗：'+str(exc))
+        if self.conditions_migrated:self.say('已恢復六項條件：股價、總量、漲幅、換手率、近5分量速比、突破守穩；門檻數值保留。資料不足不計通過。')
         self.init_research()
         self.init_dashboard()
         self.init_steady()
