@@ -46,7 +46,8 @@ class MarketIndexTests(unittest.TestCase):
         class Store:
             def stocks(self,day):return [('2330','TEST',10000,100,10010,20,4,6,'已轉弱',5,3)]
             def latest_flags(self,day):return {'2330':(10020,1,'量倒退',6,6)}
+            def qualification_counts(self,day):return {'2330':2}
         tree=Tree();app=SimpleNamespace(today_tree=tree,today_frame=Frame(),diary_store=Store(),daily_refresh=0)
         DashboardUI.refresh_today_candidates(app,force=True)
         values=tree.rows['row']['values'];self.assertEqual(values[4],'20.00');self.assertIn('待複查',values[5])
-        self.assertEqual(values[0],'2330')
+        self.assertEqual(values[0],'2330');self.assertEqual(values[6],2)
