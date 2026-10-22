@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.101'
+VERSION = '0.3.102'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -286,7 +286,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         bar = ttk.Frame(root); bar.pack(fill='x', padx=18, pady=(0,10))
         metric_bar=ttk.Frame(bar);metric_bar.pack(side='right',fill='both',expand=True,padx=(14,0))
         metrics(self,metric_bar)
-        for label, action in [('▶ 開始掃描 F8', self.begin_observation), ('Ⅱ 暫停', self.stop), ('掃描設定', self.configure_auto), ('排行定位', self.preview_menu_numbers)]:
+        for label, action in [('▶ 開始掃描 F8', self.begin_observation), ('Ⅱ 暫停', self.stop), ('重新開始', self.restart_observation), ('掃描設定', self.configure_auto), ('排行定位', self.preview_menu_numbers)]:
             ttk.Button(bar, text=label, command=action,style='Gold.TButton' if action==self.begin_observation else 'TButton').pack(side='left', padx=4,fill='y')
         advanced = ttk.Menubutton(self.header, text='進階工具 ▾')
         menu = tk.Menu(advanced, tearoff=False)

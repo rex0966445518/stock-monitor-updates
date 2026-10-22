@@ -382,7 +382,7 @@ def run_smoke_test(report):
 
         # Verify the actual GUI has only the everyday action buttons.
         actions=[child.cget('text') for child in app.main_actions.winfo_children() if child.winfo_class()=='TButton']
-        assert actions==['▶ 開始掃描 F8','Ⅱ 暫停','掃描設定','排行定位'],actions
+        assert actions==['▶ 開始掃描 F8','Ⅱ 暫停','重新開始','掃描設定','排行定位'],actions
         menu_labels=[app.advanced_menu.entrycget(i,'label') for i in range(app.advanced_menu.index('end')+1)]
         assert {'重新開始','緩漲明細／設定','手機連動／配對','使用說明'}<=set(menu_labels)
         from tkinter import ttk
@@ -431,6 +431,7 @@ def run_smoke_test(report):
         app.draw_results()
         four=next(item for item in app.tree.get_children() if app.tree.item(item,'values')[0]=='9082')
         assert app.tree.item(four,'values')[1]=='FOUR'
+        assert app.tree.item(four,'values')[18]=='4/6','Four-of-six rows must remain in the main overview'
         assert '9082' not in app.name_eligible_codes
         app.display_rows.pop();app.draw_results()
         assert app.tree.item(app.tree.get_children()[-1],'values')[1]!=''
