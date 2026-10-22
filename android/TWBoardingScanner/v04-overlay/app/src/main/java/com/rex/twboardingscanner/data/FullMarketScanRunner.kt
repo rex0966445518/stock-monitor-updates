@@ -65,6 +65,7 @@ class FullMarketScanRunner(
         val gConfig=GPatternConfig.read(config.optJSONObject("gConfig"))
         val bConfig=BPatternConfig.read(config.optJSONObject("bConfig"))
         val flowRevision=config.getString("flowRevision")
+        val dChipRevision=config.optString("dChipRevision","none")
         val paperSettings=if(config.optBoolean("paperEnabled")&&!config.isNull("paperStrategy"))
             BtSettingsCodec.decode(config.getJSONObject("paperStrategy")) else null
         val participation=ScanParticipation(enabled,sectors,paperSettings!=null,paperSettings)
@@ -73,6 +74,10 @@ class FullMarketScanRunner(
         val financial=FinancialDataProvider(c)
         val auction=ClosingAuctionProvider()
         val flows=TradeSideVolumeStore(c)
+        val chips=DChipStore(c)
+        val dChipUsed=(RadarType.D_MAIN_FORCE in enabled&&rules[RadarType.D_MAIN_FORCE].orEmpty().any{it in DPattern.CHIP_IDS})||
+            (paperSettings?.enabledRadars?.contains(RadarType.D_MAIN_FORCE)==true&&
+                paperSettings.rules[RadarType.D_MAIN_FORCE].orEmpty().any{it in DPattern.CHIP_IDS})
         val calc=TechnicalCalculator()
         val scoring=ScoringEngine()
         val pool=Executors.newFixedThreadPool(6)
@@ -124,9 +129,13 @@ class FullMarketScanRunner(
                                 if(!current(id))return@evaluate null
                                 val dated=calc.barsForRadar(bars,type,date)
                                 if(dated.isEmpty())null else {
+                                    val chipDate=RuleMetrics.tradingDate(dated.last().time)
+                                    val previousChipDate=dated.getOrNull(dated.lastIndex-1)?.let{RuleMetrics.tradingDate(it.time)}
                                     val snapshot=calc.build(s,dated).copy(
                                         dConfig=dConfig,eConfig=eConfig,fConfig=fConfig,bConfig=bConfig,gConfig=gConfig,
-                                        marketIndexCloses=indexHistory)
+                                        marketIndexCloses=indexHistory,
+                                        dChipToday=if(dChipUsed&&type==RadarType.D_MAIN_FORCE)chips.read(s.code,chipDate)else null,
+                                        dChipPrevious=if(dChipUsed&&type==RadarType.D_MAIN_FORCE&&previousChipDate!=null)chips.read(s.code,previousChipDate,completed=true)else null)
                                     when(type){
                                         RadarType.A_EARLY_BREAKOUT->scoring.evaluateA(snapshot,rules.getValue(type),exclusions.getValue(type))
                                         RadarType.B_DEEP_REVERSAL->scoring.evaluateB(snapshot,rules.getValue(type),exclusions.getValue(type))
@@ -213,6 +222,7 @@ class FullMarketScanRunner(
             enrichment.await()
             ensureActive(id)
             check(flows.revision()==flowRevision){"盤中買賣量來源已改變，請重新執行以避免條件混用"}
+            check(!dChipUsed||chips.revision()==dChipRevision){"D 每日籌碼來源更新，請重新掃描避免條件混用"}
             val all=synchronized(results){results.toList()}
             val main=participation.mainResults(all)
             val paper=if(paperSettings==null)main else participation.paperResults(all)
