@@ -23,6 +23,15 @@ def run_smoke_test(report):
             assert app.power_guard.active
             assert app.power_guard.close()
             assert not app.power_guard.active
+        from header_extras import pairing_image,receive_qr
+        from types import SimpleNamespace
+        qr,text=pairing_image(SimpleNamespace(server=True,port=8765,token='smoke-pairing-token'),['192.168.1.3'])
+        receive_qr(app,(qr,text))
+        assert app.header_qr.cget('image')
+        assert int(app.taiyo_label.grid_info()['column']) < int(app.market_label.grid_info()['column'])
+        assert int(app.header_qr.master.grid_info()['column']) > int(app.market_label.grid_info()['column'])
+        app.header_extras.receive_quote({'quote':dict(price=100,percent=2.5,ts=1700000000)})
+        assert '+2.50%' in app.taiyo_var.get()
         if (BASE/'daily-table.json').exists():
             from resume_state import load_daily
             if load_daily(BASE/'daily-table.json'):

@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.107'
+VERSION = '0.3.108'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -396,6 +396,9 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         if self.conditions_migrated:self.say('已恢復六項條件：股價、總量、漲幅、換手率、近5分量速比、突破守穩；門檻數值保留。資料不足不計通過。')
         self.init_research()
         self.init_dashboard()
+        from header_extras import HeaderExtras
+        self.header_extras=HeaderExtras(self)
+        if '--smoke-test' not in sys.argv:self.header_extras.start()
         self.init_steady()
         self.load_daily_table()
         self.root.protocol('WM_DELETE_WINDOW', self.close)
@@ -883,6 +886,11 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
                         if cleared:ready.set()
                     continue
                 if token is None:
+                    if kind=='header_qr':
+                        from header_extras import receive_qr
+                        receive_qr(self,payload);continue
+                    if kind=='header_quote':
+                        self.header_extras.receive_quote(payload);continue
                     if kind=='wantgoo_chart':
                         self.candidate_charts.receive_wantgoo(payload);continue
                     if kind=='candidate_chart':
@@ -1128,6 +1136,8 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         text.insert('1.0', HELP); text.configure(state='disabled')
 
     def close(self):
+        extras=getattr(self,'header_extras',None)
+        if extras:extras.close()
         self.sync_power_guard(closing=True)
         self.cancel_scan_retry()
         charts=getattr(self,"candidate_charts",None)

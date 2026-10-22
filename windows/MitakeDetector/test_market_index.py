@@ -51,3 +51,36 @@ class MarketIndexTests(unittest.TestCase):
         DashboardUI.refresh_today_candidates(app,force=True)
         values=tree.rows['row']['values'];self.assertEqual(values[4],'20.00');self.assertIn('待複查',values[5])
         self.assertEqual(values[0],'2330');self.assertEqual(values[6],2)
+
+class HeaderExtrasTests(unittest.TestCase):
+    def test_taiyo_percent_uses_previous_close_not_open(self):
+        from header_extras import parse_quote,quote_text
+        data={'chart':{'result':[{'meta':{'symbol':'6976.T','currency':'JPY','regularMarketPrice':110,'previousClose':100,'regularMarketTime':1700000000,'regularMarketOpen':120}}]}}
+        quote=parse_quote(data)
+        self.assertAlmostEqual(quote['percent'],10)
+        text,color=quote_text(quote)
+        self.assertIn('+10.00%',text);self.assertIn('較昨收',text);self.assertIn('台灣時間',text)
+        self.assertIn('保留前值',quote_text(quote,'failed')[0])
+        data['chart']['result'][0]['meta']['symbol']='WRONG'
+        with self.assertRaises(ValueError):parse_quote(data)
+    def test_pairing_refresh_does_not_rotate_token(self):
+        from header_extras import pairing_image
+        from types import SimpleNamespace
+        bridge=SimpleNamespace(server=True,port=8765,token='test-token')
+        image,text=pairing_image(bridge,['192.168.1.3'])
+        self.assertGreater(image.width,100)
+        self.assertEqual(bridge.token,'test-token')
+        self.assertIn('192.168.1.3',text)
+        self.assertIsNone(pairing_image(bridge,['127.0.0.1'])[0])
+        bridge.server=None
+        self.assertIsNone(pairing_image(bridge,['192.168.1.3'])[0])
+    def test_quote_failure_keeps_original_source_timestamp(self):
+        from header_extras import HeaderExtras
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        app=SimpleNamespace(taiyo_var=Mock(),taiyo_label=Mock())
+        service=HeaderExtras(app)
+        service.receive_quote({'quote':dict(percent=2,ts=1700000000)})
+        service.receive_quote({'error':'failed'})
+        self.assertEqual(service.quote['ts'],1700000000)
+        self.assertIn('保留前值',app.taiyo_var.set.call_args.args[0])

@@ -15,7 +15,7 @@ class MobileUI:
         self.ttk.Label(top,text='手機連動',font=('Microsoft JhengHei',22,'bold')).pack(pady=(20,4))
         self.ttk.Label(top,text='同 Wi-Fi 或私人 VPN｜開啟後手機可讀取候選與接收通知',wraplength=520).pack(padx=20)
         self.ttk.Label(top,text='通知需開啟六項條件。5/6、6/6為觀察訊號；6/6仍須確認必要檢核。',wraplength=520).pack(padx=20,pady=6)
-        address=self.tk.StringVar(value=local_addresses()[0]);state=self.tk.StringVar(value='尚未啟用連線服務')
+        address=self.tk.StringVar(value=self.config.get('mobile_address',local_addresses()[0]));state=self.tk.StringVar(value='尚未啟用連線服務')
         self.ttk.Combobox(top,textvariable=address,values=local_addresses(),state='normal').pack(pady=8)
         qr=self.tk.Label(top);qr.pack()
         pair=self.tk.StringVar();entry=self.ttk.Entry(top,textvariable=pair);entry.pack(fill='x',padx=20,pady=8)
@@ -24,6 +24,8 @@ class MobileUI:
             bridge=self.get_mobile_bridge()
             if not bridge.server:return
             if not private_address(address.get()):pair.set('');state.set('請輸入電腦的私人 IPv4 位址');return
+            if self.config.get('mobile_address')!=address.get():
+                self.config['mobile_address']=address.get();self.save()
             url='mitake://pair?'+urlencode(dict(address=f'http://{address.get()}:{bridge.port}',token=bridge.token))
             pair.set(url)
             import qrcode

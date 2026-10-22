@@ -37,12 +37,20 @@ def header(app):
     app.product_title=tk.Label(app.header,text='漲停板探測器',fg=GOLD,bg=BG,font=('Microsoft JhengHei',24,'bold'),anchor='w')
     app.product_title.grid(row=0,column=0,sticky='w')
     tk.Label(app.header,text='雷允澤製 · v'+VERSION,fg=MUTED,bg=BG,font=('Microsoft JhengHei',10)).grid(row=1,column=0,sticky='w')
-    nav=ttk.Frame(app.header);nav.grid(row=0,column=1,padx=24,sticky='w')
+    nav=ttk.Frame(app.header);nav.grid(row=1,column=1,columnspan=2,padx=8,pady=(8,0),sticky='e')
     for label,command in [('候選歷史',app.show_candidate_diary),('條件設定',app.show_guard_settings),('一鍵更新',app.check_update)]:
         ttk.Button(nav,text=label,command=command).pack(side='left',padx=4)
+    app.taiyo_var=tk.StringVar(value='太陽誘電 6976\n行情待取得')
+    app.taiyo_label=tk.Label(app.header,textvariable=app.taiyo_var,bg=BG,fg=MUTED,font=('Microsoft JhengHei',11,'bold'),justify='right',anchor='e',wraplength=245)
+    app.taiyo_label.grid(row=0,column=1,sticky='e',padx=(12,18))
+    qr_box=tk.Frame(app.header,bg=BG);qr_box.grid(row=0,column=3,rowspan=2,sticky='e',padx=(16,0))
+    app.header_qr=tk.Label(qr_box,text='正在準備配對碼',bg=BG,fg=MUTED,cursor='hand2');app.header_qr.pack()
+    app.header_qr.bind('<Button-1>',lambda event:app.show_mobile_pairing())
+    app.header_qr_status=tk.StringVar(value='手機掃碼連線')
+    tk.Label(qr_box,textvariable=app.header_qr_status,bg=BG,fg=MUTED,font=('Microsoft JhengHei',9)).pack()
     app.market_var=tk.StringVar(value='台股加權指數｜行情待取得')
     app.market_label=tk.Label(app.header,textvariable=app.market_var,bg=BG,fg=MUTED,font=('Microsoft JhengHei',11,'bold'),justify='right',anchor='e',wraplength=280)
-    app.market_label.grid(row=0,column=2,rowspan=2,sticky='e')
+    app.market_label.grid(row=0,column=2,sticky='e')
     app.header_status=tk.Frame(app.ui_root,bg=PANEL)
     app.index_quote=None;app.index_error=''
 
