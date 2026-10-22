@@ -24,6 +24,13 @@ def run_smoke_test(report):
                 assert app.tree.get_children(),'Startup failed to restore today table'
         app.rank_rows={};app.auto_engines={};app.display_rows=[]
 
+        assert 'ratio' in app.tree['displaycolumns'],'Five-minute volume rate must appear in the default overview'
+        assert app.tree.heading('ratio','text')=='5分量速比'
+        overview=tuple(app.tree['displaycolumns'])
+        app.expand_columns_button.invoke()
+        assert app.table_view.get()=='完整欄位'
+        assert all(c in app.tree['displaycolumns'] for c in ['ratio','turnover','state']+[f'history{i}' for i in range(8)])
+        app.tree.configure(displaycolumns=overview);app.table_view.set('行情總覽')
         assert root.title()=='漲停板探測器-雷允澤製 v'+VERSION
         assert app.product_title.cget('text')=='漲停板探測器'
         import tkinter.font as tkfont
@@ -335,6 +342,7 @@ def run_smoke_test(report):
             app.render([Quote('9088','RATE',100,2,volume,1,now-680+sec)],0,0,dict(DEFAULT,source_rank=rank),persist=False)
         rate_values=[app.tree.item(item,'values')[7] for item in app.tree.get_children() if app.tree.item(item,'values')[0]=='9088']
         assert rate_values==['約2.00'],rate_values
+        assert 'ratio' in app.tree['displaycolumns'],'Measured rate must remain visible after scans'
         assert app.tree.column('ratio','width')>=190
         first_time=app.tree.heading('history0','text')
         app.render([Quote('9088','RATE',100.1,2,3030,1,now+61)],0,0,dict(DEFAULT,source_rank='預估量增',scan_cycle=1),persist=False)

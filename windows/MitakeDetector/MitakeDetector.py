@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.99'
+VERSION = '0.3.100'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -348,9 +348,9 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         self.tree.heading('signal',text='狀態');self.tree.column('signal',width=90,stretch=False)
         self.table_view=tk.StringVar(value='行情總覽')
         view_bar=ttk.Frame(table_frame);view_bar.pack(fill='x',pady=(0,4))
-        for label,columns in [('行情總覽',['code','name','score','price','gain','volume','signal']),('8 次價格',cols[:2]+cols[9:17]),('完整欄位',cols[:8]+cols[9:17]+['state'])]:
+        for label,columns in [('行情總覽',['code','name','score','price','gain','ratio','volume','signal']),('8 次價格',cols[:2]+cols[9:17]),('完整欄位',cols[:8]+cols[9:17]+['state'])]:
             ttk.Radiobutton(view_bar,text=label,variable=self.table_view,value=label,command=lambda c=columns:self.tree.configure(displaycolumns=c)).pack(side='left',padx=6)
-        self.tree.configure(displaycolumns=['code','name','score','price','gain','volume','signal'])
+        self.tree.configure(displaycolumns=['code','name','score','price','gain','ratio','volume','signal'])
         self.tree.bind('<<TreeviewSelect>>',self.focus_chart.select)
         self.tree.bind('<Double-1>',lambda e:self.show_selected_details())
         self.tree.tag_configure('stripe',background='#152338')
@@ -374,7 +374,8 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         ttk.Label(foot,textvariable=self.terminal_status).pack(side='right')
         from display_scale import DisplayScale,SCALES
         zoom=ttk.Frame(foot);zoom.pack(side='left',padx=12)
-        ttk.Button(zoom,text='展開全部欄位',command=lambda:self.display_scale.fit_tables(reset=True)).pack(side='left',padx=4)
+        self.expand_columns_button=ttk.Button(zoom,text='展開全部欄位',command=self.expand_all_columns)
+        self.expand_columns_button.pack(side='left',padx=4)
         ttk.Label(zoom,text='介面大小').pack(side='left')
         self.display_scale_var=tk.StringVar(value='150%')
         self.display_scale_box=ttk.Combobox(zoom,textvariable=self.display_scale_var,values=[f'{n}%' for n in SCALES],state='readonly',width=6)
@@ -695,6 +696,13 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         self.name_eligible_codes=eligible
         charts=getattr(self,"candidate_charts",None)
         if charts:charts.update(chart_rows)
+
+    def expand_all_columns(self):
+        columns=list(self.tree['columns'])
+        self.table_view.set('完整欄位')
+        self.tree.configure(displaycolumns=columns[:8]+columns[9:17]+['state'])
+        self.display_scale.fit_tables(reset=True)
+        self.tree.xview_moveto(0)
 
     def show_selected_details(self):
         selected=self.tree.selection()
