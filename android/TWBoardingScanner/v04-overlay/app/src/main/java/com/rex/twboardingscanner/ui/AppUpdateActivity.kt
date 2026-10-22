@@ -36,6 +36,11 @@ class AppUpdateActivity:AppCompatActivity(){
         panel.addView(bar,android.widget.LinearLayout.LayoutParams(-1,NeonUi.dp(this,8)));panel.addView(NeonUi.gap(this,10))
         detail=NeonUi.label(this,"",13f);panel.addView(detail);root.addView(panel);root.addView(NeonUi.gap(this,12))
         primary=NeonUi.primary(this,"一鍵更新"){if(store.snapshot().optString("status")=="READY"&&isNewer())install() else startUpdate()}.apply{tag="update-primary"};root.addView(primary)
+        root.addView(NeonUi.button(this,"一鍵更新誤判？直接下載 GitHub APK",NeonUi.cyan){
+            runCatching{
+                startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://github.com/rex0966445518/stock-monitor-updates/releases/download/latest-android/TWBoardingScanner-latest.apk")))
+            }.onFailure{Toast.makeText(this,"無法開啟瀏覽器，請使用 GitHub 發布頁",Toast.LENGTH_LONG).show()}
+        }.apply{tag="update-direct-apk"})
         pause=NeonUi.button(this,"暫停下載",NeonUi.amber){autoInstall=false;store.cancel();WorkManager.getInstance(this).cancelUniqueWork(AppUpdateWorker.WORK);render()}.apply{tag="update-pause"};root.addView(pause)
         root.addView(NeonUi.label(this,"下載中斷可重試接續；更新後保留掃描設定與回測日誌。安裝需由 Android 確認，首次可能要求允許此 App 安裝更新。",12f))
         root.addView(NeonUi.gap(this,16));val releaseNotes=NeonUi.section(this,"版本更新說明");root.addView(releaseNotes)
@@ -52,7 +57,7 @@ class AppUpdateActivity:AppCompatActivity(){
     }
     override fun onPause(){visible=false;handler.removeCallbacks(polling);super.onPause()}
     override fun onSaveInstanceState(outState:Bundle){outState.putBoolean("autoInstall",autoInstall);outState.putBoolean("awaitingPermission",awaitingPermission);super.onSaveInstanceState(outState)}
-    private fun isNewer()=(store.spec()?.versionCode?:0)>AppUpdateInstaller.code(AppUpdateInstaller.installed(this))
+    private fun isNewer()=store.spec()?.let{AppUpdateInstaller.isNewer(it,AppUpdateInstaller.installed(this))}==true
     private fun startUpdate(){
         autoInstall=true
         runCatching{AppUpdateWorker.start(this)}.onFailure{autoInstall=false;Toast.makeText(this,"無法開始更新，請重試",Toast.LENGTH_LONG).show()}
@@ -60,11 +65,11 @@ class AppUpdateActivity:AppCompatActivity(){
     }
     internal fun render(){
         val state=store.snapshot();val s=store.spec();val status=state.optString("status")
-        val installed=AppUpdateInstaller.installed(this);val newer=s!=null&&s.versionCode>AppUpdateInstaller.code(installed)
-        val ready=status=="READY"&&newer;val current=status=="CURRENT"||(status=="READY"&&!newer)
+        val installed=AppUpdateInstaller.installed(this);val newer=s!=null&&AppUpdateInstaller.isNewer(s,installed)
+        val ready=status=="READY"&&newer;val current=(status=="CURRENT"||status=="READY")&&!newer
         val busy=status in AppUpdateStore.busy
         headline.text=when{ready->"更新包準備完成";current->"已是最新版本";status=="ERROR"->"更新未完成";status=="PAUSED"->"已暫停更新";status=="DOWNLOADING"->"正在下載更新";status=="VERIFYING"->"正在驗證更新包";busy->"檢查最新版…";else->"一鍵更新"}
-        version.text="目前 v${installed.versionName}"+(s?.let{"  →  v${it.versionName}"}?:"")
+        version.text="目前 v${installed.versionName} (代碼 ${AppUpdateInstaller.code(installed)})"+(s?.let{"  →  v${it.versionName} (代碼 ${it.versionCode})"}?:"")
         bar.isIndeterminate=status in setOf("CHECKING","QUEUED","VERIFYING")
         val bytes=state.optLong("bytes",0).coerceAtLeast(0);val total=s?.size?:0
         val pct=if(total>0)(bytes*100/total).toInt().coerceIn(0,100)else 0;bar.progress=if(current)100 else pct

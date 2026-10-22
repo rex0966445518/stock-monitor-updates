@@ -65,6 +65,26 @@ class AppUpdateTest {
         assertThrows(Exception::class.java){AppUpdateInstaller.checkIdentity(s,"other.app",100,"0.5.0",20,validSigners,validSigners)}
         assertThrows(Exception::class.java){AppUpdateInstaller.checkIdentity(s,AppUpdateSource.PACKAGE,99,"0.5.0",20,validSigners,validSigners)}
     }
+    @Test fun sameCodeNewerVersionNameIsAnUpdateButDowngradeRemainsBlocked(){
+        // Regression: installed v0.4.99 was mistakenly treated as up to date
+        // when public v0.5.0 reused the same integer versionCode.
+        assertTrue(AppUpdateInstaller.isNewer(103,"0.5.0",103,"0.4.99"))
+        assertTrue(AppUpdateInstaller.isNewer(104,"0.5.1",103,"0.4.99"))
+        assertFalse(AppUpdateInstaller.isNewer(103,"0.5.0",103,"0.5.0"))
+        assertFalse(AppUpdateInstaller.isNewer(103,"0.4.99",103,"0.5.0"))
+        assertFalse(AppUpdateInstaller.isNewer(103,"0.5.0",104,"0.4.99"))
+        assertFalse(AppUpdateInstaller.isNewer(103,"0.5.0",103,"beta-unknown"))
+        val s=spec()
+        val signers=setOf("same-certificate")
+        AppUpdateInstaller.checkIdentity(s,AppUpdateSource.PACKAGE,100,"0.5.0",100,signers,signers,"0.4.99")
+        assertThrows(Exception::class.java){
+            AppUpdateInstaller.checkIdentity(s,AppUpdateSource.PACKAGE,100,"0.5.0",100,signers,signers,"0.5.0")
+        }
+        assertThrows(Exception::class.java){
+            AppUpdateInstaller.checkIdentity(s,AppUpdateSource.PACKAGE,100,"0.5.0",100,signers,setOf("different-certificate"),"0.4.99")
+        }
+    }
+
     @Test fun githubMetadataRedirectWorksAndUntrustedRedirectIsRejected(){
         val responses=java.util.ArrayDeque<Reply>()
         responses.add(Reply(302,ByteArrayInputStream(byteArrayOf()),mapOf("Location" to "https://release-assets.githubusercontent.com/example")))
@@ -119,6 +139,8 @@ class AppUpdateTest {
         val store=AppUpdateStore(app);val id=store.begin();store.setSpec(id,spec());store.status(id,"DOWNLOADING","接續下載",20)
         val ctl=Robolectric.buildActivity(AppUpdateActivity::class.java).setup();val a=ctl.get()
         assertNotNull(find(a.window.decorView){it is TextView&&it.text.contains("接續下載")})
+        assertNotNull(find(a.window.decorView){it.tag=="update-direct-apk"})
+        assertNotNull(find(a.window.decorView){it is TextView&&it.text.contains("代碼")})
         assertFalse(find(a.window.decorView){it.tag=="update-primary"}!!.isEnabled)
         capture(a.window.decorView,"app-update-progress-360")
         store.status(id,"ERROR","下載中斷，請重試");a.render()
