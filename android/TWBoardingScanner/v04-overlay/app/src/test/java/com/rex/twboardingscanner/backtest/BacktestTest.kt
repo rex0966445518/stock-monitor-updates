@@ -131,7 +131,18 @@ class BacktestTest {
         check(v)
         fun screenshot(name:String){val b=Bitmap.createBitmap(720,1600,Bitmap.Config.ARGB_8888);v.draw(Canvas(b));val f=File("build/ui-previews/$name.png");f.parentFile.mkdirs();f.outputStream().use{b.compress(Bitmap.CompressFormat.PNG,100,it)};b.recycle()}
         screenshot("backtest-v2-360")
-        val scroll=(ctl.get().findViewById<android.view.ViewGroup>(android.R.id.content).getChildAt(0) as android.widget.ScrollView);scroll.scrollTo(0,1200);screenshot("backtest-v2-results-360")
+        val content=ctl.get().findViewById<android.view.ViewGroup>(android.R.id.content)
+        // A fixed neon nav now wraps the original scroll. Preserve the original
+        // screenshot assertion but locate the scroll by type, not child index.
+        fun findScroll(node:View):android.widget.ScrollView? {
+            if(node is android.widget.ScrollView)return node
+            if(node is ViewGroup)for(i in 0 until node.childCount)
+                findScroll(node.getChildAt(i))?.let{return it}
+            return null
+        }
+        val scroll=findScroll(content)?:error("Backtest content must remain scrollable")
+        assertNotNull("Neon dock absent",content.findViewWithTag<View>("neon-bottom-navigation"))
+        scroll.scrollTo(0,1200);screenshot("backtest-v2-results-360")
         ctl.pause().stop().destroy();context.getSharedPreferences("backtest_status",0).edit().clear().commit()
     }
 }
