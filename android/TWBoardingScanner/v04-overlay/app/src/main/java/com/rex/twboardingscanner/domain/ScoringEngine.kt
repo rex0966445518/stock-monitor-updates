@@ -27,7 +27,8 @@ class ScoringEngine {
         val evidence=listOfNotNull(
             if(type==RadarType.A_EARLY_BREAKOUT&&selected.any{it in APattern.IDS})metrics.aPattern.format() else null,
             if(type==RadarType.C_LONG_RED_VOLUME)CSignalEvidence.format(metrics,selected) else null,
-            if(type==RadarType.D_MAIN_FORCE)metrics.dPattern.format() else null,
+            if(type==RadarType.D_MAIN_FORCE)metrics.dPattern.format()+
+                (if(selected.any{it in DPattern.CHIP_IDS})"\n"+metrics.dChipAudit() else "") else null,
             if(type==RadarType.F_VOLUME_CONTRACTION)metrics.fPattern.format() else null,
             if(type==RadarType.G_MA5_WAVE)metrics.gPattern.format() else null,
             if(type==RadarType.E_DIF_TOUCH)metrics.ePattern?.format()?:"E 日K資料不足，待查核" else null,

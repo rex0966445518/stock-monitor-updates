@@ -98,6 +98,31 @@ data class TradeSideVolume(
     }
 }
 
+
+/** A dated, user-provided licensed feed row. 0.01 is 0.01 percentage POINT,
+ * not a 0.01% relative change. TDCC weekly data cannot establish daily changes.
+ * asOf is the last observation timestamp in Asia/Taipei.
+ */
+data class DChipDay(
+    val date:java.time.LocalDate,
+    val bigHolderPct:Double? = null,
+    val mainForce5Pct:Double? = null,
+    val foreignNetShares:Long? = null,
+    val trustNetShares:Long? = null,
+    val asOf:java.time.LocalTime,
+    val source:String
+){
+    init {
+        require(bigHolderPct==null||(bigHolderPct.isFinite()&&bigHolderPct in 0.0..100.0)){"大戶持股占比需為 0～100%"}
+        require(mainForce5Pct==null||(mainForce5Pct.isFinite()&&mainForce5Pct in -1000.0..1000.0)){"5日集中度超出允許範圍"}
+        require(listOf(foreignNetShares,trustNetShares).filterNotNull().all{it in -100_000_000_000L..100_000_000_000L}){"法人淨買賣股數不合理"}
+        require(bigHolderPct!=null||mainForce5Pct!=null||foreignNetShares!=null||trustNetShares!=null){"四種籌碼資料至少需要一項"}
+        require(asOf>=java.time.LocalTime.of(9,0)&&asOf<=java.time.LocalTime.of(13,30)){"台股盤中觀測時間須 09:00～13:30"}
+        require(source.isNotBlank()&&source.length<=140){"請標註可信的資料來源"}
+    }
+    val completeDay:Boolean get()=asOf>=java.time.LocalTime.of(13,25)
+}
+
 data class MarketStock(
     val code: String,
     val name: String,
@@ -168,7 +193,10 @@ data class StockSnapshot(
     val fConfig:FPatternConfig=FPatternConfig.DEFAULT,
     val gConfig:GPatternConfig=GPatternConfig.DEFAULT,
     val marketIndexCloses:Map<java.time.LocalDate,Double>?=null,
-    val bConfig:BPatternConfig=BPatternConfig.DEFAULT
+    val bConfig:BPatternConfig=BPatternConfig.DEFAULT,
+    /** Per-trading-day licensed chip snapshots, never extrapolated from OHLCV. */
+    val dChipToday:DChipDay?=null,
+    val dChipPrevious:DChipDay?=null
 )
 
 data class SignalResult(
