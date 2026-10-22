@@ -44,6 +44,24 @@ class AutoUI:
         guard=getattr(self,'cursor_visibility',None)
         if guard:guard.close()
 
+    def poll_capture_clear(self):
+        """Service capture barriers independently of expensive quote rendering."""
+        try:
+            pending=getattr(self,'outline_clear_pending',None)
+            if pending and not pending[1].is_set():
+                token,ready=pending
+                if token==self.generation:
+                    notice=getattr(self,'candidate_notice',None)
+                    if notice and notice.alive:notice.window.withdraw()
+                    self.show_scan_outline(None)
+                    self.root.update_idletasks()
+                ready.set()
+        except Exception:
+            # Keep the same barrier pending: a failed withdraw must be retried.
+            pass
+        finally:
+            self.root.after(25,self.poll_capture_clear)
+
     def highlight_scan(self,token,region,stop):
         from autoswitch import AutomationStopped
         if stop.is_set():raise AutomationStopped('已停止自動操作')
@@ -57,7 +75,7 @@ class AutoUI:
             ready=threading.Event()
             self.outline_clear_pending=(token,ready) if region is None else None
             self.events.put((token,'scan_region',(region,ready)))
-        deadline=time.monotonic()+.5
+        deadline=time.monotonic()+(3.0 if region is None else .5)
         while not ready.wait(.02):
             if stop.is_set():raise AutomationStopped('已停止自動操作')
             if time.monotonic()>deadline:
@@ -71,6 +89,7 @@ class AutoUI:
     def show_scan_outline(self,region):
         from scan_outline import ScanOutline
         outline=getattr(self,'scan_outline',None)
+        if outline is None and not region:return
         if outline is None:self.scan_outline=outline=ScanOutline(self.root,self.tk)
         regions=region if isinstance(region,list) else ([region] if region else [])
         extras=getattr(self,'scan_outline_extras',[])

@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.115'
+VERSION = '0.3.116'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -404,6 +404,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         self.root.protocol('WM_DELETE_WINDOW', self.close)
         self.init_f8()
         root.after(150, self.poll)
+        root.after(25, self.poll_capture_clear)
 
     def restart_observation(self):
         if not self.idle():return
@@ -868,6 +869,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
                     cleared=False
                     try:
                         if token==self.generation:
+                            if getattr(self,'outline_disabled_token',None)==token or getattr(self,'outline_clear_pending',None):region=None
                             notice=getattr(self,'candidate_notice',None)
                             if notice and notice.alive:
                                 if region is None:notice.window.withdraw()
@@ -875,7 +877,6 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
                                     import ctypes
                                     ctypes.windll.user32.ShowWindow(notice.native_hwnd,4)
                                 else:notice.window.deiconify()
-                            if getattr(self,'outline_disabled_token',None)==token:region=None
                             try:
                                 self.show_scan_outline(region);self.root.update_idletasks();cleared=True
                             except Exception:

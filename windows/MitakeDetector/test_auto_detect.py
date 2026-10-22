@@ -125,10 +125,10 @@ class OutlineResilienceTests(unittest.TestCase):
         import threading
         from unittest.mock import patch
         app=self.app();stop=threading.Event()
-        with patch('auto_ui.time.monotonic',side_effect=[0,1]):
+        with patch('auto_ui.time.monotonic',side_effect=[0,4]):
             with self.assertRaises(RuntimeError):app.highlight_scan(7,None,stop)
         ready=app.outline_clear_pending[1];size=app.events.qsize()
-        with patch('auto_ui.time.monotonic',side_effect=[0,1]):
+        with patch('auto_ui.time.monotonic',side_effect=[0,4]):
             with self.assertRaises(RuntimeError):app.highlight_scan(7,None,stop)
         self.assertEqual(app.events.qsize(),size)
         ready.set()
@@ -140,10 +140,10 @@ class OutlineResilienceTests(unittest.TestCase):
         from unittest.mock import patch
         app=self.app();stop=threading.Event();old=threading.Event();old.set()
         app.outline_clear_pending=(7,old)
-        with patch('auto_ui.time.monotonic',side_effect=[0,1]):
+        with patch('auto_ui.time.monotonic',side_effect=[0,4]):
             app.highlight_scan(7,[{'left':1}],stop)
         self.assertIsNone(app.outline_clear_pending)
-        with patch('auto_ui.time.monotonic',side_effect=[0,1]):
+        with patch('auto_ui.time.monotonic',side_effect=[0,4]):
             with self.assertRaises(RuntimeError):app.highlight_scan(8,None,stop)
         self.assertEqual(app.outline_clear_pending[0],8)
         self.assertFalse(app.outline_clear_pending[1].is_set())
@@ -155,7 +155,7 @@ class OutlineResilienceTests(unittest.TestCase):
         import threading
         from unittest.mock import patch
         app=self.app();stop=threading.Event()
-        with patch('auto_ui.time.monotonic',side_effect=[0,1]):
+        with patch('auto_ui.time.monotonic',side_effect=[0,4]):
             app.highlight_scan(7,[{'left':1}],stop)
         self.assertFalse(stop.is_set());self.assertEqual(app.outline_disabled_token,7)
         size=app.events.qsize();app.highlight_scan(7,[{'left':2}],stop)
@@ -165,7 +165,7 @@ class OutlineResilienceTests(unittest.TestCase):
         from unittest.mock import patch
         from autoswitch import AutomationStopped
         app=self.app();stop=threading.Event()
-        with patch('auto_ui.time.monotonic',side_effect=[0,1]):
+        with patch('auto_ui.time.monotonic',side_effect=[0,4]):
             with self.assertRaises(RuntimeError) as error:app.highlight_scan(7,None,stop)
         self.assertNotIsInstance(error.exception,AutomationStopped)
         self.assertFalse(stop.is_set())
@@ -182,3 +182,25 @@ class OutlineResilienceTests(unittest.TestCase):
         App.poll(app)
         app.root.after.assert_called_once_with(150,app.poll)
         app.mobile_bridge.publish_notice.assert_called_once()
+
+class CaptureClearPumpTests(unittest.TestCase):
+    def test_clear_retries_after_ui_error_and_acknowledges_only_success(self):
+        import threading
+        from unittest.mock import Mock
+        app=AutoUI();app.generation=7;app.root=Mock()
+        ready=threading.Event();app.outline_clear_pending=(7,ready)
+        app.show_scan_outline=Mock(side_effect=[RuntimeError('busy'),None])
+        app.poll_capture_clear()
+        self.assertFalse(ready.is_set())
+        app.poll_capture_clear()
+        self.assertTrue(ready.is_set())
+        self.assertEqual(app.root.after.call_count,2)
+        app.poll_capture_clear()
+        self.assertEqual(app.show_scan_outline.call_count,2)
+
+    def test_clear_without_outline_does_not_create_windows(self):
+        from unittest.mock import patch
+        app=AutoUI()
+        with patch('scan_outline.ScanOutline') as constructor:
+            app.show_scan_outline(None)
+        constructor.assert_not_called()
