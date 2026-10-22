@@ -153,6 +153,9 @@ class BacktestActivity:AppCompatActivity(){
         universe.addView(NeonUi.button(this,"匯入主動買／賣成交量 CSV",NeonUi.cyan){
             startActivity(Intent(this,TradeSideVolumeImportActivity::class.java))
         }.apply{tag="backtest-flow-import"})
+        universe.addView(NeonUi.button(this,"匯入 D 大戶／主力5日集中／法人每日 CSV",NeonUi.mint){
+            startActivity(Intent(this,DChipImportActivity::class.java))
+        }.apply{tag="backtest-d-chip-import"})
         root.addView(universe);NeonUi.group(root,universe,universe,"03  股票與入場篩選","股票範圍、產業、ABCDEFG 與管理名單","backtest-universe")
         val watcher=object:android.text.TextWatcher{
             override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}

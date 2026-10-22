@@ -567,6 +567,7 @@ class MainActivity: AppCompatActivity() {
         val created=System.currentTimeMillis()
         val paper=runCatching{com.rex.twboardingscanner.paper.PaperRepository(this).read()}.getOrNull()
         val flowRevision=com.rex.twboardingscanner.data.TradeSideVolumeStore(this).revision()
+        val dChipRevision=com.rex.twboardingscanner.data.DChipStore(this).revision()
         val frozen=com.rex.twboardingscanner.data.ScanArchiveStore.snapshot(
             date.toString(),created,radarSelections.mapValues{it.value.toSet()},
             enabledSectors.toSet(),com.rex.twboardingscanner.data.StockPolicyStore(this).read(),
@@ -576,6 +577,7 @@ class MainActivity: AppCompatActivity() {
         ).put("paperEnabled",paper?.enabled==true)
          .put("paperStrategy",paper?.strategy?.let{com.rex.twboardingscanner.backtest.BtSettingsCodec.encode(it)}
              ?:org.json.JSONObject.NULL)
+         .put("dChipRevision",dChipRevision)
         runCatching{FullMarketScanWorker.start(applicationContext,frozen)}
             .onSuccess{
                 latest=emptyList()
@@ -697,6 +699,8 @@ class MainActivity: AppCompatActivity() {
         val exclusionSnapshot=scanExclusions.mapValues{it.value.toSet()}
         val flowStore=com.rex.twboardingscanner.data.TradeSideVolumeStore(this)
         val flowRevision=flowStore.revision()
+        val dChips=com.rex.twboardingscanner.data.DChipStore(this)
+        val dChipRevision=dChips.revision()
         val scanPolicy=com.rex.twboardingscanner.data.StockPolicyStore(this).read()
         val mainSectors = enabledSectors.toSet()
         // Paper mode owns independent ABC/sectors. Fetch the union so paper-only
@@ -804,8 +808,15 @@ class MainActivity: AppCompatActivity() {
                                         if(!current())return@evaluate null
                                         val datedBars = calculator.barsForRadar(bars, type, scanDate)
                                         if (datedBars.isEmpty()) null else {
+                                            val useDChip=type==RadarType.D_MAIN_FORCE&&(
+                                                scanRules[type].orEmpty().any{it in DPattern.CHIP_IDS}||
+                                                paperSettings?.rules?.get(type).orEmpty().any{it in DPattern.CHIP_IDS})
+                                            val chipDate=RuleMetrics.tradingDate(datedBars.last().time)
+                                            val previousChipDate=datedBars.getOrNull(datedBars.lastIndex-1)?.let{RuleMetrics.tradingDate(it.time)}
                                             val snap = calculator.build(stockToUse, datedBars)
-                                                .copy(dConfig=scanDConfig,eConfig=scanEConfig,fConfig=scanFConfig,bConfig=scanBConfig,gConfig=scanGConfig,marketIndexCloses=indexHistory)
+                                                .copy(dConfig=scanDConfig,eConfig=scanEConfig,fConfig=scanFConfig,bConfig=scanBConfig,gConfig=scanGConfig,marketIndexCloses=indexHistory,
+                                                    dChipToday=if(useDChip)dChips.read(stock.code,chipDate)else null,
+                                                    dChipPrevious=if(useDChip&&previousChipDate!=null)dChips.read(stock.code,previousChipDate,completed=true)else null)
                                             when(type) {
                                                 RadarType.A_EARLY_BREAKOUT -> engine.evaluateA(snap, scanRules.getValue(type),exclusionSnapshot.getValue(type))
                                                 RadarType.B_DEEP_REVERSAL -> engine.evaluateB(snap, scanRules.getValue(type),exclusionSnapshot.getValue(type))
@@ -929,10 +940,12 @@ class MainActivity: AppCompatActivity() {
                 check(flowStore.revision()==flowRevision){
                     "主動買／賣量資料於掃描中變更，請重新開始，避免同一次掃描條件不一致"
                 }
+                check(dChips.revision()==dChipRevision){"D 每日籌碼來源在掃描中已變動，請重新掃描避免混用"}
                 val snapshot=com.rex.twboardingscanner.data.ScanArchiveStore.snapshot(
                     scanDate.toString(),latestScanAt,scanRules,mainSectors,scanPolicy,
                     flowRevision,total,analyzed.get(),failed.get(),
                     enabledRadars=scanEnabled,dConfig=scanDConfig,eConfig=scanEConfig,fConfig=scanFConfig,bConfig=scanBConfig,gConfig=scanGConfig,exclusions=exclusionSnapshot)
+                    .put("dChipRevision",dChipRevision)
                     .put("paperStrategy",paperSettings?.let{com.rex.twboardingscanner.backtest.BtSettingsCodec.encode(it)}?:org.json.JSONObject.NULL)
                 com.rex.twboardingscanner.data.ScanDiagnostics.phase(this,"保存完整掃描資料夾")
                 com.rex.twboardingscanner.data.ScanArchiveStore(this).use{store->
@@ -1241,6 +1254,10 @@ class MainActivity: AppCompatActivity() {
             MaterialAlertDialogBuilder(this).setTitle("條件判斷說明").setMessage("勾選條件全部滿足才入選；未勾選不限制。B預設為早期起轉組合，其餘基本條件預設全選，額外查核預設關閉；E 預設僅勾 DIF 向上接觸，不強制 A 股價／量能。\nA/B/E/F 排除台灣當日日線；C/D 使用最新日 K。E 的 MACD 為 EMA9 訊號線，預設線距≤收盤價0.3%，DIF須上升且前日位於訊號線下方或相等；可調線距及是否納入剛向上交叉。\nB新增可調深跌／不破底／MACD連升／RSI回升／放量突破及任一反轉事件；早期與突破確認兩套預設可套用。舊已保存勾選不自動改寫；B通過後若RSI>50且收盤>20日線另標示技術升級；不辨識W底形狀。\n額外資料不足標示待查核，勾選後會阻擋入選。5日／10日線碰觸以差距1%內且前一日差距較大定義；主動買賣比需提供來源可靠的內外盤成交量CSV，不能使用五檔委買委賣掛單量。HiStock 財報會查核技術候選股，快取24小時；HTTP403/429、格式變更、資料過期均待查核。逐日法人尚未接入。分數為所選條件通過率，不是公司評級。\n財務條件共用於ABCDEF、可各自勾選；EPS為正不代表現金流為正。產業EPS範圍不是通用及格線，未設成硬門檻。\n現金流使用原站最新列示期間，不跨季加總；金融業現金流需另行解讀。營業利益率為正不能排除一次性業外收益。\n風險估算：前20日最低價為支撐，支撐下1%為失效價，前60日最高價為壓力；(壓力−現價)/(現價−失效價)≥2。\n漲停估算：前收盤×1.1，按台股跳動單位向下取整；非交易所公告漲停價。\nC 為觀察訊號，尚無回測證明隔天一定續漲。\n估算主力成本為近20日的日K典型價（高＋低＋收）／3依成交股數加權；非券商揭露的真正大戶持股均價，也不保證股價反彈。當日資料若未收盤，估值可在收盤後改變；不足20根有效日K則顯示待查核。").setPositiveButton("關閉",null).show()
         })
         if(type==RadarType.D_MAIN_FORCE){
+            box.addView(NeonUi.label(this,"新選項：大戶持股 +0.01 個百分點、5日主力集中度增、法人當日買超需每日來源；缺資料顯示待查核，MA5交叉可從K線計算。",12f,NeonUi.amber))
+            box.addView(NeonUi.button(this,"匯入 D 大戶／主力／法人每日籌碼 CSV",NeonUi.mint){
+                startActivity(android.content.Intent(this,DChipImportActivity::class.java))
+            }.apply{tag="scanner-d-chip-import"})
             box.addView(NeonUi.button(this,"D 數值總覽（也可直接填寫下方欄位）"){
                 numbers.editD()
             }.apply{tag="scanner-d-parameters"})
@@ -1257,6 +1274,7 @@ class MainActivity: AppCompatActivity() {
                 type==RadarType.D_MAIN_FORCE&&index==0->"D 原有六項主力形態"
                 type==RadarType.D_MAIN_FORCE&&index==6->"A 準備起漲同步條件（可獨立選擇）"
                 type==RadarType.D_MAIN_FORCE&&index==17->"A 額外財報／風險查核（選填）"
+                type==RadarType.D_MAIN_FORCE&&rule.id==DPattern.BIG_HOLDER_UP->"D 新增大戶／主力／法人與均線交叉（獨立選填）"
                 type!=RadarType.D_MAIN_FORCE&&rule.extra&&!extraHeadingShown->"額外查核（選填）"
                 else->null
             }

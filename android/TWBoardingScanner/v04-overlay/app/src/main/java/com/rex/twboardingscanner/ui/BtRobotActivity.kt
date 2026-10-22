@@ -271,6 +271,9 @@ class BtRobotActivity:AppCompatActivity(){
         root.addView(NeonUi.button(this,"匯入主動買／賣成交量 CSV",NeonUi.cyan){
             if(!busy)startActivity(Intent(this,TradeSideVolumeImportActivity::class.java))
         }.apply{tag="robot-flow-import"})
+        root.addView(NeonUi.button(this,"匯入 D 大戶／主力5日集中／法人每日 CSV",NeonUi.mint){
+            if(!busy)startActivity(Intent(this,DChipImportActivity::class.java))
+        }.apply{tag="robot-d-chip-import"})
         root.addView(NeonUi.gap(this,8))
         val options=panel(NeonUi.cyan).apply{tag="robot-condition-settings"}
         options.addView(label("① 啟用類別 A～G · 彩色已啟用／灰色已停用",12f,NeonUi.cyan))
