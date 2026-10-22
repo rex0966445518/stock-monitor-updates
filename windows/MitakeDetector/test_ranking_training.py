@@ -77,8 +77,10 @@ class TeachingButtonsTests(unittest.TestCase):
         buttons={};scheduled=[];created=[]
         class Widget:
             def __init__(self,*args,**kw):
-                self.value=kw.get('value','');self.items={};self.columns=kw.get('columns');created.append(self)
+                self.bindings={};self.selected='';self.value=kw.get('value','');self.items={};self.columns=kw.get('columns');created.append(self)
                 if 'command' in kw and 'text' in kw:buttons[kw['text']]=kw['command']
+            def bind(self,event,callback):self.bindings[event]=callback
+            def identify_row(self,y):return self.selected
             def insert(self,parent,index,**kw):self.items[kw['iid']]=kw
             def item(self,key,**kw):self.items[key].update(kw);return self.items[key]
             def __getattr__(self,name):return lambda *a,**k:None
@@ -118,21 +120,28 @@ class TeachingButtonsTests(unittest.TestCase):
             with patch.dict('sys.modules',{'MitakeDetector':types.SimpleNamespace(BASE=Path(d))}),patch('autoswitch.WindowsController',return_value=c),patch('autoswitch.RankingSwitcher',return_value=s),patch('autoswitch.RANKINGS',['漲停鎖住','跌停鎖住']),patch('menu_numbers.NumberNavigator',side_effect=make_nav),patch('ranking_training.replay_menu',return_value=(im,region)),patch('PIL.ImageTk.PhotoImage',return_value=object()):
                 try:
                     open_training(app)
+                    catalog=next(w for w in created if w.columns==('state','position'))
+                    self.assertEqual(visited,[])
+                    def choose(name):
+                        catalog.selected=name;catalog.bindings['<ButtonRelease-1>'](types.SimpleNamespace(y=1))
+                    choose('跌停鎖住')
                     pump_until(lambda:bool(visited))
                     # Process the image that enables the assistance controls.
                     pump_until(lambda:app.status.get().startswith('請在下方'))
+                    buttons['標記上移一列']();pump_until(lambda:app.status.get().startswith('已移至第 1'))
                     buttons['標記下移一列']();pump_until(lambda:app.status.get().startswith('已移至第 2'))
                     buttons['標記上移一列']();pump_until(lambda:app.status.get().startswith('已移至第 1'))
                     c.click.assert_not_called()
-                    buttons['記住並下一項']();pump_until(lambda:app.status.get().startswith('請在下方截圖指出「跌停鎖住」'))
-                    self.assertEqual(visited[:3],[1,1,2])
+                    buttons['確定學習']();pump_until(lambda:app.status.get().startswith('已記住「跌停鎖住」'))
+                    choose('漲停鎖住');pump_until(lambda:app.status.get().startswith('請在下方截圖指出「漲停鎖住」'))
                     s.verify_label.assert_not_called();s.switch.assert_not_called()
-                    buttons['記住並下一項']();pump_until(lambda:not app.worker_thread.is_alive())
+                    buttons['確定學習']();pump_until(lambda:app.status.get().startswith('已記住「漲停鎖住」'))
+                    buttons['停止']();pump_until(lambda:not app.worker_thread.is_alive())
                     c.click.assert_not_called()
                     import json
                     saved=json.loads((Path(d)/'ranking-teaching-positions.json').read_text())['items']
-                    self.assertEqual(list(saved),['漲停鎖住','跌停鎖住'])
-                    self.assertTrue(app.status.get().startswith('全部 2 項'))
+                    self.assertEqual(list(saved),['跌停鎖住','漲停鎖住'])
+                    pump_until(lambda:app.status.get().startswith('已保存本次確認的 2 次'))
                     catalog=next(w for w in created if w.columns==('state','position'))
                     self.assertEqual(list(catalog.items),['漲停鎖住','跌停鎖住'])
                     self.assertTrue(all(item['values'][0]=='已記住待驗證' for item in catalog.items.values()))
@@ -163,7 +172,7 @@ class GuidedLayoutTests(unittest.TestCase):
                 top=next(w for w in root.winfo_children() if isinstance(w,tk.Toplevel))
                 for height in (630,540):
                     top.geometry(f'680x{height}');root.update()
-                    action=next(w for w in walk(top) if isinstance(w,ttk.Button) and w.cget('text')=='記住並下一項')
+                    action=next(w for w in walk(top) if isinstance(w,ttk.Button) and w.cget('text')=='確定學習')
                     self.assertTrue(action.winfo_ismapped())
                     self.assertLessEqual(action.winfo_rooty()+action.winfo_height(),top.winfo_rooty()+top.winfo_height())
                     details=next(w for w in walk(top) if isinstance(w,ttk.Treeview))

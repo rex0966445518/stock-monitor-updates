@@ -128,13 +128,13 @@ def open_training(app,mode="manual"):
     top.geometry(f'680x{height}+{x}+0')
     top.minsize(680,420)
     state={'image':None,'source':None,'scale':1,'assisting':False,'done':False,'raw_recent':[],'point':None,'number':None,'learned':{},'current':None,'overview':None,'overview_tables':[],'checks':{}}
-    counter=app.tk.StringVar(value=f'手動教學｜第 1 / {len(RANKINGS)} 項｜本次已記住 0 項')
-    target_text=app.tk.StringVar(value='現在請指定：'+RANKINGS[0])
-    instruction=app.tk.StringVar(value='① 點選下方截圖中的「'+RANKINGS[0]+'」\n② 黃色框位置正確後，按「記住並下一項」。')
+    counter=app.tk.StringVar(value='自由選擇教學｜請先點選左側排行')
+    target_text=app.tk.StringVar(value='請先選擇要學習的排行')
+    instruction=app.tk.StringVar(value='① 點選左側完整排行清單中的任意項目。\n② 選擇右側截圖的黃框位置，再按「確定學習」。')
     app.ttk.Label(top,textvariable=counter).pack(fill='x',padx=12,pady=(10,4))
     app.ttk.Label(top,textvariable=target_text,font=('Microsoft JhengHei',22,'bold'),wraplength=650).pack(fill='x',padx=12)
     app.ttk.Label(top,textvariable=instruction,font=('Microsoft JhengHei',12),wraplength=650).pack(fill='x',padx=12,pady=6)
-    status=app.tk.StringVar(value='正在準備第一項的選單截圖，請稍候…')
+    status=app.tk.StringVar(value='請先點選左側排行，例如「累計買力」。')
     def send(action,value=None):
         if stop.is_set():return
         if not state['assisting']:
@@ -142,10 +142,10 @@ def open_training(app,mode="manual"):
         state['assisting']=False
         confirm_button.configure(state='disabled')
         status.set('正在儲存你確認的位置…' if action=='confirm' else '正在更新標記，請稍候…')
-        commands.put((action,value))
+        commands.put((action,state['current'] if action=='confirm' else value))
     # The primary action is packed before expandable screenshots/details.
     buttons=app.ttk.Frame(top);buttons.pack(fill='x',padx=10,pady=4)
-    confirm_button=app.ttk.Button(buttons,text='記住並下一項',command=lambda:send('confirm'),state='disabled')
+    confirm_button=app.ttk.Button(buttons,text='確定學習',command=lambda:send('confirm'),state='disabled')
     confirm_button.pack(side='left',padx=(0,12),ipady=5)
     app.ttk.Button(buttons,text='標記上移一列',command=lambda:send('step',-1)).pack(side='left',padx=3)
     app.ttk.Button(buttons,text='標記下移一列',command=lambda:send('step',1)).pack(side='left',padx=3)
@@ -194,6 +194,16 @@ def open_training(app,mode="manual"):
     catalog.tag_configure('pending',foreground='#2166a5');catalog.tag_configure('failed',foreground='#c93838')
     bar=app.ttk.Scrollbar(catalog_frame,orient='vertical',command=catalog.yview);catalog.configure(yscrollcommand=bar.set)
     bar.pack(side='right',fill='y');catalog.pack(side='left',fill='both',expand=True)
+    def choose(event,tree):
+        if mode!='manual' or stop.is_set():return
+        name=tree.identify_row(event.y)
+        if name not in RANKINGS:return
+        state['assisting']=False;state['current']=name
+        confirm_button.configure(state='disabled')
+        target_text.set('正在準備：'+name)
+        status.set('正在載入你選擇的「'+name+'」；請稍候再選黃框位置。')
+        commands.put(('choose',name))
+    catalog.bind('<ButtonRelease-1>',lambda e:choose(e,catalog))
     def refresh_catalog():
         learned=state['learned'];current=state['current']
         catalog_count.set(f'全部 {len(RANKINGS)} 項｜已記住 {len(learned)} 項')
@@ -221,6 +231,7 @@ def open_training(app,mode="manual"):
             tree.tag_configure('pending',foreground='#2166a5');tree.tag_configure('failed',foreground='#c93838')
             for i in range(group*per_group,min(len(RANKINGS),(group+1)*per_group)):
                 tree.insert('','end',iid=RANKINGS[i],text=f'{i+1}. {RANKINGS[i]}')
+            tree.bind('<ButtonRelease-1>',lambda e,t=tree:choose(e,t))
             tree.pack(fill='both',expand=True);state['overview_tables'].append(tree)
         refresh_catalog()
     app.ttk.Button(catalog_box,text=f'展開全部 {len(RANKINGS)} 項',command=overview).pack(fill='x',pady=4)
@@ -259,7 +270,13 @@ def open_training(app,mode="manual"):
                     mapped.set(data);state['raw_recent']=[];state['current']=data
                     refresh_catalog();catalog.see(data)
                     target_text.set('現在請指定：'+data)
-                    instruction.set('① 點選下方截圖中的「'+data+'」\n② 黃色框位置正確後，按「記住並下一項」。')
+                    instruction.set('① 點選下方截圖中的「'+data+'」\n② 黃色框位置正確後，按「確定學習」。')
+                elif kind=='idle':
+                    state['current']=None;state['assisting']=False;state['source']=None
+                    canvas.delete('all');confirm_button.configure(state='disabled');refresh_catalog()
+                    target_text.set('請選擇下一個要學習的排行')
+                    instruction.set('點選左側任意排行，可重新學習已記住的項目。')
+                    counter.set(f'自由選擇教學｜本次已確認 {data} 次')
                 elif kind=='checks':
                     state['checks']=data;refresh_catalog()
                 elif kind=='learned':
@@ -329,7 +346,7 @@ def open_training(app,mode="manual"):
                 if point is None:
                     number=None;page=0;rows=[]
                     im,region=replay_menu(switcher,0)
-                    updates.put(('status','無法確認項目編號；請在截圖點選目標位置，可用滾輪捲動，再按記住並下一項。'))
+                    updates.put(('status','無法確認項目編號；請在截圖點選目標位置，可用滾輪捲動，再按確定學習。'))
                 last_image=None
                 while not stop.is_set():
                     if im is not last_image:switcher.ocr(im);last_image=im
@@ -338,12 +355,14 @@ def open_training(app,mode="manual"):
                         try:action,value=commands.get(timeout=.1);break
                         except queue.Empty:continue
                     if stop.is_set():return
+                    if action=='choose':return value
+                    if action=='confirm' and value!=name:continue
                     if action in ('alias','remove'):
                         try:
                             if action=='alias':switcher.aliases.save(*value)
                             else:switcher.aliases.remove(value)
                             switcher.verified_title_pixels=None;switcher.verified_titles=set()
-                            updates.put(('status','文字對應已更新；請確認黃色標記後按「記住並下一項」儲存位置。'))
+                            updates.put(('status','文字對應已更新；請確認黃色標記後按「確定學習」儲存位置。'))
                         except Exception as exc:updates.put(('status','對應未保存：'+str(exc)))
                         continue
                     if action=='select':
@@ -358,7 +377,7 @@ def open_training(app,mode="manual"):
                             else:
                                 point,number=old_point,old_number
                                 updates.put(('status','請點選文字所在的一列；空白區域不會被記住。'));continue
-                        updates.put(('status','已標記位置；可按上一個／下一個微調，確認後按「記住並下一項」。'))
+                        updates.put(('status','已標記位置；可按上一個／下一個微調，確認後按「確定學習」。'))
                         continue
                     if action=='step':
                         if number is None:
@@ -369,7 +388,7 @@ def open_training(app,mode="manual"):
                         visible=next((cy for item,cy in rows if item==wanted),None)
                         if visible is not None:
                             number=wanted;point=(im.width*.45,visible)
-                            updates.put(('status',f'已移至第 {number} 項；確認黃色標記後按記住並下一項。'))
+                            updates.put(('status',f'已移至第 {number} 項；確認黃色標記後按確定學習。'))
                             continue
                         old=number
                         im,region,candidate=numbered(wanted)
@@ -378,12 +397,12 @@ def open_training(app,mode="manual"):
                             updates.put(('status','無法確認下一個位置，保留原選擇；請直接點選截圖。'))
                         else:
                             number=wanted;point=candidate
-                            updates.put(('status',f'已移至第 {number} 項；確認黃色標記是「{name}」後按記住並下一項。'))
+                            updates.put(('status',f'已移至第 {number} 項；確認黃色標記是「{name}」後按確定學習。'))
                         continue
                     if action=='scroll':
                         page=max(0,min(59,page+value));number=None;point=None;rows=[]
                         im,region=replay_menu(switcher,page)
-                        updates.put(('status','選單畫面已捲動；請重新點選位置，再按記住並下一項。'));continue
+                        updates.put(('status','選單畫面已捲動；請重新點選位置，再按確定學習。'));continue
                     if action!='confirm':continue
                     if point is None:
                         updates.put(('status','請先在截圖點選要學習的排行位置。'));continue
@@ -411,17 +430,22 @@ def open_training(app,mode="manual"):
                         if switcher.numbers:switcher.numbers.disabled.add(name)
                     updates.put(('checks',learned_checks(RANKINGS,teaching,experience)))
                     updates.put(('learned',learned_positions(RANKINGS,teaching,experience)))
-                    updates.put(('status','已記住「'+name+'」的人工對應位置，準備下一項。'))
+                    updates.put(('status','已記住「'+name+'」的人工對應位置；請從清單選擇下一個要學習的排行。'))
                     return True
             if mode=='manual':
-                learned=0
-                for index,name in enumerate(RANKINGS,1):
-                    if stop.is_set():break
-                    updates.put(('step',(index,learned)))
-                    updates.put(('status',f'請在下方截圖指出「{name}」的位置；選好後按記住並下一項。'))
-                    if assist(name):
-                        learned+=1;updates.put(('step',(min(index+1,len(RANKINGS)),learned)))
-                updates.put(('done',f'全部 {learned} 項已由你確認並記住；尚未計為自動測試通過。' if learned==len(RANKINGS) else f'已保存本次確認的 {learned} 項，可稍後繼續教學。'))
+                learned=0;pending=None
+                while not stop.is_set():
+                    if pending is None:
+                        try:action,name=commands.get(timeout=.1)
+                        except queue.Empty:continue
+                        if action!='choose' or name not in RANKINGS:continue
+                    else:name=pending;pending=None
+                    updates.put(('status',f'請在下方截圖指出「{name}」的位置；選好後按確定學習。'))
+                    result=assist(name)
+                    if isinstance(result,str):pending=result
+                    elif result is True:
+                        learned+=1;updates.put(('idle',learned))
+                updates.put(('done',f'已保存本次確認的 {learned} 次對應。'))
             else:
                 rounds=0
                 while not stop.is_set() and not progress.complete:
