@@ -44,3 +44,25 @@ class TeachingReplayTests(unittest.TestCase):
         source=inspect.getsource(open_training)
         self.assertNotIn('top.withdraw(',source)
         self.assertNotIn('top.iconify(',source)
+
+class TeachingMemoryTests(unittest.TestCase):
+    def test_confirmed_candidate_persists_but_does_not_pass_test(self):
+        import tempfile
+        from pathlib import Path
+        from ranking_training import TeachingMemory
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/'positions.json';memory=TeachingMemory(path,'layout-a')
+            memory.remember('買氣強大',35,0,(50,70),(200,300))
+            saved=TeachingMemory(path,'layout-a').get('買氣強大')
+            self.assertEqual(saved['number'],35);self.assertEqual(saved['point'],[50,70])
+            self.assertIsNone(TeachingMemory(path,'layout-b').get('買氣強大'))
+            self.assertFalse(Progress(['買氣強大']).complete)
+    def test_bad_positions_do_not_drive_mouse(self):
+        import tempfile
+        from pathlib import Path
+        from ranking_training import TeachingMemory
+        with tempfile.TemporaryDirectory() as d:
+            m=TeachingMemory(Path(d)/'p.json','a')
+            for point in [(float('nan'),20),(-1,20),(201,20)]:
+                with self.assertRaises(ValueError):m.remember('A',1,0,point,(200,300))
+            self.assertIsNone(m.get('A'))
