@@ -45,7 +45,7 @@ class ScannerScrollRegressionTest {
         a.submit(listOf(fixture().copy(dEvidence=content)))
         val h=a.onCreateViewHolder(LinearLayout(context),0)
         a.onBindViewHolder(h,0)
-        val preview=h.b.dEvidence
+        val preview=h.b.dEvidence ?: error("C strategy must expose a summary view")
         assertEquals(View.VISIBLE,preview.visibility)
         assertTrue(preview.text.length<260)
         assertEquals(5,preview.maxLines)

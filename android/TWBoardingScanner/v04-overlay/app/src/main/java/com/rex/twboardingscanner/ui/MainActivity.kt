@@ -1404,6 +1404,7 @@ class MainActivity: AppCompatActivity() {
 
     override fun onDestroy() {
         restartScan=false;scanRevision.incrementAndGet();scanRenderQueue.cancel()
+        adapter.close()
         chartDialog?.dismiss()
         chartDialog = null
         handler.removeCallbacksAndMessages(null)

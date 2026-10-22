@@ -25,12 +25,21 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
     private val deferredFinancialCodes=linkedSetOf<String>()
     private val mainHandler=android.os.Handler(android.os.Looper.getMainLooper())
     private var submitVersion=0L
+    private var disposed=false
     private val diffWorker=java.util.concurrent.Executors.newSingleThreadExecutor { task ->
         Thread(task,"scanner-list-diff").apply{isDaemon=true}
     }
+    /** Shut down the per-screen diff worker when the Activity is destroyed. */
+    fun close(){
+        disposed=true
+        submitVersion++
+        deferredFinancialCodes.clear()
+        mainHandler.removeCallbacksAndMessages(null)
+        diffWorker.shutdownNow()
+    }
     /** Do not relayout financial/chart cards while the user is dragging or flinging. */
     fun setScrolling(active:Boolean){
-        if(scrolling==active)return
+        if(disposed||scrolling==active)return
         scrolling=active
         if(!active&&deferredFinancialCodes.isNotEmpty()){
             val codes=deferredFinancialCodes.toSet()
@@ -41,6 +50,7 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
     private val loadingFinancials=mutableSetOf<String>()
     fun financialReport(code:String)=financialReports[code]
     fun updateFinancial(code:String,report:com.rex.twboardingscanner.domain.FinancialReport?,loading:Boolean){
+        if(disposed)return
         val changed=financialReports[code]!=report||(code in loadingFinancials)!=loading
         if(report!=null)financialReports[code]=report
         if(loading)loadingFinancials+=code else loadingFinancials-=code
@@ -61,6 +71,7 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
      * Small lists stay synchronous for immediate navigation and existing tests.
      */
     fun submit(list:List<SignalResult>) {
+        if(disposed)return
         val target=list.toList()
         val generation=++submitVersion
         if(items.size==target.size&&items.indices.all{items[it]===target[it]})return
