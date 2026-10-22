@@ -251,6 +251,12 @@ class MainActivity: AppCompatActivity() {
             com.rex.twboardingscanner.paper.PaperWorker.schedule(this)
         b.startScanButton.setOnClickListener { startFullScan() }
         b.updateButton.setOnClickListener { startActivity(android.content.Intent(this,AppUpdateActivity::class.java).putExtra("startUpdate",true)) }
+        // Scanner navigation delegates to the existing controls, not duplicate flows.
+        b.navHome.setOnClickListener { showDashboard() }
+        b.navScan.setOnClickListener { b.recycler.smoothScrollToPosition(0) }
+        b.navBacktest.setOnClickListener { b.backtestButton.performClick() }
+        b.navRobot.setOnClickListener { b.robotButton.performClick() }
+        b.navUpdate.setOnClickListener { b.updateButton.performClick() }
         b.progressTitle.text="尚未開始掃描"
         b.progressCount.text="設定好條件後，請按「開始掃描」"
         b.etaText.text="待命中"
@@ -583,6 +589,7 @@ class MainActivity: AppCompatActivity() {
             s.state=="ERROR"->"背景執行失敗 · 複製診斷檢查原因"
             else->"背景掃描已停止"
         }
+        updateScannerMetrics()
         updateHomeDashboard()
         if(s.state=="DONE"&&s.folderId.isNotBlank()&&backgroundLoadedFolder!=s.folderId&&!backgroundResultLoading){
             backgroundLoadedFolder=s.folderId
@@ -976,8 +983,33 @@ class MainActivity: AppCompatActivity() {
         // Publish all evaluated stocks; PaperRepository applies its OWN saved rule set.
         com.rex.twboardingscanner.paper.PaperRepository(this).publish(latestPaper,latestScanAt,latestFolderId)
     }
+    /**
+     * Dashboard numbers are derived from persisted scan state; mockup counts
+     * are never inserted into the installed application.
+     */
+    private fun updateScannerMetrics(source:List<SignalResult>?=null){
+        val state=BackgroundScanState.read(this)
+        val hasSnapshot=state.id.isNotBlank()
+        val list=source?:admitted()
+        val hasResults=hasSnapshot||latestScanAt>0L||isScanning
+        b.scanScannedMetric.text=when{
+            hasSnapshot->state.done.toString()
+            latestScanAt>0L&&b.scanProgress.progress>0->b.scanProgress.progress.toString()
+            else->"—"
+        }
+        val matched=list.filter{it.light!=SignalLight.NONE}.distinctBy{it.code}.size
+        b.scanMatchedMetric.text=if(hasResults)matched.toString() else "—"
+        b.scanPendingMetric.text=if(hasSnapshot)state.pending.toString() else "—"
+        b.scanFailedMetric.text=if(hasSnapshot)state.failed.toString() else "—"
+        b.scanMatchedMetric.contentDescription="符合條件 $matched 檔"+if(!hasResults)"，尚無掃描數據" else ""
+        b.scanScannedMetric.contentDescription="已掃描 ${b.scanScannedMetric.text} 檔"
+        b.scanPendingMetric.contentDescription="待查核 ${b.scanPendingMetric.text} 檔"
+        b.scanFailedMetric.contentDescription="掃描失敗 ${b.scanFailedMetric.text} 檔"
+    }
+
     private fun render() {
         val source=admitted()
+        updateScannerMetrics(source)
         val groups=(0..9).map{ResultFilters.select(source,it)}
         b.resultFilters.update(groups.map{it.size},selectedTab)
         val selected=groups[selectedTab]
