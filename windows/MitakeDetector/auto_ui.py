@@ -1313,7 +1313,7 @@ class AutoUI:
                         else:
                             self.events.put((token,'auto_status','排行可切換，但資料讀取全部失敗｜'+details+'｜30秒後再試'))
                             c.pause(30)
-                    self.events.put((token,'auto_counts',f'本輪已巡查｜跳過 {skipped} 個排行｜累計完成 {cycle} 遍｜準備第 {cycle+1} 輪'))
+                    self.events.put((token,'auto_counts',f'本輪已巡查｜跳過 {skipped} 個排行｜累計完成 {cycle} 遍｜完成一遍耗時 {max(0,time.time()-cycle_started):.1f} 秒｜準備第 {cycle+1} 輪'))
                     self.events.put((token,'auto_phase',f'第{cycle}輪已完成｜跳過 {skipped} 個排行｜自動開始第{cycle+1}輪'))
                     cycle+=1;start_index=0;cycle_started=time.time()
                 self.events.put((token,'auto_end','輪切測試完成' if test_only else '自動輪切已停止'))

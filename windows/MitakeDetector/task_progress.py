@@ -88,7 +88,7 @@ class TaskProgress:
         self.values={};self.metric_cells=[]
         for i,(key,label,value) in enumerate([
             ('elapsed','掃描總時長','00:00:00'),('scanned','已掃描股數','0 股'),('total','排行總股數','待確認'),
-            ('passes','累計完成遍數','0 遍'),('rate','讀取速率','0 字/秒'),('freshness','最近成功讀取','尚未讀取')]):
+            ('passes','累計完成遍數','0 遍'),('round_seconds','完成一遍耗時','尚未完成'),('rate','讀取速率','0 字/秒'),('freshness','最近成功讀取','尚未讀取')]):
             cell=tk.Frame(self.metrics,bg='#15243a',highlightbackground='#30415d',highlightthickness=1)
             self.metric_cells.append(cell)
             cell.grid(row=0,column=i,sticky='nsew')
@@ -157,7 +157,7 @@ class TaskProgress:
 
     def refresh_counts(self,*args):
         text=self.counts.get()
-        for key,pattern,suffix in [('scanned',r'已掃描 (\d+) 股',' 股'),('total',r'總股數 ([^｜]+)',''),('passes',r'累計完成 (\d+) 遍',' 遍')]:
+        for key,pattern,suffix in [('scanned',r'已掃描 (\d+) 股',' 股'),('total',r'總股數 ([^｜]+)',''),('passes',r'累計完成 (\d+) 遍',' 遍'),('round_seconds',r'完成一遍耗時 ([\d.]+) 秒',' 秒')]:
             match=re.search(pattern,text)
             if match:
                 value=match.group(1).strip().replace('待完整掃描確認','待確認').replace('（上輪參考）',' (上輪)')

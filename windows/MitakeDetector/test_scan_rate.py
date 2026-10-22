@@ -24,3 +24,16 @@ class HeaderRateTests(unittest.TestCase):
         panel.rate.get.return_value='0 字／秒｜7.2 秒／段｜4.17 檔／秒'
         TaskProgress.refresh_rate(panel)
         value.set.assert_called_with('0 字/秒')
+
+    def test_round_seconds_updates_only_on_completed_round(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from task_progress import TaskProgress
+        values={key:Mock() for key in ('scanned','total','passes','round_seconds')}
+        panel=SimpleNamespace(counts=Mock(),values=values)
+        panel.counts.get.return_value='累計完成 2 遍｜完成一遍耗時 36.7 秒｜準備第 3 輪'
+        TaskProgress.refresh_counts(panel)
+        values['round_seconds'].set.assert_called_once_with('36.7 秒')
+        panel.counts.get.return_value='已掃描 20 股｜累計完成 2 遍'
+        TaskProgress.refresh_counts(panel)
+        values['round_seconds'].set.assert_called_once_with('36.7 秒')
