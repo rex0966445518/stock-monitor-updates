@@ -915,7 +915,14 @@ class AutoUI:
             if on_batch:on_batch(start,min(start+16,len(inputs)))
             rows,_=self.ocr.text_rec(inputs[start:start+16])
             results.extend(rows)
+            self.report_read_digits([row[0] for row in rows])
         return results
+
+    def report_read_digits(self,texts):
+        report=getattr(self,"digit_report",None)
+        if report:
+            from scan_rate import digit_count
+            report(digit_count(texts))
 
     def read_auto_ocr(self,image):
         from rapidocr_onnxruntime import RapidOCR
@@ -957,6 +964,7 @@ class AutoUI:
         scale=2
         result,_=self.ocr(np.asarray(padded.resize((padded.width*scale,padded.height*scale)))[:,:,::-1].copy(),unclip_ratio=2.0)
         tokens=[([[(x/scale)-margin,(y/scale)-margin] for x,y in box],text,score) for box,text,score in result or []]
+        self.report_read_digits([t[1] for t in tokens])
         if learning:learning.record(persistent_key,tokens,time.perf_counter()-started,'重新辨識')
         if tokens:
             cache[key]=tokens
@@ -1130,6 +1138,7 @@ class AutoUI:
                                 self.page_deadline=started+10;self.page_review_config=cfg;self.cell_metrics=None;self.page_pending=False
                                 from ocr_recovery import fresh_ocr
                                 from contextlib import nullcontext
+                                self.digit_report=lambda count:self.events.put((token,'auto_rate',dict(digits=count,at=time.monotonic())))
                                 try:
                                     with fresh_ocr(self) if failed_reads[0] else nullcontext():
                                         result=self.scan_recovering_table(image,cfg['column_bounds']) if auto.get('discovered') else self.scan(image,cfg['centers'])
@@ -1138,6 +1147,7 @@ class AutoUI:
                                     diagnostic.update(ocr_error_type=type(error).__name__,ocr_error=str(error))
                                     self.last_scan_diagnostic=f'{type(error).__name__}: {error}'
                                     result=([],1)
+                                finally:self.digit_report=None
                                 self.record_cell_failures(time.monotonic()-started)
                                 self.events.put((token,'auto_rate',dict(elapsed=time.monotonic()-started,count=len(result[0]))))
                                 anchors=(getattr(self,'fast_code_cache',None) or (None,None,[]))[2]

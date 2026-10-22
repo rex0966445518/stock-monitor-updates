@@ -20,13 +20,24 @@ class Progress:
     def complete(self):return all(v>=3 for v in self.streak.values())
 
 
+def same_teaching_layout(a,b):
+    if a==b:return True
+    try:
+        left,right=json.loads(a),json.loads(b)
+        if not isinstance(left,dict) or not isinstance(right,dict):return False
+        # Table columns can adapt independently of the ranking dropdown.
+        left.pop('table',None);right.pop('table',None)
+        return left==right
+    except (TypeError,ValueError):return False
+
+
 class TeachingMemory:
     """Explicitly confirmed candidates; never counted as verified experience."""
     def __init__(self,path,layout):
         self.path=path;self.layout=layout;self.items={}
         try:
             saved=json.loads(path.read_text(encoding='utf-8'))
-            if saved.get('layout')==layout and isinstance(saved.get('items'),dict):self.items=saved['items']
+            if same_teaching_layout(saved.get('layout'),layout) and isinstance(saved.get('items'),dict):self.items=saved['items']
         except (OSError,ValueError,AttributeError):pass
     def get(self,name):
         import math
@@ -38,13 +49,20 @@ class TeachingMemory:
         if not isinstance(size,list) or len(size)!=2 or not all(type(v) is int and 0<v<32768 for v in size):return None
         if not isinstance(point,list) or len(point)!=2 or not all(type(v) in (int,float) and math.isfinite(v) and 0<=v<size[i] for i,v in enumerate(point)):return None
         return value
+    def save(self):
+        self.path.parent.mkdir(parents=True,exist_ok=True)
+        temp=self.path.with_suffix('.tmp')
+        temp.write_text(json.dumps(dict(layout=self.layout,items=self.items),ensure_ascii=False),encoding='utf-8');temp.replace(self.path)
+    def mark(self,name,result,detail=''):
+        value=self.get(name)
+        if value is None:return
+        if result not in ('pending','passed','failed'):raise ValueError('未知驗證結果')
+        value.update(verification=result,detail=str(detail)[:300],checked_at=time.time());self.save()
     def remember(self,name,number,page,point,size):
         self.items[name]=dict(number=number,page=page,point=list(point),size=list(size))
         if self.get(name) is None:
             self.items.pop(name,None);raise ValueError('位置無效，未儲存')
-        self.path.parent.mkdir(parents=True,exist_ok=True)
-        temp=self.path.with_suffix('.tmp')
-        temp.write_text(json.dumps(dict(layout=self.layout,items=self.items),ensure_ascii=False),encoding='utf-8');temp.replace(self.path)
+        self.save()
 
 
 def learned_positions(names,teaching,experience):
@@ -57,6 +75,15 @@ def learned_positions(names,teaching,experience):
         else:
             entry=experience.data.get('ranks',{}).get(name,{})
             if entry.get('point') and entry.get('signature'):result[name]='已保存點選位置'
+    return result
+
+
+def learned_checks(names,teaching,experience):
+    result={}
+    for name in learned_positions(names,teaching,experience):
+        saved=teaching.get(name)
+        check=saved.get('verification','pending') if saved else ('passed' if experience.data.get('ranks',{}).get(name,{}).get('wins',0)>0 else 'pending')
+        result[name]={'pending':'已記住待驗證','passed':'實測通過','failed':'需重新校正'}.get(check,'已記住待驗證')
     return result
 
 
@@ -100,7 +127,7 @@ def open_training(app,mode="manual"):
     height=max(420,min(740,top.winfo_screenheight()-90))
     top.geometry(f'680x{height}+{x}+0')
     top.minsize(680,420)
-    state={'image':None,'source':None,'scale':1,'assisting':False,'done':False,'raw_recent':[],'point':None,'number':None,'learned':{},'current':None,'overview':None,'overview_tables':[]}
+    state={'image':None,'source':None,'scale':1,'assisting':False,'done':False,'raw_recent':[],'point':None,'number':None,'learned':{},'current':None,'overview':None,'overview_tables':[],'checks':{}}
     counter=app.tk.StringVar(value=f'手動教學｜第 1 / {len(RANKINGS)} 項｜本次已記住 0 項')
     target_text=app.tk.StringVar(value='現在請指定：'+RANKINGS[0])
     instruction=app.tk.StringVar(value='① 點選下方截圖中的「'+RANKINGS[0]+'」\n② 黃色框位置正確後，按「記住並下一項」。')
@@ -160,18 +187,19 @@ def open_training(app,mode="manual"):
     catalog_frame=app.ttk.Frame(catalog_box);catalog_frame.pack(fill='both',expand=True)
     catalog=app.ttk.Treeview(catalog_frame,columns=('state','position'),height=10,selectmode='browse')
     catalog.heading('#0',text='完整排行清單');catalog.column('#0',width=120,minwidth=100,stretch=False)
-    catalog.heading('state',text='學習狀態');catalog.column('state',width=85,minwidth=70,stretch=False)
+    catalog.heading('state',text='學習狀態');catalog.column('state',width=100,minwidth=90,stretch=False)
     catalog.heading('position',text='對應位置');catalog.column('position',width=95,minwidth=70,stretch=False)
     for i,n in enumerate(RANKINGS,1):catalog.insert('','end',iid=n,text=f'{i}. {n}',values=('未學習','—'))
     catalog.tag_configure('learned',foreground='#138045');catalog.tag_configure('current',foreground='#ad6200')
+    catalog.tag_configure('pending',foreground='#2166a5');catalog.tag_configure('failed',foreground='#c93838')
     bar=app.ttk.Scrollbar(catalog_frame,orient='vertical',command=catalog.yview);catalog.configure(yscrollcommand=bar.set)
     bar.pack(side='right',fill='y');catalog.pack(side='left',fill='both',expand=True)
     def refresh_catalog():
         learned=state['learned'];current=state['current']
         catalog_count.set(f'全部 {len(RANKINGS)} 項｜已記住 {len(learned)} 項')
         for n in RANKINGS:
-            label=('複習中' if n in learned else '正在學習') if n==current and not state['done'] else ('已記住' if n in learned else '未學習')
-            tag='current' if n==current and not state['done'] else ('learned' if n in learned else '')
+            label=('複習中' if n in learned else '正在學習') if n==current and not state['done'] else (state['checks'].get(n,'已記住待驗證') if n in learned else '未學習')
+            tag='current' if n==current and not state['done'] else ('learned' if label=='實測通過' else 'failed' if label=='需重新校正' else 'pending' if n in learned else '')
             catalog.item(n,values=(label,learned.get(n,'—')),tags=(tag,))
             for tree in state['overview_tables']:
                 if tree.winfo_exists() and tree.exists(n):tree.item(n,values=(label,),tags=(tag,))
@@ -181,15 +209,16 @@ def open_training(app,mode="manual"):
         window=app.tk.Toplevel(top);state['overview']=window;state['overview_tables']=[]
         window.title(f'全部 {len(RANKINGS)} 項排行與學習狀態')
         window.geometry(f'{min(1120,top.winfo_screenwidth()-40)}x{min(500,top.winfo_screenheight()-90)}')
-        app.ttk.Label(window,text='全部排行完整列出；綠色＝已記住，橘色＝正在學習。').pack(fill='x',padx=10,pady=8)
+        app.ttk.Label(window,text='藍色＝已記住待驗證；綠色＝實測通過；紅色＝需重新校正。').pack(fill='x',padx=10,pady=8)
         grids=app.ttk.Frame(window);grids.pack(fill='both',expand=True,padx=8,pady=8)
         per_group=(len(RANKINGS)+3)//4
         for group in range(4):
             frame=app.ttk.Frame(grids);frame.pack(side='left',fill='both',expand=True,padx=3)
             tree=app.ttk.Treeview(frame,columns=('state',),height=per_group)
             tree.heading('#0',text='排行');tree.column('#0',width=140,minwidth=110)
-            tree.heading('state',text='狀態');tree.column('state',width=80,minwidth=60)
+            tree.heading('state',text='狀態');tree.column('state',width=100,minwidth=90)
             tree.tag_configure('learned',foreground='#138045');tree.tag_configure('current',foreground='#ad6200')
+            tree.tag_configure('pending',foreground='#2166a5');tree.tag_configure('failed',foreground='#c93838')
             for i in range(group*per_group,min(len(RANKINGS),(group+1)*per_group)):
                 tree.insert('','end',iid=RANKINGS[i],text=f'{i+1}. {RANKINGS[i]}')
             tree.pack(fill='both',expand=True);state['overview_tables'].append(tree)
@@ -231,6 +260,8 @@ def open_training(app,mode="manual"):
                     refresh_catalog();catalog.see(data)
                     target_text.set('現在請指定：'+data)
                     instruction.set('① 點選下方截圖中的「'+data+'」\n② 黃色框位置正確後，按「記住並下一項」。')
+                elif kind=='checks':
+                    state['checks']=data;refresh_catalog()
                 elif kind=='learned':
                     state['learned']=data;refresh_catalog()
                 elif kind=='step':
@@ -269,6 +300,8 @@ def open_training(app,mode="manual"):
             experience=Experience(BASE/'automation-experience.json',dict({k:auto.get(k) for k in ('title','window_size','combo','menu','table')},menu_catalog=RANKINGS),True)
             switcher=RankingSwitcher(c,app.read_auto_ocr,auto['combo'],auto['menu'],experience=experience,ocr_retry=app.read_menu_ocr_retry,numbering=auto.get('menu_numbering',True),menu_numbers=auto.get('menu_numbers',{}),observe_ocr=lambda tokens:updates.put(('ocr',tokens)))
             teaching=TeachingMemory(BASE/'ranking-teaching-positions.json',experience.key)
+            switcher.teaching=teaching
+            updates.put(('checks',learned_checks(RANKINGS,teaching,experience)))
             updates.put(('learned',learned_positions(RANKINGS,teaching,experience)))
             def assist(name):
                 from menu_numbers import NumberNavigator
@@ -376,6 +409,7 @@ def open_training(app,mode="manual"):
                     else:
                         experience.record(name,page,point,switcher.menu_signature(now))
                         if switcher.numbers:switcher.numbers.disabled.add(name)
+                    updates.put(('checks',learned_checks(RANKINGS,teaching,experience)))
                     updates.put(('learned',learned_positions(RANKINGS,teaching,experience)))
                     updates.put(('status','已記住「'+name+'」的人工對應位置，準備下一項。'))
                     return True
@@ -410,8 +444,10 @@ def open_training(app,mode="manual"):
                             progress.result(name,False)
                             updates.put(('status',f'請協助定位「{name}」：{reason}'))
                             # The teaching panel stays visible beside the menu.
+                            updates.put(('checks',learned_checks(RANKINGS,teaching,experience)))
                             updates.put(('results',{n:(progress.streak[n],progress.attempts[n],progress.failures[n]) for n in RANKINGS}))
                             assist(name)
+                        updates.put(('checks',learned_checks(RANKINGS,teaching,experience)))
                         updates.put(('results',{n:(progress.streak[n],progress.attempts[n],progress.failures[n]) for n in RANKINGS}))
                         report={'time':time.time(),'layout':experience.key,'rounds':rounds,'streak':progress.streak,'attempts':progress.attempts,'failures':progress.failures,'complete':progress.complete}
                         path=BASE/'ranking-training-report.json';temp=path.with_suffix('.tmp')

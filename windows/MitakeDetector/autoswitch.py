@@ -298,8 +298,14 @@ class WindowsController:
 
 
 class RankingSwitcher:
-    def __init__(self,controller,ocr,combo_roi,menu_roi,ocr_retry=None,status=None,experience=None,numbering=False,menu_numbers=None,show_numbers=None,aliases=None,observe_ocr=None):
+    def __init__(self,controller,ocr,combo_roi,menu_roi,ocr_retry=None,status=None,experience=None,numbering=False,menu_numbers=None,show_numbers=None,aliases=None,observe_ocr=None,teaching=None):
         self.experience=experience
+        self.teaching=teaching
+        from pathlib import Path
+        path=getattr(experience,'path',None)
+        if self.teaching is None and isinstance(path,(str,Path)):
+            from ranking_training import TeachingMemory
+            self.teaching=TeachingMemory(Path(path).with_name('ranking-teaching-positions.json'),experience.key)
         from ranking_aliases import RankingAliases
         self.aliases=aliases if aliases is not None else RankingAliases()
         from ranking_aliases import RankingReader
@@ -507,8 +513,30 @@ class RankingSwitcher:
         self.status(f'排行選單已重新定位｜耗時{time.monotonic()-started:.1f}秒｜清除失效記憶，保留表頭與已掃描資料')
         return dict(combo=combo,menu=menu)
 
+    def mark_teaching(self,name,result,detail=''):
+        if self.teaching:
+            try:self.teaching.mark(name,result,detail)
+            except OSError:self.status('定位驗證結果無法寫入磁碟，請檢查儲存空間')
+
+    def remember_verified_point(self,name,page,point,image):
+        if self.experience:self.experience.record(name,page,point,self.menu_signature(image))
+        if self.teaching and self.teaching.get(name) and hasattr(image,'size'):
+            try:self.teaching.remember(name,None,page,point,image.size)
+            except OSError:self.status('新定位位置無法寫入磁碟')
+
     def switch(self,name,menu_open=False):
-        try:return self._switch(name,menu_open)
+        self._manual_attempts=set();self._manual_reason='';self._navigated=False
+        try:
+            result=self._switch(name,menu_open)
+            if self._navigated:self.mark_teaching(name,'passed','已選取並核對標題')
+            return result
+        except Exception as exc:
+            reason=str(exc)
+            if not any(word in reason for word in ('綠框','焦點','遮住','縮放','視窗已更換','滑鼠','已停止自動操作','F8')):
+                self.mark_teaching(name,'failed',self._manual_reason or reason)
+            if self._manual_reason:
+                raise AutomationStopped(self._manual_reason+'；'+reason) from exc
+            raise
         finally:
             if self.numbers:self.numbers.show(None)
 
@@ -529,9 +557,30 @@ class RankingSwitcher:
         menu=absolute_roi(self.menu,self.c.rect())
         center=(menu['left']+menu['width']//2,menu['top']+menu['height']//2)
         self.c.scroll(center,120*60);self.c.pause(.35)
+        saved=self.teaching.get(name) if self.teaching else None
+        if saved and saved['number'] is None and name not in self._manual_attempts:
+            self._manual_attempts.add(name)
+            self.status(f'人工記憶定位：{name}｜重播捲動 {saved["page"]} 次後點選已保存位置')
+            for _ in range(saved['page']):
+                self.c.scroll(center,-120);self.c.pause(.45)
+            image,region=self.c.image(self.menu)
+            if list(getattr(image,'size',()))==saved['size']:
+                x,y=saved['point']
+                self._navigated=True
+                self.c.click((region['left']+x,region['top']+y));self.menu_is_open=False
+                if self.verify_label(name):
+                    self.status(f'人工記憶命中：{name}｜標題核對通過')
+                    return
+                self._manual_reason=f'人工位置已嘗試（捲動 {saved["page"]} 次），標題核對失敗：'+getattr(self,'last_title_text','無文字')
+                self.status(self._manual_reason+'；保留人工記憶並重新搜尋')
+                return self._switch(name,False,False)
+            self._manual_reason='人工位置暫不可用：選單尺寸與教學時不同'
+            self.status(self._manual_reason+'；重新搜尋')
+            self.c.scroll(center,120*60);self.c.pause(.35)
         if self.numbers and allow_numbers:
             point=self.numbers.locate(name,menu)
             if point is not None:
+                self._navigated=True
                 self.c.click((menu['left']+point[0],menu['top']+point[1]));self.menu_is_open=False
                 if self.verify_label(name):
                     self.numbers.verified(name)
@@ -553,10 +602,11 @@ class RankingSwitcher:
             point=cached or self.menu_point(im,self.ocr(im),name)
             if cached:self.status(f'位置快取命中：直接選取「{name}」，核對切換結果')
             if point is not None:
+                self._navigated=True
                 self.c.click((region['left']+point[0],region['top']+point[1]))
                 self.menu_is_open=False
                 if self.verify_label(name):
-                    self.experience.record(name,hint,point,self.menu_signature(im))
+                    self.remember_verified_point(name,hint,point,im)
                     return
                 self.experience.forget(name)
                 self.status('已清除錯誤位置記憶，重新搜尋此排行')
@@ -579,10 +629,11 @@ class RankingSwitcher:
             self.status(f'正在尋找「{name}」｜選單第{page+1}段')
             point=self.menu_point(im,tokens,name)
             if point:
+                self._navigated=True
                 self.c.click((region['left']+point[0],region['top']+point[1]))
                 self.menu_is_open=False
                 if self.verify_label(name):
-                    if self.experience:self.experience.record(name,page,point,self.menu_signature(im))
+                    self.remember_verified_point(name,page,point,im)
                     if self.numbers:self.numbers.text_verified(name,point)
                     return
                 if self.experience:self.experience.forget(name)

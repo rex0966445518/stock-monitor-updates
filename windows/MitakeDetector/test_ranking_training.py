@@ -135,7 +135,7 @@ class TeachingButtonsTests(unittest.TestCase):
                     self.assertTrue(app.status.get().startswith('全部 2 項'))
                     catalog=next(w for w in created if w.columns==('state','position'))
                     self.assertEqual(list(catalog.items),['漲停鎖住','跌停鎖住'])
-                    self.assertTrue(all(item['values'][0]=='已記住' for item in catalog.items.values()))
+                    self.assertTrue(all(item['values'][0]=='已記住待驗證' for item in catalog.items.values()))
                 finally:
                     if hasattr(app,'stop_event'):app.stop_event.set()
                     if isinstance(app.worker_thread,threading.Thread):app.worker_thread.join(2)

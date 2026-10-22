@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.122'
+VERSION = '0.3.123'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -580,6 +580,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         captured_at=image.info.get('captured_at',time.time())
         image = image.convert('RGB').resize((image.width*2, image.height*2))
         result, _ = self.ocr(np.asarray(image)[:, :, ::-1].copy(),unclip_ratio=1.6)
+        self.report_read_digits([t[1] for t in result or []])
         return parse_ocr(result, image.width, centers, captured_at)
 
     def image_test(self):
