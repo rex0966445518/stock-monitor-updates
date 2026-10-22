@@ -384,3 +384,26 @@ class BuyingPowerAliasTests(unittest.TestCase):
         self.assertIsNotNone(find_menu_item([a,b],'買氣強大'))
         b=([[22,40],[42,40],[42,50],[22,50]],'強大',.99)
         self.assertIsNone(find_menu_item([a,b],'買氣強大'))
+
+class CaptureCursorTests(unittest.TestCase):
+    def controller(self,position):
+        from autoswitch import WindowsController
+        from unittest.mock import Mock
+        c=WindowsController.__new__(WindowsController);c.u=Mock();c.rect=lambda:(100,100,1000,800);c.pause=Mock()
+        def get(point):point._obj.x,point._obj.y=position;return 1
+        def move(x,y):position[:]=[x,y];return 1
+        c.u.GetCursorPos.side_effect=get;c.u.SetCursorPos.side_effect=move
+        c.u.GetSystemMetrics.side_effect=lambda key:{76:0,77:0,78:1920,79:1080}[key]
+        return c
+    def test_near_cursor_moves_outside_before_capture_without_click(self):
+        pos=[250,250];c=self.controller(pos)
+        c.clear_cursor(dict(left=200,top=200,width=250,height=400))
+        self.assertFalse(152<=pos[0]<498 and 152<=pos[1]<648)
+        c.pause.assert_called_once_with(.18);c.u.mouse_event.assert_not_called()
+    def test_distant_cursor_stays_put_without_delay(self):
+        c=self.controller([1400,900]);c.clear_cursor(dict(left=200,top=200,width=250,height=400))
+        c.u.SetCursorPos.assert_not_called();c.pause.assert_not_called()
+    def test_user_moves_cursor_back_causes_pause(self):
+        from autoswitch import AutomationStopped
+        c=self.controller([250,250]);c.u.SetCursorPos.side_effect=lambda x,y:1
+        with self.assertRaises(AutomationStopped):c.clear_cursor(dict(left=200,top=200,width=250,height=400))

@@ -253,11 +253,34 @@ class WindowsController:
         self.point(point)
         self.u.mouse_event(0x0800,0,0,int(delta)&0xffffffff,0)
 
+    def clear_cursor(self,region):
+        """Move only when near capture pixels; no clicks or focus changes."""
+        def overlaps(x,y):
+            return region['left']-48<=x<region['left']+region['width']+48 and region['top']-48<=y<region['top']+region['height']+48
+        pos=W.POINT()
+        if not self.u.GetCursorPos(ctypes.byref(pos)):raise AutomationStopped('無法確認滑鼠位置，請重試')
+        if not overlaps(pos.x,pos.y):return
+        left,top,right,bottom=self.rect()
+        vx=self.u.GetSystemMetrics(76);vy=self.u.GetSystemMetrics(77)
+        vw=self.u.GetSystemMetrics(78);vh=self.u.GetSystemMetrics(79)
+        candidates=[((left+right)//2,top+8),(right-12,bottom-12),
+                    (vx+4,vy+4),(vx+vw-5,vy+vh-5),(vx+4,vy+vh-5),(vx+vw-5,vy+4)]
+        for x,y in candidates:
+            if vx<=x<vx+vw and vy<=y<vy+vh and not overlaps(x,y):
+                if not self.u.SetCursorPos(x,y):raise AutomationStopped('無法移開滑鼠，請重試')
+                self.pause(.18)
+                if not self.u.GetCursorPos(ctypes.byref(pos)) or overlaps(pos.x,pos.y):
+                    raise AutomationStopped('滑鼠仍在辨識區域，請移開後再試')
+                return
+        # A full-desktop capture has no outside parking point. MSS excludes the
+        # hardware cursor; ordinary menu/title/table captures use the path above.
+
     def image(self,roi):
         self.check()
         from PIL import Image
         import mss
         region=absolute_roi(roi,self.rect())
+        self.clear_cursor(region)
         if self.highlight:
             self.highlight(dict(region))
             # Finish moving the old borders before taking the next screenshot.

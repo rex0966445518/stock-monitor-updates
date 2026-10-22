@@ -108,7 +108,7 @@ def open_training(app):
                     for n,values in data.items():table.item(n,values=values)
                 elif kind=='image':
                     from PIL import ImageTk
-                    im=data;scale=min(640/im.width,300/im.height,1)
+                    im=data;scale=min(max(1,canvas.winfo_width()-4)/im.width,max(1,canvas.winfo_height()-4)/im.height,1)
                     state['scale']=scale;state['image']=ImageTk.PhotoImage(im.resize((max(1,round(im.width*scale)),max(1,round(im.height*scale)))))
                     canvas.delete('all');canvas.create_image(0,0,anchor='nw',image=state['image'])
                     state['assisting']=True;top.lift()
@@ -183,7 +183,7 @@ def open_training(app):
                     except Exception as exc:
                         if stop.is_set():break
                         reason=str(exc)
-                        if any(word in reason for word in ('綠框','焦點','遮住','縮放','視窗已更換')):
+                        if any(word in reason for word in ('綠框','焦點','遮住','縮放','視窗已更換','滑鼠')):
                             raise RuntimeError('環境問題，學習已暫停（不算定位失敗）：'+reason)
                         progress.result(name,False)
                         updates.put(('status',f'請協助定位「{name}」：{reason}'))
