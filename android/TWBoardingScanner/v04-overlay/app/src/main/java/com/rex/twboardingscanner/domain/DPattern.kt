@@ -76,6 +76,14 @@ data class DPatternEvidence(
 object DPattern {
     const val LIMIT="d_limit";const val GREEN="d_green";const val GAP="d_gap"
     const val UNFILLED="d_unfilled";const val VOLUME="d_volume";const val RELATIVE="d_relative"
+    /** D-specific appended opt-in checks; never reorder the legacy six/A rules. */
+    const val BIG_HOLDER_UP="d_big_holder_pct_up_001"
+    const val MAIN_FORCE_5_UP="d_main_force_5_concentration_up"
+    const val INSTITUTION_BUY_TODAY="d_foreign_or_trust_netbuy_today"
+    const val MA5_CROSS_10="d_ma5_cross_ma10"
+    const val MA5_CROSS_20="d_ma5_cross_ma20"
+    val CHIP_IDS=setOf(BIG_HOLDER_UP,MAIN_FORCE_5_UP,INSTITUTION_BUY_TODAY,MA5_CROSS_10,MA5_CROSS_20)
+    val CHIP_ORDER=listOf(BIG_HOLDER_UP,MAIN_FORCE_5_UP,INSTITUTION_BUY_TODAY,MA5_CROSS_10,MA5_CROSS_20)
     val DEFAULT_ENABLED=setOf(LIMIT,GREEN,GAP,VOLUME)
     private fun date(b:DailyBar)=RuleMetrics.tradingDate(b.time)
     fun inspect(raw:List<DailyBar>,settings:DPatternConfig=DPatternConfig.DEFAULT,

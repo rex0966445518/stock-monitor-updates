@@ -31,6 +31,7 @@ import com.rex.twboardingscanner.domain.DailyBar
 import com.rex.twboardingscanner.domain.RadarType
 import com.rex.twboardingscanner.domain.DPattern
 import com.rex.twboardingscanner.domain.DPatternConfig
+import com.rex.twboardingscanner.domain.RuleMetrics
 import com.rex.twboardingscanner.domain.ScanConditions
 import com.rex.twboardingscanner.domain.ScoringEngine
 import com.rex.twboardingscanner.domain.SignalLight
@@ -48,6 +49,8 @@ import java.util.concurrent.atomic.AtomicLong
 
 class MainActivity: AppCompatActivity() {
     private lateinit var b: ActivityMainBinding
+    private var dashboard: NeonHomeDashboard? = null
+    private var returnHomeChip: TextView? = null
     private lateinit var paperLoop: com.rex.twboardingscanner.paper.PaperLoop
     private lateinit var trendHoldCheck:CheckBox
     private lateinit var posterExport: PosterExport
@@ -83,6 +86,9 @@ class MainActivity: AppCompatActivity() {
     private var backgroundLoadedFolder=""
     private var backgroundPreviewVersion=0L
     private var backgroundResultLoading=false
+    // Keep a frozen viewport during DRAGGING/SETTLING; latest market data is
+    // applied once the list becomes idle, never discarded.
+    private var pendingResultsAfterScroll=false
     private val workers = Executors.newFixedThreadPool(6)
     private val enrichmentWorkers = Executors.newSingleThreadExecutor()
 
@@ -155,11 +161,32 @@ class MainActivity: AppCompatActivity() {
         // change/predictive animations can reattach a holder already being rebound.
         b.recycler.itemAnimator=null
         b.recycler.adapter = adapter
+        b.recycler.addOnScrollListener(object:RecyclerView.OnScrollListener(){
+            override fun onScrollStateChanged(view:RecyclerView,newState:Int){
+                super.onScrollStateChanged(view,newState)
+                if(newState!=RecyclerView.SCROLL_STATE_IDLE){
+                    adapter.setScrolling(true)
+                }else{
+                    // Listener can run during RecyclerView's layout dispatch.
+                    // Flush updates only on the next frame when no longer scrolling.
+                    view.post{
+                        if(isFinishing||isDestroyed||view.scrollState!=RecyclerView.SCROLL_STATE_IDLE)return@post
+                        adapter.setScrolling(false)
+                        if(pendingResultsAfterScroll){
+                            pendingResultsAfterScroll=false
+                            render()
+                        }
+                    }
+                }
+            }
+        })
 
         b.marketGuardButton.setOnClickListener { showMarketGuard() }
         b.settingsButton.setOnClickListener { showSettings() }
         b.robotButton.setOnClickListener { startActivity(android.content.Intent(this,BtRobotActivity::class.java)) }
         b.resultFilters.onSelected = { index ->
+            b.recycler.stopScroll()
+            adapter.setScrolling(false)
             selectedTab=index
             prefs.edit().putString("resultFolder",latestFolderId).putInt("resultTab",index).apply()
             render()
@@ -249,13 +276,143 @@ class MainActivity: AppCompatActivity() {
             com.rex.twboardingscanner.paper.PaperWorker.schedule(this)
         b.startScanButton.setOnClickListener { startFullScan() }
         b.updateButton.setOnClickListener { startActivity(android.content.Intent(this,AppUpdateActivity::class.java).putExtra("startUpdate",true)) }
+        // Scanner navigation delegates to the existing controls, not duplicate flows.
+        b.navHome.setOnClickListener { showDashboard() }
+        b.navScan.setOnClickListener { b.recycler.smoothScrollToPosition(0) }
+        b.navBacktest.setOnClickListener { b.backtestButton.performClick() }
+        b.navRobot.setOnClickListener { b.robotButton.performClick() }
+        b.navUpdate.setOnClickListener { b.updateButton.performClick() }
         b.progressTitle.text="尚未開始掃描"
         b.progressCount.text="設定好條件後，請按「開始掃描」"
         b.etaText.text="待命中"
         b.scanProgress.isIndeterminate=false
+        installHomeDashboard()
         render()
         syncBackgroundScan()
         restoreLatestScan()
+        if(intent?.getBooleanExtra("neon-open-scanner",false)==true)openScannerView()
+    }
+
+
+    /** A separate, scrollable home preserves the original scanner views and event handlers. */
+    private fun installHomeDashboard() {
+        val home=NeonHomeDashboard(
+            activity=this,
+            openScanner={ openScannerView() },
+            openBacktest={ b.backtestButton.performClick() },
+            openRobot={ b.robotButton.performClick() },
+            openUpdate={ b.updateButton.performClick() },
+            openCondition={ type-> showRadarConditions(type) },
+            openDiagnostics={
+                coordinator.submit {
+                    val diagnostic=runCatching {
+                        com.rex.twboardingscanner.data.BackgroundScanDiagnostics.collect(applicationContext)
+                    }.getOrElse { "背景工作診斷失敗：" + it.message }
+                    runOnUiThread {
+                        if (!isFinishing && !isDestroyed) {
+                            val clip=android.content.ClipData.newPlainText("背景掃描診斷",diagnostic)
+                            getSystemService(android.content.ClipboardManager::class.java).setPrimaryClip(clip)
+                            Toast.makeText(this,"掃描診斷已複製，可貼上分析",Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            },
+            openPermissions={
+                startActivity(android.content.Intent(
+                    android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    android.net.Uri.parse("package:" + packageName)))
+            },
+            openCsv={ startActivity(android.content.Intent(this,TradeSideVolumeImportActivity::class.java)) },
+            openChangelog={ b.changelogButton.performClick() }
+        )
+        val host=findViewById<android.widget.FrameLayout>(android.R.id.content)
+        val chip=TextView(this).apply {
+            text="⌂ 返回首頁"
+            textSize=12f
+            setTextColor(Color.WHITE)
+            gravity=android.view.Gravity.CENTER
+            setPadding(dp(7),dp(4),dp(7),dp(4))
+            background=android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(106,27,180),Color.rgb(32,10,76))
+            ).apply {
+                cornerRadius=dp(12).toFloat()
+                setStroke(dp(1),Color.rgb(211,93,255))
+            }
+            isFocusable=true
+            contentDescription="返回首頁儀表板"
+            setOnClickListener { showDashboard() }
+        }
+        host.addView(chip,android.widget.FrameLayout.LayoutParams(dp(94),dp(37),
+            android.view.Gravity.TOP or android.view.Gravity.END).apply {
+            topMargin=dp(10);marginEnd=dp(12)
+        })
+        host.addView(home.view,android.widget.FrameLayout.LayoutParams(-1,-1))
+        dashboard=home
+        returnHomeChip=chip
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(home.view) { target,insets->
+            val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            target.setPadding(bars.left,dp(5)+bars.top,bars.right,bars.bottom)
+            insets
+        }
+        onBackPressedDispatcher.addCallback(this,object:androidx.activity.OnBackPressedCallback(true){
+            override fun handleOnBackPressed(){
+                if(dashboard?.view?.visibility==android.view.View.GONE)showDashboard()
+                else {
+                    isEnabled=false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
+        showDashboard()
+    }
+
+    private fun openScannerView(){
+        b.root.visibility=android.view.View.VISIBLE
+        dashboard?.view?.visibility=android.view.View.GONE
+        returnHomeChip?.visibility=android.view.View.VISIBLE
+    }
+
+    private fun showDashboard(){
+        b.root.visibility=android.view.View.GONE
+        returnHomeChip?.visibility=android.view.View.GONE
+        dashboard?.view?.visibility=android.view.View.VISIBLE
+        window.statusBarColor=Color.rgb(20,5,39)
+        window.navigationBarColor=Color.rgb(10,3,28)
+        updateHomeDashboard()
+    }
+
+    private fun updateHomeDashboard(){
+        val home=dashboard?:return
+        val state=runCatching{BackgroundScanState.read(this)}.getOrNull()
+        val visible=admitted().filter{it.light!=SignalLight.NONE}
+        val distinct=visible.distinctBy{it.code}
+        // A 5/6 count has meaning only when exactly six checks were selected.
+        // Do not fabricate six-check scores for strategies with a different rule count.
+        val sixChecks=visible.filter{row->row.checks.count{it.selected}==6}.distinctBy{it.code}
+        val five=if(sixChecks.isEmpty())null else sixChecks.count{row->
+            row.checks.count{it.selected&&it.state==com.rex.twboardingscanner.domain.CheckState.PASS}==5
+        }
+        val six=if(sixChecks.isEmpty())null else sixChecks.count{row->
+            row.checks.count{it.selected&&it.state==com.rex.twboardingscanner.domain.CheckState.PASS}==6
+        }
+        val hasData=(state?.id?.isNotBlank()==true)||(latestScanAt>0)
+        val title=when{
+            state?.active==true->"系統掃描中"
+            state?.state=="ERROR"->"掃描異常，請查看診斷"
+            state?.state=="DONE"->"掃描完成 · 結果已保存"
+            else->"系統待命中"
+        }
+        home.update(NeonHomeDashboard.Stats(
+            scanned=state?.takeIf{it.id.isNotBlank()}?.done,
+            matched=if(hasData)distinct.size else null,
+            fiveOfSix=if(hasData)five else null,
+            sixOfSix=if(hasData)six else null,
+            timestampMs=latestScanAt.takeIf{it>0L}?:state?.heartbeatAt?.takeIf{it>0L},
+            title=title,
+            details=state?.message?.takeIf{it.isNotBlank()}?:b.progressTitle.text.toString(),
+            running=state?.active==true
+        ))
     }
 
     private fun restoreLatestScan(){
@@ -304,9 +461,26 @@ class MainActivity: AppCompatActivity() {
         val panel=b.settingsPanel
         (panel.parent as? ViewGroup)?.removeView(panel)
         panel.visibility=android.view.View.VISIBLE
+        panel.background=NeonUi.panel(this,NeonUi.violet)
         val body=NeonUi.vertical(this).apply{background=NeonUi.backdrop(this@MainActivity)}
-        body.addView(NeonUi.label(this,"條件與工具",23f,NeonUi.ink,true).apply{setPadding(dp(16),dp(12),dp(16),dp(4))})
-        body.addView(NeonUi.label(this,"A～G 七組入場條件；G 位於類別開關及條件編輯列表的最後一排",12f).apply{setPadding(dp(16),0,dp(16),dp(8))})
+        body.addView(NeonUi.label(this,"✣ 條件與工具",23f,NeonUi.ink,true).apply{
+            setPadding(dp(16),dp(12),dp(16),dp(4))
+            setShadowLayer(dp(4).toFloat(),0f,0f,NeonUi.violet)
+        })
+        body.addView(NeonUi.label(this,"紫色霓虹策略中心 · A～G 七組條件獨立設定",12f,NeonUi.muted).apply{
+            setPadding(dp(16),0,dp(16),dp(10))
+        })
+        val overview=NeonUi.section(this,"設定總覽","使用實際保存條件，不顯示樣稿中的虛構數據")
+        overview.addView(NeonUi.row(this,listOf(
+            NeonUi.tile(this,"已啟用策略", "${radarEnabled.size} / ${RadarType.entries.size}","點擊下方切換",NeonUi.violet),
+            NeonUi.tile(this,"掃描產業", "${enabledSectors.size} 類","按現有設定執行",NeonUi.cyan)
+        )))
+        body.addView(overview,LinearLayout.LayoutParams(-1,-2).apply{
+            setMargins(dp(12),dp(2),dp(12),dp(10))
+        })
+        body.addView(NeonUi.label(this,"策略與進階工具",15f,NeonUi.ink,true).apply{
+            setPadding(dp(16),dp(1),dp(16),dp(8))
+        })
         body.addView(NeonUi.button(this,"複製背景工作診斷（心跳／排程／權限）",NeonUi.cyan){
             coordinator.submit{
                 val diagnosis=runCatching{com.rex.twboardingscanner.data.BackgroundScanDiagnostics.collect(applicationContext)}
@@ -348,6 +522,11 @@ class MainActivity: AppCompatActivity() {
         dialog.behavior.state=com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
     }
 
+    override fun onNewIntent(intent:android.content.Intent){
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if(intent.getBooleanExtra("neon-open-scanner",false))openScannerView() else showDashboard()
+    }
     override fun onResume() { super.onResume();backgroundHandler.removeCallbacks(backgroundPoll);backgroundHandler.post(backgroundPoll);guardHandler.post(guardPoll);loadScanSettings();if(::trendHoldCheck.isInitialized)trendHoldCheck.isChecked=com.rex.twboardingscanner.data.ExitRuleStore(this).readProfitTrendHold(StockScope.SCANNER);b.exitRulesButton.text="下車賣出條件 · ${com.rex.twboardingscanner.data.ExitRuleStore(this).read(com.rex.twboardingscanner.domain.StockScope.SCANNER).count{it.active}} / 7 項";if(::paperLoop.isInitialized){paperLoop.start();render()} }
     override fun onPause() { backgroundHandler.removeCallbacks(backgroundPoll);guardHandler.removeCallbacks(guardPoll);if(::paperLoop.isInitialized)paperLoop.stop();super.onPause() }
 
@@ -389,6 +568,7 @@ class MainActivity: AppCompatActivity() {
         val created=System.currentTimeMillis()
         val paper=runCatching{com.rex.twboardingscanner.paper.PaperRepository(this).read()}.getOrNull()
         val flowRevision=com.rex.twboardingscanner.data.TradeSideVolumeStore(this).revision()
+        val dChipRevision=com.rex.twboardingscanner.data.DChipStore(this).revision()
         val frozen=com.rex.twboardingscanner.data.ScanArchiveStore.snapshot(
             date.toString(),created,radarSelections.mapValues{it.value.toSet()},
             enabledSectors.toSet(),com.rex.twboardingscanner.data.StockPolicyStore(this).read(),
@@ -398,6 +578,7 @@ class MainActivity: AppCompatActivity() {
         ).put("paperEnabled",paper?.enabled==true)
          .put("paperStrategy",paper?.strategy?.let{com.rex.twboardingscanner.backtest.BtSettingsCodec.encode(it)}
              ?:org.json.JSONObject.NULL)
+         .put("dChipRevision",dChipRevision)
         runCatching{FullMarketScanWorker.start(applicationContext,frozen)}
             .onSuccess{
                 latest=emptyList()
@@ -458,6 +639,8 @@ class MainActivity: AppCompatActivity() {
             s.state=="ERROR"->"背景執行失敗 · 複製診斷檢查原因"
             else->"背景掃描已停止"
         }
+        updateScannerMetrics()
+        updateHomeDashboard()
         if(s.state=="DONE"&&s.folderId.isNotBlank()&&backgroundLoadedFolder!=s.folderId&&!backgroundResultLoading){
             backgroundLoadedFolder=s.folderId
             backgroundResultLoading=true
@@ -517,6 +700,8 @@ class MainActivity: AppCompatActivity() {
         val exclusionSnapshot=scanExclusions.mapValues{it.value.toSet()}
         val flowStore=com.rex.twboardingscanner.data.TradeSideVolumeStore(this)
         val flowRevision=flowStore.revision()
+        val dChips=com.rex.twboardingscanner.data.DChipStore(this)
+        val dChipRevision=dChips.revision()
         val scanPolicy=com.rex.twboardingscanner.data.StockPolicyStore(this).read()
         val mainSectors = enabledSectors.toSet()
         // Paper mode owns independent ABC/sectors. Fetch the union so paper-only
@@ -624,8 +809,15 @@ class MainActivity: AppCompatActivity() {
                                         if(!current())return@evaluate null
                                         val datedBars = calculator.barsForRadar(bars, type, scanDate)
                                         if (datedBars.isEmpty()) null else {
+                                            val useDChip=type==RadarType.D_MAIN_FORCE&&(
+                                                scanRules[type].orEmpty().any{it in DPattern.CHIP_IDS}||
+                                                paperSettings?.rules?.get(type).orEmpty().any{it in DPattern.CHIP_IDS})
+                                            val chipDate=RuleMetrics.tradingDate(datedBars.last().time)
+                                            val previousChipDate=datedBars.getOrNull(datedBars.lastIndex-1)?.let{RuleMetrics.tradingDate(it.time)}
                                             val snap = calculator.build(stockToUse, datedBars)
-                                                .copy(dConfig=scanDConfig,eConfig=scanEConfig,fConfig=scanFConfig,bConfig=scanBConfig,gConfig=scanGConfig,marketIndexCloses=indexHistory)
+                                                .copy(dConfig=scanDConfig,eConfig=scanEConfig,fConfig=scanFConfig,bConfig=scanBConfig,gConfig=scanGConfig,marketIndexCloses=indexHistory,
+                                                    dChipToday=if(useDChip)dChips.read(stock.code,chipDate)else null,
+                                                    dChipPrevious=if(useDChip&&previousChipDate!=null)dChips.read(stock.code,previousChipDate,completed=true)else null)
                                             when(type) {
                                                 RadarType.A_EARLY_BREAKOUT -> engine.evaluateA(snap, scanRules.getValue(type),exclusionSnapshot.getValue(type))
                                                 RadarType.B_DEEP_REVERSAL -> engine.evaluateB(snap, scanRules.getValue(type),exclusionSnapshot.getValue(type))
@@ -749,10 +941,12 @@ class MainActivity: AppCompatActivity() {
                 check(flowStore.revision()==flowRevision){
                     "主動買／賣量資料於掃描中變更，請重新開始，避免同一次掃描條件不一致"
                 }
+                check(dChips.revision()==dChipRevision){"D 每日籌碼來源在掃描中已變動，請重新掃描避免混用"}
                 val snapshot=com.rex.twboardingscanner.data.ScanArchiveStore.snapshot(
                     scanDate.toString(),latestScanAt,scanRules,mainSectors,scanPolicy,
                     flowRevision,total,analyzed.get(),failed.get(),
                     enabledRadars=scanEnabled,dConfig=scanDConfig,eConfig=scanEConfig,fConfig=scanFConfig,bConfig=scanBConfig,gConfig=scanGConfig,exclusions=exclusionSnapshot)
+                    .put("dChipRevision",dChipRevision)
                     .put("paperStrategy",paperSettings?.let{com.rex.twboardingscanner.backtest.BtSettingsCodec.encode(it)}?:org.json.JSONObject.NULL)
                 com.rex.twboardingscanner.data.ScanDiagnostics.phase(this,"保存完整掃描資料夾")
                 com.rex.twboardingscanner.data.ScanArchiveStore(this).use{store->
@@ -850,13 +1044,43 @@ class MainActivity: AppCompatActivity() {
         // Publish all evaluated stocks; PaperRepository applies its OWN saved rule set.
         com.rex.twboardingscanner.paper.PaperRepository(this).publish(latestPaper,latestScanAt,latestFolderId)
     }
+    /**
+     * Dashboard numbers are derived from persisted scan state; mockup counts
+     * are never inserted into the installed application.
+     */
+    private fun updateScannerMetrics(source:List<SignalResult>?=null){
+        val state=BackgroundScanState.read(this)
+        val hasSnapshot=state.id.isNotBlank()
+        val list=source?:admitted()
+        val hasResults=hasSnapshot||latestScanAt>0L||isScanning
+        b.scanScannedMetric.text=when{
+            hasSnapshot->state.done.toString()
+            latestScanAt>0L&&b.scanProgress.progress>0->b.scanProgress.progress.toString()
+            else->"—"
+        }
+        val matched=list.filter{it.light!=SignalLight.NONE}.distinctBy{it.code}.size
+        b.scanMatchedMetric.text=if(hasResults)matched.toString() else "—"
+        b.scanPendingMetric.text=if(hasSnapshot)state.pending.toString() else "—"
+        b.scanFailedMetric.text=if(hasSnapshot)state.failed.toString() else "—"
+        b.scanMatchedMetric.contentDescription="符合條件 $matched 檔"+if(!hasResults)"，尚無掃描數據" else ""
+        b.scanScannedMetric.contentDescription="已掃描 ${b.scanScannedMetric.text} 檔"
+        b.scanPendingMetric.contentDescription="待查核 ${b.scanPendingMetric.text} 檔"
+        b.scanFailedMetric.contentDescription="掃描失敗 ${b.scanFailedMetric.text} 檔"
+    }
+
     private fun render() {
         val source=admitted()
+        updateScannerMetrics(source)
         val groups=(0..9).map{ResultFilters.select(source,it)}
         b.resultFilters.update(groups.map{it.size},selectedTab)
         val selected=groups[selectedTab]
-        adapter.submit(selected)
-        b.emptyState.visibility=if(selected.isEmpty())android.view.View.VISIBLE else android.view.View.GONE
+        if(b.recycler.scrollState!=RecyclerView.SCROLL_STATE_IDLE){
+            pendingResultsAfterScroll=true
+        }else{
+            pendingResultsAfterScroll=false
+            adapter.submit(selected)
+            b.emptyState.visibility=if(selected.isEmpty())android.view.View.VISIBLE else android.view.View.GONE
+        }
         (b.emptyState.getChildAt(0) as TextView).text=when{
             isScanning->"正在整理市場訊號"
             selectedTab==6&&latestScanAt>0->"本次沒有符合條件的股票"
@@ -874,6 +1098,7 @@ class MainActivity: AppCompatActivity() {
             latestScanAt>0->"目前沒有符合已勾選條件的股票；可在條件與工具中調整。"
             else->"請開始掃描；預設「全部入選」顯示 ABCDEFG 所有通過的股票。"
         }
+        updateHomeDashboard()
     }
 
     private fun loadScanSettings() {
@@ -1030,6 +1255,10 @@ class MainActivity: AppCompatActivity() {
             MaterialAlertDialogBuilder(this).setTitle("條件判斷說明").setMessage("勾選條件全部滿足才入選；未勾選不限制。B預設為早期起轉組合，其餘基本條件預設全選，額外查核預設關閉；E 預設僅勾 DIF 向上接觸，不強制 A 股價／量能。\nA/B/E/F 排除台灣當日日線；C/D 使用最新日 K。E 的 MACD 為 EMA9 訊號線，預設線距≤收盤價0.3%，DIF須上升且前日位於訊號線下方或相等；可調線距及是否納入剛向上交叉。\nB新增可調深跌／不破底／MACD連升／RSI回升／放量突破及任一反轉事件；早期與突破確認兩套預設可套用。舊已保存勾選不自動改寫；B通過後若RSI>50且收盤>20日線另標示技術升級；不辨識W底形狀。\n額外資料不足標示待查核，勾選後會阻擋入選。5日／10日線碰觸以差距1%內且前一日差距較大定義；主動買賣比需提供來源可靠的內外盤成交量CSV，不能使用五檔委買委賣掛單量。HiStock 財報會查核技術候選股，快取24小時；HTTP403/429、格式變更、資料過期均待查核。逐日法人尚未接入。分數為所選條件通過率，不是公司評級。\n財務條件共用於ABCDEF、可各自勾選；EPS為正不代表現金流為正。產業EPS範圍不是通用及格線，未設成硬門檻。\n現金流使用原站最新列示期間，不跨季加總；金融業現金流需另行解讀。營業利益率為正不能排除一次性業外收益。\n風險估算：前20日最低價為支撐，支撐下1%為失效價，前60日最高價為壓力；(壓力−現價)/(現價−失效價)≥2。\n漲停估算：前收盤×1.1，按台股跳動單位向下取整；非交易所公告漲停價。\nC 為觀察訊號，尚無回測證明隔天一定續漲。\n估算主力成本為近20日的日K典型價（高＋低＋收）／3依成交股數加權；非券商揭露的真正大戶持股均價，也不保證股價反彈。當日資料若未收盤，估值可在收盤後改變；不足20根有效日K則顯示待查核。").setPositiveButton("關閉",null).show()
         })
         if(type==RadarType.D_MAIN_FORCE){
+            box.addView(NeonUi.label(this,"新選項：大戶持股 +0.01 個百分點、5日主力集中度增、法人當日買超需每日來源；缺資料顯示待查核，MA5交叉可從K線計算。",12f,NeonUi.amber))
+            box.addView(NeonUi.button(this,"匯入 D 大戶／主力／法人每日籌碼 CSV",NeonUi.mint){
+                startActivity(android.content.Intent(this,DChipImportActivity::class.java))
+            }.apply{tag="scanner-d-chip-import"})
             box.addView(NeonUi.button(this,"D 數值總覽（也可直接填寫下方欄位）"){
                 numbers.editD()
             }.apply{tag="scanner-d-parameters"})
@@ -1046,6 +1275,7 @@ class MainActivity: AppCompatActivity() {
                 type==RadarType.D_MAIN_FORCE&&index==0->"D 原有六項主力形態"
                 type==RadarType.D_MAIN_FORCE&&index==6->"A 準備起漲同步條件（可獨立選擇）"
                 type==RadarType.D_MAIN_FORCE&&index==17->"A 額外財報／風險查核（選填）"
+                type==RadarType.D_MAIN_FORCE&&rule.id==DPattern.BIG_HOLDER_UP->"D 新增大戶／主力／法人與均線交叉（獨立選填）"
                 type!=RadarType.D_MAIN_FORCE&&rule.extra&&!extraHeadingShown->"額外查核（選填）"
                 else->null
             }
@@ -1193,6 +1423,7 @@ class MainActivity: AppCompatActivity() {
 
     override fun onDestroy() {
         restartScan=false;scanRevision.incrementAndGet();scanRenderQueue.cancel()
+        adapter.close()
         chartDialog?.dismiss()
         chartDialog = null
         handler.removeCallbacksAndMessages(null)

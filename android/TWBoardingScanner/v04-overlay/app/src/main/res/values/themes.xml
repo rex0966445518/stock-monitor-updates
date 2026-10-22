@@ -1,40 +1,56 @@
 <resources>
+    <!-- Single theme used by every interior Activity: dark-purple luxury fintech. -->
     <style name="Theme.TWBoardingScanner" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:windowBackground">#090B10</item>
-        <item name="android:statusBarColor">#090B10</item>
-        <item name="android:navigationBarColor">#090B10</item>
+        <item name="android:windowBackground">#0B041F</item>
+        <item name="android:statusBarColor">#13052D</item>
+        <item name="android:navigationBarColor">#0B041F</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
-        <item name="colorPrimary">#FF728B</item>
-        <item name="colorPrimaryVariant">#35404F</item>
-        <item name="colorSecondary">#96A7E6</item>
-        <item name="colorSurface">#141922</item>
-        <item name="colorOnSurface">#EBF1FA</item>
-        <item name="android:colorBackground">#090B10</item>
-        <item name="android:textColorPrimary">#EBF1FA</item>
-        <item name="android:textColorSecondary">#94A4B9</item>
-        <item name="android:colorAccent">#6FDAEB</item>
+        <item name="colorPrimary">#B443FF</item>
+        <item name="colorPrimaryVariant">#6A2EB8</item>
+        <item name="colorSecondary">#53E3BA</item>
+        <item name="colorSurface">#201043</item>
+        <item name="colorOnSurface">#F8F3FF</item>
+        <item name="android:colorBackground">#0B041F</item>
+        <item name="android:textColorPrimary">#F8F3FF</item>
+        <item name="android:textColorSecondary">#C4AEEB</item>
+        <item name="android:colorAccent">#B443FF</item>
+        <item name="colorControlActivated">#B443FF</item>
         <item name="materialAlertDialogTheme">@style/ThemeOverlay.Scanner.Dialog</item>
     </style>
     <style name="ThemeOverlay.Scanner.Dialog" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
-        <item name="colorSurface">#141922</item>
-        <item name="colorOnSurface">#EBF1FA</item>
-        <item name="android:textColorPrimary">#EBF1FA</item>
-        <item name="android:textColorSecondary">#94A4B9</item>
-        <item name="colorPrimary">#FF728B</item>
+        <item name="colorSurface">#201043</item>
+        <item name="colorOnSurface">#F8F3FF</item>
+        <item name="android:textColorPrimary">#F8F3FF</item>
+        <item name="android:textColorSecondary">#C4AEEB</item>
+        <item name="colorPrimary">#B443FF</item>
+        <item name="colorSecondary">#53E3BA</item>
         <item name="shapeAppearanceMediumComponent">@style/Shape.Scanner.Dialog</item>
     </style>
-    <style name="Shape.Scanner.Dialog" parent="ShapeAppearance.MaterialComponents.MediumComponent"><item name="cornerSize">24dp</item></style>
+    <style name="Shape.Scanner.Dialog" parent="ShapeAppearance.MaterialComponents.MediumComponent">
+        <item name="cornerSize">22dp</item>
+    </style>
     <style name="Widget.Scanner.Button" parent="Widget.MaterialComponents.Button.OutlinedButton">
-        <item name="android:minHeight">52dp</item><item name="android:minWidth">0dp</item>
-        <item name="android:textSize">13sp</item><item name="android:textAllCaps">false</item>
-        <item name="android:paddingLeft">8dp</item><item name="android:paddingRight">8dp</item>
-        <item name="android:insetTop">3dp</item><item name="android:insetBottom">3dp</item>
-        <item name="cornerRadius">14dp</item><item name="strokeWidth">1dp</item>
-        <item name="strokeColor">#35404F</item><item name="backgroundTint">#141922</item><item name="android:textColor">#D4DEEB</item>
+        <item name="android:minHeight">52dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:paddingLeft">8dp</item>
+        <item name="android:paddingRight">8dp</item>
+        <item name="android:insetTop">3dp</item>
+        <item name="android:insetBottom">3dp</item>
+        <item name="cornerRadius">16dp</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="strokeColor">#9850DC</item>
+        <item name="backgroundTint">#26124D</item>
+        <item name="android:textColor">#F8F3FF</item>
     </style>
     <style name="Widget.Scanner.Primary" parent="Widget.Scanner.Button">
-        <item name="backgroundTint">#8F182F</item><item name="android:textColor">#EBF1FA</item><item name="strokeWidth">1dp</item><item name="strokeColor">#FF3752</item><item name="android:fontFamily">sans-serif-medium</item>
+        <item name="backgroundTint">#A43BFA</item>
+        <item name="android:textColor">#FFFFFF</item>
+        <item name="strokeWidth">2dp</item>
+        <item name="strokeColor">#D98DFF</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
     </style>
 </resources>

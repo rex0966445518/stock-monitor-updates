@@ -19,7 +19,7 @@ object BtRobotSpace {
     // v0.4.48 search keys have 102 fixed positions. Leave every existing
     // bit (including D's 31 inherited A predicates) exactly where it was.
     val dSlots=ScanConditions.forRadar(RadarType.D_MAIN_FORCE)
-        .filterNot{it.id in ScanConditions.MOMENTUM_IDS||it.id==ScanConditions.MAIN_FORCE_COST_20||it.id==RsiGoldenCross.ID}
+        .filterNot{it.id in ScanConditions.MOMENTUM_IDS||it.id==ScanConditions.MAIN_FORCE_COST_20||it.id==RsiGoldenCross.ID||it.id in DPattern.CHIP_IDS}
         .map{RadarType.D_MAIN_FORCE to it.id}
     val v4Slots=slots+dSlots
     // All FOUR new switches are appended AFTER the historical bit 101.
@@ -31,7 +31,10 @@ object BtRobotSpace {
     // Preserve the v7 A–F bit layout: G never occupies historical saved-key positions.
     val v7Slots=v6Slots+RadarType.entries.take(6).flatMap{type->ScanConditions.MOMENTUM_IDS.map{type to it}}
     val v8Slots=v7Slots+BPattern.IDS.map{RadarType.B_DEEP_REVERSAL to it}
-    val allSlots=v8Slots+APattern.IDS.map{RadarType.A_EARLY_BREAKOUT to it}+GPattern.rules().map{RadarType.G_MA5_WAVE to it.id}
+    val previousSlots=v8Slots+APattern.IDS.map{RadarType.A_EARLY_BREAKOUT to it}+GPattern.rules().map{RadarType.G_MA5_WAVE to it.id}
+    // Append: NEVER insert before existing slots because robot checkpoint bit IDs
+    // and persisted selection keys must keep their historical positions.
+    val allSlots=previousSlots+DPattern.CHIP_ORDER.map{RadarType.D_MAIN_FORCE to it}
     val total:BigInteger=BigInteger.ONE.shiftLeft(allSlots.size)
     val legacyTotal:BigInteger=BigInteger.ONE.shiftLeft(legacySlots.size)
     fun key(rules:Map<RadarType,Set<String>>):String=allSlots.foldIndexed(BigInteger.ZERO){i,n,(type,id)->if(id in rules[type].orEmpty())n.setBit(i)else n}.toString(16)

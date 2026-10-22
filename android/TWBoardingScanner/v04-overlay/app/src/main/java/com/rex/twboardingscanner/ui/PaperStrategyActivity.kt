@@ -54,7 +54,7 @@ class PaperStrategyActivity:AppCompatActivity() {
         loadDraft(preset,false)
         val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context)}
         root=NeonUi.vertical(this).apply{setPadding(dp(16),dp(16),dp(16),dp(32))}
-        scroll.addView(root);setContentView(scroll)
+        scroll.addView(root);NeonPageChrome.attach(this,scroll,NeonPageChrome.Page.SCAN)
         ViewCompat.setOnApplyWindowInsetsListener(scroll){v,i->
             val bars=i.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(bars.left,bars.top,bars.right,bars.bottom);i

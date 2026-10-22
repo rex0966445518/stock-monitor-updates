@@ -9,6 +9,10 @@ import java.util.Locale
 
 object VolumeStrip {
     fun bind(summary:TextView,row:LinearLayout,input:List<DailyBar>) {
+        // Avoid rebuilding five cards plus a bar chart for the same candle list
+        // during financial-cache refreshes or a RecyclerView redraw.
+        if(row.tag===input&&row.childCount>0)return
+        row.tag=input
         row.removeAllViews();row.orientation=LinearLayout.VERTICAL
         val stats=VolumeStats.from(input)
         summary.textSize=12f

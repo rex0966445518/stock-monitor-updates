@@ -54,7 +54,8 @@ class BtRobotStore(private val c:Context){
         val o=JSONObject().put("id",id).put("created",System.currentTimeMillis()).put("state","PAUSED").put("token","")
             .put("settings",BtSettingsCodec.encode(s)).put("sourceJournalId",sourceJournalId?:JSONObject.NULL)
             .put("sweep",sweep?.json()?:JSONObject.NULL)
-            .put("flowRevision",com.rex.twboardingscanner.data.TradeSideVolumeStore(c).revision()).put("tested",0).put("bestKey","").put("bestSeq",0).put("ack",0)
+            .put("flowRevision",com.rex.twboardingscanner.data.TradeSideVolumeStore(c).revision())
+            .put("dChipRevision",com.rex.twboardingscanner.data.DChipStore(c).revision()).put("tested",0).put("bestKey","").put("bestSeq",0).put("ack",0)
             .put("seed",BigInteger(80,java.security.SecureRandom()).toString()).put("cursor","0").put("message","按開始測試啟動").put("owner","").put("heartbeatAt",0L).put("phaseSeq",0L).put("phaseDone",0)
             .put("analysisVersion",2).put("appVersion",c.packageManager.getPackageInfo(c.packageName,0).versionName).put("searchVersion",if(singleOption&&sweep==null)if(includeBaseline)10 else 9 else 8).put("required",required).put("forbidden",forbidden).put("engineVersion",BtRobotCheckpoint.ENGINE).put("cleared",0)
         check(db.insertOrThrow("sessions",null,ContentValues().apply{put("id",id);put("created",o.getLong("created"));put("json",o.toString())})>0)
@@ -71,6 +72,9 @@ class BtRobotStore(private val c:Context){
         require(o.optInt("searchVersion",1) in 1..10){"搜尋版本不相容"}
         if(o.has("flowRevision"))require(o.getString("flowRevision")==com.rex.twboardingscanner.data.TradeSideVolumeStore(c).revision()){
             "盤中內外盤資料已更新；請以新條件建立新批次，原測試紀錄保留"
+        }
+        if(o.has("dChipRevision"))require(o.getString("dChipRevision")==com.rex.twboardingscanner.data.DChipStore(c).revision()){
+            "D 每日籌碼來源已變更；請建立新批次，原測試紀錄保留"
         }
         BtRobotSweep.read(o.optJSONObject("sweep"))?.let{sweep->
             require(o.optString("required","0")=="0"&&o.optString("forbidden","0")=="0"){"網格批次條件不可改動"}

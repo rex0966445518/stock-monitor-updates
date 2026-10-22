@@ -30,6 +30,9 @@ class CompactScannerLayoutTest {
     @Test fun mainScreenMakesRoomForCardsWithoutHidingControls(){
         Shadows.shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
         val activity=Robolectric.buildActivity(MainActivity::class.java).setup()
+        // The screenshot-inspired homepage is now the default. Exercise the legacy scanner
+        // viewport after selecting 主掃描 so its original controls remain regression tested.
+        MainActivity::class.java.getDeclaredMethod("openScannerView").apply{isAccessible=true}.invoke(activity.get())
         val body=activity.get().findViewById<View>(android.R.id.content)
         for(scale in listOf(1f,1.3f)){
             RuntimeEnvironment.setFontScale(scale)

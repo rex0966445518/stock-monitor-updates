@@ -71,11 +71,13 @@ object BacktestEngine {
     private fun date(b:DailyBar)=RuleMetrics.tradingDate(b.time)
     fun prepare(series:List<BtSeries>,settings:BtSettings,progress:(String)->Unit={},cancel:()->Boolean={false},
         flowFor:(String,LocalDate)->TradeSideVolume?={_,_->null},
-        benchmark:Map<LocalDate,Double>?=null):BtPrepared {
+        benchmark:Map<LocalDate,Double>?=null,
+        chipFor:(String,LocalDate)->DChipDay?={_,_->null}):BtPrepared {
         val signals=mutableMapOf<LocalDate,MutableList<BtSignal>>();var pending=0
         val options=RadarType.entries.filter{it in settings.enabledRadars&&(settings.robotBaseline||settings.rules[it].orEmpty().isNotEmpty())}
             .associateWith{type->ScanConditions.forRadar(type).filter{it.id in settings.rules.getValue(type)}}
         val exclusions=options.keys.associateWith{type->ExclusionConditions.forRadar(type).filter{it.id in settings.exclusions.getValue(type)}}
+        val needDChip=options[RadarType.D_MAIN_FORCE].orEmpty().any{it.id in DPattern.CHIP_IDS}
         val active=BacktestProgress.activeLabels(settings)
         progress("依本次 $active 條件掃描 0 / ${series.size} 檔")
         series.forEachIndexed{index,s->
@@ -97,9 +99,13 @@ object BacktestEngine {
                         val known=bars.subList(max(0,end-320),end);val bar=known.last()
                         val stock=MarketStock(s.code,s.name,s.market,StockSector.UNKNOWN,bar.open,bar.high,bar.low,bar.close,0.0,(bar.volumeShares/1000).toInt(),null,null,
                             tradeSideVolume=flowFor(s.code,day))
+                        val chipDate=date(bar)
+                        val prevDate=known.getOrNull(known.lastIndex-1)?.let(::date)
                         val snap=calculator.buildForRules(stock,known).copy(
-                            timestamp=day.atTime(13,30).atZone(RuleMetrics.TAIPEI).toInstant().toEpochMilli(),
-                            dConfig=settings.dConfig,eConfig=settings.eConfig,fConfig=settings.fConfig,bConfig=settings.bConfig,gConfig=settings.gConfig,marketIndexCloses=benchmark)
+                            timestamp=chipDate.atTime(13,30).atZone(RuleMetrics.TAIPEI).toInstant().toEpochMilli(),
+                            dConfig=settings.dConfig,eConfig=settings.eConfig,fConfig=settings.fConfig,bConfig=settings.bConfig,gConfig=settings.gConfig,marketIndexCloses=benchmark,
+                            dChipToday=if(needDChip)chipFor(s.code,chipDate)else null,
+                            dChipPrevious=if(needDChip&&prevDate!=null)chipFor(s.code,prevDate)else null)
                         RuleMetrics(snap)
                     }
                     val checks=conditions.map{it.test(metrics)}

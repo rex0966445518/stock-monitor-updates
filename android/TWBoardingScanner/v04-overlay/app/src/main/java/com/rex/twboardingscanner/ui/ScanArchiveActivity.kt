@@ -45,7 +45,7 @@ class ScanArchiveActivity:AppCompatActivity(){
             background=NeonUi.backdrop(context)
             addView(root,LinearLayout.LayoutParams(-1,-1))
         }
-        setContentView(base)
+        NeonPageChrome.attach(this,base,NeonPageChrome.Page.SCAN)
         ViewCompat.setOnApplyWindowInsetsListener(base){v,i->
             val bars=i.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(bars.left,bars.top,bars.right,bars.bottom);i

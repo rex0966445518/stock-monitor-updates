@@ -39,7 +39,7 @@ class TradeSideVolumeImportActivity:AppCompatActivity(){
                 NeonUi.dp(this@TradeSideVolumeImportActivity,20))
         }
         val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);addView(root)}
-        setContentView(scroll)
+        NeonPageChrome.attach(this,scroll,NeonPageChrome.Page.SCAN)
         ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->
             val bars=insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets
@@ -73,5 +73,9 @@ class TradeSideVolumeImportActivity:AppCompatActivity(){
             "匯入新資料會暫停舊回測／機器人批次，避免同一批次混用不同時點的數據。",12f,NeonUi.amber))
         root.addView(NeonUi.gap(this,10))
         root.addView(NeonUi.label(this,"目前資料版本："+TradeSideVolumeStore(this).revision().take(12),11f,NeonUi.muted))
+        root.addView(NeonUi.gap(this,12))
+        root.addView(NeonUi.button(this,"另行匯入 D 大戶／主力集中／法人每日籌碼",NeonUi.violet){
+            startActivity(android.content.Intent(this,DChipImportActivity::class.java))
+        }.apply{tag="open-d-chip-import"})
     }
 }

@@ -13,6 +13,12 @@ on:
       - android/TWBoardingScanner/**
       - .github/workflows/android-apk.yml
 
+# Cancel superseded PR preview builds, but never interrupt release publication on main.
+# Faster feedback and fewer redundant Android SDK/Gradle builds.
+concurrency:
+  group: android-apk-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: write
 

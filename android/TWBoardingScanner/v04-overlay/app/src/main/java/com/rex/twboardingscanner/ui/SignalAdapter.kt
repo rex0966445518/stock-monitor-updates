@@ -21,24 +21,62 @@ import com.rex.twboardingscanner.domain.SignalResult
 
 class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private val onFinancial: (SignalResult) -> Unit = {}, private val onFinancialVisible:(SignalResult)->Unit = {}):RecyclerView.Adapter<SignalAdapter.VH>() {
     private val financialReports=mutableMapOf<String,com.rex.twboardingscanner.domain.FinancialReport>()
+    private var scrolling=false
+    private val deferredFinancialCodes=linkedSetOf<String>()
+    private val mainHandler=android.os.Handler(android.os.Looper.getMainLooper())
+    private var submitVersion=0L
+    private var disposed=false
+    private val diffWorker=java.util.concurrent.Executors.newSingleThreadExecutor { task ->
+        Thread(task,"scanner-list-diff").apply{isDaemon=true}
+    }
+    /** Shut down the per-screen diff worker when the Activity is destroyed. */
+    fun close(){
+        disposed=true
+        submitVersion++
+        deferredFinancialCodes.clear()
+        mainHandler.removeCallbacksAndMessages(null)
+        diffWorker.shutdownNow()
+    }
+    /** Do not relayout financial/chart cards while the user is dragging or flinging. */
+    fun setScrolling(active:Boolean){
+        if(disposed||scrolling==active)return
+        scrolling=active
+        if(!active&&deferredFinancialCodes.isNotEmpty()){
+            val codes=deferredFinancialCodes.toSet()
+            deferredFinancialCodes.clear()
+            items.indices.filter{items[it].code in codes}.forEach{notifyItemChanged(it,"financial")}
+        }
+    }
     private val loadingFinancials=mutableSetOf<String>()
     fun financialReport(code:String)=financialReports[code]
     fun updateFinancial(code:String,report:com.rex.twboardingscanner.domain.FinancialReport?,loading:Boolean){
+        if(disposed)return
         val changed=financialReports[code]!=report||(code in loadingFinancials)!=loading
         if(report!=null)financialReports[code]=report
         if(loading)loadingFinancials+=code else loadingFinancials-=code
-        if(changed)items.indices.filter{items[it].code==code}.forEach{notifyItemChanged(it,"financial")}
+        if(changed){
+            if(scrolling)deferredFinancialCodes+=code
+            else items.indices.filter{items[it].code==code}.forEach{notifyItemChanged(it,"financial")}
+        }
     }
     private val items = mutableListOf<SignalResult>()
     init { setHasStableIds(true) }
     override fun getItemId(position:Int)=
         (items[position].code+"-"+items[position].radarType.name).hashCode().toLong() and 0xffffffffL
 
+
+    /**
+     * For large lists the nested chart/bar snapshots are expensive to diff.
+     * Calculate large diffs off the UI thread and discard superseded work.
+     * Small lists stay synchronous for immediate navigation and existing tests.
+     */
     fun submit(list:List<SignalResult>) {
+        if(disposed)return
         val target=list.toList()
-        if(items==target)return
+        val generation=++submitVersion
+        if(items.size==target.size&&items.indices.all{items[it]===target[it]})return
         val previous=items.toList()
-        val diff=DiffUtil.calculateDiff(object:DiffUtil.Callback(){
+        val callback=object:DiffUtil.Callback(){
             override fun getOldListSize()=previous.size
             override fun getNewListSize()=target.size
             override fun areItemsTheSame(oldItemPosition:Int,newItemPosition:Int):Boolean {
@@ -47,9 +85,21 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
             }
             override fun areContentsTheSame(oldItemPosition:Int,newItemPosition:Int)=
                 previous[oldItemPosition]==target[newItemPosition]
-        },false)
-        items.clear();items.addAll(target)
-        diff.dispatchUpdatesTo(this)
+        }
+        fun apply(diff:DiffUtil.DiffResult){
+            if(generation!=submitVersion)return
+            items.clear()
+            items.addAll(target)
+            diff.dispatchUpdatesTo(this)
+        }
+        if(previous.size+target.size<=50) {
+            apply(DiffUtil.calculateDiff(callback,false))
+        } else {
+            diffWorker.execute {
+                val diff=DiffUtil.calculateDiff(callback,false)
+                mainHandler.post{apply(diff)}
+            }
+        }
     }
 
     class VH(val b:ItemStockSignalBinding):RecyclerView.ViewHolder(b.root)
@@ -77,15 +127,16 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
         h.b.root.contentDescription = "${r.code} ${r.name}，點擊開啟籌碼K線 App 查看日K"
         val accent = NeonUi.radarColor(r.radarType)
 
-        h.b.root.strokeColor = NeonUi.border
-        h.b.root.strokeWidth = (1 * h.b.root.resources.displayMetrics.density).toInt()
+        h.b.root.strokeColor = NeonUi.tint(accent,.80f)
+        h.b.root.strokeWidth = (1.2f * h.b.root.resources.displayMetrics.density).toInt().coerceAtLeast(1)
         h.b.root.animate().cancel()
         h.b.root.alpha = 1f
         h.b.badge.text = r.radarType.label
         h.b.badge.setTextColor(accent)
-        h.b.badge.background = GradientDrawable().apply {
-            cornerRadius = 20f
-            setColor(Color.argb(35,Color.red(accent),Color.green(accent),Color.blue(accent)))
+        h.b.badge.background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+            intArrayOf(NeonUi.tint(accent,.34f),NeonUi.surface)).apply {
+            cornerRadius = 16f * h.b.root.resources.displayMetrics.density
+            setStroke((1f*h.b.root.resources.displayMetrics.density).toInt().coerceAtLeast(1),accent)
         }
 
         h.b.codeName.text = "${s.code}  ${s.name}"
@@ -118,8 +169,45 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
         h.b.chartView.setBars(s.bars)
         VolumeStrip.bind(h.b.volumeSummary, h.b.recentVolumes, s.bars)
 
-        h.b.dEvidence?.visibility=if(r.dEvidence!=null)android.view.View.VISIBLE else android.view.View.GONE
-        h.b.dEvidence?.text=r.dEvidence.orEmpty()
+        // A C/D judgement can span thousands of characters. Never measure
+        // that entire report inside a RecyclerView item while scrolling.
+        val fullEvidence=r.dEvidence?.takeIf{it.isNotBlank()}
+        h.b.dEvidence?.apply{
+            if(fullEvidence==null){
+                visibility=android.view.View.GONE
+                setOnClickListener(null)
+                isFocusable=false
+                text=""
+            }else{
+                visibility=android.view.View.VISIBLE
+                maxLines=5
+                ellipsize=android.text.TextUtils.TruncateAt.END
+                val excerpt=fullEvidence.replace(Regex("\\s+")," ").take(160)
+                text=excerpt+if(fullEvidence.length>160)"…\n▾ 點擊查看完整條件判定" else "\n▾ 點擊查看完整條件判定"
+                isClickable=true;isFocusable=true
+                contentDescription="${r.code} ${r.name} 的詳細條件判定，點擊閱讀全部內容"
+                setOnClickListener {
+                    val dialogContent=android.widget.ScrollView(context).apply{
+                        isFillViewport=false
+                        setPadding(NeonUi.dp(context,14),NeonUi.dp(context,8),NeonUi.dp(context,14),NeonUi.dp(context,6))
+                        addView(NeonUi.label(context,fullEvidence,13f,NeonUi.ink).apply{
+                            setTextIsSelectable(true)
+                            setLineSpacing(NeonUi.dp(context,3).toFloat(),1.1f)
+                        })
+                    }
+                    com.google.android.material.dialog.MaterialAlertDialogBuilder(context)
+                        .setTitle("${r.code} ${r.name} · ${r.radarType.label} 判定")
+                        .setView(dialogContent)
+                        .setNegativeButton("關閉",null)
+                        .setPositiveButton("複製說明"){_,_->
+                            val clipboard=context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("股票條件判定",fullEvidence))
+                        }
+                        .show()
+                }
+            }
+        }
         h.b.closingAuction.bind(s.sourceStock?.closingAuction)
         h.b.financialPanel.bind(financialReports[r.code]?:s.sourceStock?.financials,RuleMetrics(s).today,loading=r.code in loadingFinancials)
         onFinancialVisible(r)
@@ -165,8 +253,15 @@ class SignalAdapter(private val onClick: (SignalResult) -> Unit = {}, private va
             chipMinHeight = 28 * h.b.root.resources.displayMetrics.density
             setEnsureMinTouchTargetSize(false)
             contentDescription = label
-            chipBackgroundColor = ColorStateList.valueOf(Color.parseColor(if (state == CheckState.PASS) "#103A38" else "#13293F"))
-            setTextColor(Color.parseColor(if (state == CheckState.PASS) "#69F0C2" else "#8CA6C0"))
+            val accent=when(state){
+                CheckState.PASS->NeonUi.mint
+                CheckState.FAIL->NeonUi.neonRed
+                CheckState.PENDING->NeonUi.amber
+            }
+            chipBackgroundColor = ColorStateList.valueOf(NeonUi.tint(accent,.20f))
+            chipStrokeColor = ColorStateList.valueOf(NeonUi.tint(accent,.65f))
+            chipStrokeWidth = 1f * h.b.root.resources.displayMetrics.density
+            setTextColor(accent)
             if (android.os.Build.VERSION.SDK_INT >= 26) tooltipText = label
         }
         h.b.indicatorChips.addView(chip)

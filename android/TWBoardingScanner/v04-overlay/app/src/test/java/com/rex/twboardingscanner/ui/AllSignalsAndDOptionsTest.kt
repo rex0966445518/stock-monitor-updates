@@ -65,8 +65,9 @@ class AllSignalsAndDOptionsTest {
         val d=ScanConditions.forRadar(RadarType.D_MAIN_FORCE)
         val a=ScanConditions.forRadar(RadarType.A_EARLY_BREAKOUT).filterNot{it.id in APattern.IDS}
         assertEquals(old,d.take(6).map{it.id})
-        assertEquals(a.map{it.id},d.drop(6).map{it.id})
-        assertEquals(6+a.size,d.size)
+        assertEquals(a.map{it.id},d.drop(6).take(a.size).map{it.id})
+        assertEquals(6+a.size+5,d.size)
+        assertEquals(DPattern.CHIP_ORDER,d.takeLast(5).map{it.id})
         val oldSlots=BtRobotSpace.allSlots.take(77)
         assertEquals(BtRobotSpace.slots+old.map{RadarType.D_MAIN_FORCE to it},oldSlots)
         assertEquals(102,BtRobotSpace.v4Slots.size)

@@ -58,7 +58,21 @@ object ScanConditions {
                 rule.copy(extra=rule.id !in D_A_DEFAULT_IDS)
             }
             check(aOptions.map{it.id}.distinct().size==aOptions.size)
-            return originalD+aOptions
+            // All new D switches are opt-in. Existing D rule indices 0..34
+            // remain identical, preserving historical masks and user selections.
+            val chipOptions=listOf(
+                ScanCondition(DPattern.BIG_HOLDER_UP,
+                    "D7 大戶本交易日持股比例較前一交易日增加 ≥ 0.01 個百分點（需每日來源）",true){it.dBigHolderIncreased},
+                ScanCondition(DPattern.MAIN_FORCE_5_UP,
+                    "D8 今日 5 日主力集中度 > 昨日 5 日主力集中度（需同口徑每日來源）",true){it.dMainForce5Increased},
+                ScanCondition(DPattern.INSTITUTION_BUY_TODAY,
+                    "D9 本交易日外資或投信至少一方淨買超 > 0 股（需每日法人來源）",true){it.dInstitutionBoughtToday},
+                ScanCondition(DPattern.MA5_CROSS_10,
+                    "D10 5 日均線今日由下向上穿過 10 日均線（昨日 ≤、今日 >）",true){it.dMa5Crossed10},
+                ScanCondition(DPattern.MA5_CROSS_20,
+                    "D11 5 日均線今日由下向上穿過 20 日均線（昨日 ≤、今日 >）",true){it.dMa5Crossed20}
+            )
+            return originalD+aOptions+chipOptions
         }
         val basic = listOf(
             ScanCondition("price", "股價 ≥ 50 元") { it.last?.close?.let { p -> p >= 50 } },
@@ -171,6 +185,66 @@ class RuleMetrics(val s: StockSnapshot) {
         return (m.maxOrNull()!! - m.minOrNull()!!) / ma20 <= 0.03 + 1e-12
     }
     val ma5Up: Boolean? get() = avg(5, 1)?.let { old -> ma5?.let { it > old } }
+
+    // D new institutional data is evaluated on the LAST available K-line date.
+    // A current-day snapshot cannot be used before its asOf time, while any
+    // earlier trading day must have a completed >=13:25 snapshot.
+    private fun dChipForDate(chip:DChipDay?,date:LocalDate):DChipDay? {
+        if(chip?.date!=date)return null
+        if(date>today)return null
+        return if(date==today){
+            val asOf=Instant.ofEpochMilli(s.timestamp).atZone(TAIPEI).toLocalTime()
+            chip.takeIf{!it.asOf.isAfter(asOf)}
+        }else chip.takeIf{it.completeDay}
+    }
+    private val dCurrent: DChipDay? get()=last?.let{dChipForDate(s.dChipToday,tradingDate(it.time))}
+    private val dPrevious: DChipDay? get()=bars.getOrNull(bars.lastIndex-1)
+        ?.let{dChipForDate(s.dChipPrevious,tradingDate(it.time))}
+    val dBigHolderIncreased:Boolean? get() {
+        val a=dCurrent?.bigHolderPct?:return null
+        val b=dPrevious?.bigHolderPct?:return null
+        return a-b>=0.01-1e-9
+    }
+    val dMainForce5Increased:Boolean? get() {
+        val a=dCurrent?.mainForce5Pct?:return null
+        val b=dPrevious?.mainForce5Pct?:return null
+        return a>b+1e-10
+    }
+    val dInstitutionBoughtToday:Boolean? get() {
+        val session=last?.let{tradingDate(it.time)}?:return null
+        val c=dCurrent
+        val foreign=c?.foreignNetShares?:s.sourceStock?.foreignDaily?.firstOrNull{it.date==session}?.netBuy
+        val trust=c?.trustNetShares?:s.sourceStock?.trustDaily?.firstOrNull{it.date==session}?.netBuy
+        return when {
+            foreign?.let{it>0L}==true||trust?.let{it>0L}==true->true
+            foreign!=null&&trust!=null->false
+            else->null
+        }
+    }
+    private fun dRisingCross(short:Int,long:Int):Boolean? {
+        if(closes.size<long+1)return null
+        if(closes.takeLast(long+1).any{!it.isFinite()||it<=0.0})return null
+        val nowShort=avg(short)?:return null
+        val nowLong=avg(long)?:return null
+        val priorShort=avg(short,1)?:return null
+        val priorLong=avg(long,1)?:return null
+        return priorShort<=priorLong&&nowShort>nowLong&&nowShort>priorShort
+    }
+    val dMa5Crossed10:Boolean? get()=dRisingCross(5,10)
+    val dMa5Crossed20:Boolean? get()=dRisingCross(5,20)
+    /** Human-readable audit, not a fabricated ownership estimate. */
+    fun dChipAudit():String {
+        val current=dCurrent;val previous=dPrevious
+        fun p(n:Double?):String=n?.let{java.lang.String.format(java.util.Locale.TAIWAN,"%.4f%%",it)}?:"待查核"
+        fun shares(n:Long?):String=n?.let{java.lang.String.format(java.util.Locale.TAIWAN,"%,d 股",it)}?:"待查核"
+        return listOf(
+            "大戶持股：${p(previous?.bigHolderPct)} → ${p(current?.bigHolderPct)}",
+            "主力5日集中度：${p(previous?.mainForce5Pct)} → ${p(current?.mainForce5Pct)}",
+            "今日外資／投信：${shares(current?.foreignNetShares)}／${shares(current?.trustNetShares)}",
+            "資料來源：${current?.source?:"尚未匯入可靠每日籌碼資料"} · 資料時間：${current?.asOf?:"—"}",
+            "集保大戶資料通常每週公告，不能偽裝成每日資料；上述比例需同口徑、同股票每日紀錄"
+        ).joinToString("\n")
+    }
     /**
      * A rising 5MA approaching/touching 10MA from below or just across it.
      * Both are calculated from completed daily prices (no intraday fabricated 5MA).

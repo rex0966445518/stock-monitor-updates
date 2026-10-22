@@ -107,6 +107,10 @@ class BacktestWorker(c:Context,p:WorkerParameters):Worker(c,p){
             val data=BacktestData(applicationContext).load(s,progress,cancel)
             val flows=com.rex.twboardingscanner.data.TradeSideVolumeStore(applicationContext)
             val flowRevision=flows.revision()
+            val chips=com.rex.twboardingscanner.data.DChipStore(applicationContext)
+            val chipRevision=chips.revision()
+            var chipCode=""
+            var chipSamples:Map<LocalDate,com.rex.twboardingscanner.domain.DChipDay> = emptyMap()
             var lastCode=""
             var samples:Map<LocalDate,com.rex.twboardingscanner.domain.TradeSideVolume> = emptyMap()
             val rawPrepared=BacktestEngine.prepare(data.series,s,progress,cancel,flowFor={code,day->
@@ -114,8 +118,16 @@ class BacktestWorker(c:Context,p:WorkerParameters):Worker(c,p){
                     lastCode=code;samples=flows.forCode(code,s.start,s.end,completed=true)
                 }
                 samples[day]
-            },benchmark=data.market.associate{it.date to it.close})
+            },benchmark=data.market.associate{it.date to it.close},
+                chipFor={code,day->
+                    if(chipCode!=code){
+                        chipCode=code
+                        chipSamples=chips.forCode(code,s.start.minusDays(14),s.end,completed=true)
+                    }
+                    chipSamples[day]
+                })
             check(flows.revision()==flowRevision){"交易日內外盤資料在回測中變動，結果不可混用"}
+            check(chips.revision()==chipRevision){"D 每日籌碼來源在回測中已更新，請建立新批次避免混用"}
             val prepared=rawPrepared.copy(marketGuards=if(s.marketGuardVersion>0)com.rex.twboardingscanner.domain.MarketCrashGuard.forDays(data.market,rawPrepared.days) else emptyMap())
             val run=BacktestEngine.run(prepared,s,progress,cancel)
             check(!cancel()){ "已取消回測" }

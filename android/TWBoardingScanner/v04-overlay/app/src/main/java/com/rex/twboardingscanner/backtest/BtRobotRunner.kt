@@ -25,9 +25,11 @@ internal object BtRobotRunner {
         val frozen=frozenSession?.let{BtSettingsCodec.decode(it.getJSONObject("settings")).stockPolicy}
         val flowSource=com.rex.twboardingscanner.data.TradeSideVolumeStore(context)
         val flowRevision=frozenSession?.optString("flowRevision",flowSource.revision())?:flowSource.revision()
+        val chips=com.rex.twboardingscanner.data.DChipStore(context)
+        val chipRevision=frozenSession?.optString("dChipRevision",chips.revision())?:chips.revision()
         fun status(message:String,state:String="RUNNING")=store.status(id,token,message,state,owner)
         val stagePattern=Regex("分段套用條件 (\\d+)/(\\d+) 檔")
-        val cancellation=RobotCancellation(stopped,{!store.owns(id,token,owner)||policy.read()!=frozen||flowSource.revision()!=flowRevision})
+        val cancellation=RobotCancellation(stopped,{!store.owns(id,token,owner)||policy.read()!=frozen||flowSource.revision()!=flowRevision||chips.revision()!=chipRevision})
         val cancel={cancellation.check()}
         if(cancel())return@synchronized Outcome.STOP
         val sliceStarted=android.os.SystemClock.elapsedRealtime()
@@ -69,14 +71,23 @@ internal object BtRobotRunner {
                 require(expected.isEmpty()||dataDigest==expected){"資料快照校驗失敗；請建立新測試，避免混用行情"}
                 store.coverage(id,token,data.series.size,data.requested,dataDigest,owner)
                 val indexFile=store.conditionFile(id)
-                val fingerprint=BtConditionIndex.fingerprint(dataDigest,base,flowRevision)
+                val fingerprint=BtConditionIndex.fingerprint(dataDigest,base,flowRevision,chipRevision)
                 var lastCode=""
                 var samples:Map<java.time.LocalDate,com.rex.twboardingscanner.domain.TradeSideVolume> = emptyMap()
+                var chipCode=""
+                var chipSamples:Map<java.time.LocalDate,com.rex.twboardingscanner.domain.DChipDay> = emptyMap()
                 val index=BtRobotIndex.open(data.series,base,java.io.File(indexFile.path+".parts"),fingerprint,progress,interrupted,
                     flowFor={code,day->
                         if(lastCode!=code){lastCode=code;samples=flowSource.forCode(code,base.start,base.end,completed=true)}
                         samples[day]
-                    },benchmark=data.market.associate{it.date to it.close})
+                    },benchmark=data.market.associate{it.date to it.close},
+                    chipFor={code,day->
+                        if(chipCode!=code){
+                            chipCode=code
+                            chipSamples=chips.forCode(code,base.start.minusDays(14),base.end,completed=true)
+                        }
+                        chipSamples[day]
+                    })
                 progress("歷史條件已備妥，準備交易測算…")
                 Runtime(id,data,index,BacktestEngine.executionIndex(data.series,base.start,base.end),com.rex.twboardingscanner.domain.MarketCrashGuard.forDays(data.market,index.days)).also{cached=it}
             }
