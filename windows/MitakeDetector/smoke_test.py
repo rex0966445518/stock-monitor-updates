@@ -105,7 +105,7 @@ def run_smoke_test(report):
         app.display_scale.apply(original_scale,save=False,resize=False)
         assert not hasattr(app,'status_label')
         assert app.log.cget('wrap')=='word'
-        app.status.set('掃描已暫停\n原因：焦點離開三竹\n第22段，已讀39檔\n進度保留，按F8接續')
+        app.status.set('掃描已暫停\n原因：焦點離開三竹\n第22段，已讀39檔\n進度保留，按F1接續')
         assert '第22段，已讀39檔' in app.log.get('1.0','end')
         app.scan_rate_var.set('17.9 秒 / 段 | 0.33 檔 / 秒')
         assert str(app.rate_label.cget('textvariable'))==str(app.scan_rate_var)
@@ -396,7 +396,7 @@ def run_smoke_test(report):
 
         # Verify the actual GUI has only the everyday action buttons.
         actions=[child.cget('text') for child in app.main_actions.winfo_children() if child.winfo_class()=='TButton']
-        assert actions==['▶ 開始掃描 F8','Ⅱ 暫停','重新開始','掃描設定','排行定位'],actions
+        assert actions==['▶ 開始掃描 F1','Ⅱ 暫停 F1','重新開始','掃描設定','學習排行榜'],actions
         menu_labels=[app.advanced_menu.entrycget(i,'label') for i in range(app.advanced_menu.index('end')+1)]
         assert {'重新開始','緩漲明細／設定','手機連動／配對','使用說明'}<=set(menu_labels)
         from tkinter import ttk
@@ -503,3 +503,4 @@ def run_smoke_test(report):
     if not info.get('ok'):
         if sys.stdout is not None:print(json.dumps(info,ensure_ascii=True))
         raise SystemExit(1)
+

@@ -35,7 +35,7 @@ def open_training(app):
     app.generation+=1;token=app.generation
     app.stop_event=stop=threading.Event()
     updates=queue.Queue();commands=queue.Queue();progress=Progress(RANKINGS)
-    top=app.tk.Toplevel(app.root);top.title('學習排行榜｜F8停止');top.geometry('680x740')
+    top=app.tk.Toplevel(app.root);top.title('學習排行榜｜F1停止');top.geometry('680x740')
     status=app.tk.StringVar(value='每輪隨機測試全部排行；每項連續三次自動核對成功才完成。')
     app.ttk.Label(top,textvariable=status,wraplength=650).pack(fill='x',padx=10,pady=8)
     table=app.ttk.Treeview(top,columns=('streak','tries','fail'),height=10)
@@ -121,7 +121,7 @@ def open_training(app):
                 rounds+=1
                 for name in progress.round():
                     if stop.is_set():break
-                    updates.put(('status',f'第 {rounds} 輪｜自動測試「{name}」｜F8停止'))
+                    updates.put(('status',f'第 {rounds} 輪｜自動測試「{name}」｜F1停止'))
                     try:
                         c.check()
                         # Prevent the current label fast path from counting as navigation.
@@ -151,3 +151,4 @@ def open_training(app):
     app.worker_thread=threading.Thread(target=job,daemon=True)
     # Keep teaching UI off the target screenshot during automatic navigation.
     top.withdraw();app.worker_thread.start();top.after(50,pump)
+

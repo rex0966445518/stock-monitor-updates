@@ -1,3 +1,8 @@
+## v0.3.118
+
+- 開始／繼續與暫停快捷鍵統一改為 F1；同步更新主頁按鈕、學習排行、編號預覽及停止提示。F8 不再觸發掃描控制。
+- 更新安裝版介面驗證，核對「學習排行榜」入口及 F1 按鈕。
+
 ## v0.3.117
 
 - 新增主頁「學習排行榜」：每輪隨機測試完整排行，各項連續三次自動核對成功才完成。
@@ -232,6 +237,7 @@
 研究依據：Fidelity Accumulation Distribution（價量交叉觀察）；TDCC集保股權分散表（週末持股，不能確認盤中買方）。
 https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/accumulation-distribution
 https://original-www.tdcc.com.tw/portal/zh/smWeb/qryStock
+
 
 
 

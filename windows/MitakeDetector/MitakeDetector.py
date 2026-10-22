@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """漲停板探測器-雷允澤製 — Windows 桌面觀察工具。
 啟動：python MitakeDetector.py；核心驗證：python MitakeDetector.py --self-test
-開啟三竹熱門排行後按F8自動設定並開始掃描。
+開啟三竹熱門排行後按F1自動設定並開始掃描。
 本程式採可見畫面 OCR，沒有三竹 SDK 登入或官方行情串接。
 """
 import csv, dataclasses, datetime as dt, importlib.util, json, math, os
@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.117'
+VERSION = '0.3.118'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -173,9 +173,9 @@ class Engine:
 HELP = '''漲停板探測器-雷允澤製 v0.3.31
 
 【開始觀察】
-開啟三竹「熱門排行」，保持視窗完整可見，按F8或「開始掃描」。
+開啟三竹「熱門排行」，保持視窗完整可見，按F1或「開始掃描」。
 首次會自動定位左上類目選單、表格及六個欄位，再開始持續輪切。
-再次按F8停止。切離目標視窗、遮住操作區或縮放視窗會停止。
+再次按F1停止。切離目標視窗、遮住操作區或縮放視窗會停止。
 左上類目選單與股票表格分別操作捲動，不需手動切換類目。
 
 【掃描進度】
@@ -288,7 +288,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         bar = ttk.Frame(root); bar.pack(fill='x', padx=18, pady=(0,10))
         metric_bar=ttk.Frame(bar);metric_bar.pack(side='right',fill='both',expand=True,padx=(14,0))
         metrics(self,metric_bar)
-        for label, action in [('▶ 開始掃描 F8', self.begin_observation), ('Ⅱ 暫停', self.stop), ('重新開始', self.restart_observation), ('掃描設定', self.configure_auto), ('學習排行榜', self.learn_rankings)]:
+        for label, action in [('▶ 開始掃描 F1', self.begin_observation), ('Ⅱ 暫停 F1', self.stop), ('重新開始', self.restart_observation), ('掃描設定', self.configure_auto), ('學習排行榜', self.learn_rankings)]:
             ttk.Button(bar, text=label, command=action,style='Gold.TButton' if action==self.begin_observation else 'TButton').pack(side='left', padx=4,fill='y')
         advanced = ttk.Menubutton(self.header_navigation, text='進階工具')
         menu = tk.Menu(advanced, tearoff=False)
@@ -300,7 +300,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         auto_bar = ttk.Frame(root);auto_bar.pack(fill='x',padx=20,pady=(0,6))
         self.voice_var=tk.BooleanVar(value=self.config.get('voice_enabled',True))
         ttk.Checkbutton(auto_bar,text='語音提醒',variable=self.voice_var,command=self.toggle_task_voice).pack(side='left',padx=5)
-        ttk.Label(auto_bar, text='F8 開始／暫停 · 三竹畫面保持可見').pack(side='left', padx=8)
+        ttk.Label(auto_bar, text='F1 開始／暫停 · 三竹畫面保持可見').pack(side='left', padx=8)
         self.vars = {}
         for key in ('min_price','min_volume','min_gain','max_gain','interval','cooldown','min_turnover','accel'):
             self.vars[key]=tk.StringVar(value=str(self.config[key]))
@@ -310,14 +310,14 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         self.vars['guard_enabled']=tk.BooleanVar(value=self.config['guard_enabled'])
         for key in ['guard_warmup','guard_window','guard_hold','guard_max_gap','guard_min_rise','guard_max_pullback']:
             self.vars[key]=tk.StringVar(value=str(self.config[key]))
-        self.scan_phase=tk.StringVar(value='待機｜按 F8 開始連續掃描')
+        self.scan_phase=tk.StringVar(value='待機｜按 F1 開始連續掃描')
         self.header_status.pack(fill='x',padx=18,pady=(0,10))
         self.scan_progress=ttk.Progressbar(self.header_status,mode='indeterminate',length=230)
         self.scan_progress.pack(side='right',padx=12,pady=12)
         self.phase_label=tk.Label(self.header_status,textvariable=self.scan_phase,bg='#12243a',fg='#68f5d1',font=('Microsoft JhengHei',11,'bold'),anchor='w',justify='left')
         self.phase_label.pack(fill='x',padx=10,pady=8)
         self.phase_label.bind('<Configure>',lambda event:self.phase_label.configure(wraplength=max(80,event.width-8)))
-        self.status = tk.StringVar(value='開啟三竹「熱門排行」，按 F8 或「開始掃描」。首次會自動定位；再次按 F8 停止。')
+        self.status = tk.StringVar(value='開啟三竹「熱門排行」，按 F1 或「開始掃描」。首次會自動定位；再次按 F1 停止。')
         from scan_rate import ScanRate
         self.scan_rate=ScanRate();self.scan_rate_var=tk.StringVar(value=self.scan_rate.text())
         self.observation_summary=tk.StringVar(value='尚未讀取股票資料｜轉強候選待判斷')
@@ -402,7 +402,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         self.init_steady()
         self.load_daily_table()
         self.root.protocol('WM_DELETE_WINDOW', self.close)
-        self.init_f8()
+        self.init_f1()
         root.after(150, self.poll)
         root.after(25, self.poll_capture_clear)
 
@@ -433,7 +433,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
                 if state.get('day')==dt.date.today().isoformat():data=state.get('ui')
             if data:
                 self.restore_scan_snapshot(data)
-                self.status.set('已還原今日表格｜舊資料待複查，按F8繼續掃描')
+                self.status.set('已還原今日表格｜舊資料待複查，按F1繼續掃描')
         except (ValueError,TypeError,KeyError,OSError) as exc:self.say('當日表格還原失敗，原檔保留：'+str(exc))
 
     def save_scan_snapshot(self):
@@ -660,7 +660,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         self.close_task_progress()
         self.stop_event.set(); self.generation += 1
         self.sync_power_guard(closing=True)
-        self.status.set(self.mode + '｜已暫停，進度保留；按F8接續，或按重新開始清空本輪。'); self.say('停止請求已送出。')
+        self.status.set(self.mode + '｜已暫停，進度保留；按F1接續，或按重新開始清空本輪。'); self.say('停止請求已送出。')
         if self.auto_active:
             self.auto_active=False; self.root.deiconify()
 
@@ -942,15 +942,15 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
                 elif kind == 'auto_setup_done':
                     cfg,target,count,start_after=payload
                     self.auto_active=False;self.auto_hwnd=target;self.config=cfg
-                    self.scan_phase.set('設定完成｜準備連續掃描' if start_after else '設定完成｜按 F8 開始連續掃描')
-                    self.save();self.status.set(f'自動設定完成｜已驗證 {count} 檔資料｜F8 開始／停止')
+                    self.scan_phase.set('設定完成｜準備連續掃描' if start_after else '設定完成｜按 F1 開始連續掃描')
+                    self.save();self.status.set(f'自動設定完成｜已驗證 {count} 檔資料｜F1 開始／停止')
                     self.say(f'已自動定位選單、表格與六欄；保留輪切 {len(cfg["auto_config"]["rankings"])} 個排行、停留 {cfg["auto_config"]["seconds"]} 秒；持續重複觀察轉強條件。')
                     if start_after:
                         self.update_task_progress('自動設定完成，準備啟動輪切掃描…')
                         self.root.after(300,lambda:self.start_auto(announce=False))
                     else:self.announce_task('自動設定完成');self.close_task_progress();self.root.deiconify()
                 elif kind in ('auto_end','auto_failed'):
-                    self.scan_phase.set('測試完成｜按 F8 開始連續掃描' if payload=='輪切測試完成' else '已暫停｜進度已保留，按 F8 接續')
+                    self.scan_phase.set('測試完成｜按 F1 開始連續掃描' if payload=='輪切測試完成' else '已暫停｜進度已保留，按 F1 接續')
                     self.phase_label.configure(fg='#ffb45e')
                     self.scan_rate.stop()
                     self.save_scan_snapshot()
@@ -1247,6 +1247,7 @@ if __name__ == '__main__':
                 sys.exit(0)
         import tkinter as tk
         root = tk.Tk(); App(root); root.mainloop()
+
 
 
 

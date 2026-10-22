@@ -1,4 +1,4 @@
-"""Background research network work is independent of OCR and its F8 lifecycle."""
+"""Background research network work is independent of OCR and its F1 lifecycle."""
 import datetime as dt
 import hashlib
 import json
@@ -149,3 +149,4 @@ class ResearchService:
             finally:
                 with self.condition:self.inflight.difference_update(codes)
         
+
