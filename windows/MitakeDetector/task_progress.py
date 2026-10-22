@@ -24,7 +24,7 @@ def goal_conditions(config):
 
 
 def goal_title(stage,pulse='●'):
-    return f'{pulse} {SCAN_GOAL}｜{stage}｜F1 停止'
+    return f'{pulse} {SCAN_GOAL}｜{stage}｜F8 停止'
 
 
 def task_stage(text):

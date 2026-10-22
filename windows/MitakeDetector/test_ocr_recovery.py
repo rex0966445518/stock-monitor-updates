@@ -53,7 +53,7 @@ class RecoveryTests(unittest.TestCase):
             self.assertEqual(app.detect_layout_recovering(Image.new('RGB',(100,100))),layout)
             self.assertEqual(detect.call_count,2)
         self.assertFalse(app.force_fresh_ocr)
-        with patch('auto_detect.detect_layout',side_effect=AutomationStopped('F1')) as detect:
+        with patch('auto_detect.detect_layout',side_effect=AutomationStopped('F8')) as detect:
             with self.assertRaises(AutomationStopped):app.detect_layout_recovering(Image.new('RGB',(100,100)))
             self.assertEqual(detect.call_count,1)
 

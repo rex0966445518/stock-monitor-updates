@@ -308,7 +308,7 @@ def preview_numbers(c,menu_roi,combo,region,native,geometry,show,clock=None,seco
             c.click((combo['left']+combo['width']//2,combo['top']+combo['height']//2))
             return len(seen)
         if clock()>=deadline:
-            raise ValueError(f'預覽逾時：已預覽 {len(seen)}/{expected} 項，尚未確認到底；F1可重新啟動掃描')
+            raise ValueError(f'預覽逾時：已預覽 {len(seen)}/{expected} 項，尚未確認到底；F8可重新啟動掃描')
         c.pause(1)
         c.scroll(center,-120);c.pause(.2)
     raise ValueError(f'預覽未完成：已預覽 {len(seen)}/{expected} 項，已達捲動次數上限')
@@ -328,7 +328,7 @@ class NumberOverlay:
         # Preserve negative monitor coordinates; desktop geometry is not primary-screen-only.
         self.window.geometry(f'{width}x{height}{x:+d}{y:+d}');self.canvas.delete('all')
         if preview is not None:
-            self.canvas.create_text(width//2,28,text=f'自動完整預覽\n{preview}\nF1 結束',fill='#ffe08a',font=('Segoe UI',9,'bold'))
+            self.canvas.create_text(width//2,28,text=f'自動完整預覽\n{preview}\nF8 結束',fill='#ffe08a',font=('Segoe UI',9,'bold'))
         for number,center in payload['rows']:
             self.canvas.create_text(width-6,center+header,text=str(number),anchor='e',fill='#68f5d1',font=('Segoe UI',10,'bold'))
         from task_progress import TaskProgress

@@ -4,7 +4,7 @@ import json
 import datetime as dt
 import threading
 import time
-from autoswitch import WindowsController, RankingSwitcher, RANKINGS, absolute_roi, validate_roi, F1Toggle, AutomationStopped
+from autoswitch import WindowsController, RankingSwitcher, RANKINGS, absolute_roi, validate_roi, F8Toggle, AutomationStopped
 
 
 def migrate_read_interval(config):
@@ -570,14 +570,14 @@ class AutoUI:
             self.say('股名記憶已清除，下次讀取時重新學習。')
         except OSError as exc:self.say('無法清除股名記憶：'+str(exc))
 
-    def init_f1(self):
-        self.f1_toggle=F1Toggle()
-        if __import__('os').name=='nt':self.root.after(20,self.poll_f1)
+    def init_f8(self):
+        self.f8_toggle=F8Toggle()
+        if __import__('os').name=='nt':self.root.after(20,self.poll_f8)
 
-    def poll_f1(self):
+    def poll_f8(self):
         import ctypes
         busy=bool(getattr(self,'scan_retry_timer',None)) or self.auto_active or bool(self.worker_thread and self.worker_thread.is_alive())
-        action=self.f1_toggle.update(bool(ctypes.windll.user32.GetAsyncKeyState(0x70)&0x8000),busy)
+        action=self.f8_toggle.update(bool(ctypes.windll.user32.GetAsyncKeyState(0x77)&0x8000),busy)
         if action=='stop':self.stop()
         elif action=='start':
             auto=self.config.get('auto_config') or {}
@@ -594,8 +594,8 @@ class AutoUI:
             else:
                 candidates=[w for w in WindowsController.windows() if ('熱門排行' in w[1] or '热门排行' in w[1]) and w[0]==fg]
                 if len(candidates)==1:self.auto_setup(start_after=True)
-                else:self.say('F1未啟動：請將熱門排行視窗放在最前方。')
-        self.root.after(20,self.poll_f1)
+                else:self.say('F8未啟動：請將熱門排行視窗放在最前方。')
+        self.root.after(20,self.poll_f8)
 
     def build_filter_settings(self,parent):
         self.ttk.Label(parent,text='變更後請儲存，並重新開始掃描以套用。',wraplength=800).pack(anchor='w',padx=18,pady=15)
@@ -631,7 +631,7 @@ class AutoUI:
         windows=[w for w in WindowsController.windows() if '漲停板探測器-雷允澤製' not in w[1] and '三竹盤中轉強偵測器' not in w[1] and '三竹自動輪切設定' not in w[1]]
         choices=[f'{title}  [視窗 {hwnd}]' for hwnd,title in windows]
         self.ttk.Button(body,text='一鍵自動設定（免框選）',command=lambda:(top.destroy(),self.auto_setup())).pack(anchor='w',padx=15,pady=5)
-        self.ttk.Label(body,text='1. 選擇三竹視窗（啟動後會使用滑鼠；F1開始／停止，可操作探測器主頁，三竹畫面保持可見）').pack(anchor='w',padx=15,pady=10)
+        self.ttk.Label(body,text='1. 選擇三竹視窗（啟動後會使用滑鼠；F8開始／停止，可操作探測器主頁，三竹畫面保持可見）').pack(anchor='w',padx=15,pady=10)
         choice=self.tk.StringVar()
         combo=self.ttk.Combobox(body,textvariable=choice,values=choices,state='readonly',width=90);combo.pack(padx=15,fill='x')
         selected=next((i for i,w in enumerate(windows) if w[1]==cfg.get('title')),None)
@@ -792,7 +792,7 @@ class AutoUI:
             target=self.resolve_auto_window(cfg)
         except Exception as exc:messagebox.showerror('需要設定',str(exc));return
         self.generation+=1;token=self.generation;self.stop_event=threading.Event();stop=self.stop_event
-        self.status.set('完整編號預覽（非行情掃描）｜自動向下捲動至底部；F1可提前結束')
+        self.status.set('完整編號預覽（非行情掃描）｜自動向下捲動至底部；F8可提前結束')
         def job():
             try:
                 c=WindowsController(target,stop);c.activate()
@@ -806,9 +806,9 @@ class AutoUI:
                     im,_=c.image(cfg['menu']);geometry=PixelMenu(im,self.read_auto_ocr(im))
                 def show_preview(data):
                     self.events.put((token,'menu_numbers',data))
-                    self.events.put((token,'auto_status','完整編號預覽｜'+data['preview_label']+'｜自動向下捲動，F1結束'))
+                    self.events.put((token,'auto_status','完整編號預覽｜'+data['preview_label']+'｜自動向下捲動，F8結束'))
                 count=preview_numbers(c,cfg['menu'],combo,region,native,geometry,show_preview)
-                self.events.put((token,'message',f'編號預覽完成，共 {count} 項，已收起選單；要掃描請按「開始／繼續」或F1'))
+                self.events.put((token,'message',f'編號預覽完成，共 {count} 項，已收起選單；要掃描請按「開始／繼續」或F8'))
             except Exception as exc:self.events.put((token,'message','編號預覽結束：'+str(exc)))
             finally:stop.set();self.events.put((token,'menu_numbers',None))
         self.worker_thread=threading.Thread(target=job,daemon=True);self.worker_thread.start()
@@ -908,7 +908,7 @@ class AutoUI:
             if sum(background)<384:raw=ImageOps.invert(raw)
             inputs.append(np.asarray(raw)[:,:,::-1].copy())
         results=[]
-        # Bound each inference batch so F1 is checked between batches.
+        # Bound each inference batch so F8 is checked between batches.
         for start in range(0,len(inputs),16):
             context=getattr(self,'scan_focus_context',None)
             if context and context[1].is_set():raise AutomationStopped('掃描已暫停')
@@ -974,7 +974,7 @@ class AutoUI:
         count=getattr(self,'scan_retry_count',0)
         self.scan_retry_count=count+1
         delay=(5,15,30,60)[min(count,3)]
-        self.scan_phase.set(f'掃描失敗｜{delay}秒後自動恢復（第{count+1}次）｜F1可取消')
+        self.scan_phase.set(f'掃描失敗｜{delay}秒後自動恢復（第{count+1}次）｜F8可取消')
         self.say(self.scan_phase.get())
         def resume():
             self.scan_retry_timer=None
@@ -1293,12 +1293,12 @@ class AutoUI:
                                 context.clear();context.update(scan_context(cfg))
                                 if store:store.update(context,dict(cycle=cycle+1,rank=0,table=None,round_started=None))
                                 self.events.put((token,'auto_layout_done',dict(auto_config=auto.copy(),column_bounds=cfg['column_bounds'],region=cfg['region'])))
-                                self.events.put((token,'auto_status','選單重新定位完成，2秒後重新開始排行掃描；F1可停止'))
+                                self.events.put((token,'auto_status','選單重新定位完成，2秒後重新開始排行掃描；F8可停止'))
                                 c.pause(2)
                             except AutomationStopped:raise
                             except Exception as recovery_error:
                                 self.events.put((token,'ranking_skipped',dict(ranking='排行選單自動校正',cycle=cycle,reason=str(recovery_error)[:300])))
-                                self.events.put((token,'auto_status','選單自動校正未完成：'+str(recovery_error)+'｜30秒後再試；F1可停止'))
+                                self.events.put((token,'auto_status','選單自動校正未完成：'+str(recovery_error)+'｜30秒後再試；F8可停止'))
                                 c.pause(30)
                         else:
                             self.events.put((token,'auto_status','排行可切換，但資料讀取全部失敗｜'+details+'｜30秒後再試'))
@@ -1311,7 +1311,7 @@ class AutoUI:
                 from scan_diagnostics import record_interruption
                 from MitakeDetector import BASE,VERSION
                 location=record_interruption(BASE/'scan-interruptions.jsonl',VERSION,diagnostic,exc)
-                recoverable=not test_only and not stop.is_set() and not str(exc).startswith('F1')
+                recoverable=not test_only and not stop.is_set() and not str(exc).startswith('F8')
                 if recoverable:self.events.put((token,'ranking_skipped',dict(ranking=diagnostic.get('ranking','掃描流程'),cycle=diagnostic.get('cycle',0),reason='本次掃描中斷，將自動恢復：'+str(exc))))
                 self.events.put((token,'auto_failed' if recoverable else 'auto_end','掃描已暫停，進度保留：'+str(exc)+'｜'+location))
             finally:

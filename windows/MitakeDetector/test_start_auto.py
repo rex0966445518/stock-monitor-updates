@@ -212,7 +212,7 @@ class OptionalLearningRecoveryTests(unittest.TestCase):
             self.assertTrue(any(kind=='auto_phase' and '第2輪' in value for _,kind,value in messages))
 
 class PriorDayStartTests(unittest.TestCase):
-    def test_f1_start_archives_prior_day_and_enters_today_scan_without_dialog(self):
+    def test_f8_start_archives_prior_day_and_enters_today_scan_without_dialog(self):
         import json
         from unittest.mock import Mock
         cfg=dict(DEFAULT,auto_config=dict(title='TEST RANK',window_size=[800,600],combo=[0,0,.2,.1],menu=[0,.1,.3,.5],table=[0,.2,1,.8],rankings=['漲幅排行'],seconds=3,pages=1,full_table=True))
@@ -548,10 +548,10 @@ class RankingSkipTests(unittest.TestCase):
         self.assertEqual(scanned.count('開盤強勢'),3)
         self.assertTrue(any(k=='ranking_skipped' for _,k,_ in messages))
     def test_safety_stop_does_not_skip_or_notify(self):
-        for reason in ['F1緊急停止','焦點已切換到其他軟體','操作區域被其他視窗遮住']:
+        for reason in ['F8緊急停止','焦點已切換到其他軟體','操作區域被其他視窗遮住']:
             visited,scanned,delays,messages,_=self.run_worker(AutomationStopped(reason))
             self.assertEqual(visited,['開盤強勢']);self.assertFalse(scanned)
-            if reason.startswith('F1'):
+            if reason.startswith('F8'):
                 self.assertFalse(any(k in ('ranking_skipped','auto_failed') for _,k,_ in messages))
             else:
                 self.assertTrue(any(k=='auto_failed' for _,k,_ in messages))
@@ -610,7 +610,7 @@ class SetupValidationTests(unittest.TestCase):
 
     def test_stop_propagates_without_retry(self):
         from unittest.mock import Mock
-        ui=AutoUI();ui.events=queue.Queue();c=Mock();c.check.side_effect=AutomationStopped('F1')
+        ui=AutoUI();ui.events=queue.Queue();c=Mock();c.check.side_effect=AutomationStopped('F8')
         with self.assertRaises(AutomationStopped):ui.validate_setup_table(c,{}, {},1)
         c.image.assert_not_called()
 

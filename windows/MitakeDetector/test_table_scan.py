@@ -196,7 +196,7 @@ class AutomaticRecoveryTests(unittest.TestCase):
     def test_stop_and_unexpected_errors_are_not_retried(self):
         from table_scan import scan_with_recovery
         from autoswitch import AutomationStopped
-        for error in [AutomationStopped('F1'),ValueError('bad configuration')]:
+        for error in [AutomationStopped('F8'),ValueError('bad configuration')]:
             calls=[]
             def run(resume):calls.append(True);raise error
             with self.assertRaises(type(error)):scan_with_recovery(run,[None],lambda:None,lambda _:None,lambda _:None)
@@ -210,7 +210,7 @@ class AutomaticRecoveryTests(unittest.TestCase):
             scan_with_recovery(run,[None],lambda:None,lambda _:None,lambda _:None)
         self.assertEqual(len(calls),3)
         calls.clear()
-        def pause(_):raise AutomationStopped('F1 pressed')
+        def pause(_):raise AutomationStopped('F8 pressed')
         with self.assertRaises(AutomationStopped):scan_with_recovery(run,[None],lambda:None,lambda _:None,pause)
         self.assertEqual(len(calls),1)
 

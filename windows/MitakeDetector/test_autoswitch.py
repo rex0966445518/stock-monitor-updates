@@ -1,6 +1,6 @@
 import threading
 import unittest
-from autoswitch import RankingSwitcher,AutomationStopped,absolute_roi,normalized,find_menu_item,validate_roi,F1Toggle
+from autoswitch import RankingSwitcher,AutomationStopped,absolute_roi,normalized,find_menu_item,validate_roi,F8Toggle
 
 
 def token(text,y=20):return ([[10,y-5],[100,y-5],[100,y+5],[10,y+5]],text,.99)
@@ -15,21 +15,21 @@ class FakeController:
     def pause(self,*args,**kwargs):self.check()
 
 class AutoTests(unittest.TestCase):
-    def test_f1_start_release_and_hold(self):
-        key=F1Toggle()
+    def test_f8_start_release_and_hold(self):
+        key=F8Toggle()
         self.assertIsNone(key.update(True,False))
         for _ in range(20):self.assertIsNone(key.update(True,False))
         self.assertEqual(key.update(False,False),'start')
         self.assertIsNone(key.update(False,False))
-    def test_f1_stop_cannot_restart_on_release(self):
-        key=F1Toggle()
+    def test_f8_stop_cannot_restart_on_release(self):
+        key=F8Toggle()
         self.assertEqual(key.update(True,True),'stop')
         self.assertIsNone(key.update(True,False))
         self.assertIsNone(key.update(False,False))
         self.assertIsNone(key.update(True,False))
         self.assertEqual(key.update(False,False),'start')
-    def test_f1_busy_during_release(self):
-        key=F1Toggle();key.update(True,False)
+    def test_f8_busy_during_release(self):
+        key=F8Toggle();key.update(True,False)
         self.assertIsNone(key.update(False,True))
     def test_small_wheel_steps_do_not_skip_target(self):
         class WheelController(FakeController):

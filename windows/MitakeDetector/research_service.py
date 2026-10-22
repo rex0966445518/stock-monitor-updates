@@ -1,4 +1,4 @@
-"""Background research network work is independent of OCR and its F1 lifecycle."""
+"""Background research network work is independent of OCR and its F8 lifecycle."""
 import datetime as dt
 import hashlib
 import json

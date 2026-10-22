@@ -79,7 +79,7 @@ class NumberTests(unittest.TestCase):
         for stop in [False,True]:
             e=Experience();c=FakeController();s=RankingSwitcher(c,Mock(),[.1,.1,.2,.04],[.1,.15,.2,.5],experience=e,numbering=True)
             s.label_matches=Mock(return_value=False);s.numbers.locate=Mock(return_value=(20,30))
-            s.verify_label=Mock(side_effect=AutomationStopped('F1') if stop else None,return_value=True)
+            s.verify_label=Mock(side_effect=AutomationStopped('F8') if stop else None,return_value=True)
             if stop:
                 with self.assertRaises(AutomationStopped):s.switch('開盤強勢')
                 self.assertIsNone(e.number('開盤強勢'))
@@ -140,7 +140,7 @@ class PreviewTests(unittest.TestCase):
             preview_numbers(c,[],{},dict(left=0,top=0,width=220,height=192),native,None,Mock(),clock=Mock(side_effect=[0,121]))
         self.assertEqual(c.actions,[])
 
-    def test_closed_popup_or_f1_never_clicks(self):
+    def test_closed_popup_or_f8_never_clicks(self):
         from menu_numbers import preview_numbers
         for stopped in (False,True):
             c=FakeController();c.stopped=stopped;native=Mock();native.rows.side_effect=ValueError('closed')

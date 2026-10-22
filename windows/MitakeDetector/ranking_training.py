@@ -20,6 +20,23 @@ class Progress:
     def complete(self):return all(v>=3 for v in self.streak.values())
 
 
+def replay_menu(switcher,page):
+    """Reopen after teaching UI took focus; never trust popup-open bookkeeping."""
+    c=switcher.c
+    c.activate();c.check()
+    c.u.keybd_event(0x1B,0,0,0);c.u.keybd_event(0x1B,0,2,0)
+    c.pause(.15)
+    _,combo=c.image(switcher.combo)
+    c.click((combo['left']+combo['width']//2,combo['top']+combo['height']//2))
+    switcher.menu_is_open=True;c.pause(.4)
+    from autoswitch import absolute_roi
+    region=absolute_roi(switcher.menu,c.rect())
+    center=(region['left']+region['width']//2,region['top']+region['height']//2)
+    c.scroll(center,120*60);c.pause(.35)
+    for _ in range(page):c.scroll(center,-120);c.pause(.45)
+    return c.image(switcher.menu)
+
+
 def open_training(app):
     from tkinter import messagebox
     from autoswitch import WindowsController,RankingSwitcher,RANKINGS,validate_roi,absolute_roi
@@ -35,7 +52,12 @@ def open_training(app):
     app.generation+=1;token=app.generation
     app.stop_event=stop=threading.Event()
     updates=queue.Queue();commands=queue.Queue();progress=Progress(RANKINGS)
-    top=app.tk.Toplevel(app.root);top.title('學習排行榜｜F1停止');top.geometry('680x740')
+    top=app.tk.Toplevel(app.root);top.title('學習排行榜｜F8停止');top.geometry('680x740');top.attributes('-topmost',True)
+    # Place beside the captured menu rather than hide the learning window.
+    rect=WindowsController(target,stop).rect();menu=absolute_roi(auto['menu'],rect)
+    right=menu['left']+menu['width']+16
+    x=right if right+680<=top.winfo_screenwidth() else max(0,menu['left']-696)
+    top.geometry(f'680x740+{x}+0')
     status=app.tk.StringVar(value='每輪隨機測試全部排行；每項連續三次自動核對成功才完成。')
     app.ttk.Label(top,textvariable=status,wraplength=650).pack(fill='x',padx=10,pady=8)
     table=app.ttk.Treeview(top,columns=('streak','tries','fail'),height=10)
@@ -49,8 +71,12 @@ def open_training(app):
     state={'image':None,'scale':1,'assisting':False,'done':False}
     buttons=app.ttk.Frame(top);buttons.pack(fill='x',pady=8)
     def send(action,value=None):
-        if not state['assisting'] or stop.is_set():return
-        state['assisting']=False;top.withdraw();commands.put((action,value))
+        if stop.is_set():return
+        if not state['assisting']:
+            status.set('正在自動定位，請等待下方選單截圖出現後，再點選截圖中的排行。');return
+        state['assisting']=False
+        status.set('已收到操作，正在還原選單並核對，請稍候…')
+        commands.put((action,value))
     app.ttk.Button(buttons,text='往下一段',command=lambda:send('next')).pack(side='left',padx=8)
     app.ttk.Button(buttons,text='回到頂部',command=lambda:send('home')).pack(side='left')
     app.ttk.Button(buttons,text='停止學習',command=stop.set).pack(side='right',padx=8)
@@ -70,7 +96,7 @@ def open_training(app):
                     im=data;scale=min(640/im.width,300/im.height,1)
                     state['scale']=scale;state['image']=ImageTk.PhotoImage(im.resize((max(1,round(im.width*scale)),max(1,round(im.height*scale)))))
                     canvas.delete('all');canvas.create_image(0,0,anchor='nw',image=state['image'])
-                    state['assisting']=True;top.deiconify();top.lift()
+                    state['assisting']=True;top.lift()
                 elif kind=='done':state['done']=True;status.set(data);top.deiconify()
         except queue.Empty:pass
         if not state['done']:top.after(50,pump)
@@ -85,35 +111,31 @@ def open_training(app):
             experience=Experience(BASE/'automation-experience.json',dict({k:auto.get(k) for k in ('title','window_size','combo','menu','table')},menu_catalog=RANKINGS),True)
             switcher=RankingSwitcher(c,app.read_auto_ocr,auto['combo'],auto['menu'],experience=experience,ocr_retry=app.read_menu_ocr_retry,numbering=auto.get('menu_numbering',True),menu_numbers=auto.get('menu_numbers',{}))
             def assist(name):
-                # All demonstration screenshots use a reproducible path from the top.
-                if not switcher.menu_is_open:
-                    _,combo=c.image(auto['combo']);c.click((combo['left']+combo['width']//2,combo['top']+combo['height']//2));c.pause(.4)
-                    switcher.menu_is_open=True
-                region=absolute_roi(auto['menu'],c.rect());center=(region['left']+region['width']//2,region['top']+region['height']//2)
-                c.scroll(center,120*60);c.pause(.35);page=0
+                page=0
+                im,region=replay_menu(switcher,page)
                 while not stop.is_set():
-                    im,region=c.image(auto['menu']);updates.put(('image',im))
+                    updates.put(('image',im))
                     while not stop.is_set():
                         try:action,value=commands.get(timeout=.1);break
                         except queue.Empty:continue
                     if stop.is_set():return
-                    c.activate()
-                    # Recheck exact pixels before using a click from an old screenshot.
-                    now,_=c.image(auto['menu'])
-                    if switcher.menu_signature(now)!=switcher.menu_signature(im):
-                        updates.put(('status','選單畫面已變動，重新擷取；請再點選「'+name+'」'));continue
-                    if action=='next':
-                        if page<59:c.scroll(center,-120);page+=1
-                        c.pause(.45);continue
-                    if action=='home':c.scroll(center,120*60);page=0;c.pause(.35);continue
+                    if action=='next':page=min(59,page+1)
+                    elif action=='home':page=0
+                    now,region=replay_menu(switcher,page)
+                    if action in ('next','home'):im=now;continue
+                    if now.size!=im.size:
+                        updates.put(('status','選單尺寸變動，請重新點選「'+name+'」'))
+                        im=now;continue
+                    # The page was replayed from the top. Final title verification
+                    # gates persistence; focus/hover pixels need not be identical.
                     x,y=value
                     if not (0<=x<im.width and 0<=y<im.height):continue
                     c.click((region['left']+x,region['top']+y));switcher.menu_is_open=False
                     if not switcher.verify_label(name):
                         updates.put(('status','人工點選後標題未通過核對，未保存；請再次示範「'+name+'」'))
-                        _,combo=c.image(auto['combo']);c.click((combo['left']+combo['width']//2,combo['top']+combo['height']//2));switcher.menu_is_open=True
-                        c.pause(.4);c.scroll(center,120*60);page=0;c.pause(.35);continue
-                    experience.record(name,page,(x,y),switcher.menu_signature(im))
+                        im,region=replay_menu(switcher,page);continue
+                    experience.record(name,page,(x,y),switcher.menu_signature(now))
+                    updates.put(('status','已核對並保存「'+name+'」，繼續自動測試'))
                     if switcher.numbers:switcher.numbers.disabled.add(name)
                     return
             rounds=0
@@ -121,7 +143,7 @@ def open_training(app):
                 rounds+=1
                 for name in progress.round():
                     if stop.is_set():break
-                    updates.put(('status',f'第 {rounds} 輪｜自動測試「{name}」｜F1停止'))
+                    updates.put(('status',f'第 {rounds} 輪｜自動測試「{name}」｜F8停止'))
                     try:
                         c.check()
                         # Prevent the current label fast path from counting as navigation.
@@ -136,7 +158,7 @@ def open_training(app):
                             raise RuntimeError('環境問題，學習已暫停（不算定位失敗）：'+reason)
                         progress.result(name,False)
                         updates.put(('status',f'請協助定位「{name}」：{reason}'))
-                        # Hide the teaching panel before taking a clean menu screenshot.
+                        # The teaching panel stays visible beside the menu.
                         updates.put(('results',{n:(progress.streak[n],progress.attempts[n],progress.failures[n]) for n in RANKINGS}))
                         assist(name)
                     updates.put(('results',{n:(progress.streak[n],progress.attempts[n],progress.failures[n]) for n in RANKINGS}))
@@ -149,6 +171,5 @@ def open_training(app):
             stop.set()
             if switcher and switcher.numbers:switcher.numbers.show(None)
     app.worker_thread=threading.Thread(target=job,daemon=True)
-    # Keep teaching UI off the target screenshot during automatic navigation.
-    top.withdraw();app.worker_thread.start();top.after(50,pump)
+    app.worker_thread.start();top.after(50,pump)
 

@@ -23,7 +23,7 @@ TRANSLATE = str.maketrans('漲預單匯買賣盤轉強連續鎖處暫開壓氣�
 class AutomationStopped(RuntimeError): pass
 
 
-class F1Toggle:
+class F8Toggle:
     """Start on release; stop on press; holding never toggles repeatedly."""
     def __init__(self):
         self.down=False
@@ -200,14 +200,14 @@ class WindowsController:
 
     def check(self):
         if self.stop.is_set():raise AutomationStopped('已停止自動操作')
-        if self.u.GetAsyncKeyState(0x70)&0x8000:
-            self.stop.set();raise AutomationStopped('F1緊急停止')
+        if self.u.GetAsyncKeyState(0x77)&0x8000:
+            self.stop.set();raise AutomationStopped('F8緊急停止')
         rect=self.rect()
         if self.process_id(self.hwnd)!=self.pid:raise AutomationStopped('目標視窗已更換')
         # Refuse to continue after resizing; calibrated proportions can change column layout.
         a=self.initial_rect
         if abs((rect[2]-rect[0])-(a[2]-a[0]))>3 or abs((rect[3]-rect[1])-(a[3]-a[1]))>3:
-            raise AutomationStopped('目標視窗已縮放，進度保留；按F1自動重新定位並接續')
+            raise AutomationStopped('目標視窗已縮放，進度保留；按F8自動重新定位並接續')
         fg=self.u.GetForegroundWindow()
         if not self.belongs(fg) and not self.dashboard_foreground(fg):
             raise AutomationStopped('焦點已切換到其他軟體，已暫停；三竹與探測器主頁之間切換不會停止')
@@ -221,7 +221,7 @@ class WindowsController:
 
     def monitor_hotkey(self):
         while not self.stop.wait(.02):
-            if self.u.GetAsyncKeyState(0x70)&0x8000:self.stop.set()
+            if self.u.GetAsyncKeyState(0x77)&0x8000:self.stop.set()
 
     def pause(self,seconds,check=True):
         end=time.monotonic()+seconds
@@ -416,7 +416,7 @@ class RankingSwitcher:
         return '切換後標題仍無法確認；預期：'+getattr(self,'requested_title','未知')+'；實際OCR：'+getattr(self,'last_title_text','無文字')+'；進度已保留，沒有記入該排行資料'
 
     def verify_label(self,name):
-        # Fast first check, bounded backoff for a slow application. F1 remains active.
+        # Fast first check, bounded backoff for a slow application. F8 remains active.
         for delay in (.15,.25,.4,.6,.8):
             self.c.pause(delay)
             if self.label_matches(name):return True
