@@ -11,3 +11,16 @@ class RateTests(unittest.TestCase):
     def test_stop_clears_digits(self):
         rate=ScanRate();rate.update(dict(digits=70,at=10));rate.stop()
         self.assertTrue(rate.text(now=10).startswith('0 字／秒'))
+
+class HeaderRateTests(unittest.TestCase):
+    def test_header_displays_digits_not_stock_rate(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from task_progress import TaskProgress
+        value=Mock();panel=SimpleNamespace(rate=Mock(),values={'rate':value})
+        panel.rate.get.return_value='70 字／秒｜7.2 秒／段｜4.17 檔／秒'
+        TaskProgress.refresh_rate(panel)
+        value.set.assert_called_with('70 字/秒')
+        panel.rate.get.return_value='0 字／秒｜7.2 秒／段｜4.17 檔／秒'
+        TaskProgress.refresh_rate(panel)
+        value.set.assert_called_with('0 字/秒')

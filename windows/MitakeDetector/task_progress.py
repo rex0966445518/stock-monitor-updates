@@ -88,7 +88,7 @@ class TaskProgress:
         self.values={};self.metric_cells=[]
         for i,(key,label,value) in enumerate([
             ('elapsed','掃描總時長','00:00:00'),('scanned','已掃描股數','0 股'),('total','排行總股數','待確認'),
-            ('passes','累計完成遍數','0 遍'),('rate','讀取速率','等待首段'),('freshness','最近成功讀取','尚未讀取')]):
+            ('passes','累計完成遍數','0 遍'),('rate','讀取速率','0 字/秒'),('freshness','最近成功讀取','尚未讀取')]):
             cell=tk.Frame(self.metrics,bg='#15243a',highlightbackground='#30415d',highlightthickness=1)
             self.metric_cells.append(cell)
             cell.grid(row=0,column=i,sticky='nsew')
@@ -165,8 +165,8 @@ class TaskProgress:
 
     def refresh_rate(self,*args):
         text=self.rate.get().split('｜本次讀取')[0]
-        match=re.search(r'([\d.]+) 檔／秒',text)
-        self.values['rate'].set(match.group(1)+' 股/秒' if match else '等待首段')
+        match=re.search(r'(\d+) 字[／/]秒',text)
+        self.values['rate'].set(match.group(1)+' 字/秒' if match else '0 字/秒')
 
     def mark_success(self):
         self.last_success=time.monotonic()
