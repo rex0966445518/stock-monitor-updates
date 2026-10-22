@@ -14,28 +14,30 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import com.google.android.material.button.MaterialButton
 
-/** Shared visual language: quiet surfaces, clear hierarchy and one primary action. */
+/** Shared UI v2 design system. Every interior page reuses these purple-neon primitives. */
 internal object NeonUi {
-    val canvas=Color.rgb(9,11,16)
-    val surface=Color.rgb(20,25,34)
-    val border=Color.rgb(53,64,79)
-    val ink=Color.rgb(235,241,250)
-    val muted=Color.rgb(148,164,185)
-    val cyan=Color.rgb(111,218,235)
-    val pink=Color.rgb(255,130,154)
-    val mint=Color.rgb(113,220,184)
-    val amber=Color.rgb(231,192,123)
-    val blue=Color.rgb(150,167,230)
-    val neonRed=Color.rgb(255,55,82)
-    val ruby=Color.rgb(143,24,47)
+    val canvas=Color.rgb(11,4,31)
+    val surface=Color.rgb(32,16,67)
+    val border=Color.rgb(123,57,197)
+    val ink=Color.rgb(248,243,255)
+    val muted=Color.rgb(196,174,235)
+    /** Violet is the primary CTA. Cyan remains reserved for information / positive flow. */
+    val violet=Color.rgb(180,67,255)
+    val cyan=Color.rgb(82,220,218)
+    val pink=Color.rgb(255,74,184)
+    val mint=Color.rgb(83,227,186)
+    val amber=Color.rgb(242,182,93)
+    val blue=Color.rgb(59,134,255)
+    val neonRed=Color.rgb(255,96,156)
+    val ruby=Color.rgb(124,34,173)
     fun radarColor(type:com.rex.twboardingscanner.domain.RadarType):Int = when(type){
-        com.rex.twboardingscanner.domain.RadarType.A_EARLY_BREAKOUT->Color.rgb(99,213,196)
-        com.rex.twboardingscanner.domain.RadarType.B_DEEP_REVERSAL->Color.rgb(177,154,244)
-        com.rex.twboardingscanner.domain.RadarType.C_LONG_RED_VOLUME->Color.rgb(237,188,109)
-        com.rex.twboardingscanner.domain.RadarType.D_MAIN_FORCE->Color.rgb(128,175,255)
-        com.rex.twboardingscanner.domain.RadarType.E_DIF_TOUCH->Color.rgb(232,154,186)
-        com.rex.twboardingscanner.domain.RadarType.F_VOLUME_CONTRACTION->Color.rgb(130,203,168)
-        com.rex.twboardingscanner.domain.RadarType.G_MA5_WAVE->Color.rgb(243,124,131)
+        com.rex.twboardingscanner.domain.RadarType.A_EARLY_BREAKOUT->Color.rgb(168,59,255)
+        com.rex.twboardingscanner.domain.RadarType.B_DEEP_REVERSAL->Color.rgb(46,136,255)
+        com.rex.twboardingscanner.domain.RadarType.C_LONG_RED_VOLUME->Color.rgb(255,78,157)
+        com.rex.twboardingscanner.domain.RadarType.D_MAIN_FORCE->Color.rgb(242,177,81)
+        com.rex.twboardingscanner.domain.RadarType.E_DIF_TOUCH->Color.rgb(36,214,198)
+        com.rex.twboardingscanner.domain.RadarType.F_VOLUME_CONTRACTION->Color.rgb(78,125,255)
+        com.rex.twboardingscanner.domain.RadarType.G_MA5_WAVE->Color.rgb(234,79,210)
     }
     private fun labelAccent(value:CharSequence):Int? = com.rex.twboardingscanner.domain.RadarType.entries
         .firstOrNull{value.length>1 && value[0]==it.name[0] && value[1]==' '}?.let{radarColor(it)}
@@ -43,14 +45,14 @@ internal object NeonUi {
     fun backdrop(c:Context)=NeonBackdrop(c.resources.displayMetrics.density)
     fun categoryStyle(button:MaterialButton,type:com.rex.twboardingscanner.domain.RadarType){
         val accent=radarColor(type)
-        button.setTextColor(accent);button.strokeColor=ColorStateList.valueOf(tint(accent,.48f))
-        button.backgroundTintList=ColorStateList.valueOf(tint(accent,.06f))
+        button.setTextColor(ink);button.strokeColor=ColorStateList.valueOf(tint(accent,.77f))
+        button.backgroundTintList=ColorStateList.valueOf(tint(accent,.27f))
     }
     fun dp(c:Context,n:Int)=(c.resources.displayMetrics.density*n).toInt()
-    fun panel(c:Context,accent:Int=blue)=GradientDrawable(GradientDrawable.Orientation.TL_BR,
-        intArrayOf(Color.rgb(24,29,38),surface)).apply {
-        cornerRadius=dp(c,16).toFloat()
-        setStroke(dp(c,1).coerceAtLeast(1),Color.rgb((Color.red(accent)*.12+31).toInt(),(Color.green(accent)*.12+39).toInt(),(Color.blue(accent)*.12+51).toInt()))
+    fun panel(c:Context,accent:Int=violet)=GradientDrawable(GradientDrawable.Orientation.TL_BR,
+        intArrayOf(tint(accent,.25f),surface,Color.rgb(18,8,44))).apply {
+        cornerRadius=dp(c,19).toFloat()
+        setStroke(dp(c,1).coerceAtLeast(1),androidx.core.graphics.ColorUtils.blendARGB(border,accent,.48f))
     }
     fun label(c:Context,value:String,size:Float=12f,color:Int=muted,bold:Boolean=false)=TextView(c).apply {
         text=value;textSize=size;setTextColor(color);includeFontPadding=false
@@ -74,40 +76,42 @@ internal object NeonUi {
         views.forEachIndexed { i,v -> addView(v,LinearLayout.LayoutParams(0,-2,1f).apply { if(i>0)marginStart=dp(c,8) }) }
     }
     fun radarRows(c:Context,views:List<View>):LinearLayout=vertical(c).apply{views.chunked(3).forEach{addView(row(c,it),LinearLayout.LayoutParams(-1,-2))}}
-    fun button(c:Context,value:String,accent:Int=cyan,action:()->Unit)=MaterialButton(c).apply {
+    fun button(c:Context,value:String,accent:Int=violet,action:()->Unit)=MaterialButton(c).apply {
         text=value;isAllCaps=false;textSize=13f;minHeight=dp(c,50);minimumWidth=0
-        insetTop=dp(c,3);insetBottom=dp(c,3);cornerRadius=dp(c,14);strokeWidth=dp(c,1).coerceAtLeast(1)
+        insetTop=dp(c,3);insetBottom=dp(c,3);cornerRadius=dp(c,16);strokeWidth=dp(c,1).coerceAtLeast(1)
         val effectiveAccent=labelAccent(value)?:accent
-        strokeColor=ColorStateList.valueOf(tint(effectiveAccent,.35f));backgroundTintList=ColorStateList.valueOf(tint(effectiveAccent,.04f))
-        setTextColor(ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled),intArrayOf()),intArrayOf(muted,effectiveAccent)))
+        strokeColor=ColorStateList.valueOf(tint(effectiveAccent,.80f));backgroundTintList=ColorStateList.valueOf(tint(effectiveAccent,.25f))
+        setTextColor(ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled),intArrayOf()),intArrayOf(muted,ink)))
         setPadding(dp(c,12),dp(c,8),dp(c,12),dp(c,8));setOnClickListener { action() }
     }
-    fun primary(c:Context,value:String,action:()->Unit)=button(c,value,cyan,action).apply{primaryStyle(this)}
+    fun primary(c:Context,value:String,action:()->Unit)=button(c,value,violet,action).apply{primaryStyle(this)}
     fun primaryStyle(button:MaterialButton){
         button.setTextColor(ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled),intArrayOf()),intArrayOf(muted,ink)))
-        button.backgroundTintList=ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled),intArrayOf()),intArrayOf(border,ruby))
-        button.strokeWidth=dp(button.context,1).coerceAtLeast(1);button.strokeColor=ColorStateList.valueOf(neonRed);button.typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+        button.backgroundTintList=ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled),intArrayOf()),intArrayOf(border,violet))
+        button.strokeWidth=dp(button.context,2).coerceAtLeast(1)
+        button.strokeColor=ColorStateList.valueOf(Color.rgb(217,141,255))
+        button.typeface=Typeface.create("sans-serif-medium",Typeface.BOLD)
     }
     fun radarSwitch(button:MaterialButton,type:com.rex.twboardingscanner.domain.RadarType,on:Boolean){
         button.text="${type.label}\n${if(on)"✓ 已啟用" else "— 已停用"}"
         button.textSize=12f;button.minHeight=dp(button.context,64)
         button.isSelected=on;button.isCheckable=true;button.isChecked=on
         val accent=radarColor(type)
-        button.setTextColor(if(on)canvas else muted)
-        button.backgroundTintList=ColorStateList.valueOf(if(on)accent else surface)
+        button.setTextColor(if(on)ink else muted)
+        button.backgroundTintList=ColorStateList.valueOf(if(on)tint(accent,.47f) else surface)
         button.strokeColor=ColorStateList.valueOf(if(on)accent else border)
         button.strokeWidth=dp(button.context,if(on)2 else 1)
         button.contentDescription="${type.label}，${if(on)"已啟用，點擊停用" else "已停用，點擊啟用"}"
     }
     fun selected(button:MaterialButton,active:Boolean,accent:Int=labelAccent(button.text)?:cyan){
         button.isSelected=active
-        button.backgroundTintList=ColorStateList.valueOf(if(active)tint(accent,.15f) else surface)
+        button.backgroundTintList=ColorStateList.valueOf(if(active)tint(accent,.30f) else surface)
         button.strokeColor=ColorStateList.valueOf(if(active)accent else border)
         button.setTextColor(if(active)accent else muted)
     }
     fun header(c:Context,title:String,kicker:String,subtitle:String="",back:()->Unit)=vertical(c).apply{
         layoutParams=LinearLayout.LayoutParams(-1,-2)
-        addView(label(c,kicker,10f,neonRed,true).apply{letterSpacing=.16f})
+        addView(label(c,kicker,10f,violet,true).apply{letterSpacing=.16f})
         addView(LinearLayout(c).apply{
             layoutParams=LinearLayout.LayoutParams(-1,-2)
             gravity=Gravity.CENTER_VERTICAL
@@ -124,7 +128,8 @@ internal object NeonUi {
         addView(gap(c,12))
     }
     fun field(input:EditText):EditText=input.apply{
-        background=GradientDrawable().apply{setColor(canvas);cornerRadius=dp(context,12).toFloat();setStroke(dp(context,1).coerceAtLeast(1),border)}
+        background=GradientDrawable(GradientDrawable.Orientation.TL_BR,
+            intArrayOf(surface,canvas)).apply{cornerRadius=dp(context,14).toFloat();setStroke(dp(context,1).coerceAtLeast(1),border)}
         setPadding(dp(context,14),dp(context,12),dp(context,14),dp(context,12))
         setTextColor(ink);setHintTextColor(muted);textSize=16f;minHeight=dp(context,52)
         layoutParams=LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(context,6);bottomMargin=dp(context,10)}
