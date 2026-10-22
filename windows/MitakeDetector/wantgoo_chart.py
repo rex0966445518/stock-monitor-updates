@@ -155,11 +155,14 @@ class WantGooCharts:
         with self.lock:
             if code in self.pending:return
             self.pending.add(code)
+            self.emit(dict(code=code,loading=True,error='排隊載入玩股網五分 K…'))
             try:self.queue.put_nowait(code)
-            except queue.Full:self.pending.discard(code);return
+            except queue.Full:
+                self.pending.discard(code)
+                self.emit(dict(code=code,error='圖表佇列已滿，請按重試；掃描繼續'))
+                return
             if not self.thread:
                 self.thread=threading.Thread(target=self.work,daemon=True,name='wantgoo-chart-worker');self.thread.start()
-        self.emit(dict(code=code,loading=True,error='排隊載入玩股網五分 K…'))
     def work(self):
         while not self.stop.is_set():
             try:code=self.queue.get(timeout=.5)
@@ -168,19 +171,28 @@ class WantGooCharts:
                 if self.stop.is_set():break
                 self.emit(dict(code=code,loading=True,error='載入並確認五分 K 圖表…'))
                 directory=self.base/code;directory.mkdir(parents=True,exist_ok=True)
+                (directory/'result.json').unlink(missing_ok=True)
                 command=[sys.executable]+([] if getattr(sys,'frozen',False) else [str(Path(__file__).with_name('MitakeDetector.py'))])+['--wantgoo-capture',code,str(directory)]
                 env=os.environ.copy();env['PYINSTALLER_RESET_ENVIRONMENT']='1'
                 with self.lock:
                     if self.stop.is_set():break
                     self.proc=subprocess.Popen(command,env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
-                try:self.proc.wait(timeout=90)
+                try:self.proc.wait(timeout=40)
                 except subprocess.TimeoutExpired:
-                    self.kill();raise RuntimeError('圖表載入超過 90 秒，稍後再試；掃描繼續')
+                    self.kill();raise RuntimeError('圖表載入超過 40 秒，稍後再試；掃描繼續')
                 result=self.cached(code)
                 if not result:raise RuntimeError('圖表程序未回傳有效結果，請檢查 Edge 或改開原站')
+                if result.get('error'):raise RuntimeError(result['error'])
                 if not self.stop.is_set():self.emit(result)
             except Exception as exc:
                 result=dict(code=code,error=str(exc),day=taipei_day(),period='5m',range_version=2,fetched_at=time.time())
+                if self.stop.is_set():break
+                try:
+                    from intraday_chart import fallback_chart
+                    self.emit(dict(code=code,loading=True,error='原站未就緒，改用五分鐘行情繪圖…'))
+                    result=fallback_chart(code,self.base/code)
+                except Exception as fallback_error:
+                    result['error']+='；'+str(fallback_error)
                 try:(self.base/code/'result.json').write_text(json.dumps(result,ensure_ascii=False),encoding='utf-8')
                 except OSError:pass
                 if not self.stop.is_set():self.emit(result)

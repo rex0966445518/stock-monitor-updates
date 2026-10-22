@@ -110,3 +110,50 @@ class RetainedChartTests(unittest.TestCase):
         result=retained_chart_match(dict(count=0,total=6,text='等待重新複查'),6)
         self.assertIn('等待重新複查',candidate_heading(result))
         self.assertEqual(result['count'],0)
+
+class IntradayFallbackTests(unittest.TestCase):
+    def payload(self):
+        import datetime as dt
+        from intraday_chart import TZ
+        t=int(dt.datetime(2026,1,2,9,tzinfo=TZ).timestamp())
+        return {'chart':{'result':[{'meta':{'symbol':'2465.TW','currency':'TWD','dataGranularity':'5m'},'timestamp':[t,t+300,t+600],'indicators':{'quote':[{'open':[10,11,12],'high':[12,13,14],'low':[9,10,11],'close':[11,12,13],'volume':[100,200,300]}]}}]}}
+    def test_valid_bars_and_reject_wrong_identity(self):
+        from intraday_chart import parse_bars
+        data=self.payload();self.assertEqual(len(parse_bars(data,'2465.TW')),3)
+        for key,value in [('symbol','2330.TW'),('currency','JPY'),('dataGranularity','1d')]:
+            bad=self.payload();bad['chart']['result'][0]['meta'][key]=value
+            with self.assertRaises(ValueError):parse_bars(bad,'2465.TW')
+    def test_missing_or_invalid_bar_is_not_fabricated(self):
+        from intraday_chart import parse_bars
+        data=self.payload();data['chart']['result'][0]['indicators']['quote'][0]['close'][1]=None
+        rows=parse_bars(data,'2465.TW');self.assertEqual(len(rows),2);self.assertEqual(rows[1]['ts']-rows[0]['ts'],600)
+    def test_rendered_fallback_is_readable_image(self):
+        import tempfile
+        from pathlib import Path
+        from PIL import Image
+        from intraday_chart import parse_bars,render_bars
+        with tempfile.TemporaryDirectory() as d:
+            stamp=render_bars(parse_bars(self.payload(),'2465.TW'),'2465',d)
+            self.assertEqual(stamp,'2026-01-02 09:10')
+            with Image.open(Path(d)/'full.png') as im:self.assertEqual(im.size,(1000,570))
+    def test_worker_uses_fallback_on_browser_failure(self):
+        import tempfile,threading
+        from unittest.mock import patch
+        from wantgoo_chart import WantGooCharts
+        with tempfile.TemporaryDirectory() as d:
+            events=[];done=threading.Event()
+            def emit(value):
+                events.append(value)
+                if not value.get('loading'):done.set()
+            service=WantGooCharts(d,emit)
+            result=dict(code='2465',error='',source='Yahoo',directory=d)
+            with patch('wantgoo_chart.subprocess.Popen',side_effect=OSError('no Edge')),patch('intraday_chart.fallback_chart',return_value=result):
+                service.request('2465');self.assertTrue(done.wait(3));service.close();service.thread.join(2)
+            self.assertTrue(events[0]['loading']);self.assertEqual(events[-1],result);self.assertFalse(service.pending)
+    def test_full_queue_has_explicit_failure(self):
+        import tempfile
+        from wantgoo_chart import WantGooCharts
+        with tempfile.TemporaryDirectory() as d:
+            events=[];service=WantGooCharts(d,events.append);service.thread=object()
+            for i in range(9):service.request(str(2000+i))
+            self.assertIn('佇列已滿',events[-1]['error']);self.assertNotIn('2008',service.pending)

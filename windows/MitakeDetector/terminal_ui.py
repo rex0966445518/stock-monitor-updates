@@ -105,6 +105,7 @@ class FocusChart:
         for name in ('5 分 K','日 K','日 MACD'):
             ttk.Radiobutton(bar,text=name,variable=self.mode,value=name,command=self.invalidate).pack(side='left',padx=4)
         ttk.Button(bar,text='放大',command=self.enlarge).pack(side='right')
+        ttk.Button(bar,text='重試',command=self.retry).pack(side='right')
         self.note=tk.StringVar(value='等待掃描資料；圖表在背景載入')
         tk.Label(parent,textvariable=self.note,bg=PANEL,fg=MUTED,wraplength=400,anchor='w',justify='left',font=('Microsoft JhengHei',9)).pack(side='bottom',fill='x',padx=12,pady=8)
         self.volume=tk.Canvas(parent,height=80,bg=PANEL,highlightthickness=0);self.volume.pack(side='bottom',fill='x',padx=10,pady=(0,4))
@@ -112,6 +113,9 @@ class FocusChart:
         self.canvas.bind('<Configure>',lambda e:self.invalidate())
         self.canvas.bind('<Button-1>',lambda e:self.enlarge())
         self.volume.bind('<Configure>',lambda e:self.invalidate())
+    def retry(self):
+        if self.code:self.app.candidate_charts.retry_web(self.code)
+        self.invalidate()
     def invalidate(self):self.key=None;self.refresh()
     def select(self,event=None):
         selection=self.app.tree.selection()
@@ -141,6 +145,9 @@ class FocusChart:
                 service.last_requests[self.code]=now;service.web_service.request(self.code)
         data=service.cache.get(self.code,{})
         web=service.web_cache.get(self.code,{})
+        if web.get('loading') and time.monotonic()-web.get('loading_since',time.monotonic())>120:
+            web=dict(web,loading=False,error='圖表等待逾時，請按重試；股票掃描繼續執行')
+            service.web_cache[self.code]=web
         key=(self.code,self.mode.get(),data.get('read_at'),str(web),self.canvas.winfo_width(),self.canvas.winfo_height())
         if key==self.key:return
         self.key=key;self.canvas.delete('all');self.volume.delete('all')
@@ -156,7 +163,7 @@ class FocusChart:
                     im=source.copy();im.thumbnail((max(100,self.canvas.winfo_width()-8),max(100,self.canvas.winfo_height()-8)))
                 self.photo=ImageTk.PhotoImage(im,master=self.canvas)
                 self.canvas.create_image(self.canvas.winfo_width()/2,self.canvas.winfo_height()/2,image=self.photo)
-                self.note.set('玩股網五分 K 快照｜'+web.get('data_time','時間待核對')+'｜點圖放大')
+                self.note.set(web.get('source','玩股網')+'｜五分 K｜'+web.get('data_time','時間待核對')+' 台灣時間｜點圖放大')
             except (OSError,ValueError) as error:self.message('圖表暫時無法讀取：'+str(error))
             return
         self.volume.pack(side='bottom',fill='x',padx=10,pady=(0,4),before=self.canvas)

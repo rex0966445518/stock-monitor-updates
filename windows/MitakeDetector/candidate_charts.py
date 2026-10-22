@@ -209,7 +209,9 @@ class CandidateCharts:
                     self.last_requests[code]=now;self.web_service.request(code)
         self.timer=self.app.root.after(1000,self.tick)
     def receive_wantgoo(self,data):
-        code=data['code'];self.web_cache[code]=data
+        code=data['code'];data=dict(data)
+        if data.get('loading'):data['loading_since']=time.monotonic()
+        self.web_cache[code]=data
         if not data.get('loading'):self.photos.pop(code,None)
         while len(self.web_cache)>100:
             old=next(iter(self.web_cache));self.web_cache.pop(old);self.photos.pop(old,None);self.last_requests.pop(old,None)
@@ -231,7 +233,7 @@ class CandidateCharts:
             stamp=data.get('data_time','未知')
             fetched=dt.datetime.fromtimestamp(data['fetched_at'],dt.timezone(dt.timedelta(hours=8))).strftime('%H:%M:%S')
             old='（舊交易日）' if stamp[:10]!=dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).date().isoformat() else ''
-            c.create_text(5,148,anchor='nw',text=f"當日五分 K｜09:00 起\n{stamp}{old} · 點圖放大",fill='#b9cadd',width=width)
+            c.create_text(5,148,anchor='nw',text=f"{data.get('source','玩股網')}｜五分 K\n{stamp}{old} · 點圖放大",fill='#b9cadd',width=width)
         except (OSError,ValueError,KeyError) as exc:message(c,'圖檔讀取失敗：'+str(exc))
     def enlarge(self,code):
         data=self.web_cache.get(code)
@@ -241,11 +243,11 @@ class CandidateCharts:
         try:
             with Image.open(Path(data['directory'])/'full.png') as im:image=im.copy()
         except OSError:return
-        top=self.app.tk.Toplevel(self.app.root);top.title(f'{code} 玩股網五分 K · {data.get("data_time","")}')
+        top=self.app.tk.Toplevel(self.app.root);top.title(f'{code} 五分 K · {data.get("data_time","")}')
         image.thumbnail((min(1200,top.winfo_screenwidth()-100),min(850,top.winfo_screenheight()-120)))
         photo=ImageTk.PhotoImage(image,master=top)
         label=self.app.ttk.Label(top,image=photo);label.image=photo;label.pack()
-        self.app.ttk.Label(top,text='來源：玩股網｜五分 K 圖表快照；圖內全部指標均為五分週期，不是即時串流。').pack()
+        self.app.ttk.Label(top,text='來源：'+data.get('source','玩股網')+'｜五分 K，非即時串流。').pack()
     def close(self):
         self.closed=True
         try:self.app.root.after_cancel(self.timer)
