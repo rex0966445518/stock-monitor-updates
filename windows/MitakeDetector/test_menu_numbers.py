@@ -295,3 +295,60 @@ class CumulativeBuyIntegrationTests(unittest.TestCase):
             s.switch(name)
             self.assertEqual(c.selected,desired);self.assertEqual(experience.number(name),desired)
         self.assertEqual(calls,[0]);self.assertTrue(all(any(f'第 {n} 項｜標題核對通過' in line for line in status) for n in (19,27,35)))
+
+class LearnedRouteTests(unittest.TestCase):
+    def setup_navigation(self,path=None):
+        from adaptive import Experience
+        class C(FakeController):
+            def __init__(self):super().__init__();self.offset=0;self.images=0
+            def image(self,roi):
+                self.images+=1
+                return menu(self.offset),dict(left=100,top=100,width=220,height=192)
+            def scroll(self,point,delta):
+                self.check();self.actions.append(('scroll',delta))
+                self.offset=max(0,min(36,self.offset+abs(delta)//40 if delta<0 else 0))
+        c=C();e=Experience(path,{'size':[220,192]})
+        s=RankingSwitcher(c,Mock(return_value=tokens()),[0,0,.2,.1],[0,.1,.3,.5],experience=e,numbering=True)
+        return c,e,s,dict(left=100,top=100,width=220,height=192)
+    def test_verified_route_survives_restart_and_uses_one_capture(self):
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/'experience.json';c,e,s,region=self.setup_navigation(path)
+            point=s.numbers.locate('買氣強大',region);self.assertIsNotNone(point)
+            self.assertNotIn('買氣強大',e.data.get('number_routes',{}))
+            initial_images=c.images;s.numbers.verified('買氣強大')
+            c2,e2,s2,region=self.setup_navigation(path)
+            self.assertEqual(s2.numbers.locate('買氣強大',region),point)
+            self.assertEqual(c2.images,1);self.assertGreater(initial_images,c2.images);s2.ocr.assert_not_called()
+            self.assertEqual(sum(a[0]=='scroll' for a in c2.actions),1)
+    def test_rejected_route_is_never_reused(self):
+        c,e,s,region=self.setup_navigation()
+        s.numbers.locate('開盤強勢',region);s.numbers.verified('開盤強勢')
+        s.numbers.rejected('開盤強勢')
+        self.assertNotIn('開盤強勢',e.data['number_routes']);self.assertIsNone(e.number('開盤強勢'))
+    def test_changed_wheel_behavior_relearns_without_blind_click(self):
+        c,e,s,region=self.setup_navigation()
+        s.numbers.locate('買氣強大',region);s.numbers.verified('買氣強大');c.offset=0
+        old=c.scroll
+        def scroll(point,delta):old(point,-120 if delta< -120 else delta)
+        c.scroll=scroll
+        self.assertIsNotNone(s.numbers.locate('買氣強大',region))
+        self.assertTrue(any(a==('scroll',7200) for a in c.actions))
+        self.assertFalse(any(a[0]=='click' for a in c.actions))
+    def test_all_catalog_routes_keep_correct_number(self):
+        from autoswitch import RANKINGS
+        c,e,s,region=self.setup_navigation()
+        for i,name in enumerate(RANKINGS,1):
+            c.offset=0;point=s.numbers.locate(name,region);self.assertIsNotNone(point,name)
+            self.assertEqual(c.offset+round((point[1]-12)/24)+1,i)
+            s.numbers.verified(name);c.offset=0
+            self.assertEqual(s.numbers.locate(name,region),point)
+        self.assertEqual(len(e.data['number_routes']),44)
+    def test_corrupt_route_and_layout_change_are_ignored(self):
+        from adaptive import Experience
+        import json
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/'e.json';c,e,s,region=self.setup_navigation(path)
+            s.numbers.locate('開盤強勢',region);s.numbers.verified('開盤強勢')
+            self.assertNotIn('number_routes',Experience(path,{'size':[440,384]}).data)
+            data=json.loads(path.read_text());data['number_routes']['開盤強勢']['steps']=999999
+            path.write_text(json.dumps(data));self.assertEqual(Experience(path,{'size':[220,192]}).data['number_routes'],{})

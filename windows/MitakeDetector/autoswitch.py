@@ -449,7 +449,8 @@ class RankingSwitcher:
                     self.experience.record(name,hint,point,self.menu_signature(im))
                     return
                 self.experience.forget(name)
-                raise AutomationStopped(self.title_failure()+'；已清除該位置經驗')
+                self.status('已清除錯誤位置記憶，重新搜尋此排行')
+                return self._switch(name,False,False)
             self.experience.forget(name)
             self.status('選單內容有變，恢復完整搜尋')
             self.c.scroll(center,120*60);self.c.pause(.35)

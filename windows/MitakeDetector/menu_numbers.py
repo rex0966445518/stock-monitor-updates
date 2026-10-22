@@ -149,16 +149,26 @@ class PixelMenu:
         return (self.size[0]*.45,self.centers[i]) if 0<=i<len(self.centers) and sum(self.previous[i])>=8 else None
 
 
+def valid_route(route):
+    if not isinstance(route,dict):return False
+    return (type(route.get('steps')) is int and 0<=route['steps']<180
+            and route.get('wheel') in (40,120) and type(route.get('number')) is int
+            and 1<=route['number']<=500 and isinstance(route.get('view'),dict)
+            and isinstance(route.get('point'),list) and len(route['point'])==2
+            and all(type(v) in (int,float) and __import__('math').isfinite(v) for v in route['point']))
+
+
 class NumberNavigator:
     def __init__(self,switcher,manual=None,show=None):
         self.s=switcher;self.manual=validate_numbers(manual or {});self.show=show or (lambda value:None)
-        self.geometry=None;self.disabled=set()
+        self.geometry=None;self.disabled=set();self.pending_route=None
     def number(self,name):
         from autoswitch import RANKINGS
         learned=self.s.experience.number(name) if self.s.experience else None
         return self.manual.get(name) or learned or RANKINGS.index(name)+1
     def display(self,region,rows):self.show(dict(region=region,rows=rows))
     def locate(self,name,region):
+        self.pending_route=None
         if name in self.disabled:return None
         number=self.number(name);s=self.s
         s.status(f'數字定位：{name} → 第 {number} 項（選取後核對標題）')
@@ -167,6 +177,22 @@ class NumberNavigator:
             point=native.point(number);self.display(region,native.rows())
             return point
         except (AttributeError,ValueError):pass
+        center=(region["left"]+region["width"]//2,region["top"]+region["height"]//2)
+        experience=s.experience
+        route=experience.data.get('number_routes',{}).get(name) if experience and experience.enabled else None
+        if valid_route(route) and route['number']==number:
+            if route['steps']:
+                s.c.scroll(center,-route['steps']*route['wheel']);s.c.pause(.25)
+            image,_=s.c.image(s.menu)
+            view=PixelMenu.restore(image,route['view']) if hasattr(image,'size') else None
+            point=route['point']
+            if view and 0<=point[0]<image.width and 0<=point[1]<image.height:
+                self.pending_route=route
+                s.status(f'學習定位命中：{name} 第 {number} 項｜略過逐頁 OCR，核對切換標題')
+                return tuple(point)
+            experience.data.get('number_routes',{}).pop(name,None);experience.save()
+            s.status('位置記憶已失效｜自動回到首項重新校正')
+            s.c.scroll(center,120*60);s.c.pause(.2)
         image,_=s.c.image(s.menu)
         if not hasattr(image,'size'):return None
         if self.geometry is None and s.experience and s.experience.enabled:
@@ -178,27 +204,37 @@ class NumberNavigator:
                 if s.experience and s.experience.enabled:
                     s.experience.data['menu_geometry']=self.geometry.snapshot();s.experience.save()
             except ValueError:
-                s.status('暫時無法確認編號列距，改用文字搜尋；可在排行編號設定中校正')
-                return None
+                try:
+                    if not s.ocr_retry:raise ValueError('沒有校正辨識器')
+                    self.geometry=PixelMenu(image,s.ocr_retry(image))
+                    if s.experience and s.experience.enabled:
+                        s.experience.data['menu_geometry']=self.geometry.snapshot();s.experience.save()
+                    s.status('已完成首次列距校正，後續沿用數字定位')
+                except ValueError:
+                    s.status('暫時無法確認編號列距，改用文字搜尋；可在排行編號設定中校正')
+                    return None
         geometry=self.geometry;unchanged=0
         step=40 if s.experience and s.experience.data.get("menu_wheel")==40 else 120
         center=(region["left"]+region["width"]//2,region["top"]+region["height"]//2)
+        steps=0
         for page in range(180):
             self.display(region,geometry.rows());point=geometry.point(number)
             if point:
                 s.status(f'數字定位命中：{name} 第 {number} 項｜可見 {geometry.offset+1}～{geometry.offset+len(geometry.centers)} 項')
                 if s.experience and s.experience.enabled and s.experience.data.get('menu_wheel')!=step:
                     s.experience.data['menu_wheel']=step;s.experience.save()
+                view=geometry.snapshot();view['initial']=[row.hex() for row in geometry.previous]
+                self.pending_route=dict(number=number,steps=steps,wheel=step,view=view,point=list(point))
                 return point
             old=geometry.offset
-            s.c.scroll(center,-step)
+            s.c.scroll(center,-step);steps+=1
             s.c.pause(.12);image,_=s.c.image(s.menu)
             if not geometry.update(image):
                 if step==120:
                     s.status('選單捲動跨度過大｜回到首項，改小步數字定位，不重新 OCR')
                     s.c.scroll(center,120*60);s.c.pause(.2);image,_=s.c.image(s.menu)
                     if geometry.reset(image):
-                        step=40;unchanged=0;continue
+                        step=40;unchanged=0;steps=0;continue
                 s.status('捲動編號無法可靠銜接，退回文字核對');self.show(None);return None
             unchanged=unchanged+1 if geometry.offset==old else 0
             if unchanged>=(4 if step==40 else 2):return None
@@ -215,18 +251,31 @@ class NumberNavigator:
         if not self.s.experience:return
         if getattr(self,'native_rows',None):
             number,y=min(self.native_rows,key=lambda row:abs(row[1]-point[1]))
-            if abs(y-point[1])<8:self.s.experience.record_number(name,number)
+            if abs(y-point[1])<8:
+                self.s.experience.record_number(name,number)
+                if name not in self.manual:self.disabled.discard(name)
             return
         if not getattr(self,'text_tracking',False):return
         rows=self.geometry.rows()
         if rows:
             number,y=min(rows,key=lambda row:abs(row[1]-point[1]))
-            if abs(y-point[1])<self.geometry.pitch*.25:self.s.experience.record_number(name,number)
+            if abs(y-point[1])<self.geometry.pitch*.25:
+                self.s.experience.record_number(name,number)
+                if name not in self.manual:self.disabled.discard(name)
     def verified(self,name):
-        if self.s.experience:self.s.experience.record_number(name,self.number(name))
+        experience=self.s.experience
+        if experience:
+            experience.record_number(name,self.number(name))
+            if experience.enabled and self.pending_route:
+                experience.data.setdefault('number_routes',{})[name]=self.pending_route
+                experience.save()
+        self.pending_route=None
     def rejected(self,name):
         self.disabled.add(name)
-        if self.s.experience:self.s.experience.forget_number(name)
+        self.pending_route=None
+        if self.s.experience:
+            self.s.experience.data.get('number_routes',{}).pop(name,None)
+            self.s.experience.forget_number(name)
         self.show(None)
 
 

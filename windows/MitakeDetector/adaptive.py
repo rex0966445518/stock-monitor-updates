@@ -15,6 +15,9 @@ class Experience:
                 if value.get('version')==1 and value.get('layout')==self.key and isinstance(value.get('ranks'),dict):
                     if value.get('menu_wheel') in (40,120):self.data['menu_wheel']=value['menu_wheel']
                     if isinstance(value.get('menu_geometry'),dict):self.data['menu_geometry']=value['menu_geometry']
+                    if isinstance(value.get('number_routes'),dict):
+                        from menu_numbers import valid_route
+                        self.data['number_routes']={name:r for name,r in value['number_routes'].items() if valid_route(r)}
                     # Whitelist and clamp every value: a broken profile cannot drive inputs.
                     for name,entry in value['ranks'].items():
                         if not isinstance(entry,dict):continue
