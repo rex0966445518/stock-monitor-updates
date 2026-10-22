@@ -405,12 +405,25 @@ class RankingSwitcher:
         if self.numbers:self.numbers.show(None)
         image,_=self.c.image([0,0,1,1])
         readers=[reader for reader in (self.ocr,self.ocr_retry) if reader is not None]
-        frame=None;errors=[]
-        for reader in readers:
-            self.c.check()
-            try:
-                frame=combo_frame(image,reader(image));break
-            except ValueError as exc:errors.append(str(exc))
+        frame=None;errors=[];started=time.monotonic()
+        w,h=image.size
+        x,y,cw,ch=self.combo
+        # Translate local OCR boxes back to full-image pixels for validation.
+        pad=max(12,round(ch*h*.6))
+        nearby=(max(0,int(x*w)-pad),max(0,int(y*h)-pad),
+                min(w,int((x+cw)*w)+pad),min(h,int((y+ch)*h)+pad))
+        areas=[nearby,(0,0,max(1,round(w*.60)),max(1,round(h*.50)))]
+        for index,box in enumerate(areas):
+            if frame is not None:break
+            self.status('選單快速校正｜'+('辨識原下拉框附近' if index==0 else '擴大搜尋左上區域'))
+            for reader in readers:
+                self.c.check()
+                tokens=reader(image.crop(box))
+                shifted=[([[px+box[0],py+box[1]] for px,py in points],text,score)
+                         for points,text,score in tokens or []]
+                try:
+                    frame=combo_frame(image,shifted);break
+                except ValueError as exc:errors.append(str(exc))
         if frame is None:raise ValueError('排行下拉框重新定位失敗：'+'；'.join(errors))
         l,t,r,b=frame;w,h=image.size
         combo=validate_roi([max(0,l)/w,max(0,t)/h,(min(w,r)-max(0,l))/w,(min(h,b)-max(0,t))/h])
@@ -421,6 +434,7 @@ class RankingSwitcher:
                 try:return detect_menu(source,combo,reader)
                 except ValueError as exc:failures.append(str(exc))
             raise ValueError('；'.join(failures))
+        self.status(f'下拉框已定位｜{time.monotonic()-started:.1f}秒｜核對展開選單')
         try:menu=read_menu(image) # A previous failed search may leave the popup open.
         except ValueError:
             rect=absolute_roi(combo,self.c.rect())
@@ -435,7 +449,7 @@ class RankingSwitcher:
             self.experience.save()
         if self.numbers:self.numbers=NumberNavigator(self,self.numbers.manual,self.numbers.show)
         self.verified_titles=set();self.verified_title_pixels=None
-        self.status('排行選單已重新定位｜清除失效記憶，保留表頭與已掃描資料')
+        self.status(f'排行選單已重新定位｜耗時{time.monotonic()-started:.1f}秒｜清除失效記憶，保留表頭與已掃描資料')
         return dict(combo=combo,menu=menu)
 
     def switch(self,name,menu_open=False):
@@ -526,3 +540,4 @@ class RankingSwitcher:
             self.c.scroll(center,-120);self.c.pause(.45)
         observed='、'.join(str(t[1]) for t in tokens or [])[:100]
         raise AutomationStopped('選單中找不到「'+name+'」；本次讀到：'+(observed or '無文字')+'；已停止')
+

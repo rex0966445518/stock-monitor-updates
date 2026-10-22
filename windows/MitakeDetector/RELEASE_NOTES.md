@@ -1,3 +1,9 @@
+## v0.3.113
+
+- 加速失敗後的排行選單重新定位：先辨識已知下拉框附近，失敗才擴大至左上區域，避免全視窗行情 OCR。
+- 保留完整影像框線與切換標題驗證，局部文字座標換算回原視窗，不盲用舊位置。
+- 顯示定位階段與實際耗時，保留 F8 停止及原掃描資料。
+
 ## v0.3.112
 
 - 整輪排行切換失敗後，自動重新辨識下拉框與展開選單，清除失效定位記憶再試；不重新辨識表頭，不清除掃描資料。
@@ -201,3 +207,4 @@
 研究依據：Fidelity Accumulation Distribution（價量交叉觀察）；TDCC集保股權分散表（週末持股，不能確認盤中買方）。
 https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/accumulation-distribution
 https://original-www.tdcc.com.tw/portal/zh/smWeb/qryStock
+

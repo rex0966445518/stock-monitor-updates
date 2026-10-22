@@ -282,6 +282,26 @@ class CumulativeTitleFormsTests(unittest.TestCase):
                 self.assertEqual(s.title_tokens_match([token(title)],name),name==expected,(title,name))
 
 class MenuRecoveryTests(unittest.TestCase):
+    def test_local_ocr_coordinates_are_translated_and_small(self):
+        from unittest.mock import patch
+        c,e,s=self.build();s.combo=[.1,.1,.2,.05]
+        s.ocr.return_value=[([[10,10],[30,10],[30,25],[10,25]],'開盤強勢',.99)]
+        with patch('auto_detect.combo_frame',return_value=(100,80,300,120)) as frame,patch('auto_detect.detect_menu',return_value=[.1,.15,.2,.5]):
+            s.recalibrate_menu()
+        self.assertEqual(s.ocr.call_count,1)
+        self.assertEqual(s.ocr.call_args.args[0].size,(248,88))
+        self.assertEqual(frame.call_args.args[1][0][0][0],[86,66])
+
+    def test_local_failure_expands_once_without_full_screen_ocr(self):
+        from unittest.mock import patch
+        c,e,s=self.build()
+        with patch('auto_detect.combo_frame',side_effect=[ValueError('moved'),(20,40,220,80)]),patch('auto_detect.detect_menu',return_value=[.02,.1,.2,.5]):
+            s.recalibrate_menu()
+        sizes=[call.args[0].size for call in s.ocr.call_args_list]
+        self.assertEqual(len(sizes),2)
+        self.assertEqual(sizes[1],(600,400))
+        self.assertNotIn((1000,800),sizes)
+
     def build(self):
         from PIL import Image
         from unittest.mock import Mock
@@ -315,3 +335,4 @@ class MenuRecoveryTests(unittest.TestCase):
         c,e,s=self.build();c.stopped=True
         with self.assertRaises(AutomationStopped):s.recalibrate_menu()
         self.assertEqual(c.actions,[])
+
