@@ -37,7 +37,7 @@ def header(app):
     app.product_title=tk.Label(app.header,text='漲停板探測器',fg=GOLD,bg=BG,font=('Microsoft JhengHei',24,'bold'),anchor='w')
     app.product_title.grid(row=0,column=0,sticky='w')
     tk.Label(app.header,text='雷允澤製 · v'+VERSION,fg=MUTED,bg=BG,font=('Microsoft JhengHei',10)).grid(row=1,column=0,sticky='w')
-    nav=ttk.Frame(app.header);nav.grid(row=1,column=1,columnspan=2,padx=8,pady=(8,0),sticky='e')
+    nav=ttk.Frame(app.header);app.header_navigation=nav;nav.grid(row=1,column=1,columnspan=2,padx=8,pady=(8,0),sticky='e')
     for label,command in [('候選歷史',app.show_candidate_diary),('條件設定',app.show_guard_settings),('一鍵更新',app.check_update)]:
         ttk.Button(nav,text=label,command=command).pack(side='left',padx=4)
     app.taiyo_var=tk.StringVar(value='太陽誘電 6976\n行情待取得')
