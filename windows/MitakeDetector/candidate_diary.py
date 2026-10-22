@@ -64,6 +64,27 @@ class CandidateDiary:
                        (SELECT COUNT(*) FROM candidate_diary_events WHERE day=d.day AND code=d.code)
                        FROM candidate_diary d LEFT JOIN candidate_diary_events e ON e.id=(SELECT id FROM candidate_diary_events WHERE day=d.day AND code=d.code AND blocked=0 ORDER BY ts DESC,id DESC LIMIT 1)
                        WHERE d.day=? ORDER BY 10 DESC,d.first_ts,d.code''',(day,)).fetchall()
+    def qualification_counts(self,day):
+        """Count valid below-five -> five-or-six transitions in timestamp order.
+
+        Reconstruct from persisted events so restart and archive imports retain
+        counts. Unknown/blocked observations neither qualify nor reset a run.
+        """
+        with closing(self.connect()) as c:
+            return dict(c.execute("""
+                WITH dedup AS (
+                    SELECT code,ts,matched,
+                           ROW_NUMBER() OVER(PARTITION BY code,ts ORDER BY id DESC) AS rn
+                    FROM candidate_diary_events WHERE day=? AND blocked=0 AND total=6
+                ), transitions AS (
+                    SELECT code,matched,
+                           LAG(matched,1,0) OVER(PARTITION BY code ORDER BY ts) AS previous
+                    FROM dedup WHERE rn=1
+                )
+                SELECT code,SUM(CASE WHEN matched>=5 AND previous<5 THEN 1 ELSE 0 END)
+                FROM transitions GROUP BY code
+            """,(day,)))
+
     def latest_flags(self,day):
         with closing(self.connect()) as c:
             rows=c.execute('SELECT d.code,e.ts,e.blocked,e.reason,e.matched,e.total FROM candidate_diary d JOIN candidate_diary_events e ON e.id=(SELECT id FROM candidate_diary_events WHERE day=d.day AND code=d.code ORDER BY ts DESC,id DESC LIMIT 1) WHERE d.day=?',(day,)).fetchall()

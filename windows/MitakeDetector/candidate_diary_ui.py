@@ -27,9 +27,9 @@ class DiaryView:
         body=app.ttk.Frame(self.window);body.pack(fill='both',expand=True,padx=12,pady=10)
         self.calendar=app.ttk.Frame(body);self.calendar.pack(side='left',anchor='n',padx=(0,12))
         table=app.ttk.Frame(body);table.pack(side='left',fill='both',expand=True)
-        columns=('code','name','first','price','last','latest','quote_time','quote_source','peak','current','n')
+        columns=('code','name','first','price','last','latest','quote_time','quote_source','peak','current','n','qualifications')
         self.tree=app.ttk.Treeview(table,columns=columns,show='headings',height=12)
-        for key,title,width in zip(columns,['股號','股名','首次發現','首次價','當日最後讀取','最近價','最近價時間','行情狀態／來源','當日最高符合','當日最後符合','觀測筆數'],[65,105,100,80,115,80,155,195,100,100,85]):
+        for key,title,width in zip(columns,['股號','股名','首次發現','首次價','當日最後讀取','最近價','最近價時間','行情狀態／來源','當日最高符合','當日最後符合','觀測筆數','達5/6次數'],[65,105,100,80,115,80,155,195,100,100,85,100]):
             self.tree.heading(key,text=title);self.tree.column(key,width=width,stretch=False)
         v=app.ttk.Scrollbar(table,orient='vertical',command=self.tree.yview);v.pack(side='right',fill='y')
         h=app.ttk.Scrollbar(table,orient='horizontal',command=self.tree.xview);h.pack(side='bottom',fill='x')
@@ -67,14 +67,14 @@ class DiaryView:
         if not self.window.winfo_exists() or (not force and time.monotonic()-self.last_refresh<3):return
         self.last_refresh=time.monotonic();self.draw_calendar();selected=self.current_code
         self.tree.delete(*self.tree.get_children())
-        rows=self.store.stocks(self.day.get());live=self.store.latest_quotes(self.day.get())
+        rows=self.store.stocks(self.day.get());live=self.store.latest_quotes(self.day.get());counts=self.store.qualification_counts(self.day.get())
         def clock(ts):return dt.datetime.fromtimestamp(ts,TAIPEI).strftime('%H:%M:%S') if ts is not None else '—'
         for code,name,first,price,last,latest,matched,total,reason,peak,n in rows:
             q=live.get(code,{})
             stamp=q.get('ts',last);value=q.get('price',latest);source=q.get('source','歷史掃描快取')
             quote_time=dt.datetime.fromtimestamp(stamp,TAIPEI).strftime('%m/%d %H:%M:%S') if stamp is not None else '—'
             state='來源近期讀值' if stamp is not None and -10<=time.time()-stamp<=90 else '非即時／保留前值'
-            item=self.tree.insert('','end',values=[code,name or '股名待補',clock(first),f'{price:.2f}',clock(last),'—' if value is None else f'{value:.2f}',quote_time,state+'／'+source,f'{peak}/6',f'{matched}/{total}' if total else '—',n])
+            item=self.tree.insert('','end',values=[code,name or '股名待補',clock(first),f'{price:.2f}',clock(last),'—' if value is None else f'{value:.2f}',quote_time,state+'／'+source,f'{peak}/6',f'{matched}/{total}' if total else '—',n,counts.get(code,0)])
             if code==selected:self.tree.selection_set(item)
         self.status.set(f'{self.day.get()}｜曾達5/6或6/6：{len(rows)}檔｜日曆綠色日期有紀錄；需啟用全部六項條件才會新收集5/6。' + ('｜正在整理舊紀錄' if self.importing else '')+'｜最近價每30秒背景更新；符合數為所選當日紀錄｜'+self.quote_note)
     def destroyed(self,event):

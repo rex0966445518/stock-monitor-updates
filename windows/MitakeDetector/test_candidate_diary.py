@@ -27,6 +27,22 @@ class CandidateDiaryTests(unittest.TestCase):
             self.assertEqual(len(details),4);self.assertTrue(details[0][10]);self.assertIn('min_turnover',details[0][-1])
             self.assertEqual(details[0][13],'0.3.58')
             diary.path.unlink()
+    def test_qualification_episodes_persist_and_ignore_duplicate_or_unknown(self):
+        with tempfile.TemporaryDirectory() as folder:
+            diary=CandidateDiary(Path(folder)/'scan.sqlite3')
+            day='1970-01-01'
+            for sample in [row(10000),row(10010,hit=True),row(10020,reason='等待重新複查'),row(10030)]:
+                diary.observe([sample],CFG,'test')
+            self.assertEqual(diary.qualification_counts(day),{'2330':1})
+            diary.observe([row(10040,price=20)],CFG,'test')
+            diary.observe([row(10050)],CFG,'test')
+            diary.observe([row(10050)],dict(CFG,source_rank='其他排行'),'test')
+            self.assertEqual(CandidateDiary(diary.path).qualification_counts(day),{'2330':2})
+            self.assertEqual(diary.qualification_counts('1970-01-02'),{})
+            # Late import of a valid weak observation reconstructs history.
+            diary.observe([row(10025,price=20)],CFG,'test')
+            self.assertEqual(diary.qualification_counts(day),{'2330':3})
+
     def test_duplicate_capture_does_not_duplicate_history(self):
         with tempfile.TemporaryDirectory() as folder:
             diary=CandidateDiary(Path(folder)/'scan.sqlite3')
