@@ -68,8 +68,8 @@ class BtConditionIndex private constructor(
         check(tmp.renameTo(file)){"歷史條件快取無法保存"}
     }
     companion object {
-        fun fingerprint(digest:String,settings:BtSettings,flowRevision:String="none")=
-            "$digest:${settings.start}:${settings.end}:${ScanConditions.VERSION}:${APattern.VERSION}:$flowRevision:"+
+        fun fingerprint(digest:String,settings:BtSettings,flowRevision:String="none",chipRevision:String="none")=
+            "$digest:${settings.start}:${settings.end}:${ScanConditions.VERSION}:${APattern.VERSION}:$flowRevision:$chipRevision:"+
             settings.enabledRadars.sortedBy{it.ordinal}.joinToString(","){it.name}+":"+
             settings.dConfig.json().toString()+":"+settings.eConfig.json().toString()+":"+settings.fConfig.json().toString()+":"+settings.gConfig.json().toString()+":"+settings.bConfig.json().toString()+":"+BtRobotSpace.allSlots.joinToString(","){"${it.first.name}/${it.second}"}
         fun read(file:File,series:List<BtSeries>,fingerprint:String):BtConditionIndex=
@@ -103,7 +103,7 @@ class BtConditionIndex private constructor(
         fun buildResumable(series:List<BtSeries>,settings:BtSettings,parts:File,fingerprint:String,
             progress:(String)->Unit={},cancel:()->Boolean={false},
             flowFor:(String,LocalDate)->TradeSideVolume?={_,_->null},benchmark:Map<LocalDate,Double>?=null,
-            chunkSize:Int=8):BtConditionIndex {
+            chunkSize:Int=8,chipFor:(String,LocalDate)->DChipDay?={_,_->null}):BtConditionIndex {
             require(chunkSize in 1..64)
             parts.mkdirs()
             val records=mutableListOf<Record>();val days=sortedSetOf<LocalDate>();var completed=0
@@ -112,7 +112,7 @@ class BtConditionIndex private constructor(
                 val file=File(parts,"$i.bin.gz")
                 val key="$fingerprint:chunk:$chunkSize:$i"
                 val cached=if(file.exists())runCatching{read(file,chunk,key)}.getOrNull()else null
-                val part=cached?:build(chunk,settings,{},cancel,flowFor,benchmark).also{index->
+                val part=cached?:build(chunk,settings,{},cancel,flowFor,benchmark,chipFor).also{index->
                     check(!cancel()){"已暫停測試"};index.save(file,key)
                 }
                 records.addAll(part.records);days.addAll(part.days);completed+=chunk.size
@@ -123,10 +123,12 @@ class BtConditionIndex private constructor(
         fun build(series:List<BtSeries>,settings:BtSettings,progress:(String)->Unit={},
                   cancel:()->Boolean={false},
                   flowFor:(String,LocalDate)->TradeSideVolume?={_,_->null},
-                  benchmark:Map<LocalDate,Double>?=null):BtConditionIndex {
+                  benchmark:Map<LocalDate,Double>?=null,
+                  chipFor:(String,LocalDate)->DChipDay?={_,_->null}):BtConditionIndex {
             val records=mutableListOf<Record>();val calc=TechnicalCalculator()
             val options=RadarType.entries.map{ScanConditions.forRadar(it)}
             require(options.all{it.size<63})
+            val needDChip=RadarType.D_MAIN_FORCE in settings.enabledRadars
             series.forEachIndexed{index,s->
                 check(!cancel()){"已暫停測試"}
                 val bars=s.bars.sortedBy{it.time}.distinctBy{RuleMetrics.tradingDate(it.time)}
@@ -146,9 +148,13 @@ class BtConditionIndex private constructor(
                                 bar.open,bar.high,bar.low,bar.close,0.0,
                                 (bar.volumeShares/1000).toInt(),null,null,
                                 tradeSideVolume=flowFor(s.code,day))
+                            val chipDate=RuleMetrics.tradingDate(bar.time)
+                            val priorDate=known.getOrNull(known.lastIndex-1)?.let{RuleMetrics.tradingDate(it.time)}
                             RuleMetrics(calc.buildForRules(stock,known).copy(
-                                timestamp=day.atTime(13,30).atZone(RuleMetrics.TAIPEI).toInstant().toEpochMilli(),
-                                dConfig=settings.dConfig,eConfig=settings.eConfig,fConfig=settings.fConfig,bConfig=settings.bConfig,gConfig=settings.gConfig,marketIndexCloses=benchmark))
+                                timestamp=chipDate.atTime(13,30).atZone(RuleMetrics.TAIPEI).toInstant().toEpochMilli(),
+                                dConfig=settings.dConfig,eConfig=settings.eConfig,fConfig=settings.fConfig,bConfig=settings.bConfig,gConfig=settings.gConfig,marketIndexCloses=benchmark,
+                                dChipToday=if(needDChip)chipFor(s.code,chipDate)else null,
+                                dChipPrevious=if(needDChip&&priorDate!=null)chipFor(s.code,priorDate)else null))
                         }
                         dates[i]=RuleMetrics.tradingDate(m.last!!.time)
                         options[i].forEachIndexed{bit,condition->

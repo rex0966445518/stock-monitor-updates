@@ -3,6 +3,7 @@ package com.rex.twboardingscanner.backtest
 import java.io.File
 import java.time.LocalDate
 import com.rex.twboardingscanner.domain.TradeSideVolume
+import com.rex.twboardingscanner.domain.DChipDay
 
 /** Disk-backed facts: never keep all stocks' indicator records or evidence strings in the heap. */
 internal class BtRobotIndex private constructor(private val series:List<BtSeries>,private val parts:File,
@@ -60,7 +61,7 @@ internal class BtRobotIndex private constructor(private val series:List<BtSeries
         fun open(series:List<BtSeries>,settings:BtSettings,parts:File,fingerprint:String,
             progress:(String)->Unit={},cancel:()->Boolean={false},
             flowFor:(String,LocalDate)->TradeSideVolume?={_,_->null},benchmark:Map<LocalDate,Double>?=null,
-            chunkSize:Int=8):BtRobotIndex {
+            chunkSize:Int=8,chipFor:(String,LocalDate)->DChipDay?={_,_->null}):BtRobotIndex {
             require(chunkSize in 1..64);parts.mkdirs()
             parts.listFiles()?.filter{it.isDirectory&&it.name.startsWith("signals-")}?.forEach{it.deleteRecursively()}
             val result=BtRobotIndex(series,parts,fingerprint,chunkSize,emptyList())
@@ -69,7 +70,7 @@ internal class BtRobotIndex private constructor(private val series:List<BtSeries
                 check(!cancel()){"已暫停測試"}
                 progress("歷史條件 ${i*chunkSize}/${series.size} 檔 · 讀取分段快取")
                 val cached=if(result.file(i).exists())runCatching{BtConditionIndex.read(result.file(i),chunk,result.key(i))}.getOrNull() else null
-                val part=cached?:BtConditionIndex.build(chunk,settings,progress={message->progress("歷史條件 ${i*chunkSize}/${series.size} 檔 · $message")},cancel=cancel,flowFor=flowFor,benchmark=benchmark).also{
+                val part=cached?:BtConditionIndex.build(chunk,settings,progress={message->progress("歷史條件 ${i*chunkSize}/${series.size} 檔 · $message")},cancel=cancel,flowFor=flowFor,benchmark=benchmark,chipFor=chipFor).also{
                     check(!cancel()){"已暫停測試"};it.save(result.file(i),result.key(i))
                 }
                 days.addAll(part.days)
