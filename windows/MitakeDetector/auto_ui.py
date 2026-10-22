@@ -935,34 +935,33 @@ class AutoUI:
     def schedule_scan_retry(self,token):
         self.cancel_scan_retry()
         count=getattr(self,'scan_retry_count',0)
-        if count>=3:
-            self.scan_phase.set('已暫停｜自動恢復已達3次｜按F8接續')
-            self.say('自動恢復已達3次，停止重試並保留進度；請查看診斷後按F8接續')
-            return
         self.scan_retry_count=count+1
-        delay=(5,15,30)[count]
-        self.scan_phase.set(f'掃描失敗｜{delay}秒後自動恢復（{count+1}/3）｜F8可取消')
+        delay=(5,15,30,60)[min(count,3)]
+        self.scan_phase.set(f'掃描失敗｜{delay}秒後自動恢復（第{count+1}次）｜F8可取消')
         self.say(self.scan_phase.get())
-        deadline=time.monotonic()+60
         def resume():
             self.scan_retry_timer=None
             if token!=self.generation:return
             worker=getattr(self,'worker_thread',None)
             if worker and worker.is_alive():
-                if time.monotonic()<deadline:self.scan_retry_timer=self.root.after(500,resume)
-                else:
-                    self.scan_phase.set('已暫停｜前次辨識尚未結束，取消自動恢復')
-                    self.say('前次辨識尚未結束，已取消自動恢復，避免重複啟動')
+                self.scan_retry_timer=self.root.after(500,resume)
                 return
             try:
                 # Never activate another application's window during a retry.
                 WindowsController(self.auto_hwnd,threading.Event()).check()
             except Exception as exc:
-                self.scan_phase.set('已暫停｜視窗或焦點檢查未通過｜按F8接續')
-                self.say('自動恢復暫停：'+str(exc)+'；請回到三竹後按F8接續')
+                self.say('等待三竹視窗可操作後自動接續：'+str(exc))
+                self.events.put((token,'ranking_skipped',dict(ranking='自動恢復',cycle=0,reason='視窗暫時無法操作，稍後自動重試：'+str(exc))))
+                self.schedule_scan_retry(token)
                 return
             self.say('自動恢復：沿用已存欄位座標並接續進度')
-            self.start_auto(announce=False,recovering=True)
+            try:
+                self.start_auto(announce=False,recovering=True)
+            except Exception as exc:
+                self.say('自動恢復未完成，稍後再試：'+str(exc))
+                self.events.put((token,'ranking_skipped',dict(ranking='自動恢復',cycle=0,reason=str(exc))))
+            if not getattr(self,'auto_active',False) and token==self.generation:
+                self.schedule_scan_retry(token)
         self.scan_retry_timer=self.root.after(delay*1000,resume)
 
     def start_auto(self,test_only=False,announce=True,recovering=False):
@@ -983,7 +982,10 @@ class AutoUI:
             unknown=[n for n in auto['rankings'] if n not in RANKINGS]
             if unknown:raise ValueError('舊設定含未列於目前選單的排行：'+'、'.join(unknown)+'。請到自動輪切設定重新勾選並儲存；不會自動改選其他排行。')
             if not 2<=float(auto.get('seconds',0))<=3600 or not 1<=int(auto.get('pages',0))<=20:raise ValueError('輪切間隔或頁數無效')
-        except Exception as exc:messagebox.showerror('需要設定',str(exc));return
+        except Exception as exc:
+            if recovering:self.say('自動恢復等待設定或視窗可用：'+str(exc))
+            else:messagebox.showerror('需要設定',str(exc))
+            return
         from resume_scan import ScanCheckpoint,scan_context
         from MitakeDetector import BASE
         context=scan_context(cfg);saved=None;store=None
@@ -992,7 +994,10 @@ class AutoUI:
             try:
                 store=ScanCheckpoint(BASE/'scan-checkpoint.json');saved=store.resume(context)
                 self.scan_checkpoint=store
-            except (ValueError,OSError) as exc:messagebox.showerror('保留前次進度',str(exc));return
+            except (ValueError,OSError) as exc:
+                if recovering:self.say('中斷紀錄暫時無法讀取，稍後再試：'+str(exc))
+                else:messagebox.showerror('保留前次進度',str(exc))
+                return
         new_day=bool(store and store.archived_path)
         if saved:
             self.generation+=1;token=self.generation;self.stop_event=threading.Event()
@@ -1121,6 +1126,7 @@ class AutoUI:
                                 try:return prioritized_recheck(quotes,current)
                                 except AutomationStopped:raise
                                 except Exception as error:
+                                    self.events.put((token,'ranking_skipped',dict(ranking=name+'／候選複查',cycle=cycle,reason='複查失敗，主掃描繼續：'+str(error))))
                                     priority_budget[0]=0
                                     diagnostic.update(stage='優先複查失敗，主掃描繼續',optional_error=str(error))
                                     from scan_diagnostics import record_interruption
@@ -1210,6 +1216,7 @@ class AutoUI:
                                 try:self.learn_deferred_names(c.check)
                                 except AutomationStopped:raise
                                 except Exception as error:
+                                    self.events.put((token,'ranking_skipped',dict(ranking=name+'／股名補讀',cycle=cycle,reason='補讀失敗，數字掃描繼續：'+str(error))))
                                     diagnostic.update(stage='股名補讀失敗，主掃描繼續',optional_error=str(error))
                                     from scan_diagnostics import record_interruption
                                     from MitakeDetector import VERSION
@@ -1219,7 +1226,7 @@ class AutoUI:
                                 remaining=max(1,int(wait_until-time.monotonic()+.999))
                                 self.events.put((token,'auto_progress',(f'{name}｜已讀{len(collected)}檔｜略過{rejected}列｜{mode}｜{remaining}秒後繼續｜OCR重用{getattr(self,"ocr_cache_hits",0)}次',rank_index+1,len(auto['rankings']))))
                                 c.pause(min(1,max(0,wait_until-time.monotonic())))
-                        except (AutomationStopped,ValueError,RuntimeError) as exc:
+                        except Exception as exc:
                             # User stops, lost focus and obstructed windows must still halt.
                             if stop.is_set() or (isinstance(exc,AutomationStopped) and not str(exc).startswith(('選單中找不到','切換後標題'))):raise
                             c.check()
@@ -1245,7 +1252,8 @@ class AutoUI:
                 from scan_diagnostics import record_interruption
                 from MitakeDetector import BASE,VERSION
                 location=record_interruption(BASE/'scan-interruptions.jsonl',VERSION,diagnostic,exc)
-                recoverable=not test_only and not stop.is_set() and (not isinstance(exc,AutomationStopped) or str(exc).startswith(('選單中找不到','切換後標題')))
+                recoverable=not test_only and not stop.is_set() and not str(exc).startswith('F8')
+                if recoverable:self.events.put((token,'ranking_skipped',dict(ranking=diagnostic.get('ranking','掃描流程'),cycle=diagnostic.get('cycle',0),reason='本次掃描中斷，將自動恢復：'+str(exc))))
                 self.events.put((token,'auto_failed' if recoverable else 'auto_end','掃描已暫停，進度保留：'+str(exc)+'｜'+location))
             finally:
                 self.events.put((token,'menu_numbers',None));self.restore_scan_cursor();stop.set()

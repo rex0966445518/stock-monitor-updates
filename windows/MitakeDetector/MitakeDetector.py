@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.103'
+VERSION = '0.3.104'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -892,7 +892,9 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
                     self.number_overlay.update(payload)
                 elif kind == 'ranking_skipped':
                     bridge=getattr(self,'mobile_bridge',None)
-                    if bridge:bridge.publish_notice(**payload)
+                    if bridge:
+                        try:bridge.publish_notice(**payload)
+                        except Exception as exc:self.say('手機通知暫時失敗，掃描繼續：'+str(exc))
                 elif kind == 'auto_status':
                     self.status.set(payload); self.say(payload); self.update_task_progress(payload)
                 elif kind == 'auto_progress':

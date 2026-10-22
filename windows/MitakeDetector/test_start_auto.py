@@ -463,12 +463,12 @@ class ScanRecoveryTests(unittest.TestCase):
         app=UI({});app.worker_thread=None;app.scan_phase=Mock();app.root=Mock()
         app.root.after.side_effect=lambda delay,callback:('timer',delay,callback)
         return app
-    def test_three_bounded_delays_and_cancel(self):
+    def test_repeated_failures_back_off_without_stopping(self):
         app=self.app()
-        for delay in [5000,15000,30000]:
+        for delay in [5000,15000,30000,60000,60000]:
             app.schedule_scan_retry(0);self.assertEqual(app.scan_retry_timer[1],delay)
-        app.schedule_scan_retry(0);self.assertIsNone(app.scan_retry_timer)
-        self.assertEqual(app.scan_retry_count,3)
+        self.assertEqual(app.scan_retry_count,5)
+        app.cancel_scan_retry();self.assertIsNone(app.scan_retry_timer)
     def test_stale_generation_and_foreground_failure_never_start(self):
         from unittest.mock import Mock
         app=self.app();app.start_auto=Mock();app.schedule_scan_retry(0)
@@ -477,6 +477,23 @@ class ScanRecoveryTests(unittest.TestCase):
         with patch('auto_ui.WindowsController',side_effect=AutomationStopped('焦點已切換')):
             app.scan_retry_timer[2]()
         app.start_auto.assert_not_called()
+    def test_retry_start_exception_schedules_again_and_notifies(self):
+        from unittest.mock import Mock
+        app=self.app();app.start_auto=Mock(side_effect=OSError('temporary failure'))
+        app.schedule_scan_retry(0)
+        with patch('auto_ui.WindowsController'):
+            app.scan_retry_timer[2]()
+        self.assertEqual(app.scan_retry_timer[1],15000)
+        self.assertTrue(any(kind=='ranking_skipped' for _,kind,_ in app.events.queue))
+    def test_foreground_failure_reschedules_and_notifies(self):
+        from unittest.mock import Mock
+        app=self.app();app.start_auto=Mock();app.schedule_scan_retry(0)
+        with patch('auto_ui.WindowsController',side_effect=AutomationStopped('焦點已切換')):
+            app.scan_retry_timer[2]()
+        app.start_auto.assert_not_called()
+        self.assertEqual(app.scan_retry_timer[1],15000)
+        self.assertTrue(any(kind=='ranking_skipped' for _,kind,_ in app.events.queue))
+
     def test_recovery_preserves_resume_mode_and_checks_previous_worker(self):
         from unittest.mock import Mock
         app=self.app();app.start_auto=Mock();app.schedule_scan_retry(0)
@@ -530,7 +547,21 @@ class RankingSkipTests(unittest.TestCase):
         for reason in ['F8緊急停止','焦點已切換到其他軟體','操作區域被其他視窗遮住']:
             visited,scanned,delays,messages,_=self.run_worker(AutomationStopped(reason))
             self.assertEqual(visited,['開盤強勢']);self.assertFalse(scanned)
-            self.assertFalse(any(k in ('ranking_skipped','auto_failed') for _,k,_ in messages))
+            if reason.startswith('F8'):
+                self.assertFalse(any(k in ('ranking_skipped','auto_failed') for _,k,_ in messages))
+            else:
+                self.assertTrue(any(k=='auto_failed' for _,k,_ in messages))
+                self.assertTrue(any(k=='ranking_skipped' for _,k,_ in messages))
+    def test_unexpected_rank_and_table_errors_continue_to_next_rank(self):
+        for error in (OSError('capture unavailable'), KeyError('missing field'), TypeError('bad OCR result')):
+            for in_scan in (False,True):
+                with self.subTest(error=type(error).__name__,in_scan=in_scan):
+                    visited,scanned,delays,messages,_=self.run_worker(error,scan_failure=in_scan)
+                    self.assertEqual(visited,['開盤強勢','漲幅排行'])
+                    self.assertIn('漲幅排行',scanned)
+                    self.assertEqual(len([1 for _,kind,_ in messages if kind=='ranking_skipped']),1)
+                    self.assertFalse(any(kind=='auto_failed' for _,kind,_ in messages))
+
     def test_all_missing_waits_before_next_round(self):
         visited,scanned,delays,messages,checkpoint=self.run_worker(AutomationStopped('選單中找不到排行'),all_failed=True)
         self.assertEqual(visited,['開盤強勢','漲幅排行']);self.assertIn(30,delays)
