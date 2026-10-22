@@ -10,9 +10,10 @@
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
         android:orientation="horizontal" android:gravity="center_vertical"
         android:layout_marginBottom="5dp">
-        <TextView android:layout_width="48dp" android:layout_height="48dp"
-            android:text="◆" android:textSize="28sp" android:textColor="#F9E7FF"
-            android:background="@drawable/neon_panel" android:gravity="center"
+        <ImageView android:layout_width="48dp" android:layout_height="48dp"
+            android:padding="5dp" android:scaleType="fitCenter"
+            android:src="@drawable/neon_diamond_mark"
+            android:background="@drawable/neon_panel"
             android:contentDescription="AI-離職神器 紫色霓虹鑽石標誌"/>
         <LinearLayout android:layout_width="0dp" android:layout_weight="1"
             android:layout_height="wrap_content" android:orientation="vertical"
@@ -27,7 +28,8 @@
         </LinearLayout>
         <TextView android:id="@+id/changelogButton" android:layout_width="68dp"
             android:layout_height="40dp" android:gravity="center" android:text="日誌 ›"
-            android:textColor="#E4C5FF" android:textSize="11sp"
+            android:textColor="#E4C5FF" android:textSize="10sp"
+            android:includeFontPadding="false" android:singleLine="true"
             android:background="@drawable/neon_panel"
             android:clickable="true" android:focusable="true"
             android:contentDescription="查看版本日誌"/>
@@ -115,7 +117,7 @@
         <com.google.android.material.button.MaterialButton android:id="@+id/startScanButton"
             style="@style/Widget.Scanner.Primary" android:layout_width="0dp"
             android:layout_weight="1" android:layout_height="40dp"
-            android:layout_marginHorizontal="2dp" android:text="▶ 開始掃描"
+            android:layout_marginHorizontal="2dp" android:text="開始掃描"
             android:minHeight="0dp" android:textSize="11sp" android:paddingHorizontal="2dp"
             android:paddingVertical="0dp" app:cornerRadius="12dp"/>
         <com.google.android.material.button.MaterialButton android:id="@+id/settingsButton"
@@ -199,23 +201,23 @@
         android:layout_marginTop="3dp" android:background="@drawable/neon_panel">
         <TextView android:id="@+id/navHome" android:layout_width="0dp" android:layout_weight="1"
             android:layout_height="match_parent" android:gravity="center" android:text="⌂ 首頁"
-            android:textColor="#C4AEEB" android:textSize="11sp"
+            android:textColor="#C4AEEB" android:textSize="11sp" android:singleLine="true" android:includeFontPadding="false"
             android:clickable="true" android:focusable="true"/>
         <TextView android:id="@+id/navScan" android:layout_width="0dp" android:layout_weight="1"
             android:layout_height="match_parent" android:gravity="center" android:text="◎ 掃描"
-            android:textColor="#EBCBFF" android:textStyle="bold" android:textSize="11sp"
+            android:textColor="#EBCBFF" android:textStyle="bold" android:textSize="11sp" android:singleLine="true" android:includeFontPadding="false"
             android:clickable="true" android:focusable="true"/>
         <TextView android:id="@+id/navBacktest" android:layout_width="0dp" android:layout_weight="1"
             android:layout_height="match_parent" android:gravity="center" android:text="▥ 回測"
-            android:textColor="#C4AEEB" android:textSize="11sp"
+            android:textColor="#C4AEEB" android:textSize="11sp" android:singleLine="true" android:includeFontPadding="false"
             android:clickable="true" android:focusable="true"/>
         <TextView android:id="@+id/navRobot" android:layout_width="0dp" android:layout_weight="1"
             android:layout_height="match_parent" android:gravity="center" android:text="◇ 機器人"
-            android:textColor="#C4AEEB" android:textSize="11sp"
+            android:textColor="#C4AEEB" android:textSize="11sp" android:singleLine="true" android:includeFontPadding="false"
             android:clickable="true" android:focusable="true"/>
         <TextView android:id="@+id/navUpdate" android:layout_width="0dp" android:layout_weight="1"
             android:layout_height="match_parent" android:gravity="center" android:text="↻ 更新"
-            android:textColor="#C4AEEB" android:textSize="11sp"
+            android:textColor="#C4AEEB" android:textSize="11sp" android:singleLine="true" android:includeFontPadding="false"
             android:clickable="true" android:focusable="true"/>
     </LinearLayout>
 <LinearLayout android:id="@+id/settingsPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone" android:padding="16dp"><TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="入場條件" android:textSize="17sp" android:textColor="#EBF1FA" android:layout_marginBottom="10dp"/><LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical"><com.google.android.material.button.MaterialButton android:id="@+id/conditionAButton" style="@style/Widget.Scanner.Button" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="3dp" android:text="A 準備起漲" /><com.google.android.material.button.MaterialButton android:id="@+id/conditionBButton" style="@style/Widget.Scanner.Button" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="3dp" android:text="B 深跌反轉" /><com.google.android.material.button.MaterialButton android:id="@+id/conditionCButton" style="@style/Widget.Scanner.Button" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="3dp" android:text="C 突發爆量" /><com.google.android.material.button.MaterialButton android:id="@+id/conditionDButton" style="@style/Widget.Scanner.Button" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="3dp" android:text="D 主力進場" /></LinearLayout><LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical"><com.google.android.material.button.MaterialButton android:id="@+id/scanConditionButton" style="@style/Widget.Scanner.Button" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="3dp" android:text="產業篩選" /><com.google.android.material.button.MaterialButton android:id="@+id/searchButton" style="@style/Widget.Scanner.Button" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="3dp" android:text="搜尋股票" /></LinearLayout><TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="下車賣出" android:textSize="17sp" android:textColor="#EBF1FA" android:layout_marginTop="20dp" android:layout_marginBottom="8dp"/><LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical"><com.google.android.material.button.MaterialButton android:id="@+id/exitRulesButton" style="@style/Widget.Scanner.Button" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="3dp" android:text="下車賣出條件 · 0 / 5 組" /></LinearLayout><TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="管理與紀錄" android:textSize="17sp" android:textColor="#EBF1FA" android:layout_marginTop="20dp" android:layout_marginBottom="8dp"/><LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical"><com.google.android.material.button.MaterialButton android:id="@+id/banButton" style="@style/Widget.Scanner.Button" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="3dp" android:text="禁股名單" /><com.google.android.material.button.MaterialButton android:id="@+id/limitButton" style="@style/Widget.Scanner.Button" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="3dp" android:text="限價名單" /></LinearLayout><LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical"><com.google.android.material.button.MaterialButton android:id="@+id/refreshButton" style="@style/Widget.Scanner.Button" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="3dp" android:text="導出海報" /></LinearLayout><LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical"><com.google.android.material.button.MaterialButton android:id="@+id/updateButton" style="@style/Widget.Scanner.Button" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="3dp" android:text="軟件更新" /></LinearLayout></LinearLayout></LinearLayout>
