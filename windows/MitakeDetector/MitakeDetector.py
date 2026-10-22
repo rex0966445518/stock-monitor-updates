@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.113'
+VERSION = '0.3.114'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -826,6 +826,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
                 text='\n'.join(f'{q.code} {q.name or "股名待補"}｜{q.price:.2f}元｜{q.gain:+.2f}%｜{q.volume:,.0f}張\n{reason}' for q,reason in fresh[:3])
                 if len(fresh)>3:text+=f'\n另有{len(fresh)-3}檔，請查看候選清單。'
                 text+='\n符合目前設定的觀察條件，不代表一定漲停。'
+                self.outline_clear_pending=None
                 self.candidate_notice=CandidateNotice(self.root,self.tk,self.ttk,text)
                 spoken='；'.join(f'{q.code} {q.name or "股名待補"}，全部條件符合' for q,_ in fresh[:3])
                 if cfg.get('guard_enabled'):
@@ -1245,4 +1246,5 @@ if __name__ == '__main__':
                 sys.exit(0)
         import tkinter as tk
         root = tk.Tk(); App(root); root.mainloop()
+
 

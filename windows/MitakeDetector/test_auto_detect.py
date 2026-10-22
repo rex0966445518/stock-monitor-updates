@@ -121,6 +121,33 @@ class DetectionTests(unittest.TestCase):
 if __name__=='__main__':unittest.main()
 
 class OutlineResilienceTests(unittest.TestCase):
+    def test_late_clear_ack_is_reused_without_more_ui_requests(self):
+        import threading
+        from unittest.mock import patch
+        app=self.app();stop=threading.Event()
+        with patch('auto_ui.time.monotonic',side_effect=[0,1]):
+            with self.assertRaises(RuntimeError):app.highlight_scan(7,None,stop)
+        ready=app.outline_clear_pending[1];size=app.events.qsize()
+        with patch('auto_ui.time.monotonic',side_effect=[0,1]):
+            with self.assertRaises(RuntimeError):app.highlight_scan(7,None,stop)
+        self.assertEqual(app.events.qsize(),size)
+        ready.set()
+        app.highlight_scan(7,None,stop)
+        self.assertEqual(app.events.qsize(),size)
+
+    def test_new_decoration_and_generation_require_new_clear(self):
+        import threading
+        from unittest.mock import patch
+        app=self.app();stop=threading.Event();old=threading.Event();old.set()
+        app.outline_clear_pending=(7,old)
+        with patch('auto_ui.time.monotonic',side_effect=[0,1]):
+            app.highlight_scan(7,[{'left':1}],stop)
+        self.assertIsNone(app.outline_clear_pending)
+        with patch('auto_ui.time.monotonic',side_effect=[0,1]):
+            with self.assertRaises(RuntimeError):app.highlight_scan(8,None,stop)
+        self.assertEqual(app.outline_clear_pending[0],8)
+        self.assertFalse(app.outline_clear_pending[1].is_set())
+
     def app(self):
         import queue
         app=AutoUI();app.events=queue.Queue();return app

@@ -1,3 +1,9 @@
+## v0.3.114
+
+- 修正綠框清除逾時後，每次擷取重新排隊等待造成整輪資料讀取失敗：沿用原清除確認，完成後直接繼續。
+- 新綠框或候選浮窗出現時重新要求清除；尚未確認清除仍略過，避免提示圖層混入辨識。
+- 同一輪綠框逾時只通知一次；包含 v0.3.113 選單局部定位加速。
+
 ## v0.3.113
 
 - 加速失敗後的排行選單重新定位：先辨識已知下拉框附近，失敗才擴大至左上區域，避免全視窗行情 OCR。
@@ -207,4 +213,5 @@
 研究依據：Fidelity Accumulation Distribution（價量交叉觀察）；TDCC集保股權分散表（週末持股，不能確認盤中買方）。
 https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/accumulation-distribution
 https://original-www.tdcc.com.tw/portal/zh/smWeb/qryStock
+
 
