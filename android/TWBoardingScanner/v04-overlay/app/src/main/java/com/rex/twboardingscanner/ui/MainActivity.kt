@@ -31,6 +31,7 @@ import com.rex.twboardingscanner.domain.DailyBar
 import com.rex.twboardingscanner.domain.RadarType
 import com.rex.twboardingscanner.domain.DPattern
 import com.rex.twboardingscanner.domain.DPatternConfig
+import com.rex.twboardingscanner.domain.RuleMetrics
 import com.rex.twboardingscanner.domain.ScanConditions
 import com.rex.twboardingscanner.domain.ScoringEngine
 import com.rex.twboardingscanner.domain.SignalLight
