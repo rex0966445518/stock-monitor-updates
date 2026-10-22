@@ -43,7 +43,9 @@ class F8Toggle:
 
 
 def normalized(text):
-    return ''.join(re.findall(r'[\u3400-\u9fff0-9]+',unicodedata.normalize('NFKC',text))).translate(TRANSLATE)
+    value=''.join(re.findall(r'[\u3400-\u9fff0-9]+',unicodedata.normalize('NFKC',text))).translate(TRANSLATE)
+    # Exact ranking alias only: never substitute 氯 globally.
+    return {'买氯强大':'买气强大'}.get(value,value)
 
 
 def validate_roi(roi):
@@ -77,7 +79,7 @@ def find_menu_item(ocr, name):
                 left=min(p[0] for p in token[0])
                 if right is not None and left-right>height*2:break
                 right=max(p[0] for p in token[0]);pieces.append(token);text+=normalized(token[1])
-                if len(pieces)>1 and text==target:
+                if len(pieces)>1 and normalized(text)==target:
                     return ((min(p[0] for t in pieces for p in t[0])+max(p[0] for t in pieces for p in t[0]))/2,y)
                 if len(text)>=len(target):break
     return None
@@ -273,9 +275,14 @@ class WindowsController:
 
 
 class RankingSwitcher:
-    def __init__(self,controller,ocr,combo_roi,menu_roi,ocr_retry=None,status=None,experience=None,numbering=False,menu_numbers=None,show_numbers=None):
+    def __init__(self,controller,ocr,combo_roi,menu_roi,ocr_retry=None,status=None,experience=None,numbering=False,menu_numbers=None,show_numbers=None,aliases=None,observe_ocr=None):
         self.experience=experience
-        self.c=controller;self.ocr=ocr;self.ocr_retry=ocr_retry;self.status=status or (lambda text:None)
+        from ranking_aliases import RankingAliases
+        self.aliases=aliases if aliases is not None else RankingAliases()
+        from ranking_aliases import RankingReader
+        self.c=controller;self.ocr=RankingReader(ocr,self.aliases,observe_ocr)
+        self.ocr_retry=RankingReader(ocr_retry,self.aliases,observe_ocr) if ocr_retry else None
+        self.status=status or (lambda text:None)
         self.combo=validate_roi(combo_roi);self.menu=validate_roi(menu_roi)
         from menu_numbers import NumberNavigator
         self.numbers=NumberNavigator(self,menu_numbers,show_numbers) if numbering else None

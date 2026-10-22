@@ -60,13 +60,22 @@ def open_training(app):
     top.geometry(f'680x740+{x}+0')
     status=app.tk.StringVar(value='每輪隨機測試全部排行；每項連續三次自動核對成功才完成。')
     app.ttk.Label(top,textvariable=status,wraplength=650).pack(fill='x',padx=10,pady=8)
-    table=app.ttk.Treeview(top,columns=('streak','tries','fail'),height=10)
+    table=app.ttk.Treeview(top,columns=('streak','tries','fail'),height=6)
     table.heading('#0',text='排行');table.column('#0',width=220)
     for key,label in [('streak','連續通過 / 3'),('tries','自動測試次數'),('fail','失敗次數')]:
         table.heading(key,text=label);table.column(key,width=115)
     for name in RANKINGS:table.insert('', 'end',iid=name,text=name,values=(0,0,0))
     table.pack(fill='x',padx=10)
     app.ttk.Label(top,text='需要協助時：在下方選單截圖點選指定排行。可往下捲動尋找；\n人工示範不算通過，接著必須由系統自行選取並核對。',wraplength=650).pack(pady=8)
+    raw_text=app.tk.StringVar();mapped=app.tk.StringVar(value=RANKINGS[0])
+    app.ttk.Label(top,text='即時 OCR 原文（選一項設定對應；保留辨識信心門檻）').pack(anchor='w',padx=10)
+    raw_picker=app.ttk.Combobox(top,textvariable=raw_text,state='readonly');raw_picker.pack(fill='x',padx=10)
+    correction=app.ttk.Frame(top);correction.pack(fill='x',padx=10,pady=4)
+    app.ttk.Combobox(correction,textvariable=mapped,values=RANKINGS,state='readonly',width=16).pack(side='left')
+    app.ttk.Button(correction,text='儲存對應並重試',command=lambda:send('alias',(raw_text.get(),mapped.get()))).pack(side='left',padx=6)
+    app.ttk.Button(correction,text='刪除此對應',command=lambda:send('remove',raw_text.get())).pack(side='left')
+    ocr_detail=app.tk.StringVar(value='等待辨識…')
+    app.ttk.Label(top,textvariable=ocr_detail,wraplength=650).pack(fill='x',padx=10)
     canvas=app.tk.Canvas(top,height=300,bg='#102c40');canvas.pack(fill='both',expand=True,padx=10)
     state={'image':None,'scale':1,'assisting':False,'done':False}
     buttons=app.ttk.Frame(top);buttons.pack(fill='x',pady=8)
@@ -89,6 +98,12 @@ def open_training(app):
             while True:
                 kind,data=updates.get_nowait()
                 if kind=='status':status.set(data);app.status.set(data)
+                elif kind=='ocr':
+                    values=list(dict.fromkeys(str(t[1]) for t in data))
+                    raw_picker['values']=values
+                    if raw_text.get() not in values:raw_text.set(values[0] if values else '')
+                    ocr_detail.set('辨識原文：'+'、'.join(f'{t[1]} ({float(t[2]):.0%})' for t in data)[:180])
+                elif kind=='target':mapped.set(data)
                 elif kind=='results':
                     for n,values in data.items():table.item(n,values=values)
                 elif kind=='image':
@@ -109,16 +124,30 @@ def open_training(app):
             c.activate()
             app.highlight_scan(token,None,stop)
             experience=Experience(BASE/'automation-experience.json',dict({k:auto.get(k) for k in ('title','window_size','combo','menu','table')},menu_catalog=RANKINGS),True)
-            switcher=RankingSwitcher(c,app.read_auto_ocr,auto['combo'],auto['menu'],experience=experience,ocr_retry=app.read_menu_ocr_retry,numbering=auto.get('menu_numbering',True),menu_numbers=auto.get('menu_numbers',{}))
+            switcher=RankingSwitcher(c,app.read_auto_ocr,auto['combo'],auto['menu'],experience=experience,ocr_retry=app.read_menu_ocr_retry,numbering=auto.get('menu_numbering',True),menu_numbers=auto.get('menu_numbers',{}),observe_ocr=lambda tokens:updates.put(('ocr',tokens)))
             def assist(name):
+                updates.put(('target',name))
                 page=0
                 im,region=replay_menu(switcher,page)
                 while not stop.is_set():
+                    switcher.ocr(im)
                     updates.put(('image',im))
                     while not stop.is_set():
                         try:action,value=commands.get(timeout=.1);break
                         except queue.Empty:continue
                     if stop.is_set():return
+                    if action in ('alias','remove'):
+                        try:
+                            if action=='alias':switcher.aliases.save(*value)
+                            else:switcher.aliases.remove(value)
+                            switcher.verified_title_pixels=None;switcher.verified_titles=set()
+                            updates.put(('status','對應已更新；正在重新自動定位「'+name+'」'))
+                            switcher.switch(name)
+                            updates.put(('status','重新定位成功；人工對應不計入通過次數，繼續自動測試'))
+                            return
+                        except Exception as exc:
+                            updates.put(('status','對應重試未通過：'+str(exc)))
+                            im,region=replay_menu(switcher,page);continue
                     if action=='next':page=min(59,page+1)
                     elif action=='home':page=0
                     now,region=replay_menu(switcher,page)

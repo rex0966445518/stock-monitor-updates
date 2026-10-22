@@ -313,7 +313,7 @@ class MenuRecoveryTests(unittest.TestCase):
     def test_local_ocr_coordinates_are_translated_and_small(self):
         from unittest.mock import patch
         c,e,s=self.build();s.combo=[.1,.1,.2,.05]
-        s.ocr.return_value=[([[10,10],[30,10],[30,25],[10,25]],'開盤強勢',.99)]
+        s.ocr.reader.return_value=[([[10,10],[30,10],[30,25],[10,25]],'開盤強勢',.99)]
         with patch('auto_detect.combo_frame',return_value=(100,80,300,120)) as frame,patch('auto_detect.detect_menu',return_value=[.1,.15,.2,.5]):
             s.recalibrate_menu()
         self.assertEqual(s.ocr.call_count,1)
@@ -365,3 +365,22 @@ class MenuRecoveryTests(unittest.TestCase):
         self.assertEqual(c.actions,[])
 
 
+
+class BuyingPowerAliasTests(unittest.TestCase):
+    def test_exact_alias_and_title(self):
+        self.assertEqual(normalized('買氯強大'),normalized('買氣強大'))
+        self.assertIsNotNone(find_menu_item([token('買氯強大')],'買氣強大'))
+        s=RankingSwitcher(FakeController(),lambda im:[],[0,0,.2,.1],[0,.1,.2,.5])
+        self.assertTrue(s.title_tokens_match([token('買氯強大')],'買氣強大'))
+        self.assertFalse(s.title_tokens_match([token('買氯強大'),token('賣壓沉重',50)],'買氣強大'))
+    def test_alias_does_not_relax_confidence_or_other_labels(self):
+        t=token('買氯強大')
+        self.assertIsNone(find_menu_item([(t[0],t[1],.4)],'買氣強大'))
+        self.assertNotEqual(normalized('賣氯強大'),normalized('買氣強大'))
+        self.assertNotEqual(normalized('買氯強小'),normalized('買氣強大'))
+    def test_split_same_row_only(self):
+        a=([[0,10],[20,10],[20,20],[0,20]],'買氯',.99)
+        b=([[22,10],[42,10],[42,20],[22,20]],'強大',.99)
+        self.assertIsNotNone(find_menu_item([a,b],'買氣強大'))
+        b=([[22,40],[42,40],[42,50],[22,50]],'強大',.99)
+        self.assertIsNone(find_menu_item([a,b],'買氣強大'))
