@@ -299,8 +299,31 @@ class RankingSwitcher:
                 yield [([[x/scale,y/scale] for x,y in box],text,score)
                        for box,text,score in reader(enlarged) or []]
 
+    def neighbor_point(self,im,tokens,name):
+        """Bracket an unreadable row with two exact adjacent catalog labels."""
+        if name not in ('開低走高','連續買單'):return None
+        index=RANKINGS.index(name)
+        before=find_menu_item(tokens,RANKINGS[index-1])
+        after=find_menu_item(tokens,RANKINGS[index+1])
+        if not before or not after:return None
+        heights=[max(p[1] for p in t[0])-min(p[1] for p in t[0])
+                 for t in tokens if normalized(t[1]) in (normalized(RANKINGS[index-1]),normalized(RANKINGS[index+1])) and t[2]>=.85]
+        if len(heights)!=2 or min(heights)<=0:return None
+        height=sum(heights)/2;pitch=(after[1]-before[1])/2
+        if not height<=pitch<=height*3 or abs(before[0]-after[0])>height:return None
+        point=((before[0]+after[0])/2,(before[1]+after[1])/2)
+        if not height/2<point[1]<getattr(im,'height',0)-height/2:return None
+        for other in RANKINGS:
+            if other==name:continue
+            found=find_menu_item(tokens,other)
+            if found and abs(found[1]-point[1])<pitch*.4:return None
+        self.status(f'鄰列定位：{RANKINGS[index-1]}／{RANKINGS[index+1]} 中間的「{name}」；選取後核對標題')
+        return point
+
     def menu_point(self,im,tokens,name):
         point=find_menu_item(tokens,name)
+        if point:return point
+        point=self.neighbor_point(im,tokens,name)
         if point:return point
         if name=='開盤強勢':
             point=find_opening_strong_below_low(tokens,getattr(im,'height',0))
@@ -325,6 +348,8 @@ class RankingSwitcher:
             self.c.check()
             retry=self.ocr_retry(im);candidates.append(retry)
             point=find_menu_item(retry,name)
+            if point:return point
+            point=self.neighbor_point(im,retry,name)
             if point:return point
         for enlarged in self.enlarged_reads(im,name):
             candidates.append(enlarged)

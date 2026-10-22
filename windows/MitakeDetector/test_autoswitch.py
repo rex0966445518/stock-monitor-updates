@@ -281,6 +281,34 @@ class CumulativeTitleFormsTests(unittest.TestCase):
             for name in RANKINGS:
                 self.assertEqual(s.title_tokens_match([token(title)],name),name==expected,(title,name))
 
+class DifficultNeighborTests(unittest.TestCase):
+    def test_two_target_rows_require_brackets_and_reject_conflicts(self):
+        from types import SimpleNamespace
+        s=RankingSwitcher(FakeController(),lambda image:[],[0,0,.2,.1],[0,.1,.2,.5])
+        for name,above,below in [('開低走高','開高走低','週轉排行'),('連續買單','大幅震盪','連續賣單')]:
+            rows=[token(above,20),token(below,60)]
+            self.assertEqual(s.neighbor_point(SimpleNamespace(height=100),rows,name),(55,40))
+            self.assertIsNone(s.neighbor_point(SimpleNamespace(height=100),rows[:1],name))
+            self.assertIsNone(s.neighbor_point(SimpleNamespace(height=100),rows+[token('漲幅排行',40)],name))
+            self.assertIsNone(s.neighbor_point(SimpleNamespace(height=40),rows,name))
+            low=[(box,text,.6) for box,text,score in rows]
+            self.assertIsNone(s.neighbor_point(SimpleNamespace(height=100),low,name))
+
+    def test_neighbor_click_only_learns_after_correct_title(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        for name,above,below in [('開低走高','開高走低','週轉排行'),('連續買單','大幅震盪','連續賣單')]:
+            for valid in (True,False):
+                c=FakeController();c.image=lambda roi:(SimpleNamespace(height=100),absolute_roi(roi,c.rect()))
+                e=Mock();e.hint.return_value=None
+                s=RankingSwitcher(c,lambda image:[token(above,20),token(below,60)],[0,0,.2,.1],[0,.1,.2,.5],experience=e)
+                s.label_matches=lambda n:False;s.verify_label=lambda n:valid
+                if valid:
+                    s.switch(name);e.record.assert_called_once()
+                else:
+                    with self.assertRaises(AutomationStopped):s.switch(name)
+                    e.record.assert_not_called()
+
 class MenuRecoveryTests(unittest.TestCase):
     def test_local_ocr_coordinates_are_translated_and_small(self):
         from unittest.mock import patch
