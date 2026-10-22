@@ -85,6 +85,9 @@ class MainActivity: AppCompatActivity() {
     private var backgroundLoadedFolder=""
     private var backgroundPreviewVersion=0L
     private var backgroundResultLoading=false
+    // Keep a frozen viewport during DRAGGING/SETTLING; latest market data is
+    // applied once the list becomes idle, never discarded.
+    private var pendingResultsAfterScroll=false
     private val workers = Executors.newFixedThreadPool(6)
     private val enrichmentWorkers = Executors.newSingleThreadExecutor()
 
@@ -157,11 +160,32 @@ class MainActivity: AppCompatActivity() {
         // change/predictive animations can reattach a holder already being rebound.
         b.recycler.itemAnimator=null
         b.recycler.adapter = adapter
+        b.recycler.addOnScrollListener(object:RecyclerView.OnScrollListener(){
+            override fun onScrollStateChanged(view:RecyclerView,newState:Int){
+                super.onScrollStateChanged(view,newState)
+                if(newState!=RecyclerView.SCROLL_STATE_IDLE){
+                    adapter.setScrolling(true)
+                }else{
+                    // Listener can run during RecyclerView's layout dispatch.
+                    // Flush updates only on the next frame when no longer scrolling.
+                    view.post{
+                        if(isFinishing||isDestroyed||view.scrollState!=RecyclerView.SCROLL_STATE_IDLE)return@post
+                        adapter.setScrolling(false)
+                        if(pendingResultsAfterScroll){
+                            pendingResultsAfterScroll=false
+                            render()
+                        }
+                    }
+                }
+            }
+        })
 
         b.marketGuardButton.setOnClickListener { showMarketGuard() }
         b.settingsButton.setOnClickListener { showSettings() }
         b.robotButton.setOnClickListener { startActivity(android.content.Intent(this,BtRobotActivity::class.java)) }
         b.resultFilters.onSelected = { index ->
+            b.recycler.stopScroll()
+            adapter.setScrolling(false)
             selectedTab=index
             prefs.edit().putString("resultFolder",latestFolderId).putInt("resultTab",index).apply()
             render()
@@ -1036,8 +1060,13 @@ class MainActivity: AppCompatActivity() {
         val groups=(0..9).map{ResultFilters.select(source,it)}
         b.resultFilters.update(groups.map{it.size},selectedTab)
         val selected=groups[selectedTab]
-        adapter.submit(selected)
-        b.emptyState.visibility=if(selected.isEmpty())android.view.View.VISIBLE else android.view.View.GONE
+        if(b.recycler.scrollState!=RecyclerView.SCROLL_STATE_IDLE){
+            pendingResultsAfterScroll=true
+        }else{
+            pendingResultsAfterScroll=false
+            adapter.submit(selected)
+            b.emptyState.visibility=if(selected.isEmpty())android.view.View.VISIBLE else android.view.View.GONE
+        }
         (b.emptyState.getChildAt(0) as TextView).text=when{
             isScanning->"正在整理市場訊號"
             selectedTab==6&&latestScanAt>0->"本次沒有符合條件的股票"

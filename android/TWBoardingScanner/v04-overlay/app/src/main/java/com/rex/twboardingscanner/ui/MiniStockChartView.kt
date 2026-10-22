@@ -18,6 +18,7 @@ class MiniStockChartView @JvmOverloads constructor(context: Context, attrs: Attr
     private var series = emptyList<ChartPoint>()
     private var count = 32
     private var selected = -1
+    private var lastBarsReference:List<DailyBar>?=null
     var detailed = false
     var showAxes = false
     var onSelected: ((ChartPoint) -> Unit)? = null
@@ -29,12 +30,20 @@ class MiniStockChartView @JvmOverloads constructor(context: Context, attrs: Attr
     private val green = Color.rgb(47,209,138)
     private fun dp(v: Float) = v * density
     fun setBars(input: List<DailyBar>) {
+        if(lastBarsReference===input)return
+        lastBarsReference=input
         series = ChartSeries.prepare(input)
         selected = series.lastIndex
         series.lastOrNull()?.let { onSelected?.invoke(it) }
         invalidate()
     }
-    fun setWindow(days: Int) { count = days.coerceAtLeast(10); selected = series.lastIndex; series.lastOrNull()?.let { onSelected?.invoke(it) }; invalidate() }
+    fun setWindow(days: Int) {
+        val wanted=days.coerceAtLeast(10)
+        if(count==wanted)return
+        count=wanted;selected=series.lastIndex
+        series.lastOrNull()?.let { onSelected?.invoke(it) }
+        invalidate()
+    }
     override fun onDraw(c: Canvas) {
         super.onDraw(c)
         c.drawColor(Color.rgb(7,24,39))
