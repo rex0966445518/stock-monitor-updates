@@ -778,6 +778,10 @@ class AutoUI:
         self.auto_hwnd=current
         return current
 
+    def learn_rankings(self):
+        from ranking_training import open_training
+        open_training(self)
+
     def preview_menu_numbers(self):
         if not self.idle() or not self.dependencies():return
         from menu_numbers import NativeMenu,PixelMenu,preview_numbers
@@ -1316,4 +1320,5 @@ class AutoUI:
             if token!=self.generation:return
             self.worker_thread=threading.Thread(target=job,daemon=True);self.worker_thread.start()
         self.root.after(700,launch)
+
 

@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.116'
+VERSION = '0.3.117'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -288,11 +288,11 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         bar = ttk.Frame(root); bar.pack(fill='x', padx=18, pady=(0,10))
         metric_bar=ttk.Frame(bar);metric_bar.pack(side='right',fill='both',expand=True,padx=(14,0))
         metrics(self,metric_bar)
-        for label, action in [('▶ 開始掃描 F8', self.begin_observation), ('Ⅱ 暫停', self.stop), ('重新開始', self.restart_observation), ('掃描設定', self.configure_auto), ('排行定位', self.preview_menu_numbers)]:
+        for label, action in [('▶ 開始掃描 F8', self.begin_observation), ('Ⅱ 暫停', self.stop), ('重新開始', self.restart_observation), ('掃描設定', self.configure_auto), ('學習排行榜', self.learn_rankings)]:
             ttk.Button(bar, text=label, command=action,style='Gold.TButton' if action==self.begin_observation else 'TButton').pack(side='left', padx=4,fill='y')
         advanced = ttk.Menubutton(self.header_navigation, text='進階工具')
         menu = tk.Menu(advanced, tearoff=False)
-        for label, action in [('重新開始',self.restart_observation),('緩漲明細／設定',self.show_steady_settings),('手機連動／配對', self.show_mobile_pairing), ('重新自動定位', self.auto_setup), ('清除股名記憶', self.clear_stock_names), ('手動框選排行榜', self.select_region), ('手動校正欄位', self.calibrate), ('圖片辨識測試', self.image_test), ('合成資料示範', self.demo), ('辨識元件檢查', self.install), ('資料資料夾', self.open_folder), ('OCR學習紀錄', self.show_ocr_learning), ('中斷診斷', self.show_scan_diagnostics), ('版本日誌', self.show_version_history), ('訊號驗證紀錄', self.show_signal_reviews), ('進場檢核設定', self.show_guard_settings), ('籌碼觀察／研究', self.show_research), ('每日紀錄／重播驗證', self.show_scan_archive), ('5/6候選歷史日誌', self.show_candidate_diary), ('使用說明', self.help)]:
+        for label, action in [('排行編號預覽',self.preview_menu_numbers),('重新開始',self.restart_observation),('緩漲明細／設定',self.show_steady_settings),('手機連動／配對', self.show_mobile_pairing), ('重新自動定位', self.auto_setup), ('清除股名記憶', self.clear_stock_names), ('手動框選排行榜', self.select_region), ('手動校正欄位', self.calibrate), ('圖片辨識測試', self.image_test), ('合成資料示範', self.demo), ('辨識元件檢查', self.install), ('資料資料夾', self.open_folder), ('OCR學習紀錄', self.show_ocr_learning), ('中斷診斷', self.show_scan_diagnostics), ('版本日誌', self.show_version_history), ('訊號驗證紀錄', self.show_signal_reviews), ('進場檢核設定', self.show_guard_settings), ('籌碼觀察／研究', self.show_research), ('每日紀錄／重播驗證', self.show_scan_archive), ('5/6候選歷史日誌', self.show_candidate_diary), ('使用說明', self.help)]:
             menu.add_command(label=label, command=action)
         self.advanced_menu=menu
         advanced.configure(menu=menu);advanced.pack(side='left',padx=4,before=self.header_navigation.winfo_children()[0])
@@ -1247,5 +1247,6 @@ if __name__ == '__main__':
                 sys.exit(0)
         import tkinter as tk
         root = tk.Tk(); App(root); root.mainloop()
+
 
 

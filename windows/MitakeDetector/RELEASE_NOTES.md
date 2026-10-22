@@ -1,3 +1,10 @@
+## v0.3.117
+
+- 新增主頁「學習排行榜」：每輪隨機測試完整排行，各項連續三次自動核對成功才完成。
+- 失敗可透過選單截圖點選教學、逐段捲動；核對標題後保存位置，人工示範不計入自動通過。
+- 綠框、焦點或視窗環境問題單獨提示，不計為選單定位失敗。F8可停止，保存已驗證的位置與測試報告。
+- 原排行編號預覽移至進階工具。測試通過率僅代表本次環境結果。
+
 ## v0.3.116
 
 - 綠框清除改由獨立的 UI 優先檢查處理，避免排在行情渲染與通知後方導致多個排行被跳過。
@@ -225,5 +232,6 @@
 研究依據：Fidelity Accumulation Distribution（價量交叉觀察）；TDCC集保股權分散表（週末持股，不能確認盤中買方）。
 https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/accumulation-distribution
 https://original-www.tdcc.com.tw/portal/zh/smWeb/qryStock
+
 
 
