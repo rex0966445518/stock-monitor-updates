@@ -92,8 +92,10 @@ def run_automation_smoke(root,app):
         for label_widget in cell.winfo_children():
             assert label_widget.winfo_y()+label_widget.winfo_height()<=cell.winfo_height(),'Metric value is covered'
     assert progress_panel.metrics.winfo_x()+progress_panel.metrics.winfo_width()<=progress_panel.window.winfo_width(),'Table exceeds right edge'
-    progress_panel.rate.set('2.0 秒／段｜15.00 檔／秒')
-    assert progress_panel.values['rate'].get()=='15.00 股/秒'
+    progress_panel.rate.set('70 字／秒｜2.0 秒／段｜15.00 檔／秒')
+    assert progress_panel.values['rate'].get()=='70 字/秒'
+    progress_panel.counts.set('累計完成 2 遍｜完成一遍耗時 36.7 秒')
+    assert progress_panel.values['round_seconds'].get()=='36.7 秒'
     progress_panel.update('排行1/5｜已讀26檔｜等待3秒',1,5)
     assert '15.00 檔／秒' in progress_panel.rate.get()
     root.update()
@@ -190,3 +192,4 @@ def run_automation_smoke(root,app):
         return {'menu_switches':3,'selected_label':label.get(),'stop_blocks_input':True,'menu_auto_detected':True,'current_rank_no_click':True,'open_popup_one_click':True,'progress_visible':True,'progress_no_focus':True,'native_number_21':True,'number_overlay_no_focus':True,'manual_number_editor':True}
     finally:
         stop.set();thread.join(timeout=1);app.close_task_progress();win.destroy();root.update()
+
