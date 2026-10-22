@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.104'
+VERSION = '0.3.105'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -839,11 +839,26 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         except OSError as exc:self.say("保持喚醒設定失敗："+str(exc))
 
     def poll(self):
+        try:self.poll_events()
+        except Exception as exc:
+            # A single UI/render callback must not permanently kill the pump.
+            try:self.say('畫面更新失敗，略過本次更新並繼續：'+str(exc))
+            except Exception:pass
+            bridge=getattr(self,'mobile_bridge',None)
+            if bridge:
+                try:bridge.publish_notice(ranking='畫面更新',cycle=0,reason=str(exc))
+                except Exception:pass
+        finally:
+            try:self.root.after(150,self.poll)
+            except Exception:pass
+
+    def poll_events(self):
         try:
             while True:
                 token, kind, payload = self.events.get_nowait()
                 if kind=='scan_region':
                     region,ready=payload
+                    cleared=False
                     try:
                         if token==self.generation:
                             notice=getattr(self,'candidate_notice',None)
@@ -853,8 +868,16 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
                                     import ctypes
                                     ctypes.windll.user32.ShowWindow(notice.native_hwnd,4)
                                 else:notice.window.deiconify()
-                            self.show_scan_outline(region);self.root.update_idletasks()
-                    finally:ready.set()
+                            if getattr(self,'outline_disabled_token',None)==token:region=None
+                            try:
+                                self.show_scan_outline(region);self.root.update_idletasks();cleared=True
+                            except Exception:
+                                self.outline_disabled_token=token
+                                self.show_scan_outline(None);cleared=True
+                                raise
+                        else:cleared=True
+                    finally:
+                        if cleared:ready.set()
                     continue
                 if token is None:
                     if kind=='wantgoo_chart':
@@ -946,7 +969,6 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         if panel and panel.alive:panel.rate.set(self.scan_rate.text())
         self.refresh_index_label()
         self.refresh_today_candidates()
-        self.root.after(150, self.poll)
 
     def export(self):
         from tkinter import filedialog

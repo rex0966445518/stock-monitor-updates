@@ -46,12 +46,20 @@ class AutoUI:
 
     def highlight_scan(self,token,region,stop):
         from autoswitch import AutomationStopped
+        if stop.is_set():raise AutomationStopped('已停止自動操作')
+        # Decorative borders may be disabled, but clearing old borders before
+        # capture must still be acknowledged to avoid OCR of stale overlays.
+        if region and getattr(self,'outline_disabled_token',None)==token:return
         ready=threading.Event()
         self.events.put((token,'scan_region',(region,ready)))
-        deadline=time.monotonic()+5
+        deadline=time.monotonic()+.5
         while not ready.wait(.02):
             if stop.is_set():raise AutomationStopped('已停止自動操作')
-            if time.monotonic()>deadline:raise AutomationStopped('掃描區域提示未就緒，已停止')
+            if time.monotonic()>deadline:
+                self.outline_disabled_token=token
+                self.events.put((token,'ranking_skipped',dict(ranking='掃描綠框提示',cycle=0,reason='綠框回應逾時，已停用本次掃描綠框；主掃描繼續，未確認清除的畫面略過。')))
+                if region is None:raise RuntimeError('綠框尚未清除，略過本次擷取，繼續下一排行')
+                return
         if stop.is_set():raise AutomationStopped('已停止自動操作')
 
     def show_scan_outline(self,region):

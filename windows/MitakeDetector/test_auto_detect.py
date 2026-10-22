@@ -119,3 +119,39 @@ class DetectionTests(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+
+class OutlineResilienceTests(unittest.TestCase):
+    def app(self):
+        import queue
+        app=AutoUI();app.events=queue.Queue();return app
+    def test_show_timeout_disables_decoration_without_stopping(self):
+        import threading
+        from unittest.mock import patch
+        app=self.app();stop=threading.Event()
+        with patch('auto_ui.time.monotonic',side_effect=[0,1]):
+            app.highlight_scan(7,[{'left':1}],stop)
+        self.assertFalse(stop.is_set());self.assertEqual(app.outline_disabled_token,7)
+        size=app.events.qsize();app.highlight_scan(7,[{'left':2}],stop)
+        self.assertEqual(app.events.qsize(),size)
+    def test_clear_timeout_skips_capture_not_emergency_stop(self):
+        import threading
+        from unittest.mock import patch
+        from autoswitch import AutomationStopped
+        app=self.app();stop=threading.Event()
+        with patch('auto_ui.time.monotonic',side_effect=[0,1]):
+            with self.assertRaises(RuntimeError) as error:app.highlight_scan(7,None,stop)
+        self.assertNotIsInstance(error.exception,AutomationStopped)
+        self.assertFalse(stop.is_set())
+    def test_user_stop_is_not_swallowed(self):
+        import threading
+        from autoswitch import AutomationStopped
+        app=self.app();stop=threading.Event();stop.set()
+        with self.assertRaises(AutomationStopped):app.highlight_scan(7,None,stop)
+    def test_ui_error_still_reschedules_and_notifies(self):
+        from MitakeDetector import App
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        app=SimpleNamespace(poll_events=Mock(side_effect=ValueError('bad render')),say=Mock(),mobile_bridge=Mock(),root=Mock(),poll=Mock())
+        App.poll(app)
+        app.root.after.assert_called_once_with(150,app.poll)
+        app.mobile_bridge.publish_notice.assert_called_once()
