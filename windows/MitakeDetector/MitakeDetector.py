@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.105'
+VERSION = '0.3.106'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -687,8 +687,11 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         for (q,ratio,reason,hit),match in ordered_candidates(getattr(self,'display_rows',[]),cfg):
             if not re.fullmatch(r'[0-9]{4}',q.code):continue
             q.name=getattr(getattr(self,'stock_names',None),'names',{}).get(q.code,q.name)
-            if match['total']==6 and match['count']>=5:chart_rows.append((q,match.copy()))
-            retained=q.code in getattr(getattr(self,'retained_candidates',None),'peak',{})
+            peaks=getattr(getattr(self,'retained_candidates',None),'peak',{})
+            retained=q.code in peaks
+            from candidate_charts import retained_chart_match
+            chart_match=retained_chart_match(match,peaks.get(q.code,0))
+            if chart_match is not None:chart_rows.append((q,chart_match))
             show_name=True
             if name_eligible(match):eligible.add(q.code)
             if hidden_result(q,cfg,filters) and not retained:continue

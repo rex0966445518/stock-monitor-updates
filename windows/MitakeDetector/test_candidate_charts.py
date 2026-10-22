@@ -90,3 +90,23 @@ class ChartRetryTests(unittest.TestCase):
             with patch.object(service,'cached',return_value=dict(error='timeout',fetched_at=time.time()-31)):
                 service.request('2330')
                 self.assertEqual(service.queue.qsize(),1)
+
+class RetainedChartTests(unittest.TestCase):
+    def test_weakened_candidate_keeps_current_score_and_peak(self):
+        from candidate_charts import retained_chart_match,candidate_heading
+        match=dict(count=3,total=6,label='待觀察',text='條件轉弱')
+        result=retained_chart_match(match,5)
+        self.assertEqual(result['count'],3)
+        self.assertEqual(result['peak'],5)
+        self.assertIn('目前 3/6',candidate_heading(result))
+        self.assertIn('曾達 5/6',candidate_heading(result))
+        self.assertNotIn('peak',match)
+    def test_new_weak_stock_is_not_added(self):
+        from candidate_charts import retained_chart_match
+        self.assertIsNone(retained_chart_match(dict(count=4,total=6),0))
+        self.assertIsNotNone(retained_chart_match(dict(count=5,total=6),0))
+    def test_pending_recheck_retained_without_claiming_fresh_qualification(self):
+        from candidate_charts import retained_chart_match,candidate_heading
+        result=retained_chart_match(dict(count=0,total=6,text='等待重新複查'),6)
+        self.assertIn('等待重新複查',candidate_heading(result))
+        self.assertEqual(result['count'],0)

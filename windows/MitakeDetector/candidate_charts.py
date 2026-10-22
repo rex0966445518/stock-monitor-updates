@@ -41,6 +41,21 @@ def macd(rows):
     return [(d,s,None if d is None or s is None else 2*(d-s)) for d,s in zip(dif,signal)]
 
 
+def retained_chart_match(match,peak=0):
+    if peak<5 and not (match['total']==6 and match['count']>=5):return None
+    result=dict(match)
+    result['peak']=max(peak,match['count'] if match['total']==6 else 0)
+    result['retained']=peak>=5
+    return result
+
+
+def candidate_heading(match):
+    current=f"目前 {match['count']}/{match['total']}"
+    if match.get('retained'):
+        current+=f"｜曾達 {match['peak']}/6・持續保留"
+    return current+'｜'+match.get('text',match.get('label',''))
+
+
 class CandidateCharts:
     PAGE_SIZE=8
     def __init__(self,app,parent):
@@ -52,7 +67,7 @@ class CandidateCharts:
         self.web_service=WantGooCharts(BASE,lambda data:app.events.put((None,'wantgoo_chart',data)))
         tk,ttk=app.tk,app.ttk
         bar=ttk.Frame(parent);bar.pack(fill='x')
-        self.status=tk.StringVar(value='等待目前符合 5/6 或 6/6 的股票')
+        self.status=tk.StringVar(value='等待候選股票；曾達 5/6 或 6/6 後持續保留')
         ttk.Label(parent,textvariable=self.status,wraplength=1000).pack(fill='x',padx=8,pady=4)
         ttk.Button(bar,text='上一頁',command=lambda:self.turn(-1)).pack(side='right')
         ttk.Button(bar,text='下一頁',command=lambda:self.turn(1)).pack(side='right')
@@ -74,7 +89,7 @@ class CandidateCharts:
         self.page=max(0,min(self.page+delta,max(0,(len(self.rows)-1)//self.PAGE_SIZE)));self.canvas.yview_moveto(0);self.render()
     def render(self):
         visible=self.rows[self.page*self.PAGE_SIZE:(self.page+1)*self.PAGE_SIZE]
-        key=tuple((q.code,q.name,q.price,m['count'],m['total'],self.test_mode) for q,m in visible)
+        key=tuple((q.code,q.name,q.price,m['count'],m['total'],m.get('peak'),m.get('text'),self.test_mode) for q,m in visible)
         self.status.set(('【測試模式：符合數為示範，不是選股結果】 ' if self.test_mode else '')+f'候選 {len(self.rows)} 檔｜第 {self.page+1}/{max(1,(len(self.rows)+7)//8)} 頁｜日線非即時；五分 K 背景載入／點圖放大')
         if key!=self.key:
             self.key=key
@@ -88,7 +103,7 @@ class CandidateCharts:
         tk,ttk=self.app.tk,self.app.ttk
         card=ttk.Frame(self.inner,padding=8);card.pack(fill='x',pady=5)
         price_text='未執行掃描' if q.price is None else f'{q.price:.2f}'
-        ttk.Label(card,text=('【測試】 ' if self.test_mode else '')+f'{q.name or "股名待補"}  {q.code}  ｜ {match["count"]}/6 ｜ 掃描價 {price_text}',font=('Microsoft JhengHei',13,'bold')).pack(anchor='w')
+        ttk.Label(card,text=('【測試】 ' if self.test_mode else '')+f'{q.name or "股名待補"}  {q.code}  ｜ {candidate_heading(match)} ｜ 掃描價 {price_text}',font=('Microsoft JhengHei',13,'bold')).pack(anchor='w')
         panels=ttk.Frame(card);panels.pack(fill='x')
         links=source_links(q.code);canvases=[]
         for i,title in enumerate(('5 分 K · 玩股網','日 K · 官方快取','日成交量 · 張','日 MACD · 12/26/9')):
