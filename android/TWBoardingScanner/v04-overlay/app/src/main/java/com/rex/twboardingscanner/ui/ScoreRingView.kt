@@ -14,7 +14,7 @@ class ScoreRingView @JvmOverloads constructor(
     private val base = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 8f
-        color = Color.parseColor("#20384F")
+        color = Color.parseColor("#492574")
     }
     private val arc = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -28,12 +28,12 @@ class ScoreRingView @JvmOverloads constructor(
         typeface = android.graphics.Typeface.DEFAULT_BOLD
     }
     private val grade = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#93AAC0")
+        color = Color.parseColor("#C4AEEB")
         textAlign = Paint.Align.CENTER
         textSize = 18f
     }
     private var score = 0
-    private var accent = Color.parseColor("#36A3FF")
+    private var accent = Color.parseColor("#B443FF")
 
     fun setScore(value: Int, color: Int) {
         score = value.coerceIn(0, 100)
@@ -54,7 +54,7 @@ class ScoreRingView @JvmOverloads constructor(
         arc.color = accent
         c.drawArc(rect, -90f, 360f * score / 100f, false, arc)
         c.drawText(score.toString(), width / 2f, height / 2f + 6f * density, number)
-        val g = "通過率"
+        val g = "綜合評分"
         c.drawText(g, width / 2f, height / 2f + 20f * density, grade)
     }
 }
