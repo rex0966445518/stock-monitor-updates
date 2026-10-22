@@ -39,7 +39,7 @@ class TradeSideVolumeImportActivity:AppCompatActivity(){
                 NeonUi.dp(this@TradeSideVolumeImportActivity,20))
         }
         val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);addView(root)}
-        setContentView(scroll)
+        NeonPageChrome.attach(this,scroll,NeonPageChrome.Page.SCAN)
         ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->
             val bars=insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets

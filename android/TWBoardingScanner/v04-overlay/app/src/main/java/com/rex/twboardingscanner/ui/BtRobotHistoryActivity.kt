@@ -44,7 +44,7 @@ class BtRobotHistoryActivity:AppCompatActivity(){
             cursors.clear();savedN.indices.forEach{i->cursors+=RankCursor(savedProfits[i].takeIf{it.isFinite()},savedN[i])}
         }
         val root=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(context,16),NeonUi.dp(context,16),NeonUi.dp(context,16),NeonUi.dp(context,28))}
-        val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);addView(root)};setContentView(scroll)
+        val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);addView(root)};NeonPageChrome.attach(this,scroll,NeonPageChrome.Page.ROBOT)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
         root.addView(NeonUi.header(this,"機器人回測紀錄","ROBOT ARCHIVE","所有批次 · 每輪條件 · 詳細買賣紀錄"){finish()})
         fun categoryButton(type:RadarType?):MaterialButton=NeonUi.button(this,type?.label?:"全部類別"){selectCategory(type)}.apply{

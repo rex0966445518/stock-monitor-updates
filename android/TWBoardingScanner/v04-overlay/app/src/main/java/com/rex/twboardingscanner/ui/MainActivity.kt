@@ -265,6 +265,7 @@ class MainActivity: AppCompatActivity() {
         render()
         syncBackgroundScan()
         restoreLatestScan()
+        if(intent?.getBooleanExtra("neon-open-scanner",false)==true)openScannerView()
     }
 
 
@@ -496,6 +497,11 @@ class MainActivity: AppCompatActivity() {
         dialog.behavior.state=com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
     }
 
+    override fun onNewIntent(intent:android.content.Intent){
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if(intent.getBooleanExtra("neon-open-scanner",false))openScannerView() else showDashboard()
+    }
     override fun onResume() { super.onResume();backgroundHandler.removeCallbacks(backgroundPoll);backgroundHandler.post(backgroundPoll);guardHandler.post(guardPoll);loadScanSettings();if(::trendHoldCheck.isInitialized)trendHoldCheck.isChecked=com.rex.twboardingscanner.data.ExitRuleStore(this).readProfitTrendHold(StockScope.SCANNER);b.exitRulesButton.text="下車賣出條件 · ${com.rex.twboardingscanner.data.ExitRuleStore(this).read(com.rex.twboardingscanner.domain.StockScope.SCANNER).count{it.active}} / 7 項";if(::paperLoop.isInitialized){paperLoop.start();render()} }
     override fun onPause() { backgroundHandler.removeCallbacks(backgroundPoll);guardHandler.removeCallbacks(guardPoll);if(::paperLoop.isInitialized)paperLoop.stop();super.onPause() }
 

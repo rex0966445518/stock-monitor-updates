@@ -257,9 +257,15 @@ class BtRobotActivity:AppCompatActivity(){
     private fun buildScreen(savedInstanceState:Bundle?){
         screenFailed=false;store=BtRobotStore(this);exportId=savedInstanceState?.getString("exportId").orEmpty()
         val root=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(context,16),NeonUi.dp(context,16),NeonUi.dp(context,16),NeonUi.dp(context,28))}
-        val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);addView(root)};setContentView(scroll)
+        val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);addView(root)};NeonPageChrome.attach(this,scroll,NeonPageChrome.Page.ROBOT)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
         root.addView(NeonUi.header(this,"自動測試機器人","AUTOMATION LAB"){finish()})
+        root.addView(NeonUi.gap(this,9))
+        root.addView(NeonUi.row(this,listOf(
+            NeonUi.tile(this,"啟用策略","${enabledRadars.size} / ${RadarType.entries.size}","使用已儲存條件",NeonUi.violet),
+            NeonUi.tile(this,"測試紀錄","本機保存","支援續跑與查閱",NeonUi.mint)
+        )).apply{tag="neon-robot-overview"})
+        root.addView(NeonUi.gap(this,9))
         root.addView(NeonUi.button(this,"機器人回測紀錄",NeonUi.cyan){startActivity(Intent(this,BtRobotHistoryActivity::class.java))}.apply{tag="robot-history-entry"})
         val toolsRow=NeonUi.row(this,listOf(NeonUi.button(this,"禁股名單",NeonUi.pink){StockToolsActivity.open(this,"BAN",StockScope.ROBOT)},NeonUi.button(this,"限價名單",NeonUi.amber){StockToolsActivity.open(this,"LIMIT",StockScope.ROBOT)},NeonUi.button(this,"搜尋股票"){StockToolsActivity.open(this,"SEARCH",StockScope.ROBOT)}));root.addView(toolsRow)
         root.addView(NeonUi.button(this,"匯入主動買／賣成交量 CSV",NeonUi.cyan){

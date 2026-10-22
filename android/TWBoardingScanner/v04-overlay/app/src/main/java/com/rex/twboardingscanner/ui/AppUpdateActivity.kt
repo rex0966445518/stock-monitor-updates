@@ -18,6 +18,7 @@ class AppUpdateActivity:AppCompatActivity(){
     private lateinit var store:AppUpdateStore
     private lateinit var headline:TextView;private lateinit var version:TextView;private lateinit var detail:TextView;private lateinit var notes:TextView
     private lateinit var bar:ProgressBar;private lateinit var primary:com.google.android.material.button.MaterialButton;private lateinit var pause:com.google.android.material.button.MaterialButton
+    private lateinit var safetyPhase:TextView
     private val handler=Handler(Looper.getMainLooper())
     private var autoInstall=false;private var awaitingPermission=false;private var verifying=false;private var visible=false
     private val polling=object:Runnable{override fun run(){render();handler.postDelayed(this,700)}}
@@ -25,14 +26,19 @@ class AppUpdateActivity:AppCompatActivity(){
         super.onCreate(savedInstanceState);store=AppUpdateStore(this)
         autoInstall=savedInstanceState?.getBoolean("autoInstall")?:false;awaitingPermission=savedInstanceState?.getBoolean("awaitingPermission")?:false
         val root=NeonUi.vertical(this).apply{setPadding(NeonUi.dp(this@AppUpdateActivity,16),NeonUi.dp(this@AppUpdateActivity,16),NeonUi.dp(this@AppUpdateActivity,16),NeonUi.dp(this@AppUpdateActivity,28))}
-        val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);addView(root)};setContentView(scroll)
+        val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);addView(root)};NeonPageChrome.attach(this,scroll,NeonPageChrome.Page.UPDATE)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val b=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(b.left,b.top,b.right,b.bottom);insets}
-        root.addView(NeonUi.header(this,"軟件更新","SYSTEM UPDATE"){finish()})
-        root.addView(NeonUi.label(this,"GitHub 官方更新包 · 支援跨版本更新",12f,NeonUi.cyan));root.addView(NeonUi.gap(this,16))
-        val panel=NeonUi.vertical(this).apply{background=NeonUi.panel(this@AppUpdateActivity,NeonUi.cyan);setPadding(NeonUi.dp(this@AppUpdateActivity,16),NeonUi.dp(this@AppUpdateActivity,16),NeonUi.dp(this@AppUpdateActivity,16),NeonUi.dp(this@AppUpdateActivity,16))}
+        root.addView(NeonUi.header(this,"版本更新","SYSTEM UPDATE","GitHub 一鍵更新與安全安裝"){finish()})
+        root.addView(NeonUi.gap(this,12))
+        val safety=NeonUi.section(this,"更新狀態與安全檢查","取得版本 → 下載 → 完整性驗證 → 系統安裝")
+        safetyPhase=NeonUi.label(this,"準備取得 GitHub 版本資訊",13f,NeonUi.muted)
+            .apply{tag="neon-update-safety-phase"}
+        safety.addView(safetyPhase);root.addView(safety)
+        root.addView(NeonUi.gap(this,12))
+        val panel=NeonUi.vertical(this).apply{background=NeonUi.panel(this@AppUpdateActivity,NeonUi.violet);setPadding(NeonUi.dp(this@AppUpdateActivity,16),NeonUi.dp(this@AppUpdateActivity,16),NeonUi.dp(this@AppUpdateActivity,16),NeonUi.dp(this@AppUpdateActivity,16))}
         headline=NeonUi.label(this,"準備檢查更新",22f,NeonUi.ink,true);panel.addView(headline)
         version=NeonUi.label(this,"",14f,NeonUi.cyan);panel.addView(version);panel.addView(NeonUi.gap(this,16))
-        bar=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply{max=100;progressTintList=android.content.res.ColorStateList.valueOf(NeonUi.cyan);progressBackgroundTintList=android.content.res.ColorStateList.valueOf(NeonUi.blue)}
+        bar=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply{max=100;progressTintList=android.content.res.ColorStateList.valueOf(NeonUi.violet);progressBackgroundTintList=android.content.res.ColorStateList.valueOf(NeonUi.border)}
         panel.addView(bar,android.widget.LinearLayout.LayoutParams(-1,NeonUi.dp(this,8)));panel.addView(NeonUi.gap(this,10))
         detail=NeonUi.label(this,"",13f);panel.addView(detail);root.addView(panel);root.addView(NeonUi.gap(this,12))
         primary=NeonUi.primary(this,"一鍵更新"){if(store.snapshot().optString("status")=="READY"&&isNewer())install() else startUpdate()}.apply{tag="update-primary"};root.addView(primary)
@@ -73,6 +79,17 @@ class AppUpdateActivity:AppCompatActivity(){
         primary.isEnabled=!busy&&!verifying
         primary.text=when{verifying->"驗證中…";ready->"安裝更新";busy->"更新進行中…";current->"重新檢查更新";status in setOf("ERROR","PAUSED")->"重試／接續更新";else->"一鍵更新"}
         pause.visibility=if(busy)View.VISIBLE else View.GONE
+        safetyPhase.text=when{
+            verifying->"● 安裝前正在核對 APK 完整性與簽章…"
+            ready->"● 下載完成；安裝時將再次驗證 APK 與簽章"
+            current->"✓ 更新源顯示目前已是最新版本"
+            status=="DOWNLOADING"->"● 正在下載更新包 · ${pct}%（尚未完成驗證）"
+            status=="VERIFYING"->"● 正在核對下載的更新檔"
+            status=="ERROR"->"⚠ 更新失敗，請查看原因並重試"
+            status=="PAUSED"->"◷ 更新暫停，可嘗試接續"
+            status in AppUpdateStore.busy->"● 正在檢查 GitHub 更新資訊"
+            else->"● 尚未執行更新檢查"
+        }
         notes.text=s?.let{"v${it.versionName} · ${it.publishedAt}\n\n${it.notes.ifBlank{"本版未提供更新說明"}}"}?:"按一鍵更新取得最新版說明。"
         if(ready&&autoInstall&&visible&&!verifying){autoInstall=false;install()}
     }

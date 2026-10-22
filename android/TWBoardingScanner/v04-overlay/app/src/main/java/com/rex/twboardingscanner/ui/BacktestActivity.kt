@@ -76,9 +76,15 @@ class BacktestActivity:AppCompatActivity(){
         lastLimit=saved.maxHoldingStocks?:25;lastTarget=saved.targetNetPct
         start=runCatching{LocalDate.parse(config?.getString("start"))}.getOrDefault(start);end=runCatching{LocalDate.parse(config?.getString("end"))}.getOrDefault(end)
         val root=NeonUi.vertical(this).apply{setPadding(dp(16),dp(16),dp(16),dp(28))}
-        val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);addView(root)};setContentView(scroll)
+        val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);addView(root)};NeonPageChrome.attach(this,scroll,NeonPageChrome.Page.BACKTEST)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
         root.addView(NeonUi.header(this,"歷史回測","STRATEGY LAB","以歷史資料驗證入場與出場策略"){finish()})
+        root.addView(NeonUi.gap(this,9))
+        root.addView(NeonUi.row(this,listOf(
+            NeonUi.tile(this,"啟用策略","${btEnabled.size} / ${RadarType.entries.size}","A～G 策略",NeonUi.violet),
+            NeonUi.tile(this,"回測期間","${start}","至 ${end}",NeonUi.blue)
+        )).apply{tag="neon-backtest-overview"})
+        root.addView(NeonUi.gap(this,9))
         root.addView(NeonUi.row(this,listOf(
             NeonUi.button(this,"自動測試機器人",NeonUi.blue){startActivity(Intent(this,BtRobotActivity::class.java))},
             NeonUi.button(this,"回測日誌"){startActivity(Intent(this,BacktestJournalActivity::class.java))})))
@@ -332,7 +338,7 @@ class BacktestActivity:AppCompatActivity(){
     }
     private fun openRobotReport(id:String,key:String){
         val root=NeonUi.vertical(this).apply{setPadding(dp(16),dp(16),dp(16),dp(28))}
-        val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);addView(root)};setContentView(scroll)
+        val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);addView(root)};NeonPageChrome.attach(this,scroll,NeonPageChrome.Page.BACKTEST)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
         root.addView(NeonUi.header(this,"機器人測試詳情","ROBOT REPORT"){finish()})
         val loading=label("讀取組合紀錄…",13f);root.addView(loading)
@@ -351,7 +357,7 @@ class BacktestActivity:AppCompatActivity(){
     }
     private fun openJournal(id:String){
         val root=NeonUi.vertical(this).apply{setPadding(dp(16),dp(16),dp(16),dp(28))}
-        val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);addView(root)};setContentView(scroll)
+        val scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);addView(root)};NeonPageChrome.attach(this,scroll,NeonPageChrome.Page.BACKTEST)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
         root.addView(NeonUi.header(this,"日誌詳情","TRADE JOURNAL"){finish()})
         root.addView(label("日誌 ${id.take(8)} · 獨立保存的回測紀錄",12f,NeonUi.cyan))

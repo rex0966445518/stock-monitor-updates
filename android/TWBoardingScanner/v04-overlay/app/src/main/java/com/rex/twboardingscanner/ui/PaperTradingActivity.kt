@@ -36,7 +36,7 @@ class PaperTradingActivity:AppCompatActivity() {
         super.onCreate(savedInstanceState);repo=PaperRepository(this)
         scroll=ScrollView(this).apply{background=NeonUi.backdrop(context);isFillViewport=true}
         content=NeonUi.vertical(this).apply{setPadding(dp(16),dp(16),dp(16),dp(28))}
-        scroll.addView(content);setContentView(scroll)
+        scroll.addView(content);NeonPageChrome.attach(this,scroll,NeonPageChrome.Page.SCAN)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll){v,insets->
             val bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);insets}
         scroll.setOnScrollChangeListener { _:View, _:Int, _:Int, _:Int, _:Int -> updateChartVisibility() }

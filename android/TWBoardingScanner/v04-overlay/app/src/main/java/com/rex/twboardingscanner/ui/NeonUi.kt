@@ -10,8 +10,10 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.rex.twboardingscanner.R
 import com.google.android.material.button.MaterialButton
 
 /** Shared UI v2 design system. Every interior page reuses these purple-neon primitives. */
@@ -109,17 +111,42 @@ internal object NeonUi {
         button.strokeColor=ColorStateList.valueOf(if(active)accent else border)
         button.setTextColor(if(active)accent else muted)
     }
+    /** Shared diamond brand header used by all interior pages. */
     fun header(c:Context,title:String,kicker:String,subtitle:String="",back:()->Unit)=vertical(c).apply{
+        tag="neon-v2-interior-header"
         layoutParams=LinearLayout.LayoutParams(-1,-2)
-        addView(label(c,kicker,10f,violet,true).apply{letterSpacing=.16f})
+        background=panel(c,violet)
+        setPadding(dp(c,10),dp(c,10),dp(c,10),dp(c,11))
         addView(LinearLayout(c).apply{
             layoutParams=LinearLayout.LayoutParams(-1,-2)
             gravity=Gravity.CENTER_VERTICAL
-            addView(label(c,title,26f,ink,true),LinearLayout.LayoutParams(0,-2,1f))
-            addView(button(c,"返回",muted,back).apply{tag="page-back"},LinearLayout.LayoutParams(dp(c,64),-2).apply{marginStart=dp(c,12)})
+            addView(ImageView(c).apply{
+                setImageResource(R.drawable.neon_diamond_mark)
+                scaleType=ImageView.ScaleType.FIT_CENTER
+                background=panel(c,violet)
+                setPadding(dp(c,7),dp(c,7),dp(c,7),dp(c,7))
+                contentDescription="AI-離職神器鑽石標誌"
+            },LinearLayout.LayoutParams(dp(c,52),dp(c,52)))
+            addView(vertical(c).apply{
+                addView(label(c,"AI-離職神器  ·  $kicker",10f,muted,true).apply{
+                    maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END
+                })
+                addView(label(c,title,24f,ink,true).apply{
+                    maxLines=2
+                    setAutoSizeTextTypeUniformWithConfiguration(15,24,1,TypedValue.COMPLEX_UNIT_SP)
+                })
+            },LinearLayout.LayoutParams(0,-2,1f).apply{marginStart=dp(c,9)})
+            addView(button(c,"返回",violet,back).apply{
+                tag="page-back"
+                textSize=12f;minHeight=dp(c,43);minimumHeight=dp(c,43)
+                setPadding(dp(c,4),0,dp(c,4),0)
+            },LinearLayout.LayoutParams(dp(c,58),dp(c,47)).apply{marginStart=dp(c,6)})
         })
-        if(subtitle.isNotBlank())addView(label(c,subtitle,12f))
-        addView(gap(c,20))
+        if(subtitle.isNotBlank()){
+            addView(gap(c,7))
+            addView(label(c,subtitle,11.5f,muted))
+        }
+        addView(gap(c,4))
     }
     fun section(c:Context,title:String,subtitle:String="")=vertical(c).apply{
         background=panel(c);setPadding(dp(c,16),dp(c,16),dp(c,16),dp(c,16))
