@@ -74,21 +74,24 @@ class TeachingButtonsTests(unittest.TestCase):
         from unittest.mock import Mock,patch
         from PIL import Image
         from ranking_training import open_training,TeachingMemory
-        buttons={};scheduled=[]
+        buttons={};scheduled=[];created=[]
         class Widget:
             def __init__(self,*args,**kw):
-                self.value=kw.get('value','')
-                if 'command' in kw:buttons[kw['text']]=kw['command']
+                self.value=kw.get('value','');self.items={};self.columns=kw.get('columns');created.append(self)
+                if 'command' in kw and 'text' in kw:buttons[kw['text']]=kw['command']
+            def insert(self,parent,index,**kw):self.items[kw['iid']]=kw
+            def item(self,key,**kw):self.items[key].update(kw);return self.items[key]
             def __getattr__(self,name):return lambda *a,**k:None
             def __setitem__(self,key,value):pass
             def get(self):return self.value
             def set(self,value):self.value=value
             def winfo_screenwidth(self):return 1600
+            def winfo_screenheight(self):return 720
             def winfo_width(self):return 640
             def winfo_height(self):return 240
             def winfo_exists(self):return True
             def after(self,ms,callback):scheduled.append(callback)
-        widgets=types.SimpleNamespace(**{n:Widget for n in ('Toplevel','StringVar','Label','Treeview','Canvas','Frame','Button','Combobox')})
+        widgets=types.SimpleNamespace(**{n:Widget for n in ('Toplevel','StringVar','Label','Treeview','Canvas','Frame','Button','Combobox','Scrollbar')})
         with tempfile.TemporaryDirectory() as d:
             app=Mock();app.root=Widget();app.tk=widgets;app.ttk=widgets;app.status=Widget()
             app.idle.return_value=True;app.dependencies.return_value=True;app.generation=0
@@ -98,7 +101,7 @@ class TeachingButtonsTests(unittest.TestCase):
             c.image.return_value=(im,region)
             s=Mock();s.c=c;s.menu=[0,.1,.2,.5];s.ocr.return_value=[];s.label_matches.return_value=False
             s.switch.side_effect=RuntimeError('找不到');s.numbers=None
-            s.verify_label.side_effect=lambda name:(app.stop_event.set() or True)
+            s.verify_label.return_value=False
             nav=Mock();nav.manual={};visited=[]
             def make_nav(*args,**kwargs):nav.show=kwargs['show'];return nav
             def locate(name,area):
@@ -112,19 +115,77 @@ class TeachingButtonsTests(unittest.TestCase):
                     if predicate():return
                     time.sleep(.01)
                 self.fail('Teaching UI did not respond')
-            with patch.dict('sys.modules',{'MitakeDetector':types.SimpleNamespace(BASE=Path(d))}),patch('autoswitch.WindowsController',return_value=c),patch('autoswitch.RankingSwitcher',return_value=s),patch('autoswitch.RANKINGS',['買氣強大']),patch('menu_numbers.NumberNavigator',side_effect=make_nav),patch('ranking_training.replay_menu',return_value=(im,region)),patch('PIL.ImageTk.PhotoImage',return_value=object()):
+            with patch.dict('sys.modules',{'MitakeDetector':types.SimpleNamespace(BASE=Path(d))}),patch('autoswitch.WindowsController',return_value=c),patch('autoswitch.RankingSwitcher',return_value=s),patch('autoswitch.RANKINGS',['漲停鎖住','跌停鎖住']),patch('menu_numbers.NumberNavigator',side_effect=make_nav),patch('ranking_training.replay_menu',return_value=(im,region)),patch('PIL.ImageTk.PhotoImage',return_value=object()):
                 try:
                     open_training(app)
                     pump_until(lambda:bool(visited))
                     # Process the image that enables the assistance controls.
-                    pump_until(lambda:app.status.get().startswith('請協助'))
-                    buttons['下一個']();pump_until(lambda:app.status.get().startswith('已移至第 2'))
-                    buttons['上一個']();pump_until(lambda:app.status.get().startswith('已移至第 1'))
+                    pump_until(lambda:app.status.get().startswith('請在下方'))
+                    buttons['標記下移一列']();pump_until(lambda:app.status.get().startswith('已移至第 2'))
+                    buttons['標記上移一列']();pump_until(lambda:app.status.get().startswith('已移至第 1'))
                     c.click.assert_not_called()
-                    buttons['確定學習']();pump_until(lambda:not app.worker_thread.is_alive())
-                    c.click.assert_called_once_with((50,150))
-                    self.assertEqual(visited,[1,1])  # visible arrows never reopen/OCR the menu
-                    self.assertTrue((Path(d)/'ranking-teaching-positions.json').exists())
+                    buttons['記住並下一項']();pump_until(lambda:app.status.get().startswith('請在下方截圖指出「跌停鎖住」'))
+                    self.assertEqual(visited[:3],[1,1,2])
+                    s.verify_label.assert_not_called();s.switch.assert_not_called()
+                    buttons['記住並下一項']();pump_until(lambda:not app.worker_thread.is_alive())
+                    c.click.assert_not_called()
+                    import json
+                    saved=json.loads((Path(d)/'ranking-teaching-positions.json').read_text())['items']
+                    self.assertEqual(list(saved),['漲停鎖住','跌停鎖住'])
+                    self.assertTrue(app.status.get().startswith('全部 2 項'))
+                    catalog=next(w for w in created if w.columns==('state','position'))
+                    self.assertEqual(list(catalog.items),['漲停鎖住','跌停鎖住'])
+                    self.assertTrue(all(item['values'][0]=='已記住' for item in catalog.items.values()))
                 finally:
                     if hasattr(app,'stop_event'):app.stop_event.set()
                     if isinstance(app.worker_thread,threading.Thread):app.worker_thread.join(2)
+
+@unittest.skipUnless(__import__('os').name=='nt','Windows Tk layout check')
+class GuidedLayoutTests(unittest.TestCase):
+    def test_primary_action_stays_visible_at_large_font_and_short_window(self):
+        import tkinter as tk
+        from tkinter import ttk
+        from unittest.mock import Mock,patch
+        from ranking_training import open_training
+        root=tk.Tk();root.withdraw();root.tk.call('tk','scaling',2.0)
+        app=Mock(root=root,tk=tk,ttk=ttk,generation=0)
+        app.status=tk.StringVar(root)
+        app.idle.return_value=True;app.dependencies.return_value=True
+        app.config={'auto_config':{'combo':[0,0,.2,.1],'menu':[0,.1,.2,.5]}}
+        c=Mock();c.rect.return_value=(0,0,1000,800)
+        def walk(widget):
+            for child in widget.winfo_children():
+                yield child
+                yield from walk(child)
+        try:
+            with patch('autoswitch.WindowsController',return_value=c),patch('ranking_training.threading.Thread'),patch.object(tk.Toplevel,'winfo_screenheight',return_value=720):
+                open_training(app)
+                top=next(w for w in root.winfo_children() if isinstance(w,tk.Toplevel))
+                for height in (630,540):
+                    top.geometry(f'680x{height}');root.update()
+                    action=next(w for w in walk(top) if isinstance(w,ttk.Button) and w.cget('text')=='記住並下一項')
+                    self.assertTrue(action.winfo_ismapped())
+                    self.assertLessEqual(action.winfo_rooty()+action.winfo_height(),top.winfo_rooty()+top.winfo_height())
+                    details=next(w for w in walk(top) if isinstance(w,ttk.Treeview))
+                    self.assertFalse(details.winfo_ismapped())
+                    from autoswitch import RANKINGS
+                    catalog=next(w for w in walk(top) if isinstance(w,ttk.Treeview) and w.winfo_ismapped())
+                    self.assertEqual(list(catalog.get_children()),RANKINGS)
+                    catalog.see(RANKINGS[-1]);root.update()
+                    self.assertTrue(catalog.bbox(RANKINGS[-1]))
+        finally:
+            if hasattr(app,'stop_event'):app.stop_event.set()
+            root.destroy()
+
+class LearnedCatalogTests(unittest.TestCase):
+    def test_restores_manual_and_older_position_records(self):
+        import tempfile
+        from pathlib import Path
+        from ranking_training import TeachingMemory,learned_positions
+        from adaptive import Experience
+        with tempfile.TemporaryDirectory() as d:
+            memory=TeachingMemory(Path(d)/'teaching.json','layout')
+            memory.remember('漲停鎖住',1,0,(50,20),(200,300))
+            legacy=Experience();legacy.record_number('跌停鎖住',2)
+            result=learned_positions(['漲停鎖住','跌停鎖住','即將漲停'],TeachingMemory(memory.path,'layout'),legacy)
+            self.assertEqual(result,{'漲停鎖住':'第 1 項','跌停鎖住':'第 2 項'})
