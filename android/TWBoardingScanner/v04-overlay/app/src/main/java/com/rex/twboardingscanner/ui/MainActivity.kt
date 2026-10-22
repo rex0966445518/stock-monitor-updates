@@ -435,9 +435,26 @@ class MainActivity: AppCompatActivity() {
         val panel=b.settingsPanel
         (panel.parent as? ViewGroup)?.removeView(panel)
         panel.visibility=android.view.View.VISIBLE
+        panel.background=NeonUi.panel(this,NeonUi.violet)
         val body=NeonUi.vertical(this).apply{background=NeonUi.backdrop(this@MainActivity)}
-        body.addView(NeonUi.label(this,"條件與工具",23f,NeonUi.ink,true).apply{setPadding(dp(16),dp(12),dp(16),dp(4))})
-        body.addView(NeonUi.label(this,"A～G 七組入場條件；G 位於類別開關及條件編輯列表的最後一排",12f).apply{setPadding(dp(16),0,dp(16),dp(8))})
+        body.addView(NeonUi.label(this,"✣ 條件與工具",23f,NeonUi.ink,true).apply{
+            setPadding(dp(16),dp(12),dp(16),dp(4))
+            setShadowLayer(dp(4).toFloat(),0f,0f,NeonUi.violet)
+        })
+        body.addView(NeonUi.label(this,"紫色霓虹策略中心 · A～G 七組條件獨立設定",12f,NeonUi.muted).apply{
+            setPadding(dp(16),0,dp(16),dp(10))
+        })
+        val overview=NeonUi.section(this,"設定總覽","使用實際保存條件，不顯示樣稿中的虛構數據")
+        overview.addView(NeonUi.row(this,listOf(
+            NeonUi.tile(this,"已啟用策略", "${radarEnabled.size} / ${RadarType.entries.size}","點擊下方切換",NeonUi.violet),
+            NeonUi.tile(this,"掃描產業", "${enabledSectors.size} 類","按現有設定執行",NeonUi.cyan)
+        )))
+        body.addView(overview,LinearLayout.LayoutParams(-1,-2).apply{
+            setMargins(dp(12),dp(2),dp(12),dp(10))
+        })
+        body.addView(NeonUi.label(this,"策略與進階工具",15f,NeonUi.ink,true).apply{
+            setPadding(dp(16),dp(1),dp(16),dp(8))
+        })
         body.addView(NeonUi.button(this,"複製背景工作診斷（心跳／排程／權限）",NeonUi.cyan){
             coordinator.submit{
                 val diagnosis=runCatching{com.rex.twboardingscanner.data.BackgroundScanDiagnostics.collect(applicationContext)}
