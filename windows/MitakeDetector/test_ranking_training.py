@@ -66,3 +66,65 @@ class TeachingMemoryTests(unittest.TestCase):
             for point in [(float('nan'),20),(-1,20),(201,20)]:
                 with self.assertRaises(ValueError):m.remember('A',1,0,point,(200,300))
             self.assertIsNone(m.get('A'))
+
+class TeachingButtonsTests(unittest.TestCase):
+    def test_arrows_preview_only_and_confirm_saves_position(self):
+        import tempfile,time,types,threading
+        from pathlib import Path
+        from unittest.mock import Mock,patch
+        from PIL import Image
+        from ranking_training import open_training,TeachingMemory
+        buttons={};scheduled=[]
+        class Widget:
+            def __init__(self,*args,**kw):
+                self.value=kw.get('value','')
+                if 'command' in kw:buttons[kw['text']]=kw['command']
+            def __getattr__(self,name):return lambda *a,**k:None
+            def __setitem__(self,key,value):pass
+            def get(self):return self.value
+            def set(self,value):self.value=value
+            def winfo_screenwidth(self):return 1600
+            def winfo_width(self):return 640
+            def winfo_height(self):return 240
+            def winfo_exists(self):return True
+            def after(self,ms,callback):scheduled.append(callback)
+        widgets=types.SimpleNamespace(**{n:Widget for n in ('Toplevel','StringVar','Label','Treeview','Canvas','Frame','Button','Combobox')})
+        with tempfile.TemporaryDirectory() as d:
+            app=Mock();app.root=Widget();app.tk=widgets;app.ttk=widgets;app.status=Widget()
+            app.idle.return_value=True;app.dependencies.return_value=True;app.generation=0
+            app.config={'auto_config':{'combo':[0,0,.2,.1],'menu':[0,.1,.2,.5]}}
+            c=Mock();c.rect.return_value=(0,0,1000,800)
+            im=Image.new('RGB',(200,300));region=dict(left=0,top=100,width=200,height=300)
+            c.image.return_value=(im,region)
+            s=Mock();s.c=c;s.menu=[0,.1,.2,.5];s.ocr.return_value=[];s.label_matches.return_value=False
+            s.switch.side_effect=RuntimeError('找不到');s.numbers=None
+            s.verify_label.side_effect=lambda name:(app.stop_event.set() or True)
+            nav=Mock();nav.manual={};visited=[]
+            def make_nav(*args,**kwargs):nav.show=kwargs['show'];return nav
+            def locate(name,area):
+                visited.append(nav.manual[name]);nav.show(dict(rows=[(1,50),(2,80)]));return (50,50)
+            nav.locate.side_effect=locate
+            def pump_until(predicate):
+                deadline=time.monotonic()+3
+                while time.monotonic()<deadline:
+                    pending=scheduled[:];scheduled.clear()
+                    for callback in pending:callback()
+                    if predicate():return
+                    time.sleep(.01)
+                self.fail('Teaching UI did not respond')
+            with patch.dict('sys.modules',{'MitakeDetector':types.SimpleNamespace(BASE=Path(d))}),patch('autoswitch.WindowsController',return_value=c),patch('autoswitch.RankingSwitcher',return_value=s),patch('autoswitch.RANKINGS',['買氣強大']),patch('menu_numbers.NumberNavigator',side_effect=make_nav),patch('ranking_training.replay_menu',return_value=(im,region)),patch('PIL.ImageTk.PhotoImage',return_value=object()):
+                try:
+                    open_training(app)
+                    pump_until(lambda:bool(visited))
+                    # Process the image that enables the assistance controls.
+                    pump_until(lambda:app.status.get().startswith('請協助'))
+                    buttons['下一個']();pump_until(lambda:app.status.get().startswith('已移至第 2'))
+                    buttons['上一個']();pump_until(lambda:app.status.get().startswith('已移至第 1'))
+                    c.click.assert_not_called()
+                    buttons['確定學習']();pump_until(lambda:not app.worker_thread.is_alive())
+                    c.click.assert_called_once_with((50,150))
+                    self.assertEqual(visited,[1,1])  # visible arrows never reopen/OCR the menu
+                    self.assertTrue((Path(d)/'ranking-teaching-positions.json').exists())
+                finally:
+                    if hasattr(app,'stop_event'):app.stop_event.set()
+                    if isinstance(app.worker_thread,threading.Thread):app.worker_thread.join(2)

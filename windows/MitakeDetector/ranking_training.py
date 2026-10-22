@@ -195,8 +195,9 @@ def open_training(app):
                 if point is None:
                     number=None
                     updates.put(('status','無法確認項目編號；請在截圖點選目標位置，可用滾輪捲動，再按確定學習。'))
+                last_image=None
                 while not stop.is_set():
-                    switcher.ocr(im)
+                    if im is not last_image:switcher.ocr(im);last_image=im
                     updates.put(('image',(im,point,number)))
                     while not stop.is_set():
                         try:action,value=commands.get(timeout=.1);break
@@ -226,6 +227,11 @@ def open_training(app):
                         wanted=max(1,min(500,number+value))
                         if wanted==number:
                             updates.put(('status','已是第一個項目。'));continue
+                        visible=next((cy for item,cy in rows if item==wanted),None)
+                        if visible is not None:
+                            number=wanted;point=(im.width*.45,visible)
+                            updates.put(('status',f'已移至第 {number} 項；確認黃色標記後按確定學習。'))
+                            continue
                         old=number
                         im,region,candidate=numbered(wanted)
                         if candidate is None:
