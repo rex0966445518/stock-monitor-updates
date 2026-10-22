@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.102'
+VERSION = '0.3.103'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -238,6 +238,8 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
             try:self.save()
             except OSError:pass
         self.events, self.stop_event = queue.Queue(), threading.Event()
+        from power_guard import PowerGuard
+        self.power_guard = PowerGuard()
         self.worker_thread = None
         self.generation = 0
         from volume_rate import VolumeRates
@@ -653,6 +655,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
             self.save_scan_snapshot();self.announce_task('掃描已暫停，進度已保留')
         self.close_task_progress()
         self.stop_event.set(); self.generation += 1
+        self.sync_power_guard(closing=True)
         self.status.set(self.mode + '｜已暫停，進度保留；按F8接續，或按重新開始清空本輪。'); self.say('停止請求已送出。')
         if self.auto_active:
             self.auto_active=False; self.root.deiconify()
@@ -826,6 +829,15 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
 
         if persist and self.config.get('research_enabled',True):self.schedule_research()
 
+    def sync_power_guard(self, closing=False):
+        guard=getattr(self,"power_guard",None)
+        if guard is None:return
+        from power_guard import scanning
+        try:
+            changed=guard.close() if closing else guard.sync(scanning(self))
+            if changed:self.say("保持喚醒已啟用｜掃描期間螢幕不因閒置關閉" if guard.active else "保持喚醒已解除｜恢復原本電源設定")
+        except OSError as exc:self.say("保持喚醒設定失敗："+str(exc))
+
     def poll(self):
         try:
             while True:
@@ -921,6 +933,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
                         self.tree.insert('', 'end', values=[q.code,q.name,q.price,q.gain,q.volume,q.turnover if q.turnover is not None else '—','—','圖片測試；請對照原圖'])
                     self.status.set(f'圖片測試｜讀取{len(quotes)}檔，略過{rejected}列；不寫實盤歷史、不提醒。')
         except queue.Empty: pass
+        self.sync_power_guard()
         bridge=getattr(self,'mobile_bridge',None)
         if bridge:bridge.set_status(self.auto_active,self.scan_phase.get())
         self.scan_rate_var.set(self.scan_rate.text())
@@ -1088,6 +1101,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         text.insert('1.0', HELP); text.configure(state='disabled')
 
     def close(self):
+        self.sync_power_guard(closing=True)
         self.cancel_scan_retry()
         charts=getattr(self,"candidate_charts",None)
         if charts:charts.close()

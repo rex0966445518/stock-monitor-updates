@@ -36,3 +36,40 @@ class CollapseTests(unittest.TestCase):
         p.toggle_collapsed()
         self.assertFalse(p.collapsed);p.show_passive.assert_called_once_with(p.window,True)
         self.assertEqual(p.toggle_label.configure.call_args.kwargs['text'],'◀')
+
+class PowerGuardTests(unittest.TestCase):
+    def test_acquire_idempotence_and_release(self):
+        from power_guard import PowerGuard, AWAKE, CONTINUOUS
+        calls=[]
+        guard=PowerGuard(lambda flags:calls.append(flags) or 1)
+        self.assertTrue(guard.sync(True))
+        self.assertFalse(guard.sync(True))
+        self.assertTrue(guard.close())
+        self.assertFalse(guard.close())
+        self.assertEqual(calls,[AWAKE,CONTINUOUS])
+    def test_failure_does_not_claim_success_or_busy_retry(self):
+        from power_guard import PowerGuard
+        calls=[];guard=PowerGuard(lambda flags:calls.append(flags) or 0)
+        with self.assertRaises(OSError):guard.sync(True)
+        self.assertFalse(guard.active)
+        self.assertFalse(guard.sync(True))
+        self.assertEqual(len(calls),1)
+    def test_pause_and_retry_lifecycle(self):
+        from power_guard import scanning
+        from types import SimpleNamespace
+        from threading import Event
+        from unittest.mock import Mock
+        app=SimpleNamespace(stop_event=Event(),auto_active=True,worker_thread=Mock(),scan_retry_timer=None)
+        self.assertTrue(scanning(app))
+        app.stop_event.set()
+        self.assertFalse(scanning(app))
+        app.scan_retry_timer='timer'
+        self.assertTrue(scanning(app))
+        app.scan_retry_timer=None;app.auto_active=False;app.worker_thread=None;app.stop_event.clear()
+        self.assertFalse(scanning(app))
+    def test_cross_thread_request_rejected(self):
+        from power_guard import PowerGuard
+        from unittest.mock import patch
+        guard=PowerGuard(lambda flags:1)
+        with patch('power_guard.threading.get_ident',return_value=guard.owner+1):
+            with self.assertRaises(RuntimeError):guard.sync(True)

@@ -18,6 +18,11 @@ def run_smoke_test(report):
         from MitakeDetector import App,Quote,DEFAULT,VERSION,BASE
         from updater import validate_manifest
         root=tk.Tk();root.withdraw();app=App(root)
+        if sys.platform == 'win32':
+            assert app.power_guard.sync(True)
+            assert app.power_guard.active
+            assert app.power_guard.close()
+            assert not app.power_guard.active
         if (BASE/'daily-table.json').exists():
             from resume_state import load_daily
             if load_daily(BASE/'daily-table.json'):
