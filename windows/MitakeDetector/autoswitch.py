@@ -397,6 +397,47 @@ class RankingSwitcher:
             if self.label_matches(name):return True
         return False
 
+    def recalibrate_menu(self):
+        """Recover only menu geometry after a failed round, never table columns."""
+        from auto_detect import combo_frame,detect_menu
+        from menu_numbers import NumberNavigator
+        self.c.check()
+        if self.numbers:self.numbers.show(None)
+        image,_=self.c.image([0,0,1,1])
+        readers=[reader for reader in (self.ocr,self.ocr_retry) if reader is not None]
+        frame=None;errors=[]
+        for reader in readers:
+            self.c.check()
+            try:
+                frame=combo_frame(image,reader(image));break
+            except ValueError as exc:errors.append(str(exc))
+        if frame is None:raise ValueError('排行下拉框重新定位失敗：'+'；'.join(errors))
+        l,t,r,b=frame;w,h=image.size
+        combo=validate_roi([max(0,l)/w,max(0,t)/h,(min(w,r)-max(0,l))/w,(min(h,b)-max(0,t))/h])
+        def read_menu(source):
+            failures=[]
+            for reader in readers:
+                self.c.check()
+                try:return detect_menu(source,combo,reader)
+                except ValueError as exc:failures.append(str(exc))
+            raise ValueError('；'.join(failures))
+        try:menu=read_menu(image) # A previous failed search may leave the popup open.
+        except ValueError:
+            rect=absolute_roi(combo,self.c.rect())
+            self.c.click((rect['left']+rect['width']//2,rect['top']+rect['height']//2))
+            self.menu_is_open=True;self.c.pause(.4)
+            opened,_=self.c.image([0,0,1,1]);menu=read_menu(opened)
+        self.c.check()
+        self.combo=combo;self.menu=menu;self.menu_is_open=True
+        if self.experience:
+            for key in ('ranks','numbers','number_routes'):self.experience.data[key]={}
+            for key in ('menu_geometry','menu_wheel'):self.experience.data.pop(key,None)
+            self.experience.save()
+        if self.numbers:self.numbers=NumberNavigator(self,self.numbers.manual,self.numbers.show)
+        self.verified_titles=set();self.verified_title_pixels=None
+        self.status('排行選單已重新定位｜清除失效記憶，保留表頭與已掃描資料')
+        return dict(combo=combo,menu=menu)
+
     def switch(self,name,menu_open=False):
         try:return self._switch(name,menu_open)
         finally:

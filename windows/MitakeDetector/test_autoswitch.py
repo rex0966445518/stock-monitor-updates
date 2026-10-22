@@ -280,3 +280,38 @@ class CumulativeTitleFormsTests(unittest.TestCase):
         for title,expected in zip(simplified,RANKINGS):
             for name in RANKINGS:
                 self.assertEqual(s.title_tokens_match([token(title)],name),name==expected,(title,name))
+
+class MenuRecoveryTests(unittest.TestCase):
+    def build(self):
+        from PIL import Image
+        from unittest.mock import Mock
+        from adaptive import Experience
+        c=FakeController();c.image=Mock(return_value=(Image.new('RGB',(1000,800)),{}))
+        e=Experience();e.record_number('開盤強勢',27);e.data['menu_geometry']={'old':True}
+        s=RankingSwitcher(c,Mock(return_value=[]),[0,0,.1,.1],[0,.1,.1,.5],experience=e,numbering=True)
+        s.numbers.disabled.add('開盤強勢')
+        return c,e,s
+    def test_open_menu_recovery_preserves_popup_and_resets_failed_memory(self):
+        from unittest.mock import patch
+        c,e,s=self.build()
+        with patch('auto_detect.combo_frame',return_value=(20,40,220,80)),patch('auto_detect.detect_menu',return_value=[.02,.1,.2,.5]):
+            found=s.recalibrate_menu()
+        self.assertEqual(found['combo'],[.02,.05,.2,.05]);self.assertTrue(s.menu_is_open)
+        self.assertEqual(e.data['numbers'],{});self.assertNotIn('menu_geometry',e.data)
+        self.assertFalse(s.numbers.disabled);self.assertFalse(any(a[0]=='click' for a in c.actions))
+    def test_closed_menu_opens_only_new_verified_frame(self):
+        from unittest.mock import patch
+        c,e,s=self.build()
+        with patch('auto_detect.combo_frame',return_value=(20,40,220,80)),patch('auto_detect.detect_menu',side_effect=[ValueError('closed'),[.02,.1,.2,.5]]):
+            s.recalibrate_menu()
+        self.assertEqual([a for a in c.actions if a[0]=='click'],[('click',(220,160))])
+    def test_failed_calibration_never_replaces_coordinates_or_memory(self):
+        from unittest.mock import patch
+        c,e,s=self.build();old=s.combo[:]
+        with patch('auto_detect.combo_frame',side_effect=ValueError('no frame')):
+            with self.assertRaises(ValueError):s.recalibrate_menu()
+        self.assertEqual(s.combo,old);self.assertEqual(e.number('開盤強勢'),27);self.assertEqual(c.actions,[])
+    def test_user_stop_does_not_trigger_calibration_inputs(self):
+        c,e,s=self.build();c.stopped=True
+        with self.assertRaises(AutomationStopped):s.recalibrate_menu()
+        self.assertEqual(c.actions,[])

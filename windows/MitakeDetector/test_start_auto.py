@@ -507,7 +507,7 @@ class ScanRecoveryTests(unittest.TestCase):
 
 
 class RankingSkipTests(unittest.TestCase):
-    def run_worker(self,error,scan_failure=False,all_failed=False):
+    def run_worker(self,error,scan_failure=False,all_failed=False,recover=False):
         cfg=dict(DEFAULT,auto_config=dict(title='TEST RANK',window_size=[800,600],combo=[0,0,.2,.1],menu=[0,.1,.3,.5],table=[0,.2,1,.8],rankings=['開盤強勢','漲幅排行'],seconds=3,pages=1,full_table=True))
         app=UI(cfg);visited=[];scanned=[];delays=[]
         class C(Controller):
@@ -518,7 +518,11 @@ class RankingSkipTests(unittest.TestCase):
         class S(Switcher):
             def switch(self,name):
                 visited.append(name)
-                if not scan_failure and (name=='開盤強勢' or all_failed):raise error
+                if not getattr(self,'recovered',False) and not scan_failure and (name=='開盤強勢' or all_failed):raise error
+            def recalibrate_menu(self):
+                if not recover:raise ValueError('測試：找不到下拉框')
+                self.recovered=True
+                return dict(combo=[.01,0,.2,.1],menu=[.01,.1,.3,.5])
         def scan(*args,**kwargs):
             scanned.append(visited[-1])
             if scan_failure and visited[-1]=='開盤強勢':raise error
@@ -565,7 +569,18 @@ class RankingSkipTests(unittest.TestCase):
     def test_all_missing_waits_before_next_round(self):
         visited,scanned,delays,messages,checkpoint=self.run_worker(AutomationStopped('選單中找不到排行'),all_failed=True)
         self.assertEqual(visited,['開盤強勢','漲幅排行']);self.assertIn(30,delays)
-        self.assertEqual(len([k for _,k,_ in messages if k=='ranking_skipped']),2)
+        notices=[p for _,k,p in messages if k=='ranking_skipped']
+        self.assertEqual(len(notices),3)
+        self.assertEqual(notices[-1]['ranking'],'排行選單自動校正')
+        self.assertIn('找不到下拉框',notices[-1]['reason'])
+
+    def test_all_missing_recalibrates_then_resumes_without_thirty_second_loop(self):
+        visited,scanned,delays,messages,checkpoint=self.run_worker(AutomationStopped('選單中找不到排行'),all_failed=True,recover=True)
+        self.assertEqual(visited,['開盤強勢','漲幅排行','開盤強勢'])
+        self.assertEqual(scanned,['開盤強勢']);self.assertIn(2,delays);self.assertNotIn(30,delays)
+        layouts=[p for _,k,p in messages if k=='auto_layout_done']
+        self.assertEqual(layouts[-1]['auto_config']['combo'],[.01,0,.2,.1])
+        self.assertEqual(layouts[-1]['auto_config']['table'],[0,.2,1,.8])
 
 class SetupValidationTests(unittest.TestCase):
     def test_retry_recaptures_short_band_and_restores_force(self):

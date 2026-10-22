@@ -1061,7 +1061,8 @@ class AutoUI:
                 known_totals={}
                 start_index=saved['rank'] if saved else 0
                 while not stop.is_set():
-                    skipped=0
+                    skipped=0;switch_failures=[];round_errors=[]
+                    attempted=len(auto['rankings'])-start_index
                     for rank_index in range(start_index,len(auto['rankings'])):
                         name=auto['rankings'][rank_index]
                         diagnostic.update(cycle=cycle,ranking=name,segment=0,count=0,stage='切換排行')
@@ -1074,6 +1075,7 @@ class AutoUI:
                             self._startup_rank_error=None
                             if startup_error and startup_error[0]==name:raise startup_error[1]
                             switcher.switch(name)
+                            diagnostic.update(stage='讀取排行資料')
                             self.events.put((token,'auto_status','已切換 '+name+'｜沿用欄位座標，直接掃描數據'))
                             if test_only:continue
                             collected={};rejected=0;begin=time.monotonic();failed_reads[0]=0;saved_failure[0]=False
@@ -1240,6 +1242,8 @@ class AutoUI:
                             c.check()
                             from scan_diagnostics import record_interruption
                             from MitakeDetector import VERSION
+                            if diagnostic.get('stage')=='切換排行':switch_failures.append(name)
+                            round_errors.append(f'{name}：{str(exc)[:120]}')
                             diagnostic.update(stage='排行失敗，已跳過')
                             location=record_interruption(BASE/'scan-interruptions.jsonl',VERSION,diagnostic,exc)
                             saved=None;skipped+=1
@@ -1249,9 +1253,27 @@ class AutoUI:
                             self.events.put((token,'auto_status',f'第{cycle}輪｜{name} 掃描失敗，已跳過，繼續下一排行：{exc}｜{location}'))
                             c.pause(.5)
                     if test_only:break
-                    if skipped==len(auto['rankings']):
-                        self.events.put((token,'auto_status','本輪全部排行失敗，等待30秒後重新嘗試；F8可停止'))
-                        c.pause(30)
+                    if skipped==attempted and attempted:
+                        details='；'.join(round_errors[:3])
+                        self.events.put((token,'auto_status','本輪全部排行失敗｜'+details))
+                        if len(switch_failures)==attempted:
+                            self.events.put((token,'auto_status','整輪切換失敗，正在重新定位排行選單；保留表頭座標'))
+                            try:
+                                geometry=switcher.recalibrate_menu()
+                                auto.update(geometry);cfg['auto_config']=auto
+                                context.clear();context.update(scan_context(cfg))
+                                if store:store.update(context,dict(cycle=cycle+1,rank=0,table=None,round_started=None))
+                                self.events.put((token,'auto_layout_done',dict(auto_config=auto.copy(),column_bounds=cfg['column_bounds'],region=cfg['region'])))
+                                self.events.put((token,'auto_status','選單重新定位完成，2秒後重新開始排行掃描；F8可停止'))
+                                c.pause(2)
+                            except AutomationStopped:raise
+                            except Exception as recovery_error:
+                                self.events.put((token,'ranking_skipped',dict(ranking='排行選單自動校正',cycle=cycle,reason=str(recovery_error)[:300])))
+                                self.events.put((token,'auto_status','選單自動校正未完成：'+str(recovery_error)+'｜30秒後再試；F8可停止'))
+                                c.pause(30)
+                        else:
+                            self.events.put((token,'auto_status','排行可切換，但資料讀取全部失敗｜'+details+'｜30秒後再試'))
+                            c.pause(30)
                     self.events.put((token,'auto_counts',f'本輪已巡查｜跳過 {skipped} 個排行｜累計完成 {cycle} 遍｜準備第 {cycle+1} 輪'))
                     self.events.put((token,'auto_phase',f'第{cycle}輪已完成｜跳過 {skipped} 個排行｜自動開始第{cycle+1}輪'))
                     cycle+=1;start_index=0;cycle_started=time.time()
