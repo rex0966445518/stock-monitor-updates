@@ -56,6 +56,12 @@ class AutoUI:
                     self.show_scan_outline(None)
                     self.root.update_idletasks()
                 ready.set()
+            display=getattr(self,'outline_show_pending',None)
+            if display and not display[2].is_set():
+                token,region,ready=display
+                if token==self.generation and getattr(self,'outline_disabled_token',None)!=token:
+                    self.show_scan_outline(region);self.root.update_idletasks()
+                ready.set()
         except Exception:
             # Keep the same barrier pending: a failed withdraw must be retried.
             pass
@@ -74,6 +80,11 @@ class AutoUI:
         else:
             ready=threading.Event()
             self.outline_clear_pending=(token,ready) if region is None else None
+            if region is None:
+                previous=getattr(self,'outline_show_pending',None)
+                if previous:previous[2].set()
+                self.outline_show_pending=None
+            else:self.outline_show_pending=(token,region,ready)
             self.events.put((token,'scan_region',(region,ready)))
         deadline=time.monotonic()+(3.0 if region is None else .5)
         while not ready.wait(.02):
@@ -110,7 +121,7 @@ class AutoUI:
         if not source or not context or (source['width'],source['height'])!=image.size:return
         regions=[]
         labels={'code':'股號','name':'股名','price':'成交價','gain':'漲幅','volume':'成交量','turnover':'換手率'}
-        for field in (fields if row else []):
+        for field in fields:
             left,right=bounds[field]
             x=round(left*image.width);end=round(right*image.width)
             top,bottom=row if row else (0,image.height)
@@ -1090,11 +1101,13 @@ class AutoUI:
                 priority_last={}
                 failed_reads=[0];saved_failure=[False]
                 cycle=saved['cycle'] if saved else 1
-                cycle_started=float((saved or {}).get('round_started') or time.time())
+                from round_timer import RoundTimer
+                round_timer=RoundTimer((saved or {}).get('round_elapsed',0))
+                cycle_started=time.time()
                 def round_clock():
                     from task_progress import duration_text
                     started=dt.datetime.fromtimestamp(cycle_started).strftime('%H:%M:%S')
-                    return f'起始{started}｜本輪耗時{duration_text(max(0,time.time()-cycle_started))}'
+                    return f'起始{started}｜本輪耗時{duration_text(round_timer.elapsed())}'
                 known_totals={}
                 start_index=saved['rank'] if saved else 0
                 while not stop.is_set():
@@ -1105,7 +1118,7 @@ class AutoUI:
                         diagnostic.update(cycle=cycle,ranking=name,segment=0,count=0,stage='切換排行')
                         self.events.put((token,'auto_phase',f'掃描中｜第{cycle}輪｜{round_clock()}｜{name}'))
                         table_resume=saved.get('table') if saved and rank_index==saved['rank'] else None
-                        if store:store.update(context,dict(cycle=cycle,rank=rank_index,table=table_resume,round_started=cycle_started))
+                        if store:store.update(context,dict(cycle=cycle,rank=rank_index,table=table_resume,round_started=cycle_started,round_elapsed=round_timer.elapsed()))
                         c.check();self.events.put((token,'auto_status',f'第{cycle}輪｜排行{rank_index+1}/{len(auto["rankings"])}：正在切換{name}'))
                         try:
                             startup_error=getattr(self,'_startup_rank_error',None)
@@ -1229,7 +1242,7 @@ class AutoUI:
                             def checkpoint(state):
                                 table_state[0]=state
                                 diagnostic.update(last_codes=state.get("codes",[]),wheel_offset=state.get("offset",0),scroll_notches=state.get("notches",1))
-                                if store:store.update(context,dict(cycle=cycle,rank=rank_index,table=state,round_started=cycle_started))
+                                if store:store.update(context,dict(cycle=cycle,rank=rank_index,table=state,round_started=cycle_started,round_elapsed=round_timer.elapsed()))
                             from table_scan import scan_with_recovery
                             def attempt_scan(resume):
                                 return scan_table(c,auto['table'],read,progress,observed=observed,resume=resume,checkpoint=checkpoint,
@@ -1254,7 +1267,7 @@ class AutoUI:
                             current=dict(cfg,source_rank=name)
                             if store:
                                 next_rank=(rank_index+1)%len(auto['rankings'])
-                                store.update(context,dict(cycle=cycle+(1 if next_rank==0 else 0),rank=next_rank,table=None,round_started=None if next_rank==0 else cycle_started))
+                                store.update(context,dict(cycle=cycle+(1 if next_rank==0 else 0),rank=next_rank,table=None,round_started=None if next_rank==0 else cycle_started,round_elapsed=0 if next_rank==0 else round_timer.elapsed()))
                             experience.observed(name,bool(collected) and rejected==0)
                             dwell=experience.wait(name,auto['seconds'])
                             mode='自適應加速' if experience.enabled else '固定間隔'
@@ -1287,7 +1300,7 @@ class AutoUI:
                             location=record_interruption(BASE/'scan-interruptions.jsonl',VERSION,diagnostic,exc)
                             saved=None;skipped+=1
                             next_rank=(rank_index+1)%len(auto['rankings'])
-                            if store:store.update(context,dict(cycle=cycle+(1 if next_rank==0 else 0),rank=next_rank,table=None,round_started=None if next_rank==0 else cycle_started))
+                            if store:store.update(context,dict(cycle=cycle+(1 if next_rank==0 else 0),rank=next_rank,table=None,round_started=None if next_rank==0 else cycle_started,round_elapsed=0 if next_rank==0 else round_timer.elapsed()))
                             self.events.put((token,'ranking_skipped',dict(ranking=name,cycle=cycle,reason=str(exc)[:300])))
                             self.events.put((token,'auto_status',f'第{cycle}輪｜{name} 掃描失敗，已跳過，繼續下一排行：{exc}｜{location}'))
                             c.pause(.5)
@@ -1301,7 +1314,7 @@ class AutoUI:
                                 geometry=switcher.recalibrate_menu()
                                 auto.update(geometry);cfg['auto_config']=auto
                                 context.clear();context.update(scan_context(cfg))
-                                if store:store.update(context,dict(cycle=cycle+1,rank=0,table=None,round_started=None))
+                                if store:store.update(context,dict(cycle=cycle+1,rank=0,table=None,round_started=None,round_elapsed=0))
                                 self.events.put((token,'auto_layout_done',dict(auto_config=auto.copy(),column_bounds=cfg['column_bounds'],region=cfg['region'])))
                                 self.events.put((token,'auto_status','選單重新定位完成，2秒後重新開始排行掃描；F8可停止'))
                                 c.pause(2)
@@ -1313,9 +1326,9 @@ class AutoUI:
                         else:
                             self.events.put((token,'auto_status','排行可切換，但資料讀取全部失敗｜'+details+'｜30秒後再試'))
                             c.pause(30)
-                    self.events.put((token,'auto_counts',f'本輪已巡查｜跳過 {skipped} 個排行｜累計完成 {cycle} 遍｜完成一遍耗時 {max(0,time.time()-cycle_started):.1f} 秒｜準備第 {cycle+1} 輪'))
+                    self.events.put((token,'auto_counts',f'本輪已巡查｜跳過 {skipped} 個排行｜累計完成 {cycle} 遍｜完成一遍耗時 {round_timer.elapsed():.1f} 秒｜準備第 {cycle+1} 輪'))
                     self.events.put((token,'auto_phase',f'第{cycle}輪已完成｜跳過 {skipped} 個排行｜自動開始第{cycle+1}輪'))
-                    cycle+=1;start_index=0;cycle_started=time.time()
+                    cycle+=1;start_index=0;cycle_started=time.time();round_timer=RoundTimer()
                 self.events.put((token,'auto_end','輪切測試完成' if test_only else '自動輪切已停止'))
             except Exception as exc:
                 from scan_diagnostics import record_interruption
@@ -1330,6 +1343,7 @@ class AutoUI:
             if token!=self.generation:return
             self.worker_thread=threading.Thread(target=job,daemon=True);self.worker_thread.start()
         self.root.after(700,launch)
+
 
 
 

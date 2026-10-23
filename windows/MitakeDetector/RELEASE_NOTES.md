@@ -1,3 +1,9 @@
+# v0.3.127
+
+- 正在辨識的欄位與數字格顯示 1 像素綠框，框線位於資料外側；修復整欄讀取未顯示提示。
+- 綠框更新由 25ms 畫面服務處理，避免等待一般事件佇列；相同位置不重建框線，擷取前仍確認清除。
+- 整輪耗時改為累積實際運作秒數，續跑不計暫停或關閉期間；舊進度沒有有效運作秒數時從本次續跑開始計時。
+
 # v0.3.126
 
 - 在累計完成遍數旁新增「完成一遍耗時」，顯示最近完成一輪全部設定排行所花秒數；首輪完成前顯示尚未完成，下一輪進行時保留上一輪結果。
@@ -287,6 +293,7 @@
 研究依據：Fidelity Accumulation Distribution（價量交叉觀察）；TDCC集保股權分散表（週末持股，不能確認盤中買方）。
 https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/accumulation-distribution
 https://original-www.tdcc.com.tw/portal/zh/smWeb/qryStock
+
 
 
 

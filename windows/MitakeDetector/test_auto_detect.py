@@ -42,7 +42,7 @@ class DetectionTests(unittest.TestCase):
         for x,y,w,h in border_rects(region):
             self.assertTrue(x+w<=100 or x>=500 or y+h<=200 or y>=500)
         self.assertEqual(len(border_rects(region)),4)
-        self.assertEqual(border_rects(dict(left=-200,top=-50,width=100,height=80))[0],(-203,-53,106,3))
+        self.assertEqual(border_rects(dict(left=-200,top=-50,width=100,height=80))[0],(-201,-51,102,1))
     def test_zero_strip_read_recovers_from_whole_table_without_guessing(self):
         from MitakeDetector import FIELDS
         class App(AutoUI):
@@ -204,3 +204,4 @@ class CaptureClearPumpTests(unittest.TestCase):
         with patch('scan_outline.ScanOutline') as constructor:
             app.show_scan_outline(None)
         constructor.assert_not_called()
+

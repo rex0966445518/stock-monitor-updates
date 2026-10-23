@@ -15,7 +15,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.126'
+VERSION = '0.3.127'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -867,10 +867,11 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
                 token, kind, payload = self.events.get_nowait()
                 if kind=='scan_region':
                     region,ready=payload
+                    if ready.is_set():continue
                     cleared=False
                     try:
                         if token==self.generation:
-                            if getattr(self,'outline_disabled_token',None)==token or getattr(self,'outline_clear_pending',None):region=None
+                            if getattr(self,'outline_disabled_token',None)==token:region=None
                             notice=getattr(self,'candidate_notice',None)
                             if notice and notice.alive:
                                 if region is None:notice.window.withdraw()
@@ -1248,6 +1249,7 @@ if __name__ == '__main__':
                 sys.exit(0)
         import tkinter as tk
         root = tk.Tk(); App(root); root.mainloop()
+
 
 
 

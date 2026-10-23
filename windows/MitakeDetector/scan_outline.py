@@ -3,7 +3,7 @@ import ctypes
 import sys
 
 
-def border_rects(region,thickness=3):
+def border_rects(region,thickness=1):
     x,y,w,h=(int(region[k]) for k in ('left','top','width','height'))
     if w<=0 or h<=0:raise ValueError('掃描區域無效')
     t=thickness
@@ -31,6 +31,7 @@ class ScanOutline:
                 u.SetLayeredWindowAttributes(hwnd,0,255,2)
 
     def show(self,region):
+        if self.visible and self.region==region:return
         self.region=dict(region)
         for index,(win,(x,y,w,h)) in enumerate(zip(self.windows,border_rects(region))):
             win.geometry(f'{w}x{h}{x:+d}{y:+d}')
@@ -50,3 +51,4 @@ class ScanOutline:
     def close(self):
         for win in self.windows:win.destroy()
         self.windows=[];self.visible=False
+
