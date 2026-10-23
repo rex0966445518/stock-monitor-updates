@@ -351,16 +351,21 @@ def run_smoke_test(report):
         assert '讀值筆數' in app.archive_output.get('1.0','end')
         archive.destroy()
         # Exercise actual Tk cells for shared cross-ranking volume warmup and rates.
+        # Keep this history-shift fixture inside one day in UTC and Taiwan.
+        import datetime as history_dt
+        history_now=history_dt.datetime.combine(history_dt.datetime.now(history_dt.timezone.utc).date(),history_dt.time(4),tzinfo=history_dt.timezone.utc).timestamp()
+        from price_history import PriceHistory
+        app.price_history=PriceHistory()
         from volume_rate import VolumeRates
         app.volume_rates=VolumeRates();app.auto_engines={};app.rank_rows={}
         for sec,volume,rank in [(0,2000,'漲幅排行'),(340,2340,'成交排行'),(680,3020,'預估量增')]:
-            app.render([Quote('9088','RATE',100,2,volume,1,now-680+sec)],0,0,dict(DEFAULT,source_rank=rank),persist=False)
+            app.render([Quote('9088','RATE',100,2,volume,1,history_now-680+sec)],0,0,dict(DEFAULT,source_rank=rank),persist=False)
         rate_values=[app.tree.item(item,'values')[7] for item in app.tree.get_children() if app.tree.item(item,'values')[0]=='9088']
         assert rate_values==['約2.00'],rate_values
         assert 'ratio' in app.tree['displaycolumns'],'Measured rate must remain visible after scans'
         assert app.tree.column('ratio','width')>=190
         first_time=app.tree.heading('history0','text')
-        app.render([Quote('9088','RATE',100.1,2,3030,1,now+61)],0,0,dict(DEFAULT,source_rank='預估量增',scan_cycle=1),persist=False)
+        app.render([Quote('9088','RATE',100.1,2,3030,1,history_now+61)],0,0,dict(DEFAULT,source_rank='預估量增',scan_cycle=1),persist=False)
         assert app.tree.heading('history1','text')==first_time
         assert app.tree.heading('history0','text')!=first_time
         from price_history import PriceHistory
@@ -503,4 +508,5 @@ def run_smoke_test(report):
     if not info.get('ok'):
         if sys.stdout is not None:print(json.dumps(info,ensure_ascii=True))
         raise SystemExit(1)
+
 
