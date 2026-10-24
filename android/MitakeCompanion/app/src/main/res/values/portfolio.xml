@@ -1,1 +1,0 @@
-<resources><string name="capture_description">由你啟動單次個股任務後，在籌碼K線讀取股號、切換六頁並截圖。若本次啟用圖片AI分析，接著在Chrome的Google搜尋AI模式填入本次問題，於系統選檔器僅選本次六張截圖，上傳Google並嘗試帶回該問題的可見回覆。其他瀏覽網頁及相簿不收集。舊的一般搜尋紀錄仍不傳圖片。可隨時按停止，不操作交易。舊有股倉功能只有明確選擇Gemini分析才傳送圖片。</string></resources>
