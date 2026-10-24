@@ -168,8 +168,13 @@ def load_archive(path,now):
     return tracker
 
 
-def process(engine,quotes,cfg,tracker,now,ready=True):
+def process(engine,quotes,cfg,tracker,now,ready=True,shrink_tracker=None):
     """Gate engine alerts without consuming their cooldown on rejected observations."""
+    mode=cfg.get('scan_profile','original')
+    original_cfg=cfg
+    if mode=='shrink':
+        cfg=dict(cfg,min_price=0,min_volume=0,min_gain=-100,max_gain=100,
+                 use_turnover=False,use_accel=False,use_breakout=False,guard_enabled=False,steady_enabled=False)
     tracker.reset_day(now)
     previous=dict(engine.last_alert)
     rows,alerts=engine.process(quotes,cfg,now=now)
@@ -181,6 +186,12 @@ def process(engine,quotes,cfg,tracker,now,ready=True):
                 if q.code in previous and session(previous[q.code])[0]==session(now)[0]:engine.last_alert[q.code]=previous[q.code]
                 else:engine.last_alert.pop(q.code,None)
         alerts=[(q,allowed[q.code]) for q,_ in alerts if q.code in allowed]
+    if mode!='original':
+        from scan_profiles import ShrinkTracker
+        if shrink_tracker is None:
+            if not hasattr(tracker,'shrink_tracker'):tracker.shrink_tracker=ShrinkTracker()
+            shrink_tracker=tracker.shrink_tracker
+        rows,alerts,_=shrink_tracker.apply(rows,original_cfg,now)
     return rows,alerts,reports
 
 

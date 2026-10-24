@@ -58,6 +58,10 @@ class MobileBridge:
             return True
     def publish(self,rows,cfg,version,now=None):
         from candidate_ranking import assess
+        # Existing Android protocol interprets scores as six original conditions.
+        if cfg.get('scan_profile','original')!='original':
+            with self.lock:self.rows={};self.events.clear()
+            return
         now=time.time() if now is None else now
         day=dt.datetime.fromtimestamp(now,dt.timezone(dt.timedelta(hours=8))).date().isoformat()
         with self.lock:

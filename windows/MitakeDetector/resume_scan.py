@@ -10,7 +10,8 @@ from pathlib import Path
 def scan_context(cfg):
     auto=cfg.get('auto_config') or {}
     return {'auto':{k:auto.get(k) for k in ('title','window_size','rankings','table','pages','full_table')},
-            'rules':{k:cfg.get(k) for k in ('min_price','min_volume','min_gain','max_gain','use_turnover','min_turnover','use_accel','accel','use_breakout')}}
+            'rules':{k:cfg.get(k) for k in ('min_price','min_volume','min_gain','max_gain','use_turnover','min_turnover','use_accel','accel','use_breakout')},
+            'profile':{k:v for k,v in cfg.items() if k=='scan_profile' or k.startswith(('shrink_','use_shrink_'))}}
 
 
 class ScanCheckpoint:

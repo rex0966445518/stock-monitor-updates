@@ -11,11 +11,13 @@ from auto_ui import AutoUI
 from research_ui import ResearchUI
 from dashboard_ui import DashboardUI
 from mobile_ui import MobileUI
+from profile_ui import ProfileUI
+from scan_profiles import DEFAULTS as PROFILE_DEFAULTS
 from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.127'
+VERSION = '0.3.128'
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -26,6 +28,7 @@ DEFAULT = dict(condition_profile_version=0,interval=5, min_price=50, min_volume=
                centers=[6, 22, 40, 57, 75, 92], region=None, auto_config=None, column_bounds=None, voice_enabled=True)
 
 DEFAULT.update(STEADY_DEFAULTS)
+DEFAULT.update(PROFILE_DEFAULTS)
 
 @dataclasses.dataclass
 class Quote:
@@ -217,7 +220,7 @@ def format_feedback(text):
     return text
 
 
-class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
+class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI,ProfileUI):
     def __init__(self, root):
         import tkinter as tk
         from tkinter import ttk
@@ -307,6 +310,8 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         for key in ('use_turnover','use_accel','use_breakout'):
             self.vars[key]=tk.BooleanVar(value=self.config[key])
         self.build_steady_controls(auto_bar)
+        profile_bar=ttk.Frame(root);profile_bar.pack(fill='x',padx=20,pady=(0,6))
+        self.build_profile_controls(profile_bar)
         self.vars['guard_enabled']=tk.BooleanVar(value=self.config['guard_enabled'])
         for key in ['guard_warmup','guard_window','guard_hold','guard_max_gap','guard_min_rise','guard_max_pullback']:
             self.vars[key]=tk.StringVar(value=str(self.config[key]))
@@ -477,6 +482,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
             if cfg.get('guard_enabled') and (min(cfg['guard_warmup'],cfg['guard_window'],cfg['guard_hold'],cfg['guard_max_gap'])<1 or cfg['guard_warmup']<cfg['guard_window']):raise ValueError()
             from steady_trend import validate_config
             validate_config(cfg)
+            if hasattr(self,'profile_vars'):self.read_profile_settings(cfg)
             self.config = cfg; self.save()
             return dict(cfg)
         except (ValueError, OSError) as exc:
@@ -738,11 +744,15 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         engine.volume_rates=self.volume_rates
         if persist:
             from steady_trend import process as process_steady
-            rows,alerts,reports=process_steady(engine,quotes,cfg,self.steady_tracker,time.time(),self.steady_ready)
+            rows,alerts,reports=process_steady(engine,quotes,cfg,self.steady_tracker,time.time(),self.steady_ready, self.shrink_tracker)
             if self.steady_reports and self.steady_report_day!=self.steady_tracker.day:self.steady_reports={}
             self.steady_report_day=self.steady_tracker.day
             self.steady_reports.update(reports)
-        else:rows,alerts=engine.process(quotes,cfg)
+        elif cfg.get('scan_profile','original')=='original':rows,alerts=engine.process(quotes,cfg)
+        else:
+            from steady_trend import process as process_steady, SteadyTracker
+            from scan_profiles import ShrinkTracker
+            rows,alerts,_=process_steady(engine,quotes,cfg,SteadyTracker(),max((q.ts for q in quotes),default=time.time()),True,ShrinkTracker())
         self.price_history.update(quotes,interval=60)
         for item in self.tree.get_children(): self.tree.delete(item)
         batch = []
@@ -769,7 +779,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         missing=Counter(reason for _,_,text,hit in display if not hit for reason in text.split('｜量速：',1)[0].split('｜')[-1].split('；'))
         explanation='；'.join(f'{reason} {count}檔' for reason,count in missing.most_common(2))
         self.observation_summary.set(f'已辨識股票 {len(display)} 檔｜轉強候選 {sum(bool(item[3]) for item in display)} 檔'+('｜'+explanation if explanation else '｜候選股置頂'))
-        if persist and cfg.get('steady_enabled'):self.observation_summary.set(self.steady_summary()+'\n'+self.observation_summary.get())
+        if persist and cfg.get('steady_enabled') and cfg.get('scan_profile','original')!='shrink':self.observation_summary.set(self.steady_summary()+'\n'+self.observation_summary.get())
         pending_names=sum(not q.name for q,_,_,_ in display)
         self.observation_summary.set(self.observation_summary.get()+f'｜股名資料庫 {len(names)} 檔、待補 {pending_names} 檔｜僅掃描四位股號｜股價時間欄：每60秒新快照，非完整輪次')
         self.display_rows=display;self.display_cfg=dict(cfg)
@@ -785,7 +795,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
                 bridge.publish(rows,cfg,VERSION)
             try:
                 from candidate_diary import CandidateDiary
-                changed=CandidateDiary(BASE/'observations.sqlite3').observe(rows,cfg,VERSION)
+                changed=CandidateDiary(BASE/'observations.sqlite3').observe(rows,cfg,VERSION) if cfg.get('scan_profile','original')=='original' else False
                 diary=getattr(self,'candidate_diary_view',None)
                 if changed and diary and diary.window.winfo_exists():diary.refresh()
             except (sqlite3.Error,OSError,ValueError) as exc:self.say('候選歷史日誌寫入失敗：'+str(exc))
@@ -804,13 +814,13 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
         for q, reason in alerts:
             self.say(f'【{self.mode}】{q.code} {q.name} {q.price:.2f} / {q.gain:+.2f}%：{reason}')
         from near_alerts import near_alerts,voice_text
-        near=near_alerts(rows,cfg,self.near_alert_times) if persist else []
+        near=near_alerts(rows,cfg,self.near_alert_times) if persist and cfg.get('scan_profile','original')=='original' else []
         if persist:
             try:
                 from signal_review import SignalReview
                 from candidate_ranking import assess
-                signals=[(q,'進場檢核通過',reason) for q,reason in alerts]
-                signals += [(q,'基礎觀察候選',reason) for q,ratio,reason,hit in rows if not hit and '盤尾緩漲未通過' not in reason and assess((q,ratio,reason,hit),cfg)['count']>=5]
+                signals=[(q,'縮量上推通過' if cfg.get('scan_profile')=='shrink' else '組合條件通過' if cfg.get('scan_profile')=='combined' else '進場檢核通過',reason) for q,reason in alerts]
+                signals += [(q,'基礎觀察候選',reason) for q,ratio,reason,hit in rows if cfg.get('scan_profile','original')=='original' and not hit and '盤尾緩漲未通過' not in reason and assess((q,ratio,reason,hit),cfg)['count']>=5]
                 valid=[q for q,ratio,reason,hit in rows if '讀值跳動' not in reason and '量倒退' not in reason]
                 SignalReview(BASE/'observations.sqlite3').observe(valid,signals,cfg)
             except sqlite3.Error as exc:self.say('訊號驗證紀錄失敗：'+str(exc))
@@ -831,7 +841,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI):
                 self.outline_clear_pending=None
                 self.candidate_notice=CandidateNotice(self.root,self.tk,self.ttk,text)
                 spoken='；'.join(f'{q.code} {q.name or "股名待補"}，全部條件符合' for q,_ in fresh[:3])
-                if cfg.get('guard_enabled'):
+                if cfg.get('guard_enabled') and cfg.get('scan_profile','original')!='shrink':
                     spoken='；'.join(f'{q.code} {q.name or "股名待補"}，盤中檢核通過；籌碼研究'+getattr(self,'research_reports',{}).get(q.code,{}).get('stage','尚未取得，請另行核對') for q,_ in fresh[:3])
                 if len(fresh)>3:spoken+=f'；另有{len(fresh)-3}檔符合，請查看清單'
                 self.announce_task(spoken)

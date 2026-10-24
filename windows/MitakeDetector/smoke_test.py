@@ -38,6 +38,18 @@ def run_smoke_test(report):
                 assert app.tree.get_children(),'Startup failed to restore today table'
         app.rank_rows={};app.auto_engines={};app.display_rows=[]
 
+        # Verify the actual profile window and Tk variable round-trip in source/frozen builds.
+        profile=app.show_profile_settings();root.update_idletasks()
+        assert profile and profile.winfo_exists()
+        app.profile_vars['scan_profile'].set('shrink')
+        app.profile_vars['shrink_percent'].set('25')
+        app.profile_vars['use_shrink_above_average'].set(True)
+        profile_cfg=dict(app.config);app.read_profile_settings(profile_cfg)
+        assert profile_cfg['scan_profile']=='shrink' and profile_cfg['shrink_percent']==25
+        assert profile_cfg['use_shrink_above_average'] is True
+        from scan_profiles import DEFAULTS as PROFILE_DEFAULTS
+        for key,value in PROFILE_DEFAULTS.items():app.profile_vars[key].set(value)
+        profile.destroy()
         assert all(app.config[k] for k in ('use_turnover','use_accel','use_breakout'))
         assert 'ratio' in app.tree['displaycolumns'],'Five-minute volume rate must appear in the default overview'
         assert app.tree.heading('ratio','text')=='5分量速比'

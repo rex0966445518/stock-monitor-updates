@@ -3,6 +3,7 @@ from candidate_ranking import assess
 
 
 def near_alerts(rows,cfg,last):
+    if cfg.get("scan_profile","original")!="original":return []
     if not cfg.get("voice_enabled",True):return []
     result=[]
     for row in rows:

@@ -1,6 +1,9 @@
 """Transparent condition counts; ranking never promotes an unverified row to a hit."""
 
 def assess(row,cfg):
+    if cfg.get('scan_profile')=='shrink':
+        from scan_profiles import profile_assess
+        return profile_assess(row)
     q,ratio,reason,hit=row
     checks=[('股價',q.price>=cfg['min_price'],min(1,q.price/max(cfg['min_price'],.0001))),
             ('總量',q.volume>=cfg['min_volume'],min(1,q.volume/max(cfg['min_volume'],.0001)))]
@@ -18,6 +21,7 @@ def assess(row,cfg):
     blocked=any(t in reason for t in ['等待重新複查','等待接續複查','掃描讀值已過期','60秒讀值未變','讀值跳動','量倒退'])
     if blocked:label='待複查'
     elif '已轉弱' in reason:label='已轉弱'
+    elif cfg.get('scan_profile')=='combined' and not hit:label='待組合檢核'
     elif '盤尾緩漲未通過' in reason:label='待盤尾檢核'
     elif '進場檢核未通過' in reason:label='等待進場檢核'
     elif hit:label='★ 完全符合'
@@ -40,6 +44,7 @@ def name_eligible(match):
 
 
 def hidden_result(q,cfg,filters):
+    if cfg.get('scan_profile')=='shrink':return False
     return bool((filters.get('gain') and not cfg['min_gain']<=q.gain<=cfg['max_gain'])
                 or (filters.get('price') and q.price<cfg['min_price'])
                 or (filters.get('turnover') and cfg['use_turnover']
