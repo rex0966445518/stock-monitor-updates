@@ -133,6 +133,10 @@ def run_capture(code,directory,fixture=False):
 
 class WantGooCharts:
     """One bounded worker, five-minute cache, no UI-thread browser calls."""
+    source='玩股網'
+    capture_flag='--wantgoo-capture'
+    fallback_enabled=True
+    capture_timeout=40
     def __init__(self,base,emit):
         self.base=Path(base)/'wantgoo-charts';self.emit=emit;self.queue=queue.Queue(maxsize=8)
         self.pending=set();self.lock=threading.Lock();self.stop=threading.Event();self.proc=None;self.thread=None
@@ -155,7 +159,7 @@ class WantGooCharts:
         with self.lock:
             if code in self.pending:return
             self.pending.add(code)
-            self.emit(dict(code=code,loading=True,error='排隊載入玩股網五分 K…'))
+            self.emit(dict(code=code,loading=True,error=f'排隊載入{self.source}五分 K…'))
             try:self.queue.put_nowait(code)
             except queue.Full:
                 self.pending.discard(code)
@@ -172,22 +176,23 @@ class WantGooCharts:
                 self.emit(dict(code=code,loading=True,error='載入並確認五分 K 圖表…'))
                 directory=self.base/code;directory.mkdir(parents=True,exist_ok=True)
                 (directory/'result.json').unlink(missing_ok=True)
-                command=[sys.executable]+([] if getattr(sys,'frozen',False) else [str(Path(__file__).with_name('MitakeDetector.py'))])+['--wantgoo-capture',code,str(directory)]
+                command=[sys.executable]+([] if getattr(sys,'frozen',False) else [str(Path(__file__).with_name('MitakeDetector.py'))])+[self.capture_flag,code,str(directory)]
                 env=os.environ.copy();env['PYINSTALLER_RESET_ENVIRONMENT']='1'
                 with self.lock:
                     if self.stop.is_set():break
                     self.proc=subprocess.Popen(command,env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
-                try:self.proc.wait(timeout=40)
+                try:self.proc.wait(timeout=self.capture_timeout)
                 except subprocess.TimeoutExpired:
-                    self.kill();raise RuntimeError('圖表載入超過 40 秒，稍後再試；掃描繼續')
+                    self.kill();raise RuntimeError(f'圖表載入超過 {self.capture_timeout} 秒，稍後再試；掃描繼續')
                 result=self.cached(code)
                 if not result:raise RuntimeError('圖表程序未回傳有效結果，請檢查 Edge 或改開原站')
-                if result.get('error'):raise RuntimeError(result['error'])
+                if result.get('error') and self.fallback_enabled:raise RuntimeError(result['error'])
                 if not self.stop.is_set():self.emit(result)
             except Exception as exc:
                 result=dict(code=code,error=str(exc),day=taipei_day(),period='5m',range_version=2,fetched_at=time.time())
                 if self.stop.is_set():break
                 try:
+                    if not self.fallback_enabled:raise RuntimeError('保留指定來源，請開啟原站確認')
                     from intraday_chart import fallback_chart
                     self.emit(dict(code=code,loading=True,error='原站未就緒，改用五分鐘行情繪圖…'))
                     result=fallback_chart(code,self.base/code)

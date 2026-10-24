@@ -407,3 +407,18 @@ class CaptureCursorTests(unittest.TestCase):
         from autoswitch import AutomationStopped
         c=self.controller([250,250]);c.u.SetCursorPos.side_effect=lambda x,y:1
         with self.assertRaises(AutomationStopped):c.clear_cursor(dict(left=200,top=200,width=250,height=400))
+
+
+class EscapeStopTests(unittest.TestCase):
+    def test_escape_only_stops_busy_once_and_never_starts(self):
+        from auto_ui import AutoUI
+        from unittest.mock import Mock
+        app=AutoUI();app.stop=Mock();app.say=Mock()
+        self.assertFalse(app.handle_scan_escape(True,False))
+        app.handle_scan_escape(False,False)
+        self.assertTrue(app.handle_scan_escape(True,True))
+        self.assertFalse(app.handle_scan_escape(True,True))
+        self.assertFalse(app.handle_scan_escape(False,False))
+        app.stop.assert_called_once()
+        app.handle_scan_escape(True,True)
+        self.assertEqual(app.stop.call_count,2)

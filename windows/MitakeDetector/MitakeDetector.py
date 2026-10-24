@@ -17,7 +17,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.132'
+VERSION = '0.3.133'
 EXTRA_FIELDS = ['average', 'open_price', 'day_high']
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
@@ -671,6 +671,7 @@ class App(AutoUI,ResearchUI,DashboardUI,MobileUI,SteadyUI,ProfileUI):
         tick()
 
     def stop(self):
+        self.stop_event.set()  # Signal the worker before saving UI state.
         if getattr(self,'number_overlay',None):self.number_overlay.update(None)
         self.cancel_scan_retry()
         self.save_daily_table()
@@ -1236,7 +1237,12 @@ def self_test():
 
 
 if __name__ == '__main__':
-    if '--wantgoo-capture' in sys.argv:
+    if '--investing-capture' in sys.argv:
+        from investing_chart import run_capture
+        index=sys.argv.index('--investing-capture')
+        result=run_capture(sys.argv[index+1],sys.argv[index+2],fixture='--chart-fixture' in sys.argv)
+        sys.exit(1 if result['error'] else 0)
+    elif '--wantgoo-capture' in sys.argv:
         from wantgoo_chart import run_capture
         index=sys.argv.index('--wantgoo-capture')
         result=run_capture(sys.argv[index+1],sys.argv[index+2],fixture='--chart-fixture' in sys.argv)

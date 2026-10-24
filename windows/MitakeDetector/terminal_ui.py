@@ -106,6 +106,7 @@ class FocusChart:
             ttk.Radiobutton(bar,text=name,variable=self.mode,value=name,command=self.invalidate).pack(side='left',padx=4)
         ttk.Button(bar,text='放大',command=self.enlarge).pack(side='right')
         ttk.Button(bar,text='重試',command=self.retry).pack(side='right')
+        ttk.Button(bar,text='原站',command=self.open_source).pack(side='right')
         self.note=tk.StringVar(value='等待掃描資料；圖表在背景載入')
         tk.Label(parent,textvariable=self.note,bg=PANEL,fg=MUTED,wraplength=400,anchor='w',justify='left',font=('Microsoft JhengHei',9)).pack(side='bottom',fill='x',padx=12,pady=8)
         self.volume=tk.Canvas(parent,height=80,bg=PANEL,highlightthickness=0);self.volume.pack(side='bottom',fill='x',padx=10,pady=(0,4))
@@ -113,6 +114,15 @@ class FocusChart:
         self.canvas.bind('<Configure>',lambda e:self.invalidate())
         self.canvas.bind('<Button-1>',lambda e:self.enlarge())
         self.volume.bind('<Configure>',lambda e:self.invalidate())
+    def open_source(self):
+        if not self.code:return
+        from candidate_charts import source_links
+        import webbrowser,threading
+        data=self.app.candidate_charts.web_cache.get(self.code,{})
+        from investing_chart import safe_chart_url
+        url=data.get('url','')
+        if not safe_chart_url(url):url=source_links(self.code)[0]
+        threading.Thread(target=webbrowser.open,args=(url,),daemon=True).start()
     def retry(self):
         if self.code:self.app.candidate_charts.retry_web(self.code)
         self.invalidate()
@@ -153,7 +163,7 @@ class FocusChart:
         self.key=key;self.canvas.delete('all');self.volume.delete('all')
         if self.mode.get()=='5 分 K':
             self.volume.pack_forget()
-            self.note.set('來源：玩股網｜五分 K 快照；點圖可放大')
+            self.note.set('來源：Investing.com｜五分 K 快照；點圖可放大')
             if web.get('error'):self.message(web['error']);return
             if not web.get('directory'):self.message('五分 K 背景載入中…');return
             try:
@@ -163,7 +173,7 @@ class FocusChart:
                     im=source.copy();im.thumbnail((max(100,self.canvas.winfo_width()-8),max(100,self.canvas.winfo_height()-8)))
                 self.photo=ImageTk.PhotoImage(im,master=self.canvas)
                 self.canvas.create_image(self.canvas.winfo_width()/2,self.canvas.winfo_height()/2,image=self.photo)
-                self.note.set(web.get('source','玩股網')+'｜五分 K｜'+web.get('data_time','時間待核對')+' 台灣時間｜點圖放大')
+                self.note.set(web.get('source','Investing.com')+'｜五分 K｜'+web.get('data_time','時間待核對')+'｜點圖放大')
             except (OSError,ValueError) as error:self.message('圖表暫時無法讀取：'+str(error))
             return
         self.volume.pack(side='bottom',fill='x',padx=10,pady=(0,4),before=self.canvas)

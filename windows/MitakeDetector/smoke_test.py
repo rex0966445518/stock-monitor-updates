@@ -263,7 +263,7 @@ def run_smoke_test(report):
         # Test bundled browser driver, Edge launch and period validation without relying on external network.
         import subprocess,os
         target=report.parent/'chart-fixture'
-        command=[sys.executable]+([] if getattr(sys,'frozen',False) else [str(Path(__file__).with_name('MitakeDetector.py'))])+['--wantgoo-capture','2330',str(target),'--chart-fixture']
+        command=[sys.executable]+([] if getattr(sys,'frozen',False) else [str(Path(__file__).with_name('MitakeDetector.py'))])+['--investing-capture','2330',str(target),'--chart-fixture']
         environment=os.environ.copy();environment['PYINSTALLER_RESET_ENVIRONMENT']='1'
         checked=subprocess.run(command,env=environment,timeout=60,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
         chart_result=json.loads((target/'result.json').read_text(encoding='utf-8'))
@@ -275,7 +275,7 @@ def run_smoke_test(report):
         assert any(charts.cards['2330'][0][0].type(item)=='image' for item in charts.cards['2330'][0][0].find_all())
         charts.enlarge('2330');app.root.update_idletasks()
         charts.update([])
-        info['wantgoo_edge_fixture']=chart_result
+        info['investing_edge_fixture']=chart_result
         original_rows=list(app.display_rows)
         charts.test_button.invoke();app.root.update_idletasks()
         assert charts.test_mode and set(charts.cards)=={'2330','2317'}

@@ -581,6 +581,15 @@ class AutoUI:
             self.say('股名記憶已清除，下次讀取時重新學習。')
         except OSError as exc:self.say('無法清除股名記憶：'+str(exc))
 
+    def handle_scan_escape(self,down,busy):
+        was_down=getattr(self,'escape_down',False)
+        self.escape_down=bool(down)
+        if down and not was_down and busy:
+            self.stop()
+            self.say('已按 ESC 停止掃描，結果與進度保留。')
+            return True
+        return False
+
     def init_f8(self):
         self.f8_toggle=F8Toggle()
         if __import__('os').name=='nt':self.root.after(20,self.poll_f8)
@@ -588,6 +597,11 @@ class AutoUI:
     def poll_f8(self):
         import ctypes
         busy=bool(getattr(self,'scan_retry_timer',None)) or self.auto_active or bool(self.worker_thread and self.worker_thread.is_alive())
+        escape=bool(ctypes.windll.user32.GetAsyncKeyState(0x1B)&0x8000)
+        if self.handle_scan_escape(escape,busy):
+            self.f8_toggle=F8Toggle()
+            self.root.after(20,self.poll_f8)
+            return
         action=self.f8_toggle.update(bool(ctypes.windll.user32.GetAsyncKeyState(0x77)&0x8000),busy)
         if action=='stop':self.stop()
         elif action=='start':
@@ -642,7 +656,7 @@ class AutoUI:
         windows=[w for w in WindowsController.windows() if '漲停板探測器-雷允澤製' not in w[1] and '三竹盤中轉強偵測器' not in w[1] and '三竹自動輪切設定' not in w[1]]
         choices=[f'{title}  [視窗 {hwnd}]' for hwnd,title in windows]
         self.ttk.Button(body,text='一鍵自動設定（免框選）',command=lambda:(top.destroy(),self.auto_setup())).pack(anchor='w',padx=15,pady=5)
-        self.ttk.Label(body,text='1. 選擇三竹視窗（啟動後會使用滑鼠；F8開始／停止，可操作探測器主頁，三竹畫面保持可見）').pack(anchor='w',padx=15,pady=10)
+        self.ttk.Label(body,text='1. 選擇三竹視窗（啟動後會使用滑鼠；F8開始／停止；ESC停止，可操作探測器主頁，三竹畫面保持可見）').pack(anchor='w',padx=15,pady=10)
         choice=self.tk.StringVar()
         combo=self.ttk.Combobox(body,textvariable=choice,values=choices,state='readonly',width=90);combo.pack(padx=15,fill='x')
         selected=next((i for i,w in enumerate(windows) if w[1]==cfg.get('title')),None)

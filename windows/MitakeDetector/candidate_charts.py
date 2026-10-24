@@ -9,7 +9,8 @@ import webbrowser
 
 def source_links(code):
     if not re.fullmatch(r'[0-9]{4}',code):raise ValueError('股號必須為四位數字')
-    return (f'https://www.wantgoo.com/stock/{code}/technical-chart',
+    from investing_chart import chart_url
+    return (chart_url(code),
             f'https://goodinfo.tw/tw/ShowK_Chart.asp?STOCK_ID={code}')
 
 
@@ -62,9 +63,9 @@ class CandidateCharts:
         self.app=app;self.frame=parent;self.rows=[];self.page=0;self.cache={};self.pending=set();self.cards={};self.key=None
         self.test_mode=False;self.live_rows=[]
         self.web_cache={};self.photos={};self.last_requests={};self.closed=False
-        from wantgoo_chart import WantGooCharts
+        from investing_chart import InvestingCharts
         from MitakeDetector import BASE
-        self.web_service=WantGooCharts(BASE,lambda data:app.events.put((None,'wantgoo_chart',data)))
+        self.web_service=InvestingCharts(BASE,lambda data:app.events.put((None,'wantgoo_chart',data)))
         tk,ttk=app.tk,app.ttk
         bar=ttk.Frame(parent);bar.pack(fill='x')
         self.status=tk.StringVar(value='等待候選股票；曾達 5/6 或 6/6 後持續保留')
@@ -106,7 +107,7 @@ class CandidateCharts:
         ttk.Label(card,text=('【測試】 ' if self.test_mode else '')+f'{q.name or "股名待補"}  {q.code}  ｜ {candidate_heading(match)} ｜ 掃描價 {price_text}',font=('Microsoft JhengHei',13,'bold')).pack(anchor='w')
         panels=ttk.Frame(card);panels.pack(fill='x')
         links=source_links(q.code);canvases=[]
-        for i,title in enumerate(('5 分 K · 玩股網','日 K · 官方快取','日成交量 · 張','日 MACD · 12/26/9')):
+        for i,title in enumerate(('5 分 K · Investing.com','日 K · 官方快取','日成交量 · 張','日 MACD · 12/26/9')):
             panels.columnconfigure(i,weight=1,uniform='chart')
             panel=ttk.Frame(panels);panel.grid(row=0,column=i,sticky='nsew',padx=3)
             ttk.Label(panel,text=title).pack(anchor='w')
@@ -114,7 +115,7 @@ class CandidateCharts:
             canvases.append(c)
             c.bind('<Configure>',lambda e,code=q.code:self.paint(code))
             url=links[0 if i==0 else 1]
-            ttk.Button(panel,text='玩股網原站' if i==0 else 'Goodinfo 原站',command=lambda u=url:threading.Thread(target=webbrowser.open,args=(u,),daemon=True).start()).pack(anchor='w')
+            ttk.Button(panel,text='Investing.com原站' if i==0 else 'Goodinfo 原站',command=lambda u=url:threading.Thread(target=webbrowser.open,args=(u,),daemon=True).start()).pack(anchor='w')
         ttk.Button(card,text='重試五分 K',command=lambda code=q.code:self.retry_web(code)).pack(anchor='w')
         detail=self.app.tk.StringVar(value='讀取本地日線…')
         ttk.Label(card,textvariable=detail,wraplength=1100).pack(anchor='w')
@@ -218,7 +219,7 @@ class CandidateCharts:
         self.paint(code)
     def paint_web(self,code,c,message):
         data=self.web_cache.get(code)
-        if not data:message(c,'等待背景載入玩股網五分 K');return
+        if not data:message(c,'等待背景載入Investing.com五分 K');return
         if data.get('error'):message(c,data['error']);return
         from pathlib import Path
         from PIL import Image,ImageTk
@@ -232,8 +233,8 @@ class CandidateCharts:
             c.create_image(c.winfo_width()/2,3,anchor='n',image=stored[1])
             stamp=data.get('data_time','未知')
             fetched=dt.datetime.fromtimestamp(data['fetched_at'],dt.timezone(dt.timedelta(hours=8))).strftime('%H:%M:%S')
-            old='（舊交易日）' if stamp[:10]!=dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).date().isoformat() else ''
-            c.create_text(5,148,anchor='nw',text=f"{data.get('source','玩股網')}｜五分 K\n{stamp}{old} · 點圖放大",fill='#b9cadd',width=width)
+            old='（舊交易日）' if re.match(r'^\d{4}-\d{2}-\d{2}',stamp) and stamp[:10]!=dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).date().isoformat() else ''
+            c.create_text(5,148,anchor='nw',text=f"{data.get('source','Investing.com')}｜五分 K\n{stamp}{old} · 點圖放大",fill='#b9cadd',width=width)
         except (OSError,ValueError,KeyError) as exc:message(c,'圖檔讀取失敗：'+str(exc))
     def enlarge(self,code):
         data=self.web_cache.get(code)
@@ -247,7 +248,7 @@ class CandidateCharts:
         image.thumbnail((min(1200,top.winfo_screenwidth()-100),min(850,top.winfo_screenheight()-120)))
         photo=ImageTk.PhotoImage(image,master=top)
         label=self.app.ttk.Label(top,image=photo);label.image=photo;label.pack()
-        self.app.ttk.Label(top,text='來源：'+data.get('source','玩股網')+'｜五分 K，非即時串流。').pack()
+        self.app.ttk.Label(top,text='來源：'+data.get('source','Investing.com')+'｜五分 K，非即時串流。').pack()
     def close(self):
         self.closed=True
         try:self.app.root.after_cancel(self.timer)

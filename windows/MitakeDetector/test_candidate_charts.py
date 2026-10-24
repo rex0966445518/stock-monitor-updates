@@ -23,7 +23,7 @@ class CandidateChartTests(unittest.TestCase):
         self.assertAlmostEqual(out[-1][1],7)
         self.assertAlmostEqual(out[-1][2],0)
     def test_links_validate_codes(self):
-        self.assertEqual(source_links('2330')[0],'https://www.wantgoo.com/stock/2330/technical-chart')
+        self.assertEqual(source_links('2330')[0],'https://www.investing.com/equities/taiwan-semicon-chart')
         for code in ['23300','<script>','１２３４']:
             with self.assertRaises(ValueError):source_links(code)
 
@@ -157,3 +157,28 @@ class IntradayFallbackTests(unittest.TestCase):
             events=[];service=WantGooCharts(d,events.append);service.thread=object()
             for i in range(9):service.request(str(2000+i))
             self.assertIn('佇列已滿',events[-1]['error']);self.assertNotIn('2008',service.pending)
+
+
+class InvestingTests(unittest.TestCase):
+    def test_verify_symbol_interval_candles_and_loaded_values(self):
+        from investing_chart import validate_chart
+        valid=dict(heading='Test (2330)',legend='Test, Taiwan, 5, Taiwan',
+                   selected=True,candles=True,values=['100','102','99','101'],canvas=True)
+        validate_chart(valid,'2330','Test')
+        for delta in (dict(heading='Test (5202)'),dict(legend='Test, Taiwan, D, Taiwan'),
+                      dict(legend='Other, Taiwan, 5, Taiwan'),dict(selected=False),
+                      dict(candles=False),dict(values=['n/a']*4),dict(canvas=False),
+                      dict(values=['100','90','99','101'])):
+            with self.assertRaises(ValueError):validate_chart(dict(valid,**delta),'2330','Test')
+    def test_dedicated_cache_and_no_silent_provider_fallback(self):
+        import tempfile
+        from investing_chart import InvestingCharts,chart_url,safe_chart_url
+        with tempfile.TemporaryDirectory() as folder:
+            service=InvestingCharts(folder,lambda data:None)
+            self.assertEqual(service.base.name,'investing-charts')
+            self.assertFalse(service.fallback_enabled)
+            self.assertEqual(service.capture_flag,'--investing-capture')
+        self.assertTrue(safe_chart_url(chart_url('5202')))
+        self.assertFalse(safe_chart_url('https://evil.test/equities/test-chart'))
+        self.assertFalse(safe_chart_url('https://www.investing.com.evil.test/equities/test-chart'))
+        with self.assertRaises(ValueError):chart_url('../1234')
