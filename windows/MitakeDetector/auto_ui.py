@@ -224,7 +224,7 @@ class AutoUI:
                 opened,_=c.image([0,0,1,1])
                 menu=detect_menu(opened,discovered['combo'],self.read_auto_ocr);c.check()
                 auto=calibrated_auto(cfg.get('auto_config'),title=title,window_size=[im.width,im.height],
-                                     combo=discovered['combo'],menu=menu,table=discovered['table'],discovered=1)
+                                     combo=discovered['combo'],menu=menu,table=discovered['table'],discovered=1,price_bounds_version=3)
                 # The popup is known to be open after detect_menu: select directly.
                 RankingSwitcher(c,self.read_auto_ocr,auto['combo'],auto['menu'],ocr_retry=self.read_menu_ocr_retry,status=lambda detail:self.events.put((token,'auto_progress',(detail,None,None)))).switch('漲幅排行',menu_open=True)
                 self.events.put((token,'auto_status','正在讀取股票資料並驗證欄位…'))
@@ -516,7 +516,8 @@ class AutoUI:
         resized=size!=auto.get('window_size')
         extra_needed=cfg.get('scan_profile','original')!='original' and any(cfg.get('use_shrink_'+k) for k in ('above_average','average_up','above_open','near_high'))
         extra_refresh=extra_needed and not {'average','open_price','day_high'}.issubset(cfg.get('column_bounds') or {})
-        if not resized and not extra_refresh:
+        boundary_refresh=bool(auto.get('discovered') and 'average' in (cfg.get('column_bounds') or {}) and auto.get('price_bounds_version')!=3)
+        if not resized and not extra_refresh and not boundary_refresh:
             bounds=cfg.get('column_bounds',{})
             valid=isinstance(bounds,dict) and {'code','name','price','gain','volume','turnover'}.issubset(bounds) and all(isinstance(pair,(list,tuple)) and len(pair)==2 and all(type(v) in (int,float) for v in pair) and 0<=pair[0]<pair[1]<=1 for pair in bounds.values())
             if not auto.get('discovered') or valid:
@@ -528,7 +529,7 @@ class AutoUI:
         self.events.put((token,'auto_status',f'目前視窗 {size[0]}×{size[1]}｜'+('解析度或視窗大小已變更，自動重新定位表頭與選單' if resized else '核對表頭頭尾位置，必要時自動重新定位')))
         full,_=c.image([0,0,1,1])
         layout,reused=cached_layout(full,self.read_auto_ocr,BASE/'header-layout.json',
-            None if resized or extra_refresh else cfg.get('column_bounds'),None if resized else auto.get('table'),detector=self.detect_layout_recovering)
+            None if resized or extra_refresh or boundary_refresh else cfg.get('column_bounds'),None if resized else auto.get('table'),detector=self.detect_layout_recovering)
         c.check()
         menu_changed=resized or layout['combo']!=auto.get('combo')
         menu=auto['menu']
@@ -548,7 +549,7 @@ class AutoUI:
                 c.check()
                 self._startup_rank_error=(ranking,exc);self._scan_menu_open=picker.menu_is_open
         geometry_changed=resized or layout['column_bounds']!=cfg.get('column_bounds') or layout['table']!=auto.get('table') or menu_changed
-        auto.update(window_size=size,combo=layout['combo'],menu=menu,table=layout['table'],discovered=1)
+        auto.update(window_size=size,combo=layout['combo'],menu=menu,table=layout['table'],discovered=1,price_bounds_version=3)
         cfg.update(auto_config=auto,column_bounds=layout['column_bounds'],region=absolute_roi(layout['table'],c.rect()))
         self.events.put((token,'auto_layout_done',dict(auto_config=auto.copy(),column_bounds=layout['column_bounds'],region=cfg['region'])))
         self.events.put((token,'auto_status','表頭頭尾一致，已略過逐欄辨識' if reused else f'已適應 {size[0]}×{size[1]} 視窗｜表頭與操作位置已確認'))

@@ -210,3 +210,22 @@ class FixedHeaderTests(unittest.TestCase):
         c.image.assert_not_called();ui.read_auto_ocr.assert_not_called()
         self.assertTrue(ui.layout_coordinates_locked)
         self.assertEqual(cfg['column_bounds'],bounds)
+
+
+    def test_old_average_bounds_refresh_once_on_unchanged_window(self):
+        ui=AutoUI();ui.events=queue.Queue();ui.read_auto_ocr=Mock()
+        bounds={f:[i/9,(i+1)/9] for i,f in enumerate(['code','name','price','gain','volume','turnover','average','open_price','day_high'])}
+        auto=dict(window_size=[1366,768],discovered=1,combo=[0,0,.2,.1],menu=[0,.1,.2,.5],table=[0,.2,1,.8])
+        layout=dict(combo=auto['combo'],table=auto['table'],column_bounds=bounds)
+        c=Mock();c.initial_rect=(0,0,1366,768);c.rect.return_value=c.initial_rect
+        c.image.return_value=(Image.new('RGB',(1366,768)),None)
+        cfg=dict(column_bounds=bounds)
+        ui.detect_layout_recovering=Mock()
+        with patch('auto_detect.cached_layout',return_value=(layout,False)) as cached:
+            ui.adapt_scan_layout(c,auto,cfg,1,'漲幅排行')
+            cached.assert_called_once()
+            self.assertIsNone(cached.call_args.args[3])
+        self.assertEqual(auto['price_bounds_version'],3)
+        c.image.reset_mock()
+        ui.adapt_scan_layout(c,auto,cfg,1,'漲幅排行')
+        c.image.assert_not_called()

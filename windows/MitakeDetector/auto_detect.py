@@ -95,6 +95,22 @@ def merge_label_fragments(tokens):
     return result
 
 
+def optional_column_edges(field,spans,index,left,right):
+    """Do not expand a numeric column across a missed neighbouring header."""
+    if field not in OPTIONAL_ALIASES:return left,right
+    l,r=spans[index][:2];center=(l+r)/2
+    before=(sum(spans[index-1][:2])/2) if index else None
+    after=(sum(spans[index+1][:2])/2) if index+1<len(spans) else None
+    gaps=[gap for gap in (center-before if before is not None else None,
+                         after-center if after is not None else None) if gap is not None and gap>0]
+    if not gaps:return left,right
+    half=max((r-l)/2+2,min(gaps)/2)
+    # Only tighten excessive gaps; preserve normal right-aligned quote crops.
+    if before is None or center-before>min(gaps)*1.5:left=max(left,center-half)
+    if after is None or after-center>min(gaps)*1.5:right=min(right,center+half)
+    return left,right
+
+
 def _detect_layout_pixels(image,ocr,require_combo=True):
     import numpy as np
     w,h=image.size
@@ -123,6 +139,7 @@ def _detect_layout_pixels(image,ocr,require_combo=True):
         index=next(i for i,s in enumerate(spans) if s==(l,r))
         left=(spans[index-1][1]+l)/2 if index else 0
         right=(r+spans[index+1][0])/2 if index+1<len(spans) else w
+        left,right=optional_column_edges(field,spans,index,left,right)
         # Quotes are right-aligned; allow the header's right gap but keep the code away from name icons.
         if field=='code':left=max(left,l-18)
         bounds[field]=[max(0,left/w),min(1,right/w)]
@@ -162,6 +179,7 @@ def _layout_from_tokens(image,tokens,require_combo):
             i=next(i for i,v in enumerate(spans) if v[:2]==(l,r))
             left=(spans[i-1][1]+l)/2 if i else 0
             right=(r+spans[i+1][0])/2 if i+1<len(spans) else w
+            left,right=optional_column_edges(field,spans,i,left,right)
             if field=='code':left=max(left,l-ch)
             bounds[field]=[max(0,left/w),min(1,right/w)]
         bottom=max(v[3] for v in found.values())+max(2,round(ch*.18))
@@ -220,7 +238,7 @@ def cached_layout(image,ocr,path,configured_bounds,configured_table,detector=Non
     try:
         saved=json.loads(path.read_text(encoding='utf-8'))
         layout=saved['layout'];ends=saved['ends']
-        if (saved['version']==2 and saved['size']==list(image.size)
+        if (saved['version']==3 and saved['size']==list(image.size)
                 and layout['column_bounds']==configured_bounds and layout['table']==configured_table
                 and len(ends)==2 and all(signature(e['box'])==e['hash'] for e in ends)):
             return layout,True
@@ -234,7 +252,7 @@ def cached_layout(image,ocr,path,configured_bounds,configured_table,detector=Non
     for left,right,_ in (headers[0],headers[-1]):
         box=[max(0,int(left)-3),top,min(w,int(right)+3),y]
         ends.append(dict(box=box,hash=signature(box)))
-    value=dict(version=2,size=list(image.size),layout=layout,ends=ends)
+    value=dict(version=3,size=list(image.size),layout=layout,ends=ends)
     try:
         path.parent.mkdir(parents=True,exist_ok=True)
         temporary=path.with_suffix('.tmp');temporary.write_text(json.dumps(value,ensure_ascii=False),encoding='utf-8');temporary.replace(path)

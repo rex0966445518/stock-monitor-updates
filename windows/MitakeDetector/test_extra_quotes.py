@@ -34,6 +34,19 @@ class ExtraQuoteTests(unittest.TestCase):
         b=layout['column_bounds'];self.assertEqual(set(b),set(self.fields))
         for field,index in [('day_high',7),('open_price',9),('average',11)]:
             self.assertLess(b[field][0],(index*95+30)/1300);self.assertGreater(b[field][1],(index*95+30)/1300)
+    def test_missing_time_header_does_not_expand_average_into_time(self):
+        labels=['名稱','股號','成交','漲幅','單量','成交量','週轉率','最高','最低','開盤','參考價','均價','時間','日期']
+        image=Image.new('RGB',(1450,400))
+        for omitted in (set(),{'時間'},{'時間','日期'}):
+            tokens=[token(t,i*100,40,60) for i,t in enumerate(labels) if t not in omitted]
+            layout=_layout_from_tokens(image,tokens,False)
+            left,right=layout['column_bounds']['average']
+            self.assertLess(left*1450,1130)
+            self.assertGreater(right*1450,1160)
+            self.assertLessEqual(right*1450,1180)
+        from auto_detect import optional_column_edges
+        self.assertEqual(optional_column_edges('average',[(1000,1060),(1100,1160),(1300,1360)],1,1080,1230),(1080,1180))
+
     def test_duplicate_optional_header_is_not_guessed(self):
         labels=['股號','名稱','成交','漲幅','成交量','週轉率','均價','均價']
         layout=_layout_from_tokens(Image.new('RGB',(900,400)),[token(t,i*100,40,60) for i,t in enumerate(labels)],False)
