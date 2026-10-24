@@ -151,15 +151,18 @@ class OutlineResilienceTests(unittest.TestCase):
     def app(self):
         import queue
         app=AutoUI();app.events=queue.Queue();return app
-    def test_show_timeout_disables_decoration_without_stopping(self):
+    def test_show_timeout_retries_decoration_without_stopping(self):
         import threading
         from unittest.mock import patch
         app=self.app();stop=threading.Event()
         with patch('auto_ui.time.monotonic',side_effect=[0,4]):
             app.highlight_scan(7,[{'left':1}],stop)
-        self.assertFalse(stop.is_set());self.assertEqual(app.outline_disabled_token,7)
-        size=app.events.qsize();app.highlight_scan(7,[{'left':2}],stop)
-        self.assertEqual(app.events.qsize(),size)
+        self.assertFalse(stop.is_set())
+        size=app.events.qsize()
+        with patch('auto_ui.time.monotonic',side_effect=[0,4]):
+            app.highlight_scan(7,[{'left':2}],stop)
+        self.assertGreater(app.events.qsize(),size)
+        self.assertEqual(app.outline_show_pending[1],[{'left':2}])
     def test_clear_timeout_skips_capture_not_emergency_stop(self):
         import threading
         from unittest.mock import patch

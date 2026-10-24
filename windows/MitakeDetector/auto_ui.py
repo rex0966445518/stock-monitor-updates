@@ -59,7 +59,7 @@ class AutoUI:
             display=getattr(self,'outline_show_pending',None)
             if display and not display[2].is_set():
                 token,region,ready=display
-                if token==self.generation and getattr(self,'outline_disabled_token',None)!=token:
+                if token==self.generation:
                     self.show_scan_outline(region);self.root.update_idletasks()
                 ready.set()
         except Exception:
@@ -71,9 +71,7 @@ class AutoUI:
     def highlight_scan(self,token,region,stop):
         from autoswitch import AutomationStopped
         if stop.is_set():raise AutomationStopped('已停止自動操作')
-        # Decorative borders may be disabled, but clearing old borders before
-        # capture must still be acknowledged to avoid OCR of stale overlays.
-        if region and getattr(self,'outline_disabled_token',None)==token:return
+        # Display delays are recoverable; capture still requires a confirmed clear.
         pending=getattr(self,'outline_clear_pending',None)
         if region is None and pending and pending[0]==token:
             ready=pending[1]
@@ -90,9 +88,6 @@ class AutoUI:
         while not ready.wait(.02):
             if stop.is_set():raise AutomationStopped('已停止自動操作')
             if time.monotonic()>deadline:
-                already_disabled=getattr(self,'outline_disabled_token',None)==token
-                self.outline_disabled_token=token
-                if not already_disabled:self.events.put((token,'ranking_skipped',dict(ranking='掃描綠框提示',cycle=0,reason='綠框回應逾時，已停用本次掃描綠框；等待原清除確認後繼續，未確認的畫面略過。')))
                 if region is None:raise RuntimeError('綠框尚未清除，略過本次擷取，繼續下一排行')
                 return
         if stop.is_set():raise AutomationStopped('已停止自動操作')

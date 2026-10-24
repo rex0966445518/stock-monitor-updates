@@ -33,3 +33,25 @@ class OutlineServiceTests(unittest.TestCase):
         image=Mock(size=(100,200),width=100,height=200)
         app.focus_columns(image,{'code':(0,.2)},['code'],'read')
         self.assertEqual(app.highlight_scan.call_args.args[1],[dict(left=10,top=20,width=20,height=200)])
+
+    def test_delayed_display_recovers_and_capture_cancels_stale_show(self):
+        from auto_ui import AutoUI
+        from unittest.mock import Mock, patch
+        import threading, queue
+        app=AutoUI();app.root=Mock();app.generation=7;app.events=queue.Queue()
+        app.show_scan_outline=Mock();stop=threading.Event()
+        region=dict(left=10,top=20,width=30,height=40)
+        with patch('auto_ui.time.monotonic',side_effect=[0,4]):
+            app.highlight_scan(7,region,stop)
+        app.poll_capture_clear()
+        app.show_scan_outline.assert_called_with(region)
+        with patch('auto_ui.time.monotonic',side_effect=[0,4]):
+            app.highlight_scan(7,region,stop)
+        stale=app.outline_show_pending[2]
+        with patch('auto_ui.time.monotonic',side_effect=[0,4]):
+            with self.assertRaises(RuntimeError):
+                app.highlight_scan(7,None,stop)
+        self.assertTrue(stale.is_set())
+        app.poll_capture_clear()
+        app.show_scan_outline.assert_called_with(None)
+        self.assertTrue(app.outline_clear_pending[1].is_set())
