@@ -11,6 +11,8 @@ from candidate_diary import CandidateDiary,TAIPEI
 class DiaryView:
     def __init__(self,app,path):
         self.app=app;self.store=CandidateDiary(path);self.importing=False;self.last_refresh=0;self.current_code=None;self.before=None
+        from diary_highs import DiaryHighs
+        self.highs=DiaryHighs(path);self.high_queue=queue.Queue();self.high_busy=False;self.high_next=0;self.high_note=''
         self.quote_queue=queue.Queue();self.quote_stop=threading.Event();self.quote_busy=False;self.next_quote=0;self.quote_note='';self.timer=None
         self.window=app.tk.Toplevel(app.root);self.window.title('5/6候選歷史日誌');self.window.geometry('1300x850')
         today=dt.datetime.now(TAIPEI).date();self.month=today.replace(day=1)
@@ -27,9 +29,10 @@ class DiaryView:
         body=app.ttk.Frame(self.window);body.pack(fill='both',expand=True,padx=12,pady=10)
         self.calendar=app.ttk.Frame(body);self.calendar.pack(side='left',anchor='n',padx=(0,12))
         table=app.ttk.Frame(body);table.pack(side='left',fill='both',expand=True)
-        columns=('code','name','first','price','last','latest','quote_time','quote_source','peak','current','n','qualifications')
-        self.tree=app.ttk.Treeview(table,columns=columns,show='headings',height=12)
-        for key,title,width in zip(columns,['股號','股名','首次發現','首次價','當日最後讀取','最近價','最近價時間','行情狀態／來源','當日最高符合','當日最後符合','觀測筆數','達5/6次數'],[65,105,100,80,115,80,155,195,100,100,85,100]):
+        app.ttk.Label(self.window,text='5／10日最高價：自所選入選日（含當日整天）起，依個股有有效日線的交易日計算；不足天數標示累積進度，非入選時刻後報酬。',wraplength=1220).pack(fill='x',padx=12)
+        columns=('code','name','first','price','last','latest','quote_time','quote_source','peak','current','n','qualifications','high5','high10')
+        self.tree=app.ttk.Treeview(table,columns=columns,displaycolumns=columns[:4]+('high5','high10')+columns[4:-2],show='headings',height=12)
+        for key,title,width in zip(columns,['股號','股名','首次發現','首次價','當日最後讀取','最近價','最近價時間','行情狀態／來源','當日最高符合','當日最後符合','觀測筆數','達5/6次數','5日內最高價','10日內最高價'],[65,105,100,80,115,80,155,195,100,100,85,100,145,145]):
             self.tree.heading(key,text=title);self.tree.column(key,width=width,stretch=False)
         v=app.ttk.Scrollbar(table,orient='vertical',command=self.tree.yview);v.pack(side='right',fill='y')
         h=app.ttk.Scrollbar(table,orient='horizontal',command=self.tree.xview);h.pack(side='bottom',fill='x')
@@ -60,7 +63,7 @@ class DiaryView:
         try:self.choose(dt.date.fromisoformat(self.day.get()).isoformat())
         except ValueError:self.status.set('日期格式請填YYYY-MM-DD')
     def choose(self,day):
-        self.next_quote=0
+        self.next_quote=0;self.high_next=0;self.high_note=''
         self.day.set(day);self.month=dt.date.fromisoformat(day).replace(day=1);self.current_code=None;self.before=None
         self.text.delete('1.0','end');self.refresh(force=True)
     def refresh(self,force=False):
@@ -69,14 +72,16 @@ class DiaryView:
         self.tree.delete(*self.tree.get_children())
         rows=self.store.stocks(self.day.get());live=self.store.latest_quotes(self.day.get());counts=self.store.qualification_counts(self.day.get())
         def clock(ts):return dt.datetime.fromtimestamp(ts,TAIPEI).strftime('%H:%M:%S') if ts is not None else '—'
+        from diary_highs import display
         for code,name,first,price,last,latest,matched,total,reason,peak,n in rows:
+            highs=self.highs.result(code,dt.date.fromisoformat(self.day.get()))
             q=live.get(code,{})
             stamp=q.get('ts',last);value=q.get('price',latest);source=q.get('source','歷史掃描快取')
             quote_time=dt.datetime.fromtimestamp(stamp,TAIPEI).strftime('%m/%d %H:%M:%S') if stamp is not None else '—'
             state='來源近期讀值' if stamp is not None and -10<=time.time()-stamp<=90 else '非即時／保留前值'
-            item=self.tree.insert('','end',values=[code,name or '股名待補',clock(first),f'{price:.2f}',clock(last),'—' if value is None else f'{value:.2f}',quote_time,state+'／'+source,f'{peak}/6',f'{matched}/{total}' if total else '—',n,counts.get(code,0)])
+            item=self.tree.insert('','end',values=[code,name or '股名待補',clock(first),f'{price:.2f}',clock(last),'—' if value is None else f'{value:.2f}',quote_time,state+'／'+source,f'{peak}/6',f'{matched}/{total}' if total else '—',n,counts.get(code,0),display(highs[5],5),display(highs[10],10)])
             if code==selected:self.tree.selection_set(item)
-        self.status.set(f'{self.day.get()}｜曾達5/6或6/6：{len(rows)}檔｜日曆綠色日期有紀錄；需啟用全部六項條件才會新收集5/6。' + ('｜正在整理舊紀錄' if self.importing else '')+'｜最近價每30秒背景更新；符合數為所選當日紀錄｜'+self.quote_note)
+        self.status.set(f'{self.day.get()}｜曾達5/6或6/6：{len(rows)}檔｜日曆綠色日期有紀錄；需啟用全部六項條件才會新收集5/6。' + ('｜正在整理舊紀錄' if self.importing else '')+'｜最近價每30秒背景更新；符合數為所選當日紀錄｜'+self.quote_note+'｜'+self.high_note)
     def destroyed(self,event):
         if event.widget!=self.window:return
         self.quote_stop.set()
@@ -91,6 +96,23 @@ class DiaryView:
             self.quote_busy=False
             self.quote_note=note if day==self.day.get() else ''
             self.refresh(force=True)
+        try:
+            high_day,note=self.high_queue.get_nowait()
+        except queue.Empty:pass
+        else:
+            self.high_busy=False
+            if high_day==self.day.get():self.high_note=note
+            self.refresh(force=True)
+        if not self.high_busy and time.monotonic()>=self.high_next and '--smoke-test' not in sys.argv:
+            high_day=self.day.get();high_codes=[r[0] for r in self.store.stocks(high_day)]
+            self.high_next=time.monotonic()+900
+            if high_codes:
+                self.high_busy=True;self.high_note='背景補抓5／10日最高價…'
+                def high_job(day=high_day,codes=high_codes):
+                    try:note=self.highs.refresh(codes,dt.date.fromisoformat(day),self.quote_stop)
+                    except Exception as exc:note='最高價日線待補：'+str(exc)[:100]
+                    self.high_queue.put((day,note))
+                threading.Thread(target=high_job,daemon=True,name='diary-highs').start()
         if not self.quote_busy and time.monotonic()>=self.next_quote and '--smoke-test' not in sys.argv:
             day=self.day.get();codes=[r[0] for r in self.store.stocks(day)]
             self.next_quote=time.monotonic()+30

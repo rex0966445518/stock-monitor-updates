@@ -111,3 +111,46 @@ class LatestQuoteTests(unittest.TestCase):
         for delta in [dict(z='-'),dict(z='nan'),dict(z='0'),dict(d='20990101')]:
             self.assertEqual(parse_quotes(dict(rtcode='0000',msgArray=[dict(base,**delta)]),['2330'],now),[])
         self.assertEqual(parse_quotes(dict(rtcode='0000',msgArray=[base,dict(base,ex='otc')]),['2330'],now),[])
+
+
+class ForwardHighTests(unittest.TestCase):
+    def bar(self,day,high):
+        return dict(day=day,open=10,low=9,close=10,high=high)
+    def test_forward_windows_dedup_and_invalid_rows(self):
+        from diary_highs import summarize,display
+        days=['2026-01-02','2026-01-05','2026-01-06','2026-01-07','2026-01-08',
+              '2026-01-09','2026-01-12','2026-01-13','2026-01-14','2026-01-15','2026-01-16']
+        rows=[self.bar(d,11+i) for i,d in enumerate(days)]
+        rows += [self.bar('2026-01-01',999),self.bar('2026-01-17',999),self.bar(days[0],11),
+                 self.bar('2026-01-03',float('nan'))]
+        result=summarize(rows,dt.date(2026,1,2),dt.date(2026,1,16))
+        self.assertEqual(result[5]['high'],15)
+        self.assertEqual(result[10]['high'],20)
+        self.assertEqual(display(result[5],5),'15.00')
+        partial=summarize(rows,dt.date(2026,1,2),dt.date(2026,1,6))
+        self.assertEqual(display(partial[5],5),'13.00（3/5日）')
+    def test_missing_first_month_never_shifts_window_and_cache_persists(self):
+        from diary_highs import DiaryHighs
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'test.db';service=DiaryHighs(path)
+            service.save_month('2330','2026-02',[self.bar('2026-02-02',99)],'TWSE')
+            self.assertIsNone(service.result('2330',dt.date(2026,1,30))[5]['high'])
+            service.save_month('2330','2026-01',[self.bar('2026-01-30',15)],'TWSE')
+            result=DiaryHighs(path).result('2330',dt.date(2026,1,30))
+            self.assertEqual(result[5]['high'],99)
+            self.assertEqual(result[5]['count'],2)
+    def test_official_month_fetch_and_stop(self):
+        import threading,json
+        from diary_highs import DiaryHighs
+        with tempfile.TemporaryDirectory() as folder:
+            service=DiaryHighs(Path(folder)/'test.db');stop=threading.Event();calls=[]
+            def fetch(url):
+                calls.append(url)
+                return json.dumps(dict(title='2330',data=[
+                    ['115/01/'+str(day).zfill(2),'1000','10000','10',str(day+10),'9','10']
+                    for day in range(2,12)]))
+            service.refresh(['2330'],dt.date(2026,1,2),stop,fetch)
+            self.assertEqual(len(calls),1)
+            self.assertEqual(service.result('2330',dt.date(2026,1,2))[10]['high'],21)
+            stop.set();service.refresh(['2317'],dt.date(2026,1,2),stop,fetch)
+            self.assertEqual(len(calls),1)

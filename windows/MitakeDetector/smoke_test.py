@@ -401,6 +401,9 @@ def run_smoke_test(report):
         updated=next(view.tree.item(i,'values') for i in view.tree.get_children() if view.tree.item(i,'values')[0]=='9089')
         assert updated[5]=='123.45' and 'GUI測試行情' in updated[7],updated
         assert updated[3]=='100.00',updated
+        assert view.tree.heading('high5')['text']=='5日內最高價'
+        assert view.tree.heading('high10')['text']=='10日內最高價'
+        assert updated[-2:]==('待補日線','待補日線'),updated
         diary_top.destroy()
         assert view.quote_stop.is_set()
         # The daily panel survives weaker readings and invalid OCR spikes.
