@@ -17,7 +17,7 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.131'
+VERSION = '0.3.132'
 EXTRA_FIELDS = ['average', 'open_price', 'day_high']
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']

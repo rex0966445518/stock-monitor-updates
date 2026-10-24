@@ -711,9 +711,15 @@ class AutoUI:
         if enabled-set(RANKINGS):
             self.ttk.Label(body,text='舊設定含未列於錄影選單的排行：'+ '、'.join(sorted(enabled-set(RANKINGS)))+'；儲存後依目前勾選更新，單量排行請另行勾選。',wraplength=810).pack(anchor='w',padx=15)
         rank_vars={}
+        ranking_save_status=self.tk.StringVar(value=f'目前已勾選 {sum(name in enabled for name in RANKINGS)} 個排行；修改後請按下方儲存。')
+        def ranking_changed():
+            ranking_save_status.set(f'尚未儲存｜已勾選 {sum(bool(v.get()) for v in rank_vars.values())} 個排行')
         for i,name in enumerate(RANKINGS):
             var=self.tk.BooleanVar(value=name in enabled);rank_vars[name]=var
-            self.ttk.Checkbutton(ranks,text=name,variable=var).grid(row=i//5,column=i%5,sticky='w',padx=5,pady=2)
+            self.ttk.Checkbutton(ranks,text=name,variable=var,command=ranking_changed).grid(row=i//5,column=i%5,sticky='w',padx=5,pady=2)
+        ranking_actions=self.ttk.Frame(body);ranking_actions.pack(fill='x',padx=15,pady=10)
+        self.ttk.Button(ranking_actions,text='儲存輪切排行',command=lambda:save(close=False)).pack(side='left')
+        self.ttk.Label(ranking_actions,textvariable=ranking_save_status,wraplength=520).pack(side='left',padx=12)
         numbered=self.ttk.Frame(tabs);tabs.add(numbered,text='排行編號（手動校正）')
         number_vars=self.build_menu_number_settings(numbered,cfg)
         fields=self.ttk.Frame(body);fields.pack(fill='x',padx=15,pady=10)
@@ -744,13 +750,14 @@ class AutoUI:
                 if not cfg['rankings']:raise ValueError('請至少勾選一個排行')
                 if not self.settings():return False
                 self.persist_auto_preferences(cfg)
+                ranking_save_status.set(f'已儲存 {len(cfg["rankings"])} 個排行｜下次開始掃描時套用，重開後保留')
                 self.say('自動輪切設定已儲存，共'+str(len(cfg['rankings']))+'個排行；讀取後停留 '+str(cfg['seconds'])+' 秒，重開後保留')
                 if close:top.destroy()
                 return True
             except Exception as exc:messagebox.showerror('設定錯誤',str(exc));return False
         def test():
             if save():self.start_auto(test_only=True)
-        self.ttk.Button(buttons,text='儲存設定',command=save).pack(side='left')
+        self.ttk.Button(buttons,text='儲存並關閉',command=save).pack(side='left')
         self.ttk.Button(buttons,text='測試輪切一次（不讀取行情）',command=test).pack(side='left',padx=10)
         def preview():
             if save():self.preview_menu_numbers()
