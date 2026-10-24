@@ -78,9 +78,10 @@ class StockNames:
 
 def scan_numeric_batch(image,bounds,read,names,memory=None,focus=None,defer_names=False,anchors_ready=None):
     from PIL import Image
-    from MitakeDetector import FIELDS,parse_ocr
+    from MitakeDetector import FIELDS,EXTRA_FIELDS,parse_ocr
     import hashlib
-    fields=['code','price','gain','volume','turnover'];pieces=[];cached=[];cursor=32
+    mapped_fields=FIELDS+[f for f in EXTRA_FIELDS if f in bounds]
+    fields=['code','price','gain','volume','turnover']+[f for f in EXTRA_FIELDS if f in bounds];pieces=[];cached=[];cursor=32
     for field in fields:
         left,right=bounds[field]
         if not 0<=left<right<=1:raise ValueError('自動欄位範圍無效')
@@ -100,7 +101,7 @@ def scan_numeric_batch(image,bounds,read,names,memory=None,focus=None,defer_name
             text=re.sub(r'^[^0-9]+','',text)
             if re.fullmatch(r'[0-9 ]{4,9}',text):text=text.replace(' ','')
         y=sum(p[1] for p in box)/4;h=max(p[1] for p in box)-min(p[1] for p in box)
-        x=50+FIELDS.index(field)*100
+        x=50+mapped_fields.index(field)*100
         logical.append(([[x-10,y-h/2],[x+10,y-h/2],[x+10,y+h/2],[x-10,y+h/2]],text,confidence))
         if field=='code' and confidence>=.70 and re.fullmatch(r'[0-9]{4,12}[A-Za-z]{0,2}',text):
             anchors.append((text,y,max(h,8)));code_scores[text]=confidence
@@ -172,7 +173,7 @@ def scan_numeric_batch(image,bounds,read,names,memory=None,focus=None,defer_name
             append('name',[[0,y-h/2],[10,y-h/2],[10,y+h/2],[0,y+h/2]],name,1)
             if code not in {a[0] for a in unknown}:names.reused+=1
     if changed or names.dirty:names.save()
-    return parse_ocr(logical,600,[100*(50+i*100)/600 for i in range(6)],time.time())
+    return parse_ocr(logical,len(mapped_fields)*100,[(50+i*100)/len(mapped_fields) for i in range(len(mapped_fields))],time.time(),fields=mapped_fields)
 
 
 def learn_mapped_names(tokens,names,proof):

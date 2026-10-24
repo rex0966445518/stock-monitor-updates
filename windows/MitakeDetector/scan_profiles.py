@@ -13,10 +13,10 @@ RULES = [
     ('mean_shrink', '最新量低於前段均量', False),
     ('rise', '首末段末價格漲幅達門檻', True),
     ('tick', '每次上推至少一檔（一般股票）', False),
-    ('above_average', '成交價站上當日均價〔目前未讀取〕', False),
-    ('average_up', '當日均價逐段上升〔目前未讀取〕', False),
-    ('above_open', '成交價高於開盤價〔目前未讀取〕', False),
-    ('near_high', '接近當日最高價〔目前未讀取〕', False),
+    ('above_average', '成交價站上當日均價', False),
+    ('average_up', '當日均價逐段上升', False),
+    ('above_open', '成交價高於開盤價', False),
+    ('near_high', '接近當日最高價', False),
     ('gain', '當日漲幅介於指定範圍', False),
     ('total_volume', '當日累計成交量達門檻', False),
     ('segment_volume', '每段成交量達門檻', False),
@@ -134,7 +134,8 @@ class ShrinkTracker:
         missing = [label+('：缺資料' if tests[k] is None else '：未符合') for k,label in enabled if tests[k] is not True]
         r.update(passed=bool(enabled) and not missing, count=sum(tests[k] is True for k,_ in enabled), missing=missing,
                  status='符合' if enabled and not missing else '待確認' if any(tests[k] is None for k,_ in enabled) else '未符合')
-        r['detail'] = (f'段末價 {"→".join(f"{p:g}" for p in prices)}；新增量 {"→".join(f"{v:g}" for v in volumes)}張；'
+        display=lambda v:'缺資料' if v is None else f'{v:g}'
+        r['detail'] = (f'均價{display(average)}／開盤{display(opening)}／當日最高{display(high)}；段末價 {"→".join(f"{p:g}" for p in prices)}；新增量 {"→".join(f"{v:g}" for v in volumes)}張；'
             f'採樣段長 {"/".join(f"{v:g}" for v in durations)}秒；最新縮量{shrink:.1f}%；首末段末漲幅{rise:.2f}%；'+('、'.join(missing) or '已勾選條件全部符合'))
         return r
 

@@ -43,7 +43,7 @@ class ProfileUI:
         checks=self.ttk.LabelFrame(body,text='獨立勾選：全部已勾選條件成立才提醒');checks.pack(fill='x',padx=15,pady=8)
         for i,(key,label,_) in enumerate(RULES):
             self.ttk.Checkbutton(checks,text=label,variable=self.profile_vars['use_shrink_'+key]).grid(row=i//2,column=i%2,sticky='w',padx=8,pady=4)
-        self.ttk.Label(body,text='均價／開盤／當日最高／MACD尚未接入資料，勾選後會顯示缺資料且不通過。\n三段量需四個邊界讀值；漏掃不補造，零成交不算縮量。非精確邊界會顯示各段實際秒數。\n新模式使用電腦端提醒，不送入手機六項評分／5/6日誌。\n重新開啟程式需重新累積；同次執行跨排行榜依股號合併。更換條件後觸發次數重新計算。',wraplength=820).pack(anchor='w',padx=15,pady=8)
+        self.ttk.Label(body,text='均價／開盤／當日最高由三竹同列讀取；欄位遮擋或辨識不清時不通過。MACD仍需K線資料。\n三段量需四個邊界讀值；漏掃不補造，零成交不算縮量。非精確邊界會顯示各段實際秒數。\n新模式使用電腦端提醒，不送入手機六項評分／5/6日誌。\n重新開啟程式需重新累積；同次執行跨排行榜依股號合併。更換條件後觸發次數重新計算。',wraplength=820).pack(anchor='w',padx=15,pady=8)
         def save():
             if not self.idle():return
             cfg=self.settings()

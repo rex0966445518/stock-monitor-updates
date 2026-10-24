@@ -30,7 +30,7 @@ class AdaptiveLayoutTests(unittest.TestCase):
             with self.subTest(size=(w,h),scale=scale):
                 im,tokens=headers(w,h,scale)
                 layout=_layout_from_tokens(im,tokens,True)
-                self.assertEqual(len(layout['column_bounds']),6)
+                self.assertEqual(set(layout['column_bounds']),{'code','name','price','gain','volume','turnover','day_high'})
                 self.assertGreater(layout['table'][1],.3)
                 for field,(l,r) in layout['column_bounds'].items():self.assertTrue(0<=l<r<=1)
                 self.assertLess(layout['column_bounds']['turnover'][1],.89) # extra column excluded
@@ -160,7 +160,7 @@ class HeaderFragmentTests(unittest.TestCase):
                     fragmented.append(([[x,t],[x+step-1,t],[x+step-1,t+18*scale],[x,t+18*scale]],ch,score))
             with self.subTest(scale=scale):
                 layout=_layout_from_tokens(im,fragmented,True)
-                self.assertEqual(len(layout['column_bounds']),6)
+                self.assertEqual(set(layout['column_bounds']),{'code','name','price','gain','volume','turnover','day_high'})
                 self.assertTrue(any(t[1]=='成交量' for t in merge_label_fragments(fragmented)))
 
     def test_never_join_separate_rows_or_distant_columns(self):
@@ -181,7 +181,7 @@ class HeaderFragmentTests(unittest.TestCase):
         im,tokens=headers(1366,768,y=90)
         read=Mock(return_value=tokens)
         layout=detect_layout(im,read)
-        self.assertEqual(len(layout['column_bounds']),6)
+        self.assertEqual(set(layout['column_bounds']),{'code','name','price','gain','volume','turnover','day_high'})
         self.assertEqual(read.call_count,1)
 
     def test_zoom_scale_maps_coordinates_exactly(self):

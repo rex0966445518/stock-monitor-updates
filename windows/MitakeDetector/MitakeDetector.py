@@ -17,7 +17,8 @@ from steady_ui import SteadyUI
 from steady_trend import DEFAULTS as STEADY_DEFAULTS
 from pathlib import Path
 
-VERSION = '0.3.128'
+VERSION = '0.3.129'
+EXTRA_FIELDS = ['average', 'open_price', 'day_high']
 FIELDS = ['code', 'name', 'price', 'gain', 'volume', 'turnover']
 LABELS = ['股號', '股名', '成交價', '漲幅%', '總量（張）', '換手率%']
 BASE = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'MitakeDetector'
@@ -39,6 +40,9 @@ class Quote:
     volume: float
     turnover: object = None
     ts: float = 0
+    average: object = None
+    open_price: object = None
+    day_high: object = None
 
 
 def number(value):
@@ -52,8 +56,9 @@ def number(value):
     return n
 
 
-def parse_ocr(result, width, centers, ts):
+def parse_ocr(result, width, centers, ts, fields=None):
     """以股號的 y 座標作列錨點，避免缺欄時數字移位。"""
+    fields = FIELDS if fields is None else fields
     cells = []
     for box, raw, confidence in result or []:
         if confidence < .70:
@@ -61,12 +66,12 @@ def parse_ocr(result, width, centers, ts):
         x = sum(p[0] for p in box) / 4 / width * 100
         y = sum(p[1] for p in box) / 4
         h = max(p[1] for p in box) - min(p[1] for p in box)
-        col = min(range(6), key=lambda k: abs(x - centers[k]))
-        cells.append((col, y, max(h, 8), str(raw)))
+        col = min(range(len(fields)), key=lambda k: abs(x - centers[k]))
+        cells.append((col, y, max(h, 8), str(raw), confidence))
     out, rejected = [], 0
     anchors = [c for c in cells if c[0] == 0 and re.fullmatch(r'[0-9]{4}', unicodedata.normalize('NFKC', c[3]).strip())]
     seen = set()
-    for _, y, h, rawcode in anchors:
+    for _, y, h, rawcode, _ in anchors:
         code = unicodedata.normalize('NFKC', rawcode).strip()
         if code in seen:
             rejected += 1
@@ -74,12 +79,12 @@ def parse_ocr(result, width, centers, ts):
         seen.add(code)
         row = {}
         ambiguous = False
-        for col in range(1, 6):
+        for col in range(1, len(fields)):
             near = [c for c in cells if c[0] == col and abs(c[1] - y) < h * .55]
             if len(near) > 1:
-                ambiguous = True
+                if fields[col] not in EXTRA_FIELDS:ambiguous = True
             elif near:
-                row[FIELDS[col]] = near[0][3]
+                if fields[col] not in EXTRA_FIELDS or near[0][4]>=.93:row[fields[col]] = near[0][3]
         try:
             if ambiguous:
                 raise ValueError('列欄位重疊')
@@ -89,7 +94,17 @@ def parse_ocr(result, width, centers, ts):
                 raise ValueError('超出合理值')
             if turn is not None and not 0 <= turn <= 1000:
                 raise ValueError('換手率異常')
-            out.append(Quote(code, row.get('name', ''), price, gain, vol, turn, ts))
+            extra={}
+            for field in EXTRA_FIELDS:
+                try:
+                    value=number(row[field])
+                    if 0 < value < 1000000 and .5 <= value/price <= 2:extra[field]=value
+                except (ValueError,KeyError):pass
+            high=extra.get('day_high')
+            if high is not None and (high+1e-8<price or any(extra.get(k,0)>high+1e-8 for k in ('average','open_price'))):
+                # Inconsistent optional columns must not confirm any of their conditions.
+                extra={}
+            out.append(Quote(code, row.get('name', ''), price, gain, vol, turn, ts, **extra))
         except (ValueError, KeyError):
             rejected += 1
     return out, rejected

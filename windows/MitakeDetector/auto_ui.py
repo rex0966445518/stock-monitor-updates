@@ -120,7 +120,7 @@ class AutoUI:
         source=getattr(self,'scan_capture_region',None);context=getattr(self,'scan_focus_context',None)
         if not source or not context or (source['width'],source['height'])!=image.size:return
         regions=[]
-        labels={'code':'股號','name':'股名','price':'成交價','gain':'漲幅','volume':'成交量','turnover':'換手率'}
+        labels={'code':'股號','name':'股名','price':'成交價','gain':'漲幅','volume':'成交量','turnover':'換手率','average':'均價','open_price':'開盤價','day_high':'當日最高價'}
         for field in fields:
             left,right=bounds[field]
             x=round(left*image.width);end=round(right*image.width)
@@ -347,7 +347,8 @@ class AutoUI:
         return codes
 
     def scan_mapped_table(self,image,bounds):
-        from MitakeDetector import FIELDS,parse_ocr
+        from MitakeDetector import FIELDS,EXTRA_FIELDS,parse_ocr
+        FIELDS=FIELDS+[f for f in EXTRA_FIELDS if f in bounds]
         import re,unicodedata
         tokens=[]
         for i,field in enumerate(FIELDS):
@@ -375,7 +376,7 @@ class AutoUI:
             from fast_quotes import learn_mapped_names
             import hashlib
             learn_mapped_names(tokens,names,'mapped:'+hashlib.sha256(image.tobytes()).hexdigest())
-        return parse_ocr(tokens,600,[100*(50+i*100)/600 for i in range(6)],time.time())
+        return parse_ocr(tokens,len(FIELDS)*100,[(50+i*100)/len(FIELDS) for i in range(len(FIELDS))],time.time(),fields=FIELDS)
 
     def scan_recovering_table(self,image,bounds):
         started=time.perf_counter()
@@ -404,7 +405,8 @@ class AutoUI:
 
     def _scan_recovering_table(self,image,bounds):
         """Retry whole-table OCR when narrow strips yield no complete rows."""
-        from MitakeDetector import FIELDS,parse_ocr
+        from MitakeDetector import FIELDS,EXTRA_FIELDS,parse_ocr
+        FIELDS=FIELDS+[f for f in EXTRA_FIELDS if f in bounds]
         import re,unicodedata
         started=time.perf_counter()
         from fast_quotes import StockNames,scan_numeric_batch
@@ -469,7 +471,7 @@ class AutoUI:
             from fast_quotes import learn_mapped_names
             import hashlib
             learn_mapped_names(mapped,names,'whole:'+hashlib.sha256(image.tobytes()).hexdigest())
-            return parse_ocr(mapped,600,[100*(50+i*100)/600 for i in range(6)],time.time())
+            return parse_ocr(mapped,len(FIELDS)*100,[(50+i*100)/len(FIELDS) for i in range(len(FIELDS))],time.time(),fields=FIELDS)
         quotes,rejected=parse(self.read_auto_ocr(image))
         if not quotes:
             from PIL import ImageOps
@@ -517,7 +519,9 @@ class AutoUI:
         from MitakeDetector import BASE
         size=[c.initial_rect[2]-c.initial_rect[0],c.initial_rect[3]-c.initial_rect[1]]
         resized=size!=auto.get('window_size')
-        if not resized:
+        extra_needed=cfg.get('scan_profile','original')!='original' and any(cfg.get('use_shrink_'+k) for k in ('above_average','average_up','above_open','near_high'))
+        extra_refresh=extra_needed and not {'average','open_price','day_high'}.issubset(cfg.get('column_bounds') or {})
+        if not resized and not extra_refresh:
             bounds=cfg.get('column_bounds',{})
             valid=isinstance(bounds,dict) and {'code','name','price','gain','volume','turnover'}.issubset(bounds) and all(isinstance(pair,(list,tuple)) and len(pair)==2 and all(type(v) in (int,float) for v in pair) and 0<=pair[0]<pair[1]<=1 for pair in bounds.values())
             if not auto.get('discovered') or valid:
@@ -529,7 +533,7 @@ class AutoUI:
         self.events.put((token,'auto_status',f'目前視窗 {size[0]}×{size[1]}｜'+('解析度或視窗大小已變更，自動重新定位表頭與選單' if resized else '核對表頭頭尾位置，必要時自動重新定位')))
         full,_=c.image([0,0,1,1])
         layout,reused=cached_layout(full,self.read_auto_ocr,BASE/'header-layout.json',
-            None if resized else cfg.get('column_bounds'),None if resized else auto.get('table'),detector=self.detect_layout_recovering)
+            None if resized or extra_refresh else cfg.get('column_bounds'),None if resized else auto.get('table'),detector=self.detect_layout_recovering)
         c.check()
         menu_changed=resized or layout['combo']!=auto.get('combo')
         menu=auto['menu']

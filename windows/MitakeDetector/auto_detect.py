@@ -50,6 +50,8 @@ ALIASES={
  'price':{'成交','成交價','成交价'},'gain':{'幅度','漲幅','涨幅'},
  'volume':{'成交量','總量','总量'},'turnover':{'週轉率','周轉率','周转率','換手率','换手率','轉率','转率','调轉率','调转率'}
 }
+OPTIONAL_ALIASES={'average':{'均價','均价','平均價','平均价'},'open_price':{'開盤','开盘','開盤價','开盘价'},'day_high':{'最高','最高價','最高价','當日最高'}}
+ALL_ALIASES=dict(ALIASES,**OPTIONAL_ALIASES)
 def clean(text):return re.sub(r'[^\u3400-\u9fffA-Za-z0-9]','',unicodedata.normalize('NFKC',text))
 
 
@@ -59,7 +61,7 @@ def merge_label_fragments(tokens):
     Unknown text and separate columns remain boundaries. No fuzzy header names,
     old column proportions or missing fields are invented.
     """
-    vocabulary={clean(label) for labels in ALIASES.values() for label in labels}
+    vocabulary={clean(label) for labels in ALL_ALIASES.values() for label in labels}
     vocabulary.update(clean(label) for label in RANKINGS)
     remaining=list(tokens);result=[]
     while remaining:
@@ -110,7 +112,7 @@ def _detect_layout_pixels(image,ocr,require_combo=True):
         crop=image.crop((max(0,l-3),max(0,yt-2),min(w,r+3),min(h,yb+2)))
         text=clean(''.join(t[1] for t in ocr(crop) if t[2]>=.60))
         headers.append((l,r,text))
-        for field,aliases in ALIASES.items():
+        for field,aliases in ALL_ALIASES.items():
             if text in aliases:
                 if field in found:raise ValueError('表頭重複：'+field)
                 found[field]=(l,r)
@@ -147,6 +149,9 @@ def _layout_from_tokens(image,tokens,require_combo):
             if len(matches)!=1:break
             found[field]=bbox(matches[0])
         if len(found)!=len(ALIASES):continue
+        for field,aliases in OPTIONAL_ALIASES.items():
+            matches=[t for t in row if clean(t[1]) in aliases]
+            if len(matches)==1:found[field]=bbox(matches[0])
         ordered=sorted(found.items(),key=lambda pair:pair[1][0])
         if any(a[1][2]>=b[1][0] for a,b in zip(ordered,ordered[1:])):continue
         # Extra visible columns also delimit fields; do not absorb their values.
@@ -215,7 +220,7 @@ def cached_layout(image,ocr,path,configured_bounds,configured_table,detector=Non
     try:
         saved=json.loads(path.read_text(encoding='utf-8'))
         layout=saved['layout'];ends=saved['ends']
-        if (saved['version']==1 and saved['size']==list(image.size)
+        if (saved['version']==2 and saved['size']==list(image.size)
                 and layout['column_bounds']==configured_bounds and layout['table']==configured_table
                 and len(ends)==2 and all(signature(e['box'])==e['hash'] for e in ends)):
             return layout,True
@@ -229,7 +234,7 @@ def cached_layout(image,ocr,path,configured_bounds,configured_table,detector=Non
     for left,right,_ in (headers[0],headers[-1]):
         box=[max(0,int(left)-3),top,min(w,int(right)+3),y]
         ends.append(dict(box=box,hash=signature(box)))
-    value=dict(version=1,size=list(image.size),layout=layout,ends=ends)
+    value=dict(version=2,size=list(image.size),layout=layout,ends=ends)
     try:
         path.parent.mkdir(parents=True,exist_ok=True)
         temporary=path.with_suffix('.tmp');temporary.write_text(json.dumps(value,ensure_ascii=False),encoding='utf-8');temporary.replace(path)

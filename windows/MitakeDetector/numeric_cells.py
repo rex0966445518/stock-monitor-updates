@@ -30,7 +30,8 @@ def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,
     import re,unicodedata
     bands=row_bands(image,bounds)
     if not bands:return None
-    fields=['code','price','gain','volume','turnover']
+    from MitakeDetector import EXTRA_FIELDS
+    fields=['code','price','gain','volume','turnover']+[f for f in EXTRA_FIELDS if f in bounds]
     def make(field,top,bottom):
         left,right=[round(v*image.width) for v in bounds[field]]
         if right-left<5:raise ValueError('數字欄位寬度不足')
@@ -135,7 +136,7 @@ def scan_cells(image,bounds,read,names,cache,memory=None,force=False,focus=None,
         valid_tops=set()
         for code_cell in accepted:
             group=[c for c in numeric if c['top']==code_cell['top']]
-            failures=[c for c in group if not c['tokens'] or len(c['tokens'])!=1 or c['tokens'][0][2]<.93]
+            failures=[c for c in group if c['field'] not in EXTRA_FIELDS and (not c['tokens'] or len(c['tokens'])!=1 or c['tokens'][0][2]<.93)]
             if failures:
                 metrics['unresolved']+=len(failures);metrics['pending_codes'].append(code_cell['tokens'][0][1])
             else:valid_tops.add(code_cell['top'])
