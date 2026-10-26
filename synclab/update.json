@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 15,
-  "versionName": "1.14.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/b4bc07810f56cbed2a8844a6beefee6913533cdf/synclab/packages/SyncLab-v1.14.0.apk.b64",
-  "sha256": "fd3576e3bb046ae4cf1ef2eaf5365d81aa9ff270bc466ca804b68ced25796a8f",
-  "bytes": 70260,
+  "versionCode": 16,
+  "versionName": "1.15.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/b253d6577285bad1185fe09a9f828257afd2d419/synclab/packages/SyncLab-v1.15.0.apk.b64",
+  "sha256": "c9d185627804c60facc2fba7afe49a5a1bb833418a6d0a0a8cce2f7e47ba4a43",
+  "bytes": 242358,
   "encoding": "base64",
-  "notes": "排除市場休市、停牌、無成交及缺少指定盤別的事件，不以更早行情回填。加入1997–2027交易日曆及10/23台股臨時休市，串接成交量驗證。股票名稱與行情紅漲綠跌、平盤中性色。舊報告需重新探查。"
+  "notes": "新增自動尋找高同向組合：14127檔美台日韓現存上市股票候選快照，可設定目標同向率、最低樣本與1～8條件股。邊讀單股邊探索組合，未達標持續搜尋並顯示最佳；可停止續跑、保留20%期間驗證、查看明細與匯出。切換App暫停保存，需前景執行；無法保證找到目標。"
 }
