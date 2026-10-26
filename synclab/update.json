@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 19,
-  "versionName": "1.18.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/6138f40945ff3a795e7316de2f304e4de5ea8b4c/synclab/packages/SyncLab-v1.18.0.apk.b64",
-  "sha256": "5c316c40d76242876c894aa1178e868fda64f79ab973ec92b732fbef48159f3c",
-  "bytes": 254646,
+  "versionCode": 20,
+  "versionName": "1.19.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/7edb6de4b1a4a4edbec2fdf96227a982c5334581/synclab/packages/SyncLab-v1.19.0.apk.b64",
+  "sha256": "666f0a7d5600d3ddf926559f7efeea4cdeb871c25a8f4bc9409b50119cf798a3",
+  "bytes": 258742,
   "encoding": "base64",
-  "notes": "修正一鍵更新無明確反應：搜尋中也能檢查下載，改用原生下載執行緒，顯示百分比、KB與具體錯誤。安裝前保存停止搜尋；新增重新開啟安裝，取消或未授權後可繼續。保留版本、SHA-256及簽章驗證。舊版按鈕無反應時，先下載本版APK覆蓋修復。"
+  "notes": "續搜行情修復：保留已讀游標、候選與最佳組合；暫時錯誤等待15/30/60/60秒重試，顯示失敗股號與來源原因。降低掃描頻率，續搜重用同任務已保存的對比股日線。停止可中斷等待；仍失敗則保存暫停，不跳過未讀候選。舊任務首次續搜仍須下載一次對比股資料。"
 }
