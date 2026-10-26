@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 7,
-  "versionName": "1.6.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/bff25d9f28fcce49ed384ae534b99d2c510b63c2/synclab/packages/SyncLab-v1.6.0.apk.b64",
-  "sha256": "ff56c5dffae928e657c787fd00ebf08065187ebd20100f96c161abbe95c62689",
+  "versionCode": 8,
+  "versionName": "1.7.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/c894b7cd922da6ce1900d31bf320d644a9a459ac/synclab/packages/SyncLab-v1.7.0.apk.b64",
+  "sha256": "d84f1068e3f7b6a2759259656501209ea48b7cb6384fa42fbb0f5977cc7b6f13",
   "bytes": 53803,
   "encoding": "base64",
-  "notes": "修正開盤同向率：分開條件股收盤與對比股開盤計算，新增美股收盤→台股隔日開盤預設及±4%事件門檻，列出前收盤/開盤與交易日期供核對，舊報告標註舊口徑。"
+  "notes": "新增每檔條件股的最低漲跌幅%：填4僅納入漲至少4%或跌至少4%的事件，多檔各自達標才比對；空白候選繼承門檻，明細/收藏/匯出保留設定。"
 }
