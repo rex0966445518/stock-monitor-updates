@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 14,
-  "versionName": "1.13.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/cf5d066c08d836fa2a8956f29abb25b7793a386e/synclab/packages/SyncLab-v1.13.0.apk.b64",
-  "sha256": "446827935c928c91ebab9025aa7a3238bd97b6b8f1d23a1b2e0df1129f1c16bd",
-  "bytes": 57899,
+  "versionCode": 15,
+  "versionName": "1.14.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/b4bc07810f56cbed2a8844a6beefee6913533cdf/synclab/packages/SyncLab-v1.14.0.apk.b64",
+  "sha256": "fd3576e3bb046ae4cf1ef2eaf5365d81aa9ff270bc466ca804b68ced25796a8f",
+  "bytes": 70260,
   "encoding": "base64",
-  "notes": "修正KOSDAQ空白欄搜尋無候選：補入067310、089030、036930，新增封裝測試服務分類與京元電子自動辨識。候選數量明列，市場不交叉替代；本次失敗或停止時清楚標示上次報告，避免誤讀舊結果。"
+  "notes": "排除市場休市、停牌、無成交及缺少指定盤別的事件，不以更早行情回填。加入1997–2027交易日曆及10/23台股臨時休市，串接成交量驗證。股票名稱與行情紅漲綠跌、平盤中性色。舊報告需重新探查。"
 }
