@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 22,
-  "versionName": "1.21.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/f8ffb5eb56d3edcaf40ebba230ebad0babb071ec/synclab/packages/SyncLab-v1.21.0.apk.b64",
-  "sha256": "f27312328b7eaf69e2c9981c8ba31fe4b47da07a372904eae4b17d76d02d8127",
+  "versionCode": 23,
+  "versionName": "1.22.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/3bcc235b9a0333be285742d83f4f2fb709f17f07/synclab/packages/SyncLab-v1.22.0.apk.b64",
+  "sha256": "9b11bccef42d60542fc126a55de41b29308ff625064823362fff8e2f83347f46",
   "bytes": 262838,
   "encoding": "base64",
-  "notes": "新增探查任務1/2/3三個入口，可同時執行不同對比任務。各任務獨立背景引擎、通知、停止、設定、報告、進度與最佳組合；切換入口不停止其他任務。原有進度保留在任務1。一般條件探查支援背景執行，自動目標搜尋各自可斷點續搜。三任務共用行情節流，更新安裝前保存並停止全部任務。"
+  "notes": "修正任務2/3無法點擊：事件明細佔位文字不再使用全頁絕對定位，所有文字佔位層禁止攔截觸控；只有圖表範圍可使用定位佔位。任務入口改為明確三欄網格及自動高度，狀態和股號不再溢出。原有三任務設定、進度與結果保留。"
 }
