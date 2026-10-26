@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 12,
-  "versionName": "1.11.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/371ba7e3f7c24163adb5855eab6c301c3d3a356b/synclab/packages/SyncLab-v1.11.0.apk.b64",
-  "sha256": "cc48039aa9b62f426840fef18d6b3784c29b35f474effc38005a9100dce65251",
+  "versionCode": 13,
+  "versionName": "1.12.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/404b87d72f2d38ba3e161f5296c5f3208fca39c0/synclab/packages/SyncLab-v1.12.0.apk.b64",
+  "sha256": "dbf42b469121d230c3695e0011664263dd1a7164e8548143bb375d0c9c730d66",
   "bytes": 57899,
   "encoding": "base64",
-  "notes": "條件股逐檔對齊交易日期、開盤價、收盤價、漲跌幅。事件改為日期卡片，分開對比股與條件股行情；門檻與日期配對說明獨立排列。CSV同步包含條件股行情，舊紀錄缺少開盤價請重新探查。"
+  "notes": "每檔條件股及對比股顯示台灣開盤、收盤日期時間，保留原市場交易日期，處理美股夏冬令及跨日。CSV同步加入時間；時間依一般交易時段換算，特殊時段未支援。舊紀錄請重新探查。價格顯示最多兩位小數。"
 }
