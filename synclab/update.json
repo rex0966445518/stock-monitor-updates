@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 8,
-  "versionName": "1.7.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/c894b7cd922da6ce1900d31bf320d644a9a459ac/synclab/packages/SyncLab-v1.7.0.apk.b64",
-  "sha256": "d84f1068e3f7b6a2759259656501209ea48b7cb6384fa42fbb0f5977cc7b6f13",
+  "versionCode": 9,
+  "versionName": "1.8.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/9565e8b1c61d0d88d75cb5dfefbf2a717579da6d/synclab/packages/SyncLab-v1.8.0.apk.b64",
+  "sha256": "985a6d492d086ffed41a502fec1c534114ea9a6d9b5656ee15f31133551a8681",
   "bytes": 53803,
   "encoding": "base64",
-  "notes": "新增每檔條件股的最低漲跌幅%：填4僅納入漲至少4%或跌至少4%的事件，多檔各自達標才比對；空白候選繼承門檻，明細/收藏/匯出保留設定。"
+  "notes": "修正067310為KOSDAQ（.KQ），已知韓股市場自動修正及補足前導零；探查與兩檔比較統一解析，抓取失敗不再誤報沒有樣本。"
 }
