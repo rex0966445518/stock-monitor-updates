@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 5,
-  "versionName": "1.4.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/c7b27f6963ac94b29377cc93b20a2333b10385f0/synclab/packages/SyncLab-v1.4.0.apk.b64",
-  "sha256": "4cbcd9dcd0decebe94e929000cf3db14802d1213db45f2c791f80eb0060c999b",
+  "versionCode": 6,
+  "versionName": "1.5.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/c24a2ee2a0e7d5f372f7d3d552afc2bd686d11ce/synclab/packages/SyncLab-v1.5.0.apk.b64",
+  "sha256": "dc9a020191e840aa5d242669ecc1c355828607a8b77874e7d5a3ceb4b37d992a",
   "bytes": 49707,
   "encoding": "base64",
-  "notes": "新增設置頁，整合一鍵優化與優化日誌；新增自動檢查、下載、檔案與簽章校驗及系統安裝流程。"
+  "notes": "新增搜索以下所有類別，合併五種類別並跨類別去重；每個空白條件欄候選上限提高至50檔。"
 }
