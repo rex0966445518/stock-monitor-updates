@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 9,
-  "versionName": "1.8.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/9565e8b1c61d0d88d75cb5dfefbf2a717579da6d/synclab/packages/SyncLab-v1.8.0.apk.b64",
-  "sha256": "985a6d492d086ffed41a502fec1c534114ea9a6d9b5656ee15f31133551a8681",
-  "bytes": 53803,
+  "versionCode": 10,
+  "versionName": "1.9.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/50592ceb661a2e80c4499cfdb547130f2038d35b/synclab/packages/SyncLab-v1.9.0.apk.b64",
+  "sha256": "3ba5a99d8098bd2043062eab22379fef351cceedcd93fa736e6ca18b89c86806",
+  "bytes": 57899,
   "encoding": "base64",
-  "notes": "修正067310為KOSDAQ（.KQ），已知韓股市場自動修正及補足前導零；探查與兩檔比較統一解析，抓取失敗不再誤報沒有樣本。"
+  "notes": "日/韓/台條件股新增前日與當日選項；新增歷史最高資料夾，自動保存同漲、同跌或合併同向率超過90%的組合，支援逐筆刪除及復原。"
 }
