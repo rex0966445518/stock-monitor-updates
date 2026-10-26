@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 10,
-  "versionName": "1.9.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/50592ceb661a2e80c4499cfdb547130f2038d35b/synclab/packages/SyncLab-v1.9.0.apk.b64",
-  "sha256": "3ba5a99d8098bd2043062eab22379fef351cceedcd93fa736e6ca18b89c86806",
+  "versionCode": 11,
+  "versionName": "1.10.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/03295ddc077c4dc491f2a5f363052440025f7837/synclab/packages/SyncLab-v1.10.0.apk.b64",
+  "sha256": "56bad98faba6383a61cb8d4f1df96535991aaefad8cf2fed85787edcfc1d5add",
   "bytes": 57899,
   "encoding": "base64",
-  "notes": "日/韓/台條件股新增前日與當日選項；新增歷史最高資料夾，自動保存同漲、同跌或合併同向率超過90%的組合，支援逐筆刪除及復原。"
+  "notes": "對比股觸發事件明細新增交易日期、當日開盤價及收盤價；尚未收盤明確標示。事件CSV同步新增收盤價與收盤狀態，跨市場每日對照顯示開收盤價。"
 }
