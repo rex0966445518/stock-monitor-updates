@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 16,
-  "versionName": "1.15.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/b253d6577285bad1185fe09a9f828257afd2d419/synclab/packages/SyncLab-v1.15.0.apk.b64",
-  "sha256": "c9d185627804c60facc2fba7afe49a5a1bb833418a6d0a0a8cce2f7e47ba4a43",
-  "bytes": 242358,
+  "versionCode": 17,
+  "versionName": "1.16.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/f23970f3421e741fb3e97185f1aa19fd30e49886/synclab/packages/SyncLab-v1.16.0.apk.b64",
+  "sha256": "140fac655400f312bc006c3ebf6e1322e7bf9a9ab783b4516fba01b085ec8692",
+  "bytes": 254646,
   "encoding": "base64",
-  "notes": "新增自動尋找高同向組合：14127檔美台日韓現存上市股票候選快照，可設定目標同向率、最低樣本與1～8條件股。邊讀單股邊探索組合，未達標持續搜尋並顯示最佳；可停止續跑、保留20%期間驗證、查看明細與匯出。切換App暫停保存，需前景執行；無法保證找到目標。"
+  "notes": "新增獨立Android背景搜尋服務，切換App或鎖屏仍可搜尋。通知顯示目前任務、進度、已比較次數、最佳結果、已執行與候選掃描預估剩餘時間，提供停止保存。達標時間無法預估。首次開始須允許通知；Android系統時限或省電可能中斷，已保存進度可續跑。"
 }
