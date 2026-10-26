@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 20,
-  "versionName": "1.19.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/7edb6de4b1a4a4edbec2fdf96227a982c5334581/synclab/packages/SyncLab-v1.19.0.apk.b64",
-  "sha256": "666f0a7d5600d3ddf926559f7efeea4cdeb871c25a8f4bc9409b50119cf798a3",
+  "versionCode": 21,
+  "versionName": "1.20.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/084968689e6ec5c06e73072dc8fbb48ef0865999/synclab/packages/SyncLab-v1.20.0.apk.b64",
+  "sha256": "b939247763b822621e6bf1d69582f85bf6298b5f013b6869f1dfc6f861b3a8c6",
   "bytes": 258742,
   "encoding": "base64",
-  "notes": "續搜行情修復：保留已讀游標、候選與最佳組合；暫時錯誤等待15/30/60/60秒重試，顯示失敗股號與來源原因。降低掃描頻率，續搜重用同任務已保存的對比股日線。停止可中斷等待；仍失敗則保存暫停，不跳過未讀候選。舊任務首次續搜仍須下載一次對比股資料。"
+  "notes": "修正043220.KQ等來源回應成功但沒有交易日期時，誤判斷線導致反覆重試。兩個端點都沒有有效日線時記錄原因並繼續下一檔，不加入同向率樣本；顯示最近略過原因，匯出保留最近100筆失敗記錄。真正網路及限流錯誤仍重試保存。保留原搜尋進度與最佳組合，可繼續上次搜尋。"
 }
