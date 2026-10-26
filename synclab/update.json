@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 13,
-  "versionName": "1.12.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/404b87d72f2d38ba3e161f5296c5f3208fca39c0/synclab/packages/SyncLab-v1.12.0.apk.b64",
-  "sha256": "dbf42b469121d230c3695e0011664263dd1a7164e8548143bb375d0c9c730d66",
+  "versionCode": 14,
+  "versionName": "1.13.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/cf5d066c08d836fa2a8956f29abb25b7793a386e/synclab/packages/SyncLab-v1.13.0.apk.b64",
+  "sha256": "446827935c928c91ebab9025aa7a3238bd97b6b8f1d23a1b2e0df1129f1c16bd",
   "bytes": 57899,
   "encoding": "base64",
-  "notes": "每檔條件股及對比股顯示台灣開盤、收盤日期時間，保留原市場交易日期，處理美股夏冬令及跨日。CSV同步加入時間；時間依一般交易時段換算，特殊時段未支援。舊紀錄請重新探查。價格顯示最多兩位小數。"
+  "notes": "修正KOSDAQ空白欄搜尋無候選：補入067310、089030、036930，新增封裝測試服務分類與京元電子自動辨識。候選數量明列，市場不交叉替代；本次失敗或停止時清楚標示上次報告，避免誤讀舊結果。"
 }
