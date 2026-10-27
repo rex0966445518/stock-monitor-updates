@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 24,
-  "versionName": "1.23.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/e9432753b7d2392633210adedd5fa1101a32f997/synclab/packages/SyncLab-v1.23.0.apk.b64",
-  "sha256": "50d4f91f2ed57e4fa428bd92779936600cdb7d460453d11f9accd8870c8db62d",
-  "bytes": 279222,
+  "versionCode": 25,
+  "versionName": "1.24.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/845afa0777f72c00eb3478411ef594b24de0fcf8/synclab/packages/SyncLab-v1.24.0.apk.b64",
+  "sha256": "8edfd52cac858d08f28ab47ec40309d00440c3a5105faf1a13486daa2900ec31",
+  "bytes": 283318,
   "encoding": "base64",
-  "notes": "最佳組合每檔分開顯示完整股號、公司或證券名稱、市場、可得交易所、幣別及來源證券類型。台股補公司全稱，美股保留完整證券描述；海外名稱使用來源原文。排行、明細、歷史最高、收藏、通知及匯出同步補識別資訊。按市場與代碼區分同號股票；舊結果可從本地名單補顯示，無需重跑比對，保留三任務進度與統計。"
+  "notes": "自動搜尋新增可選必須股，例如固定LRCX再找搭配股票。每檔必須股與每個自動欄位可各自設定最低漲跌幅；每組上限包含必須股。不同欄位門檻會交換候選位置比對。固定股不被替換、不可重複或等於對比股，行情缺失則保存暫停。三任務各自保存設定、固定向量快取及進度，舊任務保持原全自動口徑。變更條件需開始新搜尋，繼續上次搜尋沿用原條件。"
 }
