@@ -1,9 +1,9 @@
 {
   "packageName": "com.rex.sixstocks",
-  "versionCode": 17,
-  "versionName": "0.5.5",
+  "versionCode": 18,
+  "versionName": "0.5.6",
   "appName": "國巨日月光愛送錢",
   "author": "雷允澤",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/eight-stocks/YageoMoney-v0.5.5.apk",
-  "sha256": "ea15fb07c560ae9b70bc36717512d77564e702c40a8206614ce5d122c3f925ce"
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/eight-stocks/YageoMoney-v0.5.6.apk",
+  "sha256": "d38f89e0822991d12519decf115dccd9ce80193bc76413fa9fdc6040161e940d"
 }
