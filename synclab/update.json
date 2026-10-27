@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 23,
-  "versionName": "1.22.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/3bcc235b9a0333be285742d83f4f2fb709f17f07/synclab/packages/SyncLab-v1.22.0.apk.b64",
-  "sha256": "9b11bccef42d60542fc126a55de41b29308ff625064823362fff8e2f83347f46",
-  "bytes": 262838,
+  "versionCode": 24,
+  "versionName": "1.23.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/e9432753b7d2392633210adedd5fa1101a32f997/synclab/packages/SyncLab-v1.23.0.apk.b64",
+  "sha256": "50d4f91f2ed57e4fa428bd92779936600cdb7d460453d11f9accd8870c8db62d",
+  "bytes": 279222,
   "encoding": "base64",
-  "notes": "修正任務2/3無法點擊：事件明細佔位文字不再使用全頁絕對定位，所有文字佔位層禁止攔截觸控；只有圖表範圍可使用定位佔位。任務入口改為明確三欄網格及自動高度，狀態和股號不再溢出。原有三任務設定、進度與結果保留。"
+  "notes": "最佳組合每檔分開顯示完整股號、公司或證券名稱、市場、可得交易所、幣別及來源證券類型。台股補公司全稱，美股保留完整證券描述；海外名稱使用來源原文。排行、明細、歷史最高、收藏、通知及匯出同步補識別資訊。按市場與代碼區分同號股票；舊結果可從本地名單補顯示，無需重跑比對，保留三任務進度與統計。"
 }
