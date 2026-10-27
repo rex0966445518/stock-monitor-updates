@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 25,
-  "versionName": "1.24.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/845afa0777f72c00eb3478411ef594b24de0fcf8/synclab/packages/SyncLab-v1.24.0.apk.b64",
-  "sha256": "8edfd52cac858d08f28ab47ec40309d00440c3a5105faf1a13486daa2900ec31",
+  "versionCode": 26,
+  "versionName": "1.25.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/67dae1d313787f32fcbcfa8d77cac535db8cd6f2/synclab/packages/SyncLab-v1.25.0.apk.b64",
+  "sha256": "e72ad369fc3269158a1c982a6b1b1c96f5d568dd23987a25e71a55d124d8df83",
   "bytes": 283318,
   "encoding": "base64",
-  "notes": "自動搜尋新增可選必須股，例如固定LRCX再找搭配股票。每檔必須股與每個自動欄位可各自設定最低漲跌幅；每組上限包含必須股。不同欄位門檻會交換候選位置比對。固定股不被替換、不可重複或等於對比股，行情缺失則保存暫停。三任務各自保存設定、固定向量快取及進度，舊任務保持原全自動口徑。變更條件需開始新搜尋，繼續上次搜尋沿用原條件。"
+  "notes": "自動搜尋面板新增對比股漲跌判定，可選開盤相對前收盤、或收盤相對當日開盤，並顯示公式與反向範例。與一般探查同步，三個任務各自保存；搜尋中鎖定選項，結果、事件及匯出沿用實際口徑。繼續上次搜尋保留原口徑，切換後需建立新搜尋。保留收盤與還原計算選項。"
 }
