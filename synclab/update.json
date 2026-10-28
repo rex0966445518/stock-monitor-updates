@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 31,
-  "versionName": "1.30.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/63dd569f3a87593e74ed3db74ab060500b4ece16/synclab/packages/SyncLab-v1.30.0.apk.b64",
-  "sha256": "debd9c93ace3103ad3f43cc79e2a1645f2026d0a0378ccc5c632495413bb94af",
+  "versionCode": 32,
+  "versionName": "1.31.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/b6da4e52a9ac02025f46985c473c9f1b7203878c/synclab/packages/SyncLab-v1.31.0.apk.b64",
+  "sha256": "42e5b7198fade05482a4640a10ee681da30cd6112ec67aace64a32dec77d4d8d",
   "bytes": 332470,
   "encoding": "base64",
-  "notes": "修復一鍵更新只有開始提示、舊版本顯示與連線等待問題：顯示等待秒數及下載進度，提供停止連線與逾時提示；主要及GitHub API備援來源核對較高版本，下載可切換同一commit備援，保留套件、版本、SHA-256與簽章檢查。包含台股類別逐檔配對美股及三條搜尋線。若舊版更新流程卡住，請先直接覆蓋安裝本版以套用更新器修正。"
+  "notes": "修正台股搜尋線2、3因舊全球任務紀錄被帶到全球探查頁的問題。三條線均開啟相同完整台股類別設定／搜尋／結果介面，可各選不同類別並同時執行，各自保存條件、進度與報告。已完成全球舊紀錄不再顯示為台股線內容，保留原紀錄；切換畫面不停止其他線。含v1.30.0更新器備援與逾時修正。"
 }
