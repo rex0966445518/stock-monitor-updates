@@ -455,7 +455,10 @@ def run_smoke_test(report):
         assert '已還原 3 檔' in app.observation_summary.get()
         # Verify ranking, highlight and stock-specific speech using real widgets.
         app.rank_rows={};app.auto_engines={}
-        spoken=[];original_announce=app.announce_task;app.announce_task=spoken.append
+        spoken=[];speech_priorities=[];original_announce=app.announce_task
+        def record_speech(message,priority=False):
+            spoken.append(message);speech_priorities.append(priority)
+        app.announce_task=record_speech
         app.display_cfg=dict(DEFAULT,use_turnover=True,min_turnover=3,use_accel=True,use_breakout=True)
         app.display_rows=[(Quote('9080','LOW',20,0,50,1,now),None,'等待觀測突破守穩',False),
                           (Quote('9081','GOOD',100,3,2000,4,now),2,'轉強候選',True)]
@@ -485,6 +488,7 @@ def run_smoke_test(report):
             assert 'hit' in app.tree.item(items[0],'tags'),'Fully matched stock must be highlighted'
             assert '接近候選' in app.tree.item(items[1],'values')[2]
             assert len(spoken)==1 and '9020 FULL' in spoken[0],'Voice must name the matching stock'
+            assert speech_priorities==[True],'Candidate speech must have priority over routine scan messages'
         finally:
             app.announce_task=original_announce
             notice=getattr(app,'candidate_notice',None)
@@ -523,5 +527,6 @@ def run_smoke_test(report):
     if not info.get('ok'):
         if sys.stdout is not None:print(json.dumps(info,ensure_ascii=True))
         raise SystemExit(1)
+
 
 
