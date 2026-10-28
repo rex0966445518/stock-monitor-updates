@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 27,
-  "versionName": "1.26.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/88d6f757c617567e976f025d3dbbbc5a6486a580/synclab/packages/SyncLab-v1.26.0.apk.b64",
-  "sha256": "b8cfa4d82b70158ff54c82e34311eba94ba4a23315a2517f354e337a7d5ddaf8",
-  "bytes": 283318,
+  "versionCode": 30,
+  "versionName": "1.29.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/3104aa694f76ed11b9ad57a1de076907b80a034e/synclab/packages/SyncLab-v1.29.0.apk.b64",
+  "sha256": "343851ab59d2a922b8fe7fc5075bde23cb5cdafe8102d12e9034aa41f448fa58",
+  "bytes": 328374,
   "encoding": "base64",
-  "notes": "三個任務入口下方新增搜尋結果區，置於所有設定之前。一般探查顯示最佳同向率、樣本與組合，可直開最佳明細或完整排行；排行與觸發事件明細同步移到頂部。自動搜尋的目前最佳組合也置頂。搜尋完成回傳時在當前任務頁移至結果區，重開與切換任務沿用各自已保存結果。沒有有效樣本或行情失敗仍可查看完整說明，計算口徑保持原設定。"
+  "notes": "新增獨立台股全天候探查器：依台股產業類別將上市／上櫃股票逐檔當對比股，逐一匹配完整內建美股公司名單，掃完再切換下一檔。最多三條搜尋線，各自停止、續跑與保存前五名及事件明細。另含全球同向探查器更名與3265台星科等上市／上櫃自動辨識修正。"
 }
