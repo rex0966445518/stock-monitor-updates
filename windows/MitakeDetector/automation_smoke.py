@@ -1,0 +1,195 @@
+"""Windows integration test using an isolated local ranking-menu fixture."""
+import ctypes
+import queue
+import threading
+import time
+from autoswitch import WindowsController, RankingSwitcher, AutomationStopped
+
+
+def run_automation_smoke(root,app):
+    import tkinter as tk
+    from tkinter import ttk
+    win=tk.Toplevel(root);win.title('Mitake automation test fixture');win.geometry('520x450+100+100')
+    label=tk.StringVar(value='漲幅排行')
+    panel=tk.Frame(win,bg='white',bd=1,relief='solid')
+    combo=tk.Button(win,textvariable=label,font=('Microsoft JhengHei',16),bg='#102c40',fg='white',command=lambda:panel.place(x=25,y=65,width=260,height=150))
+    combo.place(x=25,y=25,width=260,height=40)
+    selections=[]
+    def select(name):
+        selections.append(name)
+        label.set(name);panel.place_forget()
+    for i,name in enumerate(['漲幅排行','預估量增','大單流入','大單匯集']):
+        tk.Button(panel,text=name,font=('Microsoft JhengHei',16),bg='#102c40',fg='white',anchor='w',bd=0,command=lambda n=name:select(n)).place(x=1,y=i*36,width=255,height=36)
+    root.update();win.lift();win.focus_force();root.update()
+    u=ctypes.windll.user32
+    from ctypes import wintypes as W
+    u.GetAncestor.argtypes=[W.HWND,W.UINT];u.GetAncestor.restype=W.HWND
+    hwnd=u.GetAncestor(win.winfo_id(),2)
+    stop=threading.Event();controller=WindowsController(hwnd,stop)
+    rect=controller.rect();width,height=rect[2]-rect[0],rect[3]-rect[1]
+    x,y=combo.winfo_rootx()-rect[0],combo.winfo_rooty()-rect[1]
+    combo_roi=[x/width,y/height,260/width,40/height]
+    menu_roi=[x/width,(y+40)/height,260/width,170/height]
+    from cursor_visibility import native_smoke
+    assert native_smoke(controller,(combo.winfo_rootx()+10,combo.winfo_rooty()+10))
+    foreground=u.GetForegroundWindow()
+    region=dict(left=combo.winfo_rootx(),top=combo.winfo_rooty(),width=260,height=40)
+    app.show_scan_outline(region);root.update()
+    assert app.scan_outline.visible and app.scan_outline.region==region
+    assert all(win.winfo_ismapped() for win in app.scan_outline.windows)
+    assert u.GetForegroundWindow()==foreground,'Scan outline stole focus'
+    from PIL import ImageGrab
+    baseline=ImageGrab.grab(bbox=(region['left'],region['top'],region['left']+260,region['top']+40))
+    app.scan_outline.hide();root.update()
+    clean=ImageGrab.grab(bbox=(region['left'],region['top'],region['left']+260,region['top']+40))
+    assert baseline.tobytes()==clean.tobytes(),'Scan border changed pixels inside the OCR area'
+    app.show_scan_outline([dict(region,width=50),dict(region,left=region['left']+100,width=50)])
+    root.update()
+    assert app.scan_outline.region['width']==50
+    assert len(app.scan_outline_extras)==1 and app.scan_outline_extras[0].visible
+    assert u.GetForegroundWindow()==foreground
+    app.show_scan_outline(None);root.update()
+    assert not app.scan_outline.visible and not app.scan_outline_extras[0].visible
+    app.show_scan_outline(dict(region,left=region['left']+20))
+    root.update()
+    assert app.scan_outline.region['left']==region['left']+20
+    app.scan_outline.hide()
+    saved_config=app.config
+    app.config=dict(saved_config,auto_config=dict(combo=combo_roi,menu=menu_roi))
+    app.show_task_progress(hwnd,'正在測試進度窗｜第1/3頁')
+    app.config=saved_config
+    root.update()
+    assert u.GetForegroundWindow()==foreground,'Progress panel stole keyboard focus'
+    from task_progress import CandidateNotice
+    notice=CandidateNotice(root,app.tk,app.ttk,'2330 TEST｜100元｜+3%｜符合目前條件')
+    root.update()
+    assert notice.window.winfo_ismapped(),'Candidate notice is not visible'
+    assert u.GetForegroundWindow()==foreground,'Candidate notice stole scan focus'
+    exstyle=u.GetWindowLongW(notice.native_hwnd,-20)
+    assert exstyle&0x08000000 and exstyle&0x20,'Candidate notice must not activate or block mouse'
+    notice.close();root.update()
+    assert not notice.alive
+    progress_panel=app.task_panel
+    assert progress_panel.alive and progress_panel.window.winfo_ismapped(),'Progress panel is not visible'
+    progress_panel.counts.set('漲幅排行：已掃描 26 股／總股數 100（上輪參考）｜目前第 3 輪｜累計完成 2 遍')
+    assert progress_panel.values['scanned'].get()=='26 股'
+    assert progress_panel.values['passes'].get()=='2 遍'
+    assert '100' in progress_panel.values['total'].get()
+    progress_panel.started=time.monotonic()-3661
+    progress_panel.mark_success()
+    root.after_cancel(progress_panel.after_id);progress_panel.tick()
+    assert progress_panel.values['elapsed'].get()=='01:01:01'
+    assert progress_panel.metrics.winfo_ismapped()
+    bx,by,br,bb=progress_panel.allowed_bounds
+    assert progress_panel.window.winfo_rootx()>=bx
+    assert progress_panel.window.winfo_rooty()>=by
+    assert progress_panel.window.winfo_rootx()+progress_panel.window.winfo_width()<=br
+    assert progress_panel.window.winfo_rooty()+progress_panel.window.winfo_height()<=bb,'Status escaped yellow strip'
+    assert progress_panel.window.winfo_rootx()>combo.winfo_rootx()+combo.winfo_width(),'Status covers combo' 
+    root.update_idletasks()
+    for cell in progress_panel.metric_cells:
+        assert cell.winfo_height()>=cell.winfo_reqheight(),'Metric row clips value at Windows DPI'
+        for label_widget in cell.winfo_children():
+            assert label_widget.winfo_y()+label_widget.winfo_height()<=cell.winfo_height(),'Metric value is covered'
+    assert progress_panel.metrics.winfo_x()+progress_panel.metrics.winfo_width()<=progress_panel.window.winfo_width(),'Table exceeds right edge'
+    progress_panel.rate.set('70 字／秒｜2.0 秒／段｜15.00 檔／秒')
+    assert progress_panel.values['rate'].get()=='70 字/秒'
+    progress_panel.counts.set('累計完成 2 遍｜完成一遍耗時 36.7 秒')
+    assert progress_panel.values['round_seconds'].get()=='36.7 秒'
+    progress_panel.update('排行1/5｜已讀26檔｜等待3秒',1,5)
+    assert '15.00 檔／秒' in progress_panel.rate.get()
+    root.update()
+    assert '26檔' in progress_panel.detail.get()
+    assert '目標：潛在漲停轉強股' in progress_panel.title.get(),'Scan goal must survive task updates'
+    from PIL import ImageGrab
+    from pathlib import Path
+    root.update_idletasks()
+    ImageGrab.grab(bbox=(progress_panel.window.winfo_rootx(),progress_panel.window.winfo_rooty(),progress_panel.window.winfo_rootx()+progress_panel.window.winfo_width(),progress_panel.window.winfo_rooty()+progress_panel.window.winfo_height())).save(Path('release-output')/'progress-panel.png')
+    get_style=u.GetWindowLongPtrW if ctypes.sizeof(ctypes.c_void_p)==8 else u.GetWindowLongW
+    get_style.argtypes=[W.HWND,ctypes.c_int];get_style.restype=ctypes.c_ssize_t
+    style=get_style(progress_panel.native_hwnd,-20)
+    assert style&0x08000000 and style&0x20,'Panel must be passive and click-through'
+    done=queue.Queue();ocr_log=[]
+    def read(image):
+        from pathlib import Path
+        image.save(Path('release-output')/('auto-fixture-'+str(len(ocr_log))+'.png'))
+        tokens=app.read_auto_ocr(image)
+        ocr_log.append([str(t[1]) for t in tokens])
+        return tokens
+    def worker():
+        try:
+            controller.activate()
+            from auto_detect import detect_menu
+            switcher=RankingSwitcher(controller,read,combo_roi,menu_roi)
+            # Starting on the requested ranking must not open its dropdown.
+            clicks=[];original_click=controller.click
+            def tracked_click(point):clicks.append(point);original_click(point)
+            controller.click=tracked_click
+            switcher.switch('漲幅排行')
+            assert not clicks,'Already selected ranking caused a mouse click'
+            controller.click((rect[0]+x+100,rect[1]+y+20));controller.pause(.4)
+            opened,_=controller.image([0,0,1,1])
+            discovered_menu=detect_menu(opened,combo_roi,read)
+            switcher=RankingSwitcher(controller,read,combo_roi,discovered_menu)
+            before=len(clicks)
+            switcher.switch('漲幅排行',menu_open=True)
+            assert len(clicks)==before+1,'Open popup was toggled rather than selected'
+            # Repeat a complete rotation with the visible status table present.
+            for _ in range(2):
+                switcher.switch('大單流入')
+                switcher.switch('漲幅排行')
+            stop.set()
+            try:controller.click((rect[0]+50,rect[1]+50))
+            except AutomationStopped:pass
+            else:raise AssertionError('Stop did not block mouse input')
+            done.put((True,None))
+        except Exception as exc:done.put((False,str(exc)+'; OCR='+repr(ocr_log)))
+    thread=threading.Thread(target=worker,daemon=True);thread.start()
+    deadline=time.monotonic()+100
+    try:
+        while time.monotonic()<deadline:
+            root.update()
+            try:ok,error=done.get_nowait();break
+            except queue.Empty:time.sleep(.02)
+        else:stop.set();raise RuntimeError('Automation fixture timed out')
+        if not ok:raise RuntimeError('Automation fixture: '+error)
+        assert label.get()=='漲幅排行'
+        # Exercise real native ListBox indices and passive numbering on Windows.
+        stop.clear();app.close_task_progress();win.lift();win.focus_force();root.update()
+        u.CreateWindowExW.argtypes=[W.DWORD,W.LPCWSTR,W.LPCWSTR,W.DWORD,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,W.HWND,W.HMENU,W.HINSTANCE,W.LPVOID]
+        u.CreateWindowExW.restype=W.HWND
+        u.SendMessageW.argtypes=[W.HWND,W.UINT,W.WPARAM,W.LPARAM];u.SendMessageW.restype=W.LPARAM
+        u.DestroyWindow.argtypes=[W.HWND]
+        child=u.CreateWindowExW(0,'LISTBOX','',0x50000000|0x00200000|0x40|0x100,300,180,180,180,win.winfo_id(),None,None,None)
+        assert child,'Native menu fixture creation failed'
+        ruler=None
+        try:
+            for i in range(39):
+                text=ctypes.create_unicode_buffer('Ranking '+str(i+1))
+                assert u.SendMessageW(child,0x0180,0,ctypes.addressof(text))>=0
+            root.update()
+            u.SetWindowPos(child,W.HWND(0),0,0,0,0,0x0010|0x0001|0x0002|0x0040)
+            r=W.RECT();u.GetWindowRect(child,ctypes.byref(r))
+            native_region=dict(left=r.left,top=r.top,width=r.right-r.left,height=r.bottom-r.top)
+            from menu_numbers import NativeMenu,NumberOverlay
+            native=NativeMenu(controller,native_region)
+            assert native.count==39
+            point=native.point(21);assert point is not None and native.rows()[0][0]==21
+            foreground=u.GetForegroundWindow();ruler=NumberOverlay(root)
+            ruler.update(dict(region=native_region,rows=native.rows()));root.update()
+            assert ruler.window.winfo_ismapped() and u.GetForegroundWindow()==foreground,'Number ruler stole focus'
+            assert '21' in [ruler.canvas.itemcget(i,'text') for i in ruler.canvas.find_all()]
+            hit=u.WindowFromPoint(W.POINT(round(r.left+point[0]),round(r.top+point[1])))
+            assert hit==child,'Number overlay blocked menu input'
+            ruler.update(None);root.update();assert not ruler.window.winfo_ismapped()
+        finally:
+            if ruler:ruler.close()
+            u.DestroyWindow(child)
+        editor=tk.Toplevel(root);number_vars=app.build_menu_number_settings(editor,{'menu_numbers':{'開盤強勢':21}})
+        root.update_idletasks();assert number_vars['開盤強勢'].get()=='21' and len(number_vars)==44
+        assert number_vars['漲停鎖住'].get()=='1' and number_vars['延後收盤'].get()=='44'
+        editor.destroy()
+        return {'menu_switches':3,'selected_label':label.get(),'stop_blocks_input':True,'menu_auto_detected':True,'current_rank_no_click':True,'open_popup_one_click':True,'progress_visible':True,'progress_no_focus':True,'native_number_21':True,'number_overlay_no_focus':True,'manual_number_editor':True}
+    finally:
+        stop.set();thread.join(timeout=1);app.close_task_progress();win.destroy();root.update()
+
