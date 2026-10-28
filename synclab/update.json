@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 32,
-  "versionName": "1.31.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/b6da4e52a9ac02025f46985c473c9f1b7203878c/synclab/packages/SyncLab-v1.31.0.apk.b64",
-  "sha256": "42e5b7198fade05482a4640a10ee681da30cd6112ec67aace64a32dec77d4d8d",
+  "versionCode": 33,
+  "versionName": "1.32.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/b6db427e780859513c224f07376feab59765fd1b/synclab/packages/SyncLab-v1.32.0.apk.b64",
+  "sha256": "5b557b2992ccada89385775e7099a4eb04635a84eee77e02a7d503c1e8781b09",
   "bytes": 332470,
   "encoding": "base64",
-  "notes": "修正台股搜尋線2、3因舊全球任務紀錄被帶到全球探查頁的問題。三條線均開啟相同完整台股類別設定／搜尋／結果介面，可各選不同類別並同時執行，各自保存條件、進度與報告。已完成全球舊紀錄不再顯示為台股線內容，保留原紀錄；切換畫面不停止其他線。含v1.30.0更新器備援與逾時修正。"
+  "notes": "修正3661世芯-KY於自動搜尋同業時無法辨識產業分類的問題。新增ASIC／客製化晶片設計類型與世芯-KY、創意、Broadcom、Marvell、Socionext候選，輸入3661.TW可自動辨識同業分類並進入探查。未知分類的提示與查無股號分開；保留原固定條件、市場及全部類別功能。沿用原簽章，可覆蓋更新保留設定。"
 }
