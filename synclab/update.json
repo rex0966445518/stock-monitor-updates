@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 33,
-  "versionName": "1.32.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/b6db427e780859513c224f07376feab59765fd1b/synclab/packages/SyncLab-v1.32.0.apk.b64",
-  "sha256": "5b557b2992ccada89385775e7099a4eb04635a84eee77e02a7d503c1e8781b09",
+  "versionCode": 34,
+  "versionName": "1.33.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/464b97df6c1e5b3fa7a15c9866bcb95ed67376fb/synclab/packages/SyncLab-v1.33.0.apk.b64",
+  "sha256": "fbc78993fd2789157106057ab30ffceabbf8d59f52b0ca1fadcc9e9abd83c1e6",
   "bytes": 332470,
   "encoding": "base64",
-  "notes": "修正3661世芯-KY於自動搜尋同業時無法辨識產業分類的問題。新增ASIC／客製化晶片設計類型與世芯-KY、創意、Broadcom、Marvell、Socionext候選，輸入3661.TW可自動辨識同業分類並進入探查。未知分類的提示與查無股號分開；保留原固定條件、市場及全部類別功能。沿用原簽章，可覆蓋更新保留設定。"
+  "notes": "台股最佳配對結果改為按畫面顯示的研究同向率由高到低排列，最高同向率股票置頂；同率時樣本較多者優先，無有效結果列最後。搜尋進行中的結果也即時排序，保留各篩選、事件明細與原搜尋進度，僅改顯示順序。"
 }
