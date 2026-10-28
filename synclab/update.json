@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 34,
-  "versionName": "1.33.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/464b97df6c1e5b3fa7a15c9866bcb95ed67376fb/synclab/packages/SyncLab-v1.33.0.apk.b64",
-  "sha256": "fbc78993fd2789157106057ab30ffceabbf8d59f52b0ca1fadcc9e9abd83c1e6",
+  "versionCode": 35,
+  "versionName": "1.34.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/2d218bbfe0435f68244974a6f1a9991134ad7abf/synclab/packages/SyncLab-v1.34.0.apk.b64",
+  "sha256": "05cfc3696aea86491a71e37ccfbf5524c80d7c37daa2a0c390ae49a0af9c4299",
   "bytes": 332470,
   "encoding": "base64",
-  "notes": "台股最佳配對結果改為按畫面顯示的研究同向率由高到低排列，最高同向率股票置頂；同率時樣本較多者優先，無有效結果列最後。搜尋進行中的結果也即時排序，保留各篩選、事件明細與原搜尋進度，僅改顯示順序。"
+  "notes": "修正背景啟動時舊全球任務進度可能覆寫台股任務、造成其他搜尋線顯示名額使用中的問題。啟動前不寫回進度，執行中按任務類型與ID保護保存；三線可各自執行台股類別。新增「恢復本線台股搜尋」，可停止本線占用任務並從手機已保存的台股游標續跑，不影響其他線。未執行的舊running狀態改顯示已暫停及續跑提示，保留最高結果置頂。"
 }
