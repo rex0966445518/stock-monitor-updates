@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 26,
-  "versionName": "1.25.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/67dae1d313787f32fcbcfa8d77cac535db8cd6f2/synclab/packages/SyncLab-v1.25.0.apk.b64",
-  "sha256": "e72ad369fc3269158a1c982a6b1b1c96f5d568dd23987a25e71a55d124d8df83",
+  "versionCode": 27,
+  "versionName": "1.26.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/88d6f757c617567e976f025d3dbbbc5a6486a580/synclab/packages/SyncLab-v1.26.0.apk.b64",
+  "sha256": "b8cfa4d82b70158ff54c82e34311eba94ba4a23315a2517f354e337a7d5ddaf8",
   "bytes": 283318,
   "encoding": "base64",
-  "notes": "自動搜尋面板新增對比股漲跌判定，可選開盤相對前收盤、或收盤相對當日開盤，並顯示公式與反向範例。與一般探查同步，三個任務各自保存；搜尋中鎖定選項，結果、事件及匯出沿用實際口徑。繼續上次搜尋保留原口徑，切換後需建立新搜尋。保留收盤與還原計算選項。"
+  "notes": "三個任務入口下方新增搜尋結果區，置於所有設定之前。一般探查顯示最佳同向率、樣本與組合，可直開最佳明細或完整排行；排行與觸發事件明細同步移到頂部。自動搜尋的目前最佳組合也置頂。搜尋完成回傳時在當前任務頁移至結果區，重開與切換任務沿用各自已保存結果。沒有有效樣本或行情失敗仍可查看完整說明，計算口徑保持原設定。"
 }
