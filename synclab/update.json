@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 30,
-  "versionName": "1.29.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/3104aa694f76ed11b9ad57a1de076907b80a034e/synclab/packages/SyncLab-v1.29.0.apk.b64",
-  "sha256": "343851ab59d2a922b8fe7fc5075bde23cb5cdafe8102d12e9034aa41f448fa58",
-  "bytes": 328374,
+  "versionCode": 31,
+  "versionName": "1.30.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/63dd569f3a87593e74ed3db74ab060500b4ece16/synclab/packages/SyncLab-v1.30.0.apk.b64",
+  "sha256": "debd9c93ace3103ad3f43cc79e2a1645f2026d0a0378ccc5c632495413bb94af",
+  "bytes": 332470,
   "encoding": "base64",
-  "notes": "新增獨立台股全天候探查器：依台股產業類別將上市／上櫃股票逐檔當對比股，逐一匹配完整內建美股公司名單，掃完再切換下一檔。最多三條搜尋線，各自停止、續跑與保存前五名及事件明細。另含全球同向探查器更名與3265台星科等上市／上櫃自動辨識修正。"
+  "notes": "修復一鍵更新只有開始提示、舊版本顯示與連線等待問題：顯示等待秒數及下載進度，提供停止連線與逾時提示；主要及GitHub API備援來源核對較高版本，下載可切換同一commit備援，保留套件、版本、SHA-256與簽章檢查。包含台股類別逐檔配對美股及三條搜尋線。若舊版更新流程卡住，請先直接覆蓋安裝本版以套用更新器修正。"
 }
