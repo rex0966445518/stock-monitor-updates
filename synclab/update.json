@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 35,
-  "versionName": "1.34.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/2d218bbfe0435f68244974a6f1a9991134ad7abf/synclab/packages/SyncLab-v1.34.0.apk.b64",
-  "sha256": "05cfc3696aea86491a71e37ccfbf5524c80d7c37daa2a0c390ae49a0af9c4299",
-  "bytes": 332470,
+  "versionCode": 36,
+  "versionName": "1.35.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/eed1da7c56a993fa60b2eeabfa5388b92d3ce0cc/synclab/packages/SyncLab-v1.35.0.apk.b64",
+  "sha256": "abe35e0a1e7ba893d7af259acca1dde0cc32d8d4977e433f231611c6ffa01a2c",
+  "bytes": 336566,
   "encoding": "base64",
-  "notes": "修正背景啟動時舊全球任務進度可能覆寫台股任務、造成其他搜尋線顯示名額使用中的問題。啟動前不寫回進度，執行中按任務類型與ID保護保存；三線可各自執行台股類別。新增「恢復本線台股搜尋」，可停止本線占用任務並從手機已保存的台股游標續跑，不影響其他線。未執行的舊running狀態改顯示已暫停及續跑提示，保留最高結果置頂。"
+  "notes": "修正 SOX 費城半導體指數：SOX／^SOX／費半自動辨識美國指數，指數零成交量不再被誤判無交易。新增 TX 台指期近月，市場選單分為日盤與夜盤，直連期交所月資料、按交易歸屬日配對；換月使用同一契約前收盤。保留三條獨立搜尋線、最高同向率置頂與續跑。本次已同步發布一鍵更新來源。"
 }
