@@ -1,5 +1,9 @@
+#ifndef UNICODE
 #define UNICODE
+#endif
+#ifndef _UNICODE
 #define _UNICODE
+#endif
 #include <windows.h>
 #include <wchar.h>
 #ifdef SETUP_BUILD
@@ -14,9 +18,20 @@ static int spawn(const wchar_t *script,int smoke){
     wchar_t system[MAX_PATH],exe[MAX_PATH],command[32768];GetSystemDirectoryW(system,MAX_PATH);
     _snwprintf(exe,MAX_PATH,L"%ls\\WindowsPowerShell\\v1.0\\powershell.exe",system);
     _snwprintf(command,32768,L"\"%ls\" -NoLogo -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File \"%ls\"%ls",exe,script,smoke?L" -SmokeTest":L"");
+    wchar_t local[32768],logdir[32768],logpath[32768];GetEnvironmentVariableW(L"LOCALAPPDATA",local,32768);
+    _snwprintf(logdir,32768,L"%ls\\NineMonitor",local);CreateDirectoryW(logdir,NULL);
+    _snwprintf(logdir,32768,L"%ls\\NineMonitor\\Data",local);CreateDirectoryW(logdir,NULL);
+#ifdef SETUP_BUILD
+    _snwprintf(logpath,32768,L"%ls\\installer-native.log",logdir);
+#else
+    _snwprintf(logpath,32768,L"%ls\\app-launch.log",logdir);
+#endif
+    SECURITY_ATTRIBUTES sa={sizeof(sa),NULL,TRUE};
+    HANDLE log=CreateFileW(logpath,GENERIC_WRITE,FILE_SHARE_READ|FILE_SHARE_WRITE,&sa,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
     STARTUPINFOW si={0};PROCESS_INFORMATION pi={0};si.cb=sizeof(si);si.dwFlags=STARTF_USESHOWWINDOW;si.wShowWindow=SW_HIDE;
-    if(!CreateProcessW(exe,command,NULL,NULL,FALSE,CREATE_NO_WINDOW,NULL,NULL,&si,&pi)){MessageBoxW(NULL,L"無法啟動 Windows PowerShell。請確認 Windows 內建元件可用。",L"三色數值監視器",MB_OK|MB_ICONERROR);return 1;}
-    WaitForSingleObject(pi.hProcess,INFINITE);DWORD code=1;GetExitCodeProcess(pi.hProcess,&code);CloseHandle(pi.hProcess);CloseHandle(pi.hThread);return (int)code;
+    if(log!=INVALID_HANDLE_VALUE){si.dwFlags|=STARTF_USESTDHANDLES;si.hStdOutput=log;si.hStdError=log;si.hStdInput=GetStdHandle(STD_INPUT_HANDLE);}
+    if(!CreateProcessW(exe,command,NULL,NULL,TRUE,CREATE_NO_WINDOW,NULL,NULL,&si,&pi)){MessageBoxW(NULL,L"無法啟動 Windows PowerShell。請確認 Windows 內建元件可用。",L"三色數值監視器",MB_OK|MB_ICONERROR);return 1;}
+    WaitForSingleObject(pi.hProcess,INFINITE);DWORD code=1;GetExitCodeProcess(pi.hProcess,&code);CloseHandle(pi.hProcess);CloseHandle(pi.hThread);if(log!=INVALID_HANDLE_VALUE)CloseHandle(log);return (int)code;
 }
 int WINAPI wWinMain(HINSTANCE h,HINSTANCE prev,PWSTR args,int show){
 #ifdef SETUP_BUILD

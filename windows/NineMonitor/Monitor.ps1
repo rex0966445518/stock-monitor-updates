@@ -7,7 +7,7 @@ Add-Type -TypeDefinition (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'Nat
 [NineMonitor.Desktop]::EnableDpiAwareness()
 [Windows.Forms.Application]::EnableVisualStyles()
 Import-Module (Join-Path $PSScriptRoot 'Core.psm1') -Force
-$script:version=[version]'0.2.0'
+$script:version=[version](Get-Content -LiteralPath (Join-Path $PSScriptRoot 'version.json') -Raw -Encoding UTF8|ConvertFrom-Json).version
 $script:root=$PSScriptRoot
 $script:names=@('Orange','Pink','White');$script:labels=@{Orange='橘色';Pink='粉紅色';White='白色'}
 $script:colors=@{Orange=[Drawing.Color]::Orange;Pink=[Drawing.Color]::HotPink;White=[Drawing.Color]::White}
@@ -25,7 +25,7 @@ $script:voice=$null;$script:voiceChinese=$false;$script:voices=@()
 try{Add-Type -AssemblyName System.Speech;$script:voice=New-Object Speech.Synthesis.SpeechSynthesizer;$script:voices=@($voice.GetInstalledVoices()|Where-Object{$_.Enabled});$zh=$voices|Where-Object{$_.VoiceInfo.Culture.Name -like 'zh*'}|Select-Object -First 1;if($zh){$voice.SelectVoice($zh.VoiceInfo.Name);$script:voiceChinese=$true}}catch{}
 $bg=[Drawing.Color]::FromArgb(15,22,34);$fg=[Drawing.Color]::FromArgb(235,241,248);$card=[Drawing.Color]::FromArgb(25,36,52);$accent=[Drawing.Color]::FromArgb(73,225,180)
 $script:ui=@{};$script:form=New-Object Windows.Forms.Form
-$form.Text='三色數值監視器 v'+$version+' — 作者雷允澤';$form.Size=New-Object Drawing.Size(1110,900);$form.MinimumSize=New-Object Drawing.Size(1090,850);$form.StartPosition='CenterScreen';$form.BackColor=$bg;$form.ForeColor=$fg;$form.Font=New-Object Drawing.Font('Microsoft JhengHei',10);$form.AutoScroll=$true
+$form.Text='三色數值監視器 v'+$version+' — 作者雷允澤';$work=[Windows.Forms.Screen]::PrimaryScreen.WorkingArea;$form.Size=New-Object Drawing.Size([Math]::Min(1110,[Math]::Max(900,$work.Width-40)),[Math]::Min(900,[Math]::Max(680,$work.Height-40)));$form.MinimumSize=New-Object Drawing.Size(900,680);$form.AutoScrollMinSize=New-Object Drawing.Size(1065,850);$form.StartPosition='CenterScreen';$form.BackColor=$bg;$form.ForeColor=$fg;$form.Font=New-Object Drawing.Font('Microsoft JhengHei',10);$form.AutoScroll=$true
 function New-Label([string]$text,[int]$x,[int]$y,[int]$w,[int]$h=28){$c=New-Object Windows.Forms.Label;$c.Text=$text;$c.SetBounds($x,$y,$w,$h);$c.ForeColor=$fg;$form.Controls.Add($c);return $c}
 function New-Button([string]$text,[int]$x,[int]$y,[int]$w=130){$c=New-Object Windows.Forms.Button;$c.Text=$text;$c.SetBounds($x,$y,$w,35);$c.FlatStyle='Flat';$c.BackColor=$card;$c.ForeColor=$fg;$form.Controls.Add($c);return $c}
 $ui.title=New-Label '三色數值監視器' 24 18 600 44;$ui.title.Font=New-Object Drawing.Font('Microsoft JhengHei',25,[Drawing.FontStyle]::Bold)

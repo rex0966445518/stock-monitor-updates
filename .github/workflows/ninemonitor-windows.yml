@@ -43,13 +43,34 @@ jobs:
         run: |
           $env:NM_CI_TEST = '1'
           $p = Start-Process -FilePath .\dist\NineMonitor-Setup.exe -ArgumentList '/SILENT /NOLAUNCH' -Wait -PassThru
-          if ($p.ExitCode -ne 0) { throw "Installer failed: $($p.ExitCode)" }
+          if ($p.ExitCode -ne 0) {
+            Get-Content "$env:LOCALAPPDATA\NineMonitor\Data\installer-native.log" -ErrorAction SilentlyContinue
+            throw "Installer failed: $($p.ExitCode)"
+          }
           $app = Join-Path $env:LOCALAPPDATA 'NineMonitor\App\NineMonitor.exe'
           if (!(Test-Path $app)) { throw 'Installed app EXE missing' }
           $p = Start-Process -FilePath $app -ArgumentList '/SMOKE' -Wait -PassThru
-          if ($p.ExitCode -ne 0) { throw "Installed launcher failed: $($p.ExitCode)" }
+          if ($p.ExitCode -ne 0) {
+            Get-Content "$env:LOCALAPPDATA\NineMonitor\Data\app-launch.log" -ErrorAction SilentlyContinue
+            throw "Installed launcher failed: $($p.ExitCode)"
+          }
           $prefs = Join-Path $env:LOCALAPPDATA 'NineMonitor\Data\threecolor-settings.json'
           if (!(Test-Path $prefs)) { throw 'GUI did not save settings' }
+          $saved = Get-Content $prefs -Raw | ConvertFrom-Json
+          $saved.Channels.Orange.Threshold = 88.25
+          $saved | ConvertTo-Json -Depth 8 | Set-Content $prefs -Encoding UTF8
+          $sentinel = Join-Path $env:LOCALAPPDATA 'NineMonitor\Data\history-preservation-test.txt'
+          Set-Content $sentinel 'Preserve history on update' -Encoding UTF8
+          $p = Start-Process -FilePath .\dist\NineMonitor-Setup.exe -ArgumentList '/UPDATE /NOLAUNCH' -Wait -PassThru
+          if ($p.ExitCode -ne 0) {
+            Get-Content "$env:LOCALAPPDATA\NineMonitor\Data\installer-native.log" -ErrorAction SilentlyContinue
+            throw 'Update installation failed'
+          }
+          $p = Start-Process -FilePath $app -ArgumentList '/SMOKE' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw 'Updated app failed to launch' }
+          if ((Get-Content $prefs -Raw | ConvertFrom-Json).Channels.Orange.Threshold -ne 88.25) { throw 'Update lost settings' }
+          if (!(Test-Path $sentinel)) { throw 'Update lost history' }
+          Write-Host 'EXE install, launch, upgrade and data preservation passed' 
       - name: Save build artifacts
         uses: actions/upload-artifact@v4
         with:
