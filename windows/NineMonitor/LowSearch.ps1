@@ -24,23 +24,35 @@
     })
     return $d
 }
+function Get-LowSearchPoint {
+    $picker=New-Object NineMonitor.TargetClickPicker
+    try{if($picker.ShowDialog() -eq 'OK'){return $picker.SelectedPoint};return $null}
+    finally{$picker.Dispose()}
+}
 function Start-LowSearch {
-    $started=$false;$picker=$null
+    $started=$false
     try{
         if((Get-ScreenSignature) -ne $script:signature){throw '螢幕配置已改變，請重新框選三色區域。'}
         Assert-RangeSettings $script:searchRanges
         Save-Settings
-        $form.Hide();[Windows.Forms.Application]::DoEvents();Start-Sleep -Milliseconds 200
-        $picker=New-Object NineMonitor.TargetClickPicker
-        if($picker.ShowDialog() -ne 'OK'){return}
-        $point=$picker.SelectedPoint;$picker.Dispose();$picker=$null
+        $form.WindowState='Minimized';[Windows.Forms.Application]::DoEvents();Start-Sleep -Milliseconds 200
+        $point=Get-LowSearchPoint
+        if($null -eq $point){return}
+        # Keep the main form minimized after the modal picker releases focus.
+        $form.WindowState='Minimized'
         if(-not $hotkey.Register()){throw 'ESC 被其他程式占用，請先解除衝突再搜索。'}
         if(-not $rightInput.SelectPoint($point)){throw '無法選取該位置的目標視窗，請點圖表區域並確認程式權限相同。'}
         $script:searchMode=$true;$script:autoMode=$true;$script:active=$true;$script:generation++;$script:latch=@{Active=$false};$script:autoStarted=$clock.Elapsed.TotalSeconds
         $script:nextAt=$clock.Elapsed.TotalSeconds+0.2
-        foreach($name in $names){$b=New-Object NineMonitor.Border($channels[$name].Region);$b.Show();$script:borders+=,$b}
+        $region=$channels.Orange.Region
+        $b=New-Object NineMonitor.Border($region);$script:borders+=,$b;$b.Show()
+        $rangeText=($names|ForEach-Object{$labels[$_]+' '+$script:searchRanges.$_.Min+'～'+$script:searchRanges.$_.Max}) -join '；'
+        $script:searchWindow=New-Object NineMonitor.SearchWindow($region,$rangeText)
+        $script:searchWindow.Add_StopRequested({Stop-Monitor})
+        # No owner: minimizing the main form must not hide this persistent window.
+        $script:searchWindow.Show()
         [void][NineMonitor.Desktop]::SetThreadExecutionState(2147483651)
         $rightPump.Start(200);Controls;Status '搜索低點中：三項同時落在設定範圍才語音提醒；ESC 停止。';$started=$true
     }catch{Stop-Monitor;Status $_.Exception.Message $true}
-    finally{if($picker){$picker.Dispose()};if(-not $started){Show-App;Controls}}
+    finally{if(-not $started){Show-App;Controls}}
 }

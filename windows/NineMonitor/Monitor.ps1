@@ -22,7 +22,7 @@ $script:configPath=Join-Path $dataRoot 'threecolor-settings.json'
 $script:channels=@{};foreach($n in $names){$channels[$n]=@{Region=$null;Rgb=-1;Threshold=80.0}}
 $script:sharedRegion=$null
 $script:signature='';$script:active=$false;$script:job=$null;$script:updateJob=$null;$script:generation=0
-$script:latch=@{Active=$false};$script:previous=$null;$script:borders=@();$script:clock=[Diagnostics.Stopwatch]::StartNew();$script:nextAt=0.0;$script:captureKeys=0L
+$script:latch=@{Active=$false};$script:previous=$null;$script:borders=@();$script:searchWindow=$null;$script:clock=[Diagnostics.Stopwatch]::StartNew();$script:nextAt=0.0;$script:captureKeys=0L
 $script:hotkey=New-Object NineMonitor.EscapeKey
 $script:rightInput=New-Object NineMonitor.WindowsRightInput
 $script:rightPump=New-Object NineMonitor.AutoRightPump($script:rightInput)
@@ -107,6 +107,7 @@ function Controls{
 function Stop-Monitor{
     $rightPump.Stop();$script:lastSent=$rightPump.SentCount;$script:autoMode=$false
     $script:active=$false;$script:generation++;$hotkey.Unregister()
+    if($script:searchWindow){$script:searchWindow.Close();$script:searchWindow.Dispose();$script:searchWindow=$null}
     foreach($b in $script:borders){$b.Close();$b.Dispose()};$script:borders=@()
     if($voice){$voice.SpeakAsyncCancelAll()};[void][NineMonitor.Desktop]::SetThreadExecutionState(2147483648)
     Controls;Status '已停止；未完成的辨識結果會捨棄，不會補報。';$tray.Text='三色監視器：已停止'
@@ -124,6 +125,7 @@ function Speak-Alert($values,[bool]$test=$false){
 function Add-Row($r){$condition=if($r.PSObject.Properties['CommonMatched']){[string]$r.CommonMatched}else{[string]$r.AllAbove};$item=New-Object Windows.Forms.ListViewItem([string]$r.Time);foreach($s in @((Fmt $r.Orange),(Fmt $r.Pink),(Fmt $r.White),$condition,[string]$r.Status)){[void]$item.SubItems.Add([string]$s)};[void]$ui.history.Items.Insert(0,$item);while($ui.history.Items.Count -gt 300){$ui.history.Items.RemoveAt($ui.history.Items.Count-1)}}
 function Record($values,[string]$note,[datetimeoffset]$stamp,[bool]$test){
     foreach($n in $names){$ui[$n].value.Text=$labels[$n]+'　'+(Fmt $values.$n)}
+    if($script:searchWindow){$script:searchWindow.UpdateValues('橘 '+(Fmt $values.Orange)+'　紫／粉 '+(Fmt $values.Pink)+'　白 '+(Fmt $values.White))}
     $ui.last.Text=$stamp.ToString('yyyy-MM-dd HH:mm:ss.fff zzz')+$(if($test){'　單次測試，不寫入正式紀錄、不觸發門檻警報'}else{'　同一次畫面取樣'})
     if($test){Status ('測試結果：'+$note) ($null -eq $values.Orange -or $null -eq $values.Pink -or $null -eq $values.White);return}
     $thresholds=[pscustomobject]@{Orange=[double]$ui.Orange.threshold.Value;Pink=[double]$ui.Pink.threshold.Value;White=[double]$ui.White.threshold.Value}
@@ -277,6 +279,7 @@ $timer.Add_Tick({try{
         Status ($explanation+'；本次共送出 '+$count+' 次右鍵。') $true
     }
     Poll-Ocr;Poll-Update
+    if($script:searchWindow -and $script:active){$script:searchWindow.UpdateProgress($rightPump.SentCount)}
     if($script:autoMode -and $script:active){
         if($rightPump.Armed){$tray.Text=$(if($script:searchMode){'搜索低點：'}else{'自動右移：'})+'已送出 '+$rightPump.SentCount+' 次'}
         elseif($script:searchMode){Status '正在啟動所選圖表的低點搜索…'}

@@ -295,6 +295,33 @@ namespace NineMonitor {
         public void Dispose(){Stop();cancel.Dispose();}
     }
 
+    public sealed class SearchWindow : Form {
+        readonly Label progress;
+        readonly Label values;
+        public event EventHandler StopRequested;
+        public SearchWindow(Rectangle region,string ranges) {
+            Text="搜索低點";FormBorderStyle=FormBorderStyle.FixedToolWindow;
+            ControlBox=false;ShowInTaskbar=false;TopMost=true;StartPosition=FormStartPosition.Manual;
+            ClientSize=new Size(370,186);BackColor=Color.FromArgb(12,65,39);ForeColor=Color.White;
+            Font=new Font("Microsoft JhengHei",10);
+            var title=new Label();title.Text="搜索低點｜每秒向右 5 次";title.SetBounds(12,10,345,24);Controls.Add(title);
+            var bounds=new Label();bounds.Text=ranges;bounds.SetBounds(12,38,345,46);Controls.Add(bounds);
+            values=new Label();values.Text="目前數值：等待辨識";values.SetBounds(12,87,345,25);Controls.Add(values);
+            progress=new Label();progress.Text="請點選圖表起始位置";progress.SetBounds(12,116,345,25);Controls.Add(progress);
+            var stop=new Button();stop.Text="停止搜索（ESC）";stop.SetBounds(172,147,185,30);stop.ForeColor=Color.Black;
+            stop.Click+=delegate{var handler=StopRequested;if(handler!=null)handler(this,EventArgs.Empty);};Controls.Add(stop);
+            Rectangle area=Screen.FromRectangle(region).WorkingArea;
+            Point[] choices={new Point(area.Right-Width,area.Top),new Point(area.Left,area.Top),new Point(area.Right-Width,area.Bottom-Height),new Point(area.Left,area.Bottom-Height)};
+            bool placed=false;
+            foreach(Point p in choices){if(!new Rectangle(p,Size).IntersectsWith(region)){Location=p;placed=true;break;}}
+            if(!placed)throw new InvalidOperationException("搜索視窗沒有足夠空間，請縮小三色數字框選範圍。");
+        }
+        protected override bool ShowWithoutActivation { get { return true; } }
+        protected override CreateParams CreateParams {get{var cp=base.CreateParams;cp.ExStyle|=0x08000000|0x00000080;return cp;}}
+        protected override void WndProc(ref Message m){if(m.Msg==0x0021){m.Result=new IntPtr(3);return;}base.WndProc(ref m);}
+        public void UpdateProgress(long count){progress.Text="搜索中｜已向右 "+count+" 次｜ESC 停止";}
+        public void UpdateValues(string text){values.Text=text;}
+    }
     public sealed class TargetClickPicker : Form {
         Bitmap shot;
         public Point SelectedPoint {get;private set;}
