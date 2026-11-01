@@ -12,7 +12,7 @@ try{
     if(-not $silent){$answer=[Windows.Forms.MessageBox]::Show('將安裝三色數值監視器，並建立桌面捷徑。設定及歷史紀錄會保留。要繼續嗎？','三色數值監視器安裝','YesNo','Question');if($answer -ne 'Yes'){exit 0}}
     if($argsText -match '/WAITPID=(\d+)'){$parentId=[int]$Matches[1];if($parentId -gt 0 -and (Get-Process -Id $parentId -ErrorAction SilentlyContinue)){Wait-Process -Id $parentId -Timeout 45 -ErrorAction Stop}}
     [void][IO.Directory]::CreateDirectory($stage)
-    foreach($file in @('NineMonitor.exe','Launch.ps1','Monitor.ps1','Core.psm1','OcrWorker.ps1','Native.cs','UpdateWorker.ps1','Uninstall.ps1','version.json','README.txt')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $stage $file) -Force}
+    foreach($file in @('NineMonitor.exe','Launch.ps1','Monitor.ps1','LowSearch.ps1','Core.psm1','OcrWorker.ps1','Native.cs','UpdateWorker.ps1','Uninstall.ps1','version.json','README.txt')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $stage $file) -Force}
     $renamed=$false
     if(Test-Path $target){for($i=0;$i -lt 15;$i++){try{[IO.Directory]::Move($target,$backup);$renamed=$true;break}catch{Start-Sleep -Milliseconds 300}};if(-not $renamed){throw '舊版程式仍在使用，請關閉監視器後重新安裝。'}}
     try{[IO.Directory]::Move($stage,$target)}catch{if($renamed -and -not (Test-Path $target)){[IO.Directory]::Move($backup,$target)};throw}

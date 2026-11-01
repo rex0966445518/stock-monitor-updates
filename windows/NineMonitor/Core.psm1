@@ -20,6 +20,27 @@ function Test-AllThree([hashtable]$Latch,$Values,$Thresholds) {
     if(-not $Latch.Active) { $Latch.Active=$true; return $true }
     return $false
 }
+function Assert-RangeSettings($Ranges) {
+    foreach($name in @('Orange','Pink','White')) {
+        $r=$Ranges.$name
+        if($null -eq $r -or $null -eq $r.Min -or $null -eq $r.Max) { throw ('缺少範圍：'+$name) }
+        $min=[double]$r.Min;$max=[double]$r.Max
+        if([double]::IsNaN($min) -or [double]::IsInfinity($min) -or [double]::IsNaN($max) -or [double]::IsInfinity($max) -or $min -gt $max) { throw ('範圍下限必須小於或等於上限：'+$name) }
+    }
+}
+function Test-ThreeRanges([hashtable]$Latch,$Values,$Ranges) {
+    Assert-RangeSettings $Ranges
+    foreach($name in @('Orange','Pink','White')) {
+        if($null -eq $Values.$name -or [double]::IsNaN([double]$Values.$name) -or [double]::IsInfinity([double]$Values.$name)) { return $false }
+    }
+    $all=$true
+    foreach($name in @('Orange','Pink','White')) {
+        if([double]$Values.$name -lt [double]$Ranges.$name.Min -or [double]$Values.$name -gt [double]$Ranges.$name.Max) { $all=$false }
+    }
+    if(-not $all) { $Latch.Active=$false;return $false }
+    if(-not $Latch.Active) { $Latch.Active=$true;return $true }
+    return $false
+}
 function Get-ScreenSignature {
     (@([Windows.Forms.Screen]::AllScreens | Sort-Object DeviceName | ForEach-Object { '{0}:{1},{2},{3},{4}' -f $_.DeviceName,$_.Bounds.X,$_.Bounds.Y,$_.Bounds.Width,$_.Bounds.Height }) -join ';')
 }
@@ -34,4 +55,4 @@ function Test-UpdateManifest($Manifest,[version]$Current) {
     if(-not $url.AbsolutePath.Contains($tag)) { throw '更新版本與下載路徑不符。' }
     return $version -gt $Current
 }
-Export-ModuleMember -Function 'Convert-ColorNumber','Test-AllThree','Get-ScreenSignature','Test-UpdateManifest'
+Export-ModuleMember -Function 'Convert-ColorNumber','Test-AllThree','Get-ScreenSignature','Test-UpdateManifest','Assert-RangeSettings','Test-ThreeRanges'

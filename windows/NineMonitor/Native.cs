@@ -118,7 +118,7 @@ namespace NineMonitor {
                 return diff<=20 && sat>=Math.Max(0.18,ts-0.4) && max>=Math.Max(0.25,tm-0.4);
             }
             if(kind=="Orange")return hue>=12 && hue<=58 && sat>=0.32 && max>=0.4;
-            if(kind=="Pink")return hue>=285 && hue<=355 && sat>=0.22 && max>=0.4;
+            if(kind=="Pink")return hue>=250 && hue<=355 && sat>=0.22 && max>=0.4;
             return sat<=0.22 && max>=0.68;
         }
         public static Bitmap Mask(Bitmap source,Rectangle local,string kind,int customRgb,out int count) {
@@ -173,10 +173,30 @@ namespace NineMonitor {
         [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr window,System.Text.StringBuilder text,int count);
         [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr window,System.Text.StringBuilder text,int count);
         [DllImport("user32.dll",SetLastError=true)] static extern uint SendInput(uint count,INPUT[] inputs,int size);
-        IntPtr target;uint targetPid;
+        [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(Point point);
+        [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr window,uint flags);
+        [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr window);
+        [DllImport("user32.dll")] static extern bool SetCursorPos(int x,int y);
+        IntPtr expected;IntPtr target;uint targetPid;
+        public void ClearSelection(){expected=IntPtr.Zero;}
+        public bool SelectPoint(Point point){
+            IntPtr child=WindowFromPoint(point);IntPtr root=GetAncestor(child,2);uint pid;
+            if(root==IntPtr.Zero||!IsWindowVisible(root)||IsIconic(root))return false;
+            GetWindowThreadProcessId(root,out pid);
+            if(pid==(uint)System.Diagnostics.Process.GetCurrentProcess().Id)return false;
+            var cls=new System.Text.StringBuilder(256);GetClassName(root,cls,256);
+            if(cls.ToString()=="Progman"||cls.ToString()=="WorkerW"||cls.ToString()=="Shell_TrayWnd")return false;
+            if(!SetForegroundWindow(root)&&GetForegroundWindow()!=root)return false;
+            if(!SetCursorPos(point.X,point.Y))return false;
+            INPUT down=new INPUT();down.type=0;down.data.mouse.flags=2;
+            INPUT up=down;up.data.mouse.flags=4;
+            if(SendInput(2,new INPUT[]{down,up},InputSize)!=2)return false;
+            expected=root;return true;
+        }
         public static int InputSize {get{return Marshal.SizeOf(typeof(INPUT));}}
         public bool CanArm(out string title) {
             title="";target=GetForegroundWindow();
+            if(expected!=IntPtr.Zero && target!=expected)return false;
             if(target==IntPtr.Zero||!IsWindowVisible(target)||IsIconic(target))return false;
             GetWindowThreadProcessId(target,out targetPid);
             if(targetPid==(uint)System.Diagnostics.Process.GetCurrentProcess().Id)return false;
@@ -236,5 +256,26 @@ namespace NineMonitor {
         }
         public void Stop(){lock(gate){cancel.Set();running=false;armed=false;}if(thread!=null&&thread!=System.Threading.Thread.CurrentThread){thread.Join();thread=null;}}
         public void Dispose(){Stop();cancel.Dispose();}
+    }
+
+    public sealed class TargetClickPicker : Form {
+        Bitmap shot;
+        public Point SelectedPoint {get;private set;}
+        public TargetClickPicker(){
+            Rectangle desk=SystemInformation.VirtualScreen;shot=Desktop.Capture(desk);
+            FormBorderStyle=FormBorderStyle.None;StartPosition=FormStartPosition.Manual;Bounds=desk;
+            TopMost=true;ShowInTaskbar=false;Cursor=Cursors.Cross;KeyPreview=true;DoubleBuffered=true;
+        }
+        protected override void OnPaint(PaintEventArgs e){
+            e.Graphics.DrawImageUnscaled(shot,0,0);
+            using(Brush b=new SolidBrush(Color.FromArgb(210,0,0,0)))e.Graphics.FillRectangle(b,0,Height-65,Width,65);
+            using(Font f=new Font("Microsoft JhengHei",16,FontStyle.Bold))e.Graphics.DrawString("點選圖表的起始位置，開始搜索低點；ESC 取消",f,Brushes.White,24,Height-50);
+        }
+        protected override void OnMouseUp(MouseEventArgs e){
+            if(e.Button!=MouseButtons.Left||e.Y>=Height-65)return;
+            SelectedPoint=PointToScreen(e.Location);Hide();DialogResult=DialogResult.OK;Close();
+        }
+        protected override void OnKeyDown(KeyEventArgs e){if(e.KeyCode==Keys.Escape){DialogResult=DialogResult.Cancel;Close();}}
+        protected override void Dispose(bool disposing){if(disposing&&shot!=null){shot.Dispose();shot=null;}base.Dispose(disposing);}
     }
 }

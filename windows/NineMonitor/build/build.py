@@ -6,7 +6,7 @@ version=json.loads((root/'version.json').read_text(encoding='utf-8-sig'))['versi
 def cc(args):
  subprocess.run([sys.executable,'-m','ziglang','cc','-target','x86_64-windows-gnu','-O2','-municode','-Wl,--subsystem,windows',str(root/'build/launcher.c'),'-luser32',*args],check=True,cwd=root)
 cc(['-o',str(out/'NineMonitor.exe')])
-files=['Launch.ps1','Monitor.ps1','Core.psm1','OcrWorker.ps1','Native.cs','UpdateWorker.ps1','Uninstall.ps1','version.json','README.txt','Install.ps1','SetupShell.cs']
+files=['Launch.ps1','Monitor.ps1','LowSearch.ps1','Core.psm1','OcrWorker.ps1','Native.cs','UpdateWorker.ps1','Uninstall.ps1','version.json','README.txt','Install.ps1','SetupShell.cs']
 archive=out/'payload.zip'
 with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED) as z:
  for name in files:z.write(root/name,name)

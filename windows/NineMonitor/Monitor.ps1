@@ -9,7 +9,10 @@ Add-Type -TypeDefinition (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'Nat
 Import-Module (Join-Path $PSScriptRoot 'Core.psm1') -Force
 $script:version=[version](Get-Content -LiteralPath (Join-Path $PSScriptRoot 'version.json') -Raw -Encoding UTF8|ConvertFrom-Json).version
 $script:root=$PSScriptRoot
-$script:names=@('Orange','Pink','White');$script:labels=@{Orange='橘色';Pink='粉紅色';White='白色'}
+. (Join-Path $script:root 'LowSearch.ps1')
+$script:searchMode=$false;$script:searchPause=$false
+$script:searchRanges=[pscustomobject]@{Orange=[pscustomobject]@{Min=19.0;Max=21.0};Pink=[pscustomobject]@{Min=10.0;Max=12.0};White=[pscustomobject]@{Min=-20.0;Max=0.0}}
+$script:names=@('Orange','Pink','White');$script:labels=@{Orange='橘色';Pink='粉紅／紫色';White='白色'}
 $script:colors=@{Orange=[Drawing.Color]::Orange;Pink=[Drawing.Color]::HotPink;White=[Drawing.Color]::White}
 $created=$false;$script:mutex=[Threading.Mutex]::new($true,'Local\NineMonitor-ThreeColor',[ref]$created)
 if(-not $created){[void][Windows.Forms.MessageBox]::Show('三色數值監視器已開啟，請查看右下角圖示。');$mutex.Dispose();return}
@@ -20,7 +23,8 @@ $script:channels=@{};foreach($n in $names){$channels[$n]=@{Region=$null;Rgb=-1;T
 $script:signature='';$script:active=$false;$script:job=$null;$script:updateJob=$null;$script:generation=0
 $script:latch=@{Active=$false};$script:previous=$null;$script:borders=@();$script:clock=[Diagnostics.Stopwatch]::StartNew();$script:nextAt=0.0;$script:captureKeys=0L
 $script:hotkey=New-Object NineMonitor.EscapeKey
-$script:rightPump=New-Object NineMonitor.AutoRightPump((New-Object NineMonitor.WindowsRightInput))
+$script:rightInput=New-Object NineMonitor.WindowsRightInput
+$script:rightPump=New-Object NineMonitor.AutoRightPump($script:rightInput)
 $script:autoMode=$false;$script:autoStarted=0.0;$script:lastSent=0L
 $script:worker=Get-Content -LiteralPath (Join-Path $root 'OcrWorker.ps1') -Raw -Encoding UTF8
 $script:voice=$null;$script:voiceChinese=$false;$script:voices=@()
@@ -33,7 +37,8 @@ function New-Button([string]$text,[int]$x,[int]$y,[int]$w=130){$c=New-Object Win
 $ui.title=New-Label '三色數值監視器' 24 18 600 44;$ui.title.Font=New-Object Drawing.Font('Microsoft JhengHei',25,[Drawing.FontStyle]::Bold)
 $ui.auto=New-Button '自動右移 5 次／秒' 670 25 215
 $ui.update=New-Button '一鍵更新' 900 25 150
-$ui.sub=New-Label '自動右移模式：按下後 3 秒內點選目標圖表；持續辨識三色，ESC 或切換視窗即停止。' 28 73 1020 30
+$ui.sub=New-Label '先框選三項；搜索低點時設定範圍，再點圖表起始位置。ESC 停止。' 28 73 620 30
+$ui.low=New-Button '搜索低點' 670 73 215
 $ui.headers=New-Label '監視數值　　　　　　　　　　　警報門檻（嚴格大於）　　　　框選／顏色校正' 28 115 1010 30
 $index=0
 foreach($n in $names){
@@ -73,14 +78,14 @@ function Update-RegionLabels{
 }
 function Save-Settings{
     $c=[ordered]@{};foreach($n in $names){$r=$channels[$n].Region;$c[$n]=@{Region=$(if($r){@{X=$r.X;Y=$r.Y;Width=$r.Width;Height=$r.Height}}else{$null});Rgb=$channels[$n].Rgb;Threshold=[double]$ui[$n].threshold.Value}}
-    $prefs=@{Schema=2;Channels=$c;Signature=$signature;Interval=[int]$ui.interval.Value;Minimize=$ui.minimize.Checked;Voice=[string]$ui.voice.SelectedItem}
+    $prefs=@{Schema=2;Channels=$c;Signature=$signature;Interval=[int]$ui.interval.Value;Minimize=$ui.minimize.Checked;Voice=[string]$ui.voice.SelectedItem;SearchRanges=$script:searchRanges;PauseOnSearchHit=$script:searchPause}
     $tmp=$configPath+'.tmp';[IO.File]::WriteAllText($tmp,($prefs|ConvertTo-Json -Depth 8),(New-Object Text.UTF8Encoding($true)))
     if(Test-Path $configPath){[IO.File]::Replace($tmp,$configPath,$null)}else{[IO.File]::Move($tmp,$configPath)}
 }
 function Controls{
     $idle=-not $script:active -and $null -eq $script:job -and $null -eq $script:updateJob
     $ready=$true;foreach($n in $names){if(-not $channels[$n].Region){$ready=$false};foreach($key in @('select','pick','reset','threshold')){$ui[$n][$key].Enabled=$idle}}
-    $ui.auto.Enabled=$idle -and $ready;$ui.test.Enabled=$idle -and $ready;$ui.start.Enabled=$idle -and $ready;$ui.stop.Enabled=$active
+    $ui.low.Enabled=$idle -and $ready;$ui.auto.Enabled=$idle -and $ready;$ui.test.Enabled=$idle -and $ready;$ui.start.Enabled=$idle -and $ready;$ui.stop.Enabled=$active
     $ui.update.Enabled=$null -eq $job -and $null -eq $updateJob;$ui.interval.Enabled=$idle;$ui.minimize.Enabled=$idle;$ui.voice.Enabled=$idle -and $voices.Count -gt 0
 }
 function Stop-Monitor{
@@ -93,22 +98,30 @@ function Stop-Monitor{
 function Speak-Alert($values,[bool]$test=$false){
     $zh=$script:voiceChinese
     if($test){$text=if($zh){'這是三色數值監視器的語音測試。三個數值同時超過門檻時，會提醒您。'}else{'This is a voice test. An alert sounds when all three values exceed their thresholds.'}}
-    else{$text=if($zh){'注意，三個數值都已超過門檻。橘色 '+(Fmt $values.Orange)+'，粉紅色 '+(Fmt $values.Pink)+'，白色 '+(Fmt $values.White)}else{'All three values exceeded their thresholds. Orange '+(Fmt $values.Orange)+', Pink '+(Fmt $values.Pink)+', White '+(Fmt $values.White)}}
+    else{
+        if($script:searchMode){$text=if($zh){'搜索低點，發現三項同時符合搜尋範圍。橘色 '+(Fmt $values.Orange)+'，第二色 '+(Fmt $values.Pink)+'，白色 '+(Fmt $values.White)}else{'Low-point search match. All three values are within their ranges. Orange '+(Fmt $values.Orange)+', second color '+(Fmt $values.Pink)+', white '+(Fmt $values.White)}}
+        else{$text=if($zh){'注意，三個數值都已超過門檻。橘色 '+(Fmt $values.Orange)+'，第二色 '+(Fmt $values.Pink)+'，白色 '+(Fmt $values.White)}else{'All three values exceeded their thresholds. Orange '+(Fmt $values.Orange)+', second color '+(Fmt $values.Pink)+', white '+(Fmt $values.White)}}
+    }
     [Media.SystemSounds]::Exclamation.Play();$tray.BalloonTipTitle='三色數值條件達成';$tray.BalloonTipText=$text;$tray.ShowBalloonTip(8000)
     if($voice -and $voices.Count -gt 0){$voice.SpeakAsyncCancelAll();[void]$voice.SpeakAsync($text)}else{Status '找不到語音引擎，目前只有音效與通知。請在 Windows 安裝語音元件後重啟。' $true}
 }
-function Add-Row($r){$item=New-Object Windows.Forms.ListViewItem([string]$r.Time);foreach($s in @((Fmt $r.Orange),(Fmt $r.Pink),(Fmt $r.White),[string]$r.AllAbove,[string]$r.Status)){[void]$item.SubItems.Add([string]$s)};[void]$ui.history.Items.Insert(0,$item);while($ui.history.Items.Count -gt 300){$ui.history.Items.RemoveAt($ui.history.Items.Count-1)}}
+function Add-Row($r){$condition=if($r.PSObject.Properties['CommonMatched']){[string]$r.CommonMatched}else{[string]$r.AllAbove};$item=New-Object Windows.Forms.ListViewItem([string]$r.Time);foreach($s in @((Fmt $r.Orange),(Fmt $r.Pink),(Fmt $r.White),$condition,[string]$r.Status)){[void]$item.SubItems.Add([string]$s)};[void]$ui.history.Items.Insert(0,$item);while($ui.history.Items.Count -gt 300){$ui.history.Items.RemoveAt($ui.history.Items.Count-1)}}
 function Record($values,[string]$note,[datetimeoffset]$stamp,[bool]$test){
     foreach($n in $names){$ui[$n].value.Text=$labels[$n]+'　'+(Fmt $values.$n)}
     $ui.last.Text=$stamp.ToString('yyyy-MM-dd HH:mm:ss.fff zzz')+$(if($test){'　單次測試，不寫入正式紀錄、不觸發門檻警報'}else{'　同一次畫面取樣'})
     if($test){Status ('測試結果：'+$note) ($null -eq $values.Orange -or $null -eq $values.Pink -or $null -eq $values.White);return}
     $thresholds=[pscustomobject]@{Orange=[double]$ui.Orange.threshold.Value;Pink=[double]$ui.Pink.threshold.Value;White=[double]$ui.White.threshold.Value}
-    $complete=$true;$all=$true;foreach($n in $names){if($null -eq $values.$n){$complete=$false;$all=$false}elseif($values.$n -le $thresholds.$n){$all=$false}}
-    $fire=Test-AllThree $latch $values $thresholds
+    $complete=$true;$all=$true
+    foreach($n in $names){
+        if($null -eq $values.$n){$complete=$false;$all=$false}
+        elseif($script:searchMode){if($values.$n -lt $script:searchRanges.$n.Min -or $values.$n -gt $script:searchRanges.$n.Max){$all=$false}}
+        elseif($values.$n -le $thresholds.$n){$all=$false}
+    }
+    $fire=if($script:searchMode){Test-ThreeRanges $latch $values $script:searchRanges}else{Test-AllThree $latch $values $thresholds}
     if($fire){$note+='；語音警報'}
-    $row=[pscustomobject]@{Time=$stamp.ToString('yyyy-MM-dd HH:mm:ss.fff zzz');Orange=$values.Orange;Pink=$values.Pink;White=$values.White;OrangeThreshold=$thresholds.Orange;PinkThreshold=$thresholds.Pink;WhiteThreshold=$thresholds.White;AllAbove=$(if($complete){[string]$all}else{'未知'});Status=$note;Mode=$(if($script:autoMode){'AutoRight5Hz'}else{'Timed'});RightPresses=$script:captureKeys;SampleId=[guid]::NewGuid().ToString('N')}
+    $row=[pscustomobject]@{Time=$stamp.ToString('yyyy-MM-dd HH:mm:ss.fff zzz');Orange=$values.Orange;Pink=$values.Pink;White=$values.White;OrangeThreshold=$thresholds.Orange;PinkThreshold=$thresholds.Pink;WhiteThreshold=$thresholds.White;AllAbove=$(if(-not $script:searchMode -and $complete){[string]$all}else{$null});AllInRange=$(if($script:searchMode -and $complete){[string]$all}else{$null});CommonMatched=$(if($complete){[string]$all}else{'未知'});SearchRanges=$(if($script:searchMode){$script:searchRanges|ConvertTo-Json -Depth 4 -Compress}else{''});Status=$note;Mode=$(if($script:searchMode){'LowSearch5Hz'}elseif($script:autoMode){'AutoRight5Hz'}else{'Timed'});RightPresses=$script:captureKeys;SampleId=[guid]::NewGuid().ToString('N')}
     try{[IO.File]::AppendAllText((Join-Path $dataRoot ($stamp.ToString('yyyy-MM-dd')+'-threecolor.jsonl')),($row|ConvertTo-Json -Compress)+[Environment]::NewLine,(New-Object Text.UTF8Encoding($true)));Add-Row $row;Status ('已記錄：'+$note) (-not $complete)}catch{Status ('紀錄寫入失敗：'+$_.Exception.Message) $true}
-    if($fire){Speak-Alert $values}
+    if($fire){if($script:searchMode -and $script:searchPause){Stop-Monitor;Status ('搜索命中，已暫停；命中取樣的右移次數：'+$script:captureKeys)};Speak-Alert $values}
 }
 function Empty-Values{[pscustomobject]@{Orange=$null;Pink=$null;White=$null}}
 function Begin-Sample([bool]$test=$false){
@@ -164,7 +177,7 @@ foreach($n in $names){
     $ui[$n].reset.Add_Click({$channels[[string]$this.Tag].Rgb=-1;Update-RegionLabels;try{Save-Settings}catch{};Status '已恢復預設顏色範圍。'})
 }
 $ui.test.Add_Click({try{$form.Hide();[Windows.Forms.Application]::DoEvents();Start-Sleep -Milliseconds 200;Begin-Sample $true}finally{Show-App}})
-$ui.start.Add_Click({try{$script:autoMode=$false;Save-Settings;$script:active=$true;$script:generation++;$script:latch=@{Active=$false};$script:nextAt=$clock.Elapsed.TotalSeconds+1
+$ui.start.Add_Click({try{$script:searchMode=$false;$script:autoMode=$false;Save-Settings;$script:active=$true;$script:generation++;$script:latch=@{Active=$false};$script:nextAt=$clock.Elapsed.TotalSeconds+1
     foreach($n in $names){$b=New-Object NineMonitor.Border($channels[$n].Region);$b.Show();$script:borders+=,$b};[void][NineMonitor.Desktop]::SetThreadExecutionState(2147483651)
     $ok=$hotkey.Register();Controls;if($ui.minimize.Checked){$form.WindowState='Minimized'};Status $(if($ok){'監視中，三項同時嚴格超過門檻才報警。ESC 可停止。'}else{'監視中，ESC 被占用，請使用停止按鈕。'}) (-not $ok);$tray.Text='三色監視器：監視中'
 }catch{Stop-Monitor;Status $_.Exception.Message $true}})
@@ -173,14 +186,24 @@ $ui.auto.Add_Click({
         Save-Settings
         if((Get-ScreenSignature) -ne $signature){throw '螢幕配置已變更，請重新框選。'}
         if(-not $hotkey.Register()){throw 'ESC 停止鍵被其他程式占用，請關閉衝突後重試。'}
-        $script:autoMode=$true;$script:active=$true;$script:generation++;$script:latch=@{Active=$false};$script:autoStarted=$clock.Elapsed.TotalSeconds
+        $script:searchMode=$false;$script:autoMode=$true;$script:active=$true;$script:generation++;$script:latch=@{Active=$false};$script:autoStarted=$clock.Elapsed.TotalSeconds
         $script:nextAt=$clock.Elapsed.TotalSeconds+3.0
         foreach($n in $names){$b=New-Object NineMonitor.Border($channels[$n].Region);$b.Show();$script:borders+=,$b}
         [void][NineMonitor.Desktop]::SetThreadExecutionState(2147483651)
         Controls;$form.WindowState='Minimized'
         $tray.BalloonTipTitle='3 秒內點選目標圖表';$tray.BalloonTipText='之後每秒右移 5 次，持續辨識並記錄三色。ESC／切換視窗停止。';$tray.ShowBalloonTip(3000)
-        $rightPump.Start(3000);Status '3 秒內點選目標圖表。目標將被固定，切換視窗即停止。'
+        $rightInput.ClearSelection();$rightPump.Start(3000);Status '3 秒內點選目標圖表。目標將被固定，切換視窗即停止。'
     }catch{Stop-Monitor;Status $_.Exception.Message $true}
+})
+$ui.low.Add_Click({
+    $dialog=$null
+    try{
+        $dialog=New-LowSearchDialog $script:searchRanges $script:searchPause
+        if($dialog.ShowDialog($form) -ne 'OK'){return}
+        $script:searchRanges=$dialog.Tag.Selected;$script:searchPause=$dialog.Tag.Pause.Checked
+        $dialog.Dispose();$dialog=$null
+        Start-LowSearch
+    }catch{Status $_.Exception.Message $true}finally{if($dialog){$dialog.Dispose()}}
 })
 $ui.stop.Add_Click({Stop-Monitor});$hotkey.Add_Pressed({Stop-Monitor});$miStop.Add_Click({Stop-Monitor});$miShow.Add_Click({Show-App});$tray.Add_DoubleClick({Show-App});$miExit.Add_Click({$form.Close()})
 $ui.say.Add_Click({Speak-Alert (Empty-Values) $true})
@@ -199,6 +222,7 @@ function Poll-Update{
 try{
     if(Test-Path $configPath){$p=Get-Content -LiteralPath $configPath -Raw -Encoding UTF8|ConvertFrom-Json;$script:signature=[string]$p.Signature
         foreach($n in $names){$c=$p.Channels.$n;$channels[$n].Rgb=[int]$c.Rgb;$ui[$n].threshold.Value=[decimal]$c.Threshold;if($c.Region -and $signature -eq (Get-ScreenSignature) -and $c.Region.Width -ge 30 -and $c.Region.Height -ge 20){$channels[$n].Region=New-Object Drawing.Rectangle([int]$c.Region.X,[int]$c.Region.Y,[int]$c.Region.Width,[int]$c.Region.Height)}}
+        if($p.PSObject.Properties['SearchRanges']){Assert-RangeSettings $p.SearchRanges;$script:searchRanges=$p.SearchRanges;$script:searchPause=[bool]$p.PauseOnSearchHit}
         $ui.interval.Value=[decimal]$p.Interval;$ui.minimize.Checked=[bool]$p.Minimize;if($p.Voice -and $ui.voice.Items.Contains([string]$p.Voice)){$ui.voice.SelectedItem=[string]$p.Voice}
     }
 }catch{Status '先前設定無法完整還原，請重新設定三項。' $true}
@@ -219,7 +243,8 @@ $timer.Add_Tick({try{
     }
     Poll-Ocr;Poll-Update
     if($script:autoMode -and $script:active){
-        if($rightPump.Armed){$tray.Text='自動右移：已送出 '+$rightPump.SentCount+' 次'}
+        if($rightPump.Armed){$tray.Text=$(if($script:searchMode){'搜索低點：'}else{'自動右移：'})+'已送出 '+$rightPump.SentCount+' 次'}
+        elseif($script:searchMode){Status '正在啟動所選圖表的低點搜索…'}
         else{Status ('請點目標圖表，倒數 '+[Math]::Max(0,[Math]::Ceiling(3-($clock.Elapsed.TotalSeconds-$autoStarted)))+' 秒')}
     }
     if($active -and -not $job -and $clock.Elapsed.TotalSeconds -ge $nextAt -and (-not $script:autoMode -or $rightPump.Armed)){Begin-Sample $false}

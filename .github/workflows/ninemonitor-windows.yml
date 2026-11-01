@@ -31,6 +31,8 @@ jobs:
         run: '& .\tests\Native.Tests.ps1'
       - name: Test automatic right-arrow cadence and stop behavior
         run: '& .\tests\AutoRight.Tests.ps1'
+      - name: Test low-point ranges and search dialog
+        run: '& .\tests\LowSearch.Tests.ps1'
       - name: Smoke test Windows UI
         run: |
           & .\Monitor.ps1 -SmokeTest
@@ -100,7 +102,7 @@ jobs:
           $exists = $false
           try { $null = Invoke-RestMethod "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/tags/$tag"; $exists = $true } catch { if ($_.Exception.Response.StatusCode.value__ -ne 404) { throw } }
           if ($exists) { throw "Version already published. Increment version.json before releasing again." }
-          gh release create $tag --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "三色數值監視器 v$v" --notes '新增每秒 5 次向右連按、連續三色辨識與紀錄、3 秒選目標、ESC 與焦點切換停止。升級保留設定與歷史。先在實際畫面測試辨識及目標程式對右鍵的反應。' --prerelease '--latest=false' dist/NineMonitor-Setup.exe dist/SHA256SUMS.txt
+          gh release create $tag --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "三色數值監視器 v$v" --notes '新增搜索低點：分別設定三色上下限、點選圖表起始位置、每秒五次右移並連續搜尋，三項同時在範圍內才語音提示。保留自動右移與一鍵更新。' --prerelease '--latest=false' dist/NineMonitor-Setup.exe dist/SHA256SUMS.txt
           if ($LASTEXITCODE -ne 0) { throw 'Version release failed' }
           $channelExists = $false
           try { $null = Invoke-RestMethod "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/tags/ninemonitor-latest"; $channelExists = $true } catch { if ($_.Exception.Response.StatusCode.value__ -ne 404) { throw } }

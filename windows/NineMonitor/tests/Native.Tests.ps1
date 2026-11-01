@@ -3,7 +3,7 @@ $root=Split-Path $PSScriptRoot -Parent
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -TypeDefinition (Get-Content -LiteralPath (Join-Path $root 'Native.cs') -Raw -Encoding UTF8) -ReferencedAssemblies 'System.Windows.Forms.dll','System.Drawing.dll'
-foreach($case in @(@([Drawing.Color]::Orange,'Orange',$true),@([Drawing.Color]::HotPink,'Pink',$true),@([Drawing.Color]::White,'White',$true),@([Drawing.Color]::Black,'White',$false),@([Drawing.Color]::Blue,'Orange',$false),@([Drawing.Color]::Orange,'Pink',$false))){if([NineMonitor.ColorFilter]::Matches($case[0],$case[1],-1) -ne $case[2]){throw ('Color filter failed: '+$case[1])}}
+foreach($case in @(@([Drawing.Color]::Orange,'Orange',$true),@([Drawing.Color]::HotPink,'Pink',$true),@([Drawing.Color]::MediumPurple,'Pink',$true),@([Drawing.Color]::White,'White',$true),@([Drawing.Color]::Black,'White',$false),@([Drawing.Color]::Blue,'Orange',$false),@([Drawing.Color]::Orange,'Pink',$false))){if([NineMonitor.ColorFilter]::Matches($case[0],$case[1],-1) -ne $case[2]){throw ('Color filter failed: '+$case[1])}}
 $canvas=New-Object Drawing.Bitmap(400,240);$g=[Drawing.Graphics]::FromImage($canvas);$g.Clear([Drawing.Color]::Black)
 $font=New-Object Drawing.Font('Segoe UI',28,[Drawing.FontStyle]::Bold)
 $g.DrawString('81.50',$font,[Drawing.Brushes]::Orange,10,4);$g.DrawString('72.25',$font,[Drawing.Brushes]::HotPink,10,84);$g.DrawString('63.75',$font,[Drawing.Brushes]::White,10,164);$g.Dispose();$font.Dispose()
