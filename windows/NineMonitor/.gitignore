@@ -1,0 +1,4 @@
+dist/
+build/payload.h
+build/bootstrap.h
+__pycache__/

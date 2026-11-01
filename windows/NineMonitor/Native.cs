@@ -1,0 +1,146 @@
+﻿using System;
+using System.Drawing;
+using System.Windows.Forms;
+using System.Runtime.InteropServices;
+
+namespace NineMonitor {
+    public static class Desktop {
+        [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+        [DllImport("user32.dll", EntryPoint="SetProcessDpiAwarenessContext")] static extern bool SetDpiContext(IntPtr context);
+        public static void EnableDpiAwareness() {
+            try { if(SetDpiContext(new IntPtr(-4))) return; } catch(EntryPointNotFoundException) { }
+            SetProcessDPIAware();
+        }
+        [DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);
+        public static Bitmap Capture(Rectangle rect) {
+            Bitmap b = new Bitmap(rect.Width, rect.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            try { using (Graphics g = Graphics.FromImage(b)) g.CopyFromScreen(rect.Location, Point.Empty, rect.Size, CopyPixelOperation.SourceCopy); return b; }
+            catch { b.Dispose(); throw; }
+        }
+    }
+    public sealed class Selector : Form {
+        public string Prompt = "拖曳框住指定顏色的一個數字，放開確認；ESC 取消";
+        Bitmap shot; Point start; Rectangle selected; bool dragging;
+        public Rectangle Selected { get; private set; }
+        public Selector() {
+            Rectangle desktop = SystemInformation.VirtualScreen;
+            shot = Desktop.Capture(desktop);
+            FormBorderStyle = FormBorderStyle.None; StartPosition = FormStartPosition.Manual;
+            Bounds = desktop; TopMost = true; ShowInTaskbar = false; DoubleBuffered = true; KeyPreview = true; Cursor = Cursors.Cross;
+        }
+        protected override void OnPaint(PaintEventArgs e) {
+            e.Graphics.DrawImageUnscaled(shot, 0, 0);
+            using (Brush shade = new SolidBrush(Color.FromArgb(120,0,0,0))) e.Graphics.FillRectangle(shade, ClientRectangle);
+            if (selected.Width > 0 && selected.Height > 0) {
+                e.Graphics.DrawImage(shot, selected, selected, GraphicsUnit.Pixel);
+                using (Pen pen = new Pen(Color.Lime, 2)) e.Graphics.DrawRectangle(pen, selected);
+            }
+            using (Font font = new Font("Microsoft JhengHei", 16, FontStyle.Bold))
+            using (Brush brush = new SolidBrush(Color.White))
+                e.Graphics.DrawString(Prompt, font, brush, 24, 24);
+        }
+        protected override void OnMouseDown(MouseEventArgs e) { if(e.Button == MouseButtons.Left) { start=e.Location; dragging=true; } }
+        protected override void OnMouseMove(MouseEventArgs e) {
+            if (!dragging) return;
+            int x=Math.Max(0,Math.Min(ClientSize.Width,e.X)), y=Math.Max(0,Math.Min(ClientSize.Height,e.Y));
+            selected=Rectangle.FromLTRB(Math.Min(start.X,x),Math.Min(start.Y,y),Math.Max(start.X,x),Math.Max(start.Y,y)); Invalidate();
+        }
+        protected override void OnMouseUp(MouseEventArgs e) {
+            if (!dragging) return; dragging=false;
+            if(selected.Width < 30 || selected.Height < 20) return;
+            Selected=new Rectangle(selected.X+Left,selected.Y+Top,selected.Width,selected.Height);
+            DialogResult=DialogResult.OK; Close();
+        }
+        protected override void OnKeyDown(KeyEventArgs e) { if(e.KeyCode==Keys.Escape) { DialogResult=DialogResult.Cancel; Close(); } }
+        protected override void Dispose(bool disposing) { if(disposing && shot!=null) {shot.Dispose();shot=null;} base.Dispose(disposing); }
+    }
+    public sealed class Border : Form {
+        public Border(Rectangle region) {
+            FormBorderStyle=FormBorderStyle.None; ShowInTaskbar=false; StartPosition=FormStartPosition.Manual; TopMost=true;
+            Bounds=Rectangle.Inflate(region,3,3); BackColor=Color.Magenta; TransparencyKey=Color.Magenta;
+        }
+        protected override bool ShowWithoutActivation { get { return true; } }
+        protected override CreateParams CreateParams {
+            get { CreateParams cp=base.CreateParams; cp.ExStyle|=0x00000020|0x00080000|0x08000000|0x00000080; return cp; }
+        }
+        protected override void OnPaint(PaintEventArgs e) {
+            using(Pen p=new Pen(Color.Lime,2)) e.Graphics.DrawRectangle(p,1,1,ClientSize.Width-3,ClientSize.Height-3);
+        }
+    }
+    public sealed class EscapeKey : NativeWindow, IDisposable {
+        [DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr hwnd,int id,uint modifiers,uint key);
+        [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr hwnd,int id);
+        public event EventHandler Pressed;
+        bool registered;
+        public bool Register() {
+            if(registered) return true;
+            if(Handle==IntPtr.Zero) CreateHandle(new CreateParams { Parent=new IntPtr(-3) });
+            registered=RegisterHotKey(Handle,1,0,27);return registered;
+        }
+        public void Unregister() { if(registered) UnregisterHotKey(Handle,1);registered=false; }
+        protected override void WndProc(ref Message m) { if(m.Msg==0x0312 && Pressed!=null) Pressed(this,EventArgs.Empty);base.WndProc(ref m); }
+        public void Dispose() { Unregister();if(Handle!=IntPtr.Zero) DestroyHandle(); }
+    }
+
+    public sealed class PixelPicker : Form {
+        Bitmap shot;
+        public Color Picked { get; private set; }
+        public PixelPicker() {
+            Rectangle desk=SystemInformation.VirtualScreen;shot=Desktop.Capture(desk);
+            FormBorderStyle=FormBorderStyle.None;StartPosition=FormStartPosition.Manual;Bounds=desk;
+            TopMost=true;ShowInTaskbar=false;Cursor=Cursors.Cross;KeyPreview=true;DoubleBuffered=true;
+        }
+        protected override void OnPaint(PaintEventArgs e) {
+            e.Graphics.DrawImageUnscaled(shot,0,0);
+            using(Brush b=new SolidBrush(Color.FromArgb(200,0,0,0))) e.Graphics.FillRectangle(b,0,0,Width,60);
+            using(Font f=new Font("Microsoft JhengHei",16,FontStyle.Bold)) e.Graphics.DrawString("點選數字筆畫中央來取色；ESC 取消",f,Brushes.White,24,15);
+        }
+        protected override void OnMouseDown(MouseEventArgs e) {
+            if(e.Button!=MouseButtons.Left || e.Y<60)return;
+            Picked=shot.GetPixel(Math.Max(0,Math.Min(shot.Width-1,e.X)),Math.Max(0,Math.Min(shot.Height-1,e.Y)));
+            DialogResult=DialogResult.OK;Close();
+        }
+        protected override void OnKeyDown(KeyEventArgs e) {if(e.KeyCode==Keys.Escape){DialogResult=DialogResult.Cancel;Close();}}
+        protected override void Dispose(bool disposing){if(disposing && shot!=null){shot.Dispose();shot=null;}base.Dispose(disposing);}
+    }
+    public static class ColorFilter {
+        public static bool Matches(Color c,string kind,int customRgb) {
+            double r=c.R/255.0,g=c.G/255.0,b=c.B/255.0;
+            double max=Math.Max(r,Math.Max(g,b)),min=Math.Min(r,Math.Min(g,b));
+            double sat=max==0?0:(max-min)/max; double hue=c.GetHue();
+            if(customRgb>=0) {
+                Color target=Color.FromArgb((customRgb>>16)&255,(customRgb>>8)&255,customRgb&255);
+                double tr=target.R/255.0,tg=target.G/255.0,tb=target.B/255.0;
+                double tm=Math.Max(tr,Math.Max(tg,tb)),tn=Math.Min(tr,Math.Min(tg,tb));
+                double ts=tm==0?0:(tm-tn)/tm;
+                if(ts<0.18) return sat<0.24 && max>Math.Max(0.45,tm-0.20);
+                double diff=Math.Abs(hue-target.GetHue());diff=Math.Min(diff,360-diff);
+                return diff<=20 && sat>=Math.Max(0.18,ts-0.4) && max>=Math.Max(0.25,tm-0.4);
+            }
+            if(kind=="Orange")return hue>=12 && hue<=58 && sat>=0.32 && max>=0.4;
+            if(kind=="Pink")return hue>=285 && hue<=355 && sat>=0.22 && max>=0.4;
+            return sat<=0.22 && max>=0.68;
+        }
+        public static Bitmap Mask(Bitmap source,Rectangle local,string kind,int customRgb,out int count) {
+            using(Bitmap crop=source.Clone(local,System.Drawing.Imaging.PixelFormat.Format32bppArgb)) {
+                var data=crop.LockBits(new Rectangle(0,0,crop.Width,crop.Height),System.Drawing.Imaging.ImageLockMode.ReadWrite,System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                count=0;
+                try {
+                    byte[] bytes=new byte[Math.Abs(data.Stride)*data.Height];Marshal.Copy(data.Scan0,bytes,0,bytes.Length);
+                    for(int y=0;y<crop.Height;y++) for(int x=0;x<crop.Width;x++) {
+                        int i=y*data.Stride+x*4;Color c=Color.FromArgb(bytes[i+2],bytes[i+1],bytes[i]);bool hit=Matches(c,kind,customRgb);
+                        if(hit)count++;byte value=hit?(byte)0:(byte)255;bytes[i]=value;bytes[i+1]=value;bytes[i+2]=value;bytes[i+3]=255;
+                    }
+                    Marshal.Copy(bytes,0,data.Scan0,bytes.Length);
+                } finally {crop.UnlockBits(data);}
+                double scale=Math.Min(3.0,2100.0/Math.Max(crop.Width,crop.Height));
+                Bitmap result=new Bitmap(Math.Max(1,(int)(crop.Width*scale))+28,Math.Max(1,(int)(crop.Height*scale))+28);
+                using(Graphics g=Graphics.FromImage(result)) {
+                    g.Clear(Color.White);g.InterpolationMode=System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                    g.DrawImage(crop,14,14,result.Width-28,result.Height-28);
+                }
+                return result;
+            }
+        }
+    }
+}
