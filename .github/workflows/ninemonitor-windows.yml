@@ -100,3 +100,20 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Channel installer upload failed' }
           gh release upload ninemonitor-latest --repo $env:GITHUB_REPOSITORY --clobber dist/ninemonitor-update.json
           if ($LASTEXITCODE -ne 0) { throw 'Update manifest publication failed' }
+      - name: Verify live one-click update download
+        timeout-minutes: 3
+        run: |
+          $ready = $false
+          for ($i = 0; $i -lt 3; $i++) {
+            $result = & .\UpdateWorker.ps1 '0.1.0' (Join-Path (Get-Location) 'Core.psm1')
+            if ($result.State -eq 'Ready') {
+              if (!(Test-Path $result.Path)) { throw 'Update download missing' }
+              Write-Host ('Live update download and hash verification passed: ' + $result.Version)
+              Remove-Item -LiteralPath $result.Path -Force
+              $ready = $true
+              break
+            }
+            Write-Host $result.Error
+            Start-Sleep -Seconds 5
+          }
+          if (!$ready) { throw 'Published update channel could not be verified' }

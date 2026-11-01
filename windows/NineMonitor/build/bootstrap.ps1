@@ -6,6 +6,7 @@ try{
     & (Join-Path $payload 'Install.ps1')
     exit $LASTEXITCODE
 }catch{
+    if($env:NM_CI_TEST -eq '1'){Write-Host $_.Exception.Message;exit 1}
     Add-Type -AssemblyName System.Windows.Forms
     [void][Windows.Forms.MessageBox]::Show(('無法完成安裝：'+$_.Exception.Message),'三色數值監視器')
     exit 1
