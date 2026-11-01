@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 36,
-  "versionName": "1.35.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/eed1da7c56a993fa60b2eeabfa5388b92d3ce0cc/synclab/packages/SyncLab-v1.35.0.apk.b64",
-  "sha256": "abe35e0a1e7ba893d7af259acca1dde0cc32d8d4977e433f231611c6ffa01a2c",
+  "versionCode": 37,
+  "versionName": "1.36.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/b676cda687ad4edc6fc2a64f993d5f0526913052/synclab/packages/SyncLab-v1.36.0.apk.b64",
+  "sha256": "470eb2553f68e2f8bc580361e6d049353fd4ba2f33d82196597334fd29706b0f",
   "bytes": 336566,
   "encoding": "base64",
-  "notes": "修正 SOX 費城半導體指數：SOX／^SOX／費半自動辨識美國指數，指數零成交量不再被誤判無交易。新增 TX 台指期近月，市場選單分為日盤與夜盤，直連期交所月資料、按交易歸屬日配對；換月使用同一契約前收盤。保留三條獨立搜尋線、最高同向率置頂與續跑。本次已同步發布一鍵更新來源。"
+  "notes": "修正台股全天候探查器「查看前5名與配對明細」被背景刷新自動收合：結果未變時保留原卡片與焦點；結果變更、排名調整或篩選切換時，以搜尋線／任務ID／台股身分恢復展開狀態，手動收合仍維持，新任務不沿用舊狀態。保留SOX指數、TX日夜盤及三線獨立搜尋功能。"
 }
