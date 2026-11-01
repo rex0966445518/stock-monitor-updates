@@ -18,41 +18,76 @@ namespace NineMonitor {
             catch { b.Dispose(); throw; }
         }
     }
+    public static class SelectionGeometry {
+        public const int MinimumWidth=6,MinimumHeight=4;
+        public static Rectangle Build(Point a,Point b,Size bounds) {
+            int ax=Math.Max(0,Math.Min(bounds.Width,a.X)),ay=Math.Max(0,Math.Min(bounds.Height,a.Y));
+            int bx=Math.Max(0,Math.Min(bounds.Width,b.X)),by=Math.Max(0,Math.Min(bounds.Height,b.Y));
+            return Rectangle.FromLTRB(Math.Min(ax,bx),Math.Min(ay,by),Math.Max(ax,bx),Math.Max(ay,by));
+        }
+        public static bool Valid(Rectangle area){return area.Width>=MinimumWidth&&area.Height>=MinimumHeight;}
+    }
     public sealed class Selector : Form {
-        public string Prompt = "拖曳框住指定顏色的一個數字，放開確認；ESC 取消";
-        Bitmap shot; Point start; Rectangle selected; bool dragging;
-        public Rectangle Selected { get; private set; }
-        public Selector() {
-            Rectangle desktop = SystemInformation.VirtualScreen;
-            shot = Desktop.Capture(desktop);
-            FormBorderStyle = FormBorderStyle.None; StartPosition = FormStartPosition.Manual;
-            Bounds = desktop; TopMost = true; ShowInTaskbar = false; DoubleBuffered = true; KeyPreview = true; Cursor = Cursors.Cross;
+        public string Prompt="框住一個數字；放開自動確認，Enter 手動確認，ESC 取消";
+        Bitmap shot;Point start;Rectangle selected;bool dragging,finishing;
+        Timer releaseWatch;string notice="";
+        public Rectangle Selected {get;private set;}
+        public Selector():this(null,SystemInformation.VirtualScreen){}
+        public Selector(Bitmap image,Rectangle desktop){
+            shot=image==null?Desktop.Capture(desktop):(Bitmap)image.Clone();
+            FormBorderStyle=FormBorderStyle.None;StartPosition=FormStartPosition.Manual;
+            Bounds=desktop;TopMost=true;ShowInTaskbar=false;DoubleBuffered=true;KeyPreview=true;Cursor=Cursors.Cross;
+            releaseWatch=new Timer();releaseWatch.Interval=50;
+            releaseWatch.Tick+=delegate{
+                if(dragging&&(Control.MouseButtons&MouseButtons.Left)==0)CompleteDrag(PointToClient(Cursor.Position));
+            };
         }
-        protected override void OnPaint(PaintEventArgs e) {
-            e.Graphics.DrawImageUnscaled(shot, 0, 0);
-            using (Brush shade = new SolidBrush(Color.FromArgb(120,0,0,0))) e.Graphics.FillRectangle(shade, ClientRectangle);
-            if (selected.Width > 0 && selected.Height > 0) {
-                e.Graphics.DrawImage(shot, selected, selected, GraphicsUnit.Pixel);
-                using (Pen pen = new Pen(Color.Lime, 2)) e.Graphics.DrawRectangle(pen, selected);
+        protected override void OnPaint(PaintEventArgs e){
+            e.Graphics.DrawImageUnscaled(shot,0,0);
+            using(Brush shade=new SolidBrush(Color.FromArgb(120,0,0,0)))e.Graphics.FillRectangle(shade,ClientRectangle);
+            if(selected.Width>0&&selected.Height>0){
+                e.Graphics.DrawImage(shot,selected,selected,GraphicsUnit.Pixel);
+                using(Pen pen=new Pen(Color.Lime,2))e.Graphics.DrawRectangle(pen,selected);
             }
-            using (Font font = new Font("Microsoft JhengHei", 16, FontStyle.Bold))
-            using (Brush brush = new SolidBrush(Color.White))
-                e.Graphics.DrawString(Prompt, font, brush, 24, 24);
+            using(Font font=new Font("Microsoft JhengHei",14,FontStyle.Bold)){
+                e.Graphics.DrawString(Prompt,font,Brushes.White,24,18);
+                string details=notice.Length>0?notice:(selected.Width>0?"選框 "+selected.Width+" × "+selected.Height+" 像素":"可由任意方向拖曳，只框數字本身");
+                e.Graphics.DrawString(details,font,notice.Length>0?Brushes.Orange:Brushes.Lime,24,48);
+            }
         }
-        protected override void OnMouseDown(MouseEventArgs e) { if(e.Button == MouseButtons.Left) { start=e.Location; dragging=true; } }
-        protected override void OnMouseMove(MouseEventArgs e) {
-            if (!dragging) return;
-            int x=Math.Max(0,Math.Min(ClientSize.Width,e.X)), y=Math.Max(0,Math.Min(ClientSize.Height,e.Y));
-            selected=Rectangle.FromLTRB(Math.Min(start.X,x),Math.Min(start.Y,y),Math.Max(start.X,x),Math.Max(start.Y,y)); Invalidate();
+        protected override void OnMouseDown(MouseEventArgs e){
+            base.OnMouseDown(e);if(e.Button!=MouseButtons.Left||finishing)return;
+            start=e.Location;selected=Rectangle.Empty;notice="";dragging=true;Capture=true;releaseWatch.Start();Invalidate();
         }
-        protected override void OnMouseUp(MouseEventArgs e) {
-            if (!dragging) return; dragging=false;
-            if(selected.Width < 30 || selected.Height < 20) return;
+        protected override void OnMouseMove(MouseEventArgs e){
+            base.OnMouseMove(e);if(!dragging)return;selected=SelectionGeometry.Build(start,e.Location,ClientSize);Invalidate();
+        }
+        protected override void OnMouseUp(MouseEventArgs e){
+            base.OnMouseUp(e);if(e.Button==MouseButtons.Left&&dragging)CompleteDrag(e.Location);
+        }
+        void CompleteDrag(Point end){
+            if(finishing||!dragging)return;
+            selected=SelectionGeometry.Build(start,end,ClientSize);dragging=false;releaseWatch.Stop();Capture=false;
+            Confirm();
+        }
+        void Confirm(){
+            if(finishing)return;
+            if(!SelectionGeometry.Valid(selected)){
+                notice="選框太小（"+selected.Width+" × "+selected.Height+"），請重新拖曳；至少 6 × 4 像素";Invalidate();return;
+            }
+            finishing=true;releaseWatch.Stop();Capture=false;
             Selected=new Rectangle(selected.X+Left,selected.Y+Top,selected.Width,selected.Height);
-            DialogResult=DialogResult.OK; Close();
+            DialogResult=DialogResult.OK;Close();
         }
-        protected override void OnKeyDown(KeyEventArgs e) { if(e.KeyCode==Keys.Escape) { DialogResult=DialogResult.Cancel; Close(); } }
-        protected override void Dispose(bool disposing) { if(disposing && shot!=null) {shot.Dispose();shot=null;} base.Dispose(disposing); }
+        protected override void OnKeyDown(KeyEventArgs e){
+            if(e.KeyCode==Keys.Escape){dragging=false;releaseWatch.Stop();Capture=false;DialogResult=DialogResult.Cancel;Close();e.Handled=true;return;}
+            if(e.KeyCode==Keys.Enter){if(dragging)CompleteDrag(PointToClient(Cursor.Position));else Confirm();e.Handled=true;return;}
+            base.OnKeyDown(e);
+        }
+        protected override void Dispose(bool disposing){
+            if(disposing){if(releaseWatch!=null){releaseWatch.Stop();releaseWatch.Dispose();releaseWatch=null;}if(shot!=null){shot.Dispose();shot=null;}}
+            base.Dispose(disposing);
+        }
     }
     public sealed class Border : Form {
         public Border(Rectangle region) {

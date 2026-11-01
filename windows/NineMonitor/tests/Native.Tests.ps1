@@ -8,7 +8,7 @@ $canvas=New-Object Drawing.Bitmap(400,240);$g=[Drawing.Graphics]::FromImage($can
 $font=New-Object Drawing.Font('Segoe UI',28,[Drawing.FontStyle]::Bold)
 $g.DrawString('81.50',$font,[Drawing.Brushes]::Orange,10,4);$g.DrawString('72.25',$font,[Drawing.Brushes]::HotPink,10,84);$g.DrawString('63.75',$font,[Drawing.Brushes]::White,10,164);$g.Dispose();$font.Dispose()
 $items=@();$i=0
-foreach($name in @('Orange','Pink','White')){$count=0;$r=New-Object Drawing.Rectangle(0,($i*80),300,80);$b=[NineMonitor.ColorFilter]::Mask($canvas,$r,$name,-1,[ref]$count);if($count -lt 10){throw 'Masked image is empty'};$path=Join-Path $env:TEMP ('NM3-Test-'+$name+'.png');$b.Save($path,[Drawing.Imaging.ImageFormat]::Png);$b.Dispose();$items+=@{Name=$name;Path=$path;Pixels=$count};$i++};$canvas.Dispose()
+foreach($name in @('Orange','Pink','White')){$count=0;$r=New-Object Drawing.Rectangle(0,0,400,240);$b=[NineMonitor.ColorFilter]::Mask($canvas,$r,$name,-1,[ref]$count);if($count -lt 10){throw 'Masked image is empty'};$path=Join-Path $env:TEMP ('NM3-Test-'+$name+'.png');$b.Save($path,[Drawing.Imaging.ImageFormat]::Png);$b.Dispose();$items+=@{Name=$name;Path=$path;Pixels=$count};$i++};$canvas.Dispose()
 Write-Host 'Color filtering and pixel masking passed'
 $r=& (Join-Path $root 'OcrWorker.ps1') (@{Core=(Join-Path $root 'Core.psm1');Items=$items}|ConvertTo-Json -Compress -Depth 5)
 if($r.Error -match '沒有可用|not registered|not supported|無法載入|找不到類型|0x80040154'){
@@ -16,5 +16,5 @@ if($r.Error -match '沒有可用|not registered|not supported|無法載入|找�
 }else{
  if($r.Error){throw $r.Error}
  foreach($pair in @(@('Orange',81.5),@('Pink',72.25),@('White',63.75))){if($r.Values.($pair[0]) -ne $pair[1]){throw ('Synthetic OCR mismatch '+$pair[0]+': '+($r|ConvertTo-Json -Depth 6))}}
- Write-Host 'Synthetic three-color OCR passed'
+ Write-Host 'Single shared-region synthetic three-color OCR passed'
 }

@@ -20,6 +20,7 @@ $script:dataRoot=Join-Path $env:LOCALAPPDATA 'NineMonitor\Data'
 [void][IO.Directory]::CreateDirectory($dataRoot)
 $script:configPath=Join-Path $dataRoot 'threecolor-settings.json'
 $script:channels=@{};foreach($n in $names){$channels[$n]=@{Region=$null;Rgb=-1;Threshold=80.0}}
+$script:sharedRegion=$null
 $script:signature='';$script:active=$false;$script:job=$null;$script:updateJob=$null;$script:generation=0
 $script:latch=@{Active=$false};$script:previous=$null;$script:borders=@();$script:clock=[Diagnostics.Stopwatch]::StartNew();$script:nextAt=0.0;$script:captureKeys=0L
 $script:hotkey=New-Object NineMonitor.EscapeKey
@@ -37,15 +38,18 @@ function New-Button([string]$text,[int]$x,[int]$y,[int]$w=130){$c=New-Object Win
 $ui.title=New-Label '三色數值監視器' 24 18 600 44;$ui.title.Font=New-Object Drawing.Font('Microsoft JhengHei',25,[Drawing.FontStyle]::Bold)
 $ui.auto=New-Button '自動右移 5 次／秒' 670 25 215
 $ui.update=New-Button '一鍵更新' 900 25 150
-$ui.sub=New-Label '先框選三項；搜索低點時設定範圍，再點圖表起始位置。ESC 停止。' 28 73 620 30
+$ui.sub=New-Label '框選一次包含三色數字的區域，自動識別三項；放開後立即測試。' 28 73 620 25
 $ui.low=New-Button '搜索低點' 670 73 215
-$ui.headers=New-Label '監視數值　　　　　　　　　　　警報門檻（嚴格大於）　　　　框選／顏色校正' 28 115 1010 30
+$ui.shared=New-Button '框選三色數字' 900 73 150
+$ui.regionInfo=New-Label '尚未框選：請一次框住三個數字，不含左側指標名稱與參數。' 28 101 620 22
+$ui.regionInfo.Font=New-Object Drawing.Font('Microsoft JhengHei',9)
+$ui.headers=New-Label '監視數值　　　　　　　　　　　警報門檻（嚴格大於）　　　　框選／顏色校正' 28 126 1010 23
 $index=0
 foreach($n in $names){
     $y=153+$index*86
     $u=@{};$u.value=New-Label ($labels[$n]+'　—') 24 $y 310 57;$u.value.Font=New-Object Drawing.Font('Microsoft JhengHei',24,[Drawing.FontStyle]::Bold);$u.value.ForeColor=$colors[$n];$u.value.BackColor=$card
     $u.threshold=New-Object Windows.Forms.NumericUpDown;$u.threshold.SetBounds(364,($y+9),128,30);$u.threshold.Minimum=-1000000;$u.threshold.Maximum=1000000;$u.threshold.DecimalPlaces=2;$u.threshold.Value=80;$form.Controls.Add($u.threshold)
-    $u.select=New-Button ('框選'+$labels[$n]) 530 ($y+5) 135;$u.select.Tag=$n
+    $u.autoLabel=New-Label '自動顏色識別' 530 ($y+12) 135 28
     $u.pick=New-Button '點取筆畫顏色' 680 ($y+5) 150;$u.pick.Tag=$n
     $u.reset=New-Button '預設顏色' 845 ($y+5) 120;$u.reset.Tag=$n
     $u.swatch=New-Label '' 984 ($y+8) 36 28;$u.swatch.BackColor=$colors[$n]
@@ -61,7 +65,7 @@ $ui.voiceLabel=New-Label '語音' 630 486 60
 $ui.voice=New-Object Windows.Forms.ComboBox;$ui.voice.DropDownStyle='DropDownList';$ui.voice.SetBounds(690,482,360,30);$form.Controls.Add($ui.voice)
 foreach($v in $voices){[void]$ui.voice.Items.Add($v.VoiceInfo.Name)}
 if($voice -and $ui.voice.Items.Count -gt 0){$ui.voice.SelectedItem=$voice.Voice.Name}else{$ui.voice.Enabled=$false}
-$ui.status=New-Label '請分別框選三個數字，再進行單次辨識測試。' 24 530 1028 40;$ui.status.BackColor=$card;$ui.status.ForeColor=$accent
+$ui.status=New-Label '請按「框選三色數字」，一次框住三個數字，放開後自動辨識。' 24 530 1028 40;$ui.status.BackColor=$card;$ui.status.ForeColor=$accent
 $ui.last=New-Label '自動右移時每輪 OCR 完成即取下一筆；不保證每次右移都有紀錄。三項共同超過門檻才報警。' 28 580 1020 27
 $ui.raw=New-Object Windows.Forms.TextBox;$ui.raw.SetBounds(24,618,1028,65);$ui.raw.Multiline=$true;$ui.raw.ReadOnly=$true;$ui.raw.ScrollBars='Vertical';$ui.raw.BackColor=$card;$ui.raw.ForeColor=$fg;$form.Controls.Add($ui.raw)
 $ui.history=New-Object Windows.Forms.ListView;$ui.history.SetBounds(24,695,1028,100);$ui.history.View='Details';$ui.history.FullRowSelect=$true;$ui.history.GridLines=$true;$ui.history.BackColor=$card;$ui.history.ForeColor=$fg
@@ -74,17 +78,29 @@ function Status([string]$text,[bool]$bad=$false){$ui.status.Text=$text;$ui.statu
 function Fmt($n){if($null -eq $n){return '—'};return ([double]$n).ToString('0.00',[Globalization.CultureInfo]::InvariantCulture)}
 function Show-App{$form.Show();$form.WindowState='Normal';$form.Activate()}
 function Update-RegionLabels{
-    foreach($n in $names){$c=$channels[$n];if($c.Region){$r=$c.Region;$ui[$n].region.Text='X='+$r.X+' Y='+$r.Y+' 寬='+$r.Width+' 高='+$r.Height}else{$ui[$n].region.Text='尚未框選，請只框一個數字'};$ui[$n].swatch.BackColor=if($c.Rgb -ge 0){[Drawing.Color]::FromArgb(255,(($c.Rgb -shr 16) -band 255),(($c.Rgb -shr 8) -band 255),($c.Rgb -band 255))}else{$colors[$n]}}
+    if($script:sharedRegion){$r=$script:sharedRegion;$ui.regionInfo.Text='已框選共用區域：X='+$r.X+' Y='+$r.Y+'　'+$r.Width+' × '+$r.Height+' 像素；三色同時辨識'}
+    else{$ui.regionInfo.Text='尚未框選：請一次框住三個數字，不含左側指標名稱與參數。'}
+    foreach($n in $names){
+        $c=$channels[$n];$ui[$n].region.Text=$labels[$n]+'：從同一個選框自動識別；如顏色不符，可點取筆畫校正。'
+        $ui[$n].swatch.BackColor=if($c.Rgb -ge 0){[Drawing.Color]::FromArgb(255,(($c.Rgb -shr 16) -band 255),(($c.Rgb -shr 8) -band 255),($c.Rgb -band 255))}else{$colors[$n]}
+    }
 }
+function Set-SharedRegion([Drawing.Rectangle]$Region){
+    $script:sharedRegion=$Region
+    foreach($n in $names){$channels[$n].Region=$Region}
+    Update-RegionLabels
+}
+
 function Save-Settings{
     $c=[ordered]@{};foreach($n in $names){$r=$channels[$n].Region;$c[$n]=@{Region=$(if($r){@{X=$r.X;Y=$r.Y;Width=$r.Width;Height=$r.Height}}else{$null});Rgb=$channels[$n].Rgb;Threshold=[double]$ui[$n].threshold.Value}}
-    $prefs=@{Schema=2;Channels=$c;Signature=$signature;Interval=[int]$ui.interval.Value;Minimize=$ui.minimize.Checked;Voice=[string]$ui.voice.SelectedItem;SearchRanges=$script:searchRanges;PauseOnSearchHit=$script:searchPause}
+    $prefs=@{Schema=3;SharedRegion=$(if($script:sharedRegion){@{X=$sharedRegion.X;Y=$sharedRegion.Y;Width=$sharedRegion.Width;Height=$sharedRegion.Height}}else{$null});Channels=$c;Signature=$signature;Interval=[int]$ui.interval.Value;Minimize=$ui.minimize.Checked;Voice=[string]$ui.voice.SelectedItem;SearchRanges=$script:searchRanges;PauseOnSearchHit=$script:searchPause}
     $tmp=$configPath+'.tmp';[IO.File]::WriteAllText($tmp,($prefs|ConvertTo-Json -Depth 8),(New-Object Text.UTF8Encoding($true)))
     if(Test-Path $configPath){[IO.File]::Replace($tmp,$configPath,$null)}else{[IO.File]::Move($tmp,$configPath)}
 }
 function Controls{
     $idle=-not $script:active -and $null -eq $script:job -and $null -eq $script:updateJob
-    $ready=$true;foreach($n in $names){if(-not $channels[$n].Region){$ready=$false};foreach($key in @('select','pick','reset','threshold')){$ui[$n][$key].Enabled=$idle}}
+    $ready=$true;foreach($n in $names){if(-not $channels[$n].Region){$ready=$false};foreach($key in @('pick','reset','threshold')){$ui[$n][$key].Enabled=$idle}}
+    $ui.shared.Enabled=$idle
     $ui.low.Enabled=$idle -and $ready;$ui.auto.Enabled=$idle -and $ready;$ui.test.Enabled=$idle -and $ready;$ui.start.Enabled=$idle -and $ready;$ui.stop.Enabled=$active
     $ui.update.Enabled=$null -eq $job -and $null -eq $updateJob;$ui.interval.Enabled=$idle;$ui.minimize.Enabled=$idle;$ui.voice.Enabled=$idle -and $voices.Count -gt 0
 }
@@ -166,13 +182,23 @@ function Poll-Ocr{
     }catch{if($j.Generation -eq $generation){Record (Empty-Values) ('辨識失敗：'+$_.Exception.Message) $j.Stamp $j.Test}}
     finally{$j.PS.Dispose();foreach($i in $j.Items){Remove-Item -LiteralPath $i.Path -ErrorAction SilentlyContinue};Controls}
 }
+$ui.shared.Add_Click({
+    $selector=$null;$saved=$false
+    try{
+        $form.Hide();[Windows.Forms.Application]::DoEvents();Start-Sleep -Milliseconds 200
+        $selector=New-Object NineMonitor.Selector
+        $selector.Prompt='一次框住橘、粉／紫、白三個數字；放開確認，Enter 確認，ESC 取消'
+        if($selector.ShowDialog() -eq 'OK'){
+            $r=$selector.Selected;$script:signature=Get-ScreenSignature
+            Set-SharedRegion $r;Save-Settings;$saved=$true
+            Status ('已儲存共用選框（'+$r.Width+' × '+$r.Height+' 像素），正在自動測試三色辨識…')
+        }
+        $selector.Dispose();$selector=$null
+        if($saved){[Windows.Forms.Application]::DoEvents();Start-Sleep -Milliseconds 150;Begin-Sample $true}
+    }catch{Status ('框選未完成：'+$_.Exception.Message) $true}
+    finally{if($selector){$selector.Dispose()};Show-App;Controls}
+})
 foreach($n in $names){
-    $ui[$n].select.Add_Click({
-        $n=[string]$this.Tag
-        try{$form.Hide();[Windows.Forms.Application]::DoEvents();Start-Sleep -Milliseconds 200;$selector=New-Object NineMonitor.Selector;$selector.Prompt='請框住'+$labels[$n]+'的一個數字；放開確認，ESC 取消'
-            try{if($selector.ShowDialog() -eq 'OK'){$newSignature=Get-ScreenSignature;if($signature -and $signature -ne $newSignature){foreach($key in $names){$channels[$key].Region=$null}};$channels[$n].Region=$selector.Selected;$script:signature=$newSignature;Update-RegionLabels;Save-Settings;Status ('已設定'+$labels[$n]+'區域')}}finally{$selector.Dispose()}
-        }catch{Status $_.Exception.Message $true}finally{Show-App;Controls}
-    })
     $ui[$n].pick.Add_Click({$n=[string]$this.Tag;try{$form.Hide();[Windows.Forms.Application]::DoEvents();Start-Sleep -Milliseconds 200;$picker=New-Object NineMonitor.PixelPicker;try{if($picker.ShowDialog() -eq 'OK'){$c=$picker.Picked;$channels[$n].Rgb=([int]$c.R * 65536)+([int]$c.G * 256)+[int]$c.B;Update-RegionLabels;Save-Settings;Status '顏色已校正，請單次測試辨識。'}}finally{$picker.Dispose()}}catch{Status $_.Exception.Message $true}finally{Show-App;Controls}})
     $ui[$n].reset.Add_Click({$channels[[string]$this.Tag].Rgb=-1;Update-RegionLabels;try{Save-Settings}catch{};Status '已恢復預設顏色範圍。'})
 }
@@ -221,7 +247,16 @@ function Poll-Update{
 }
 try{
     if(Test-Path $configPath){$p=Get-Content -LiteralPath $configPath -Raw -Encoding UTF8|ConvertFrom-Json;$script:signature=[string]$p.Signature
-        foreach($n in $names){$c=$p.Channels.$n;$channels[$n].Rgb=[int]$c.Rgb;$ui[$n].threshold.Value=[decimal]$c.Threshold;if($c.Region -and $signature -eq (Get-ScreenSignature) -and $c.Region.Width -ge 30 -and $c.Region.Height -ge 20){$channels[$n].Region=New-Object Drawing.Rectangle([int]$c.Region.X,[int]$c.Region.Y,[int]$c.Region.Width,[int]$c.Region.Height)}}
+        foreach($n in $names){$c=$p.Channels.$n;$channels[$n].Rgb=[int]$c.Rgb;$ui[$n].threshold.Value=[decimal]$c.Threshold;if($c.Region -and $signature -eq (Get-ScreenSignature) -and $c.Region.Width -ge 6 -and $c.Region.Height -ge 4){$channels[$n].Region=New-Object Drawing.Rectangle([int]$c.Region.X,[int]$c.Region.Y,[int]$c.Region.Width,[int]$c.Region.Height)}}
+        if($script:signature -eq (Get-ScreenSignature)){
+            $common=$null
+            if($p.PSObject.Properties['SharedRegion'] -and $p.SharedRegion -and $p.SharedRegion.Width -ge 6 -and $p.SharedRegion.Height -ge 4){
+                $q=$p.SharedRegion;$common=New-Object Drawing.Rectangle([int]$q.X,[int]$q.Y,[int]$q.Width,[int]$q.Height)
+            }elseif(@($names|Where-Object{$channels[$_].Region}).Count -eq 3){
+                $common=$channels.Orange.Region;foreach($key in $names){$common=[Drawing.Rectangle]::Union($common,$channels[$key].Region)}
+            }
+            if($common){Set-SharedRegion $common}else{foreach($key in $names){$channels[$key].Region=$null}}
+        }
         if($p.PSObject.Properties['SearchRanges']){Assert-RangeSettings $p.SearchRanges;$script:searchRanges=$p.SearchRanges;$script:searchPause=[bool]$p.PauseOnSearchHit}
         $ui.interval.Value=[decimal]$p.Interval;$ui.minimize.Checked=[bool]$p.Minimize;if($p.Voice -and $ui.voice.Items.Contains([string]$p.Voice)){$ui.voice.SelectedItem=[string]$p.Voice}
     }
