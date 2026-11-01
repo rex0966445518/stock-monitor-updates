@@ -190,7 +190,9 @@ namespace NineMonitor {
             if(!SetCursorPos(point.X,point.Y))return false;
             INPUT down=new INPUT();down.type=0;down.data.mouse.flags=2;
             INPUT up=down;up.data.mouse.flags=4;
-            if(SendInput(2,new INPUT[]{down,up},InputSize)!=2)return false;
+            if(GetForegroundWindow()!=root||EscapePressed()||ModifiersPressed())return false;
+            uint clicked=SendInput(2,new INPUT[]{down,up},InputSize);
+            if(clicked!=2){if(clicked==1)SendInput(1,new INPUT[]{up},InputSize);return false;}
             expected=root;return true;
         }
         public static int InputSize {get{return Marshal.SizeOf(typeof(INPUT));}}
