@@ -11,6 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
+    if: ${{ !contains(github.event.head_commit.message, '[publish-validated]') }}
     runs-on: windows-latest
     timeout-minutes: 20
     defaults:
@@ -88,6 +89,7 @@ jobs:
             windows/NineMonitor/dist/ninemonitor-update.json
             windows/NineMonitor/dist/SHA256SUMS.txt
       - name: Publish dedicated update channel
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
