@@ -18,8 +18,10 @@ $script:dataRoot=Join-Path $env:LOCALAPPDATA 'NineMonitor\Data'
 $script:configPath=Join-Path $dataRoot 'threecolor-settings.json'
 $script:channels=@{};foreach($n in $names){$channels[$n]=@{Region=$null;Rgb=-1;Threshold=80.0}}
 $script:signature='';$script:active=$false;$script:job=$null;$script:updateJob=$null;$script:generation=0
-$script:latch=@{Active=$false};$script:previous=$null;$script:borders=@();$script:clock=[Diagnostics.Stopwatch]::StartNew();$script:nextAt=0.0
+$script:latch=@{Active=$false};$script:previous=$null;$script:borders=@();$script:clock=[Diagnostics.Stopwatch]::StartNew();$script:nextAt=0.0;$script:captureKeys=0L
 $script:hotkey=New-Object NineMonitor.EscapeKey
+$script:rightPump=New-Object NineMonitor.AutoRightPump((New-Object NineMonitor.WindowsRightInput))
+$script:autoMode=$false;$script:autoStarted=0.0;$script:lastSent=0L
 $script:worker=Get-Content -LiteralPath (Join-Path $root 'OcrWorker.ps1') -Raw -Encoding UTF8
 $script:voice=$null;$script:voiceChinese=$false;$script:voices=@()
 try{Add-Type -AssemblyName System.Speech;$script:voice=New-Object Speech.Synthesis.SpeechSynthesizer;$script:voices=@($voice.GetInstalledVoices()|Where-Object{$_.Enabled});$zh=$voices|Where-Object{$_.VoiceInfo.Culture.Name -like 'zh*'}|Select-Object -First 1;if($zh){$voice.SelectVoice($zh.VoiceInfo.Name);$script:voiceChinese=$true}}catch{}
@@ -29,8 +31,9 @@ $form.Text='三色數值監視器 v'+$version+' — 作者雷允澤';$work=[Wind
 function New-Label([string]$text,[int]$x,[int]$y,[int]$w,[int]$h=28){$c=New-Object Windows.Forms.Label;$c.Text=$text;$c.SetBounds($x,$y,$w,$h);$c.ForeColor=$fg;$form.Controls.Add($c);return $c}
 function New-Button([string]$text,[int]$x,[int]$y,[int]$w=130){$c=New-Object Windows.Forms.Button;$c.Text=$text;$c.SetBounds($x,$y,$w,35);$c.FlatStyle='Flat';$c.BackColor=$card;$c.ForeColor=$fg;$form.Controls.Add($c);return $c}
 $ui.title=New-Label '三色數值監視器' 24 18 600 44;$ui.title.Font=New-Object Drawing.Font('Microsoft JhengHei',25,[Drawing.FontStyle]::Bold)
+$ui.auto=New-Button '自動右移 5 次／秒' 670 25 215
 $ui.update=New-Button '一鍵更新' 900 25 150
-$ui.sub=New-Label '三個數字分別框選、取色；同次取樣三項都超過門檻，才發出語音。' 28 73 1020 30
+$ui.sub=New-Label '自動右移模式：按下後 3 秒內點選目標圖表；持續辨識三色，ESC 或切換視窗即停止。' 28 73 1020 30
 $ui.headers=New-Label '監視數值　　　　　　　　　　　警報門檻（嚴格大於）　　　　框選／顏色校正' 28 115 1010 30
 $index=0
 foreach($n in $names){
@@ -54,7 +57,7 @@ $ui.voice=New-Object Windows.Forms.ComboBox;$ui.voice.DropDownStyle='DropDownLis
 foreach($v in $voices){[void]$ui.voice.Items.Add($v.VoiceInfo.Name)}
 if($voice -and $ui.voice.Items.Count -gt 0){$ui.voice.SelectedItem=$voice.Voice.Name}else{$ui.voice.Enabled=$false}
 $ui.status=New-Label '請分別框選三個數字，再進行單次辨識測試。' 24 530 1028 40;$ui.status.BackColor=$card;$ui.status.ForeColor=$accent
-$ui.last=New-Label '缺一項就不報警；持續達標不重報，離開條件後再達標才重報。' 28 580 1020 27
+$ui.last=New-Label '自動右移時每輪 OCR 完成即取下一筆；不保證每次右移都有紀錄。三項共同超過門檻才報警。' 28 580 1020 27
 $ui.raw=New-Object Windows.Forms.TextBox;$ui.raw.SetBounds(24,618,1028,65);$ui.raw.Multiline=$true;$ui.raw.ReadOnly=$true;$ui.raw.ScrollBars='Vertical';$ui.raw.BackColor=$card;$ui.raw.ForeColor=$fg;$form.Controls.Add($ui.raw)
 $ui.history=New-Object Windows.Forms.ListView;$ui.history.SetBounds(24,695,1028,100);$ui.history.View='Details';$ui.history.FullRowSelect=$true;$ui.history.GridLines=$true;$ui.history.BackColor=$card;$ui.history.ForeColor=$fg
 foreach($col in @(@('時間',175),@('橘色',85),@('粉紅色',85),@('白色',85),@('共同條件',100),@('狀態',480))){[void]$ui.history.Columns.Add([string]$col[0],[int]$col[1])};$form.Controls.Add($ui.history)
@@ -77,10 +80,11 @@ function Save-Settings{
 function Controls{
     $idle=-not $script:active -and $null -eq $script:job -and $null -eq $script:updateJob
     $ready=$true;foreach($n in $names){if(-not $channels[$n].Region){$ready=$false};foreach($key in @('select','pick','reset','threshold')){$ui[$n][$key].Enabled=$idle}}
-    $ui.test.Enabled=$idle -and $ready;$ui.start.Enabled=$idle -and $ready;$ui.stop.Enabled=$active
+    $ui.auto.Enabled=$idle -and $ready;$ui.test.Enabled=$idle -and $ready;$ui.start.Enabled=$idle -and $ready;$ui.stop.Enabled=$active
     $ui.update.Enabled=$null -eq $job -and $null -eq $updateJob;$ui.interval.Enabled=$idle;$ui.minimize.Enabled=$idle;$ui.voice.Enabled=$idle -and $voices.Count -gt 0
 }
 function Stop-Monitor{
+    $rightPump.Stop();$script:lastSent=$rightPump.SentCount;$script:autoMode=$false
     $script:active=$false;$script:generation++;$hotkey.Unregister()
     foreach($b in $script:borders){$b.Close();$b.Dispose()};$script:borders=@()
     if($voice){$voice.SpeakAsyncCancelAll()};[void][NineMonitor.Desktop]::SetThreadExecutionState(2147483648)
@@ -96,13 +100,13 @@ function Speak-Alert($values,[bool]$test=$false){
 function Add-Row($r){$item=New-Object Windows.Forms.ListViewItem([string]$r.Time);foreach($s in @((Fmt $r.Orange),(Fmt $r.Pink),(Fmt $r.White),[string]$r.AllAbove,[string]$r.Status)){[void]$item.SubItems.Add([string]$s)};[void]$ui.history.Items.Insert(0,$item);while($ui.history.Items.Count -gt 300){$ui.history.Items.RemoveAt($ui.history.Items.Count-1)}}
 function Record($values,[string]$note,[datetimeoffset]$stamp,[bool]$test){
     foreach($n in $names){$ui[$n].value.Text=$labels[$n]+'　'+(Fmt $values.$n)}
-    $ui.last.Text=$stamp.ToString('yyyy-MM-dd HH:mm:ss zzz')+$(if($test){'　單次測試，不寫入正式紀錄、不觸發門檻警報'}else{'　同一次畫面取樣'})
+    $ui.last.Text=$stamp.ToString('yyyy-MM-dd HH:mm:ss.fff zzz')+$(if($test){'　單次測試，不寫入正式紀錄、不觸發門檻警報'}else{'　同一次畫面取樣'})
     if($test){Status ('測試結果：'+$note) ($null -eq $values.Orange -or $null -eq $values.Pink -or $null -eq $values.White);return}
     $thresholds=[pscustomobject]@{Orange=[double]$ui.Orange.threshold.Value;Pink=[double]$ui.Pink.threshold.Value;White=[double]$ui.White.threshold.Value}
     $complete=$true;$all=$true;foreach($n in $names){if($null -eq $values.$n){$complete=$false;$all=$false}elseif($values.$n -le $thresholds.$n){$all=$false}}
     $fire=Test-AllThree $latch $values $thresholds
     if($fire){$note+='；語音警報'}
-    $row=[pscustomobject]@{Time=$stamp.ToString('yyyy-MM-dd HH:mm:ss zzz');Orange=$values.Orange;Pink=$values.Pink;White=$values.White;OrangeThreshold=$thresholds.Orange;PinkThreshold=$thresholds.Pink;WhiteThreshold=$thresholds.White;AllAbove=$(if($complete){[string]$all}else{'未知'});Status=$note}
+    $row=[pscustomobject]@{Time=$stamp.ToString('yyyy-MM-dd HH:mm:ss.fff zzz');Orange=$values.Orange;Pink=$values.Pink;White=$values.White;OrangeThreshold=$thresholds.Orange;PinkThreshold=$thresholds.Pink;WhiteThreshold=$thresholds.White;AllAbove=$(if($complete){[string]$all}else{'未知'});Status=$note;Mode=$(if($script:autoMode){'AutoRight5Hz'}else{'Timed'});RightPresses=$script:captureKeys;SampleId=[guid]::NewGuid().ToString('N')}
     try{[IO.File]::AppendAllText((Join-Path $dataRoot ($stamp.ToString('yyyy-MM-dd')+'-threecolor.jsonl')),($row|ConvertTo-Json -Compress)+[Environment]::NewLine,(New-Object Text.UTF8Encoding($true)));Add-Row $row;Status ('已記錄：'+$note) (-not $complete)}catch{Status ('紀錄寫入失敗：'+$_.Exception.Message) $true}
     if($fire){Speak-Alert $values}
 }
@@ -111,13 +115,15 @@ function Begin-Sample([bool]$test=$false){
     if($script:job){return}
     if((Get-ScreenSignature) -ne $script:signature){Stop-Monitor;Status '螢幕配置或解析度已改變，請重新框選三項。' $true;return}
     $stamp=[datetimeoffset]::Now;$items=@();$shot=$null
+    $sampleKeys=if($script:autoMode){$rightPump.SentCount}else{0L};$script:captureKeys=$sampleKeys
     try{
         $union=$channels.Orange.Region
         foreach($n in $names){$r=$channels[$n].Region;if(-not $r -or -not [Windows.Forms.SystemInformation]::VirtualScreen.Contains($r)){throw '選框無效或超出螢幕，請重新框選。'};$union=[Drawing.Rectangle]::Union($union,$r)}
         if(-not $test -and $form.Visible -and $form.WindowState -ne 'Minimized'){
-            foreach($n in $names){if($form.Bounds.IntersectsWith($channels[$n].Region)){Record (Empty-Values) '監視器遮住數字，請移開或最小化' $stamp $false;$script:nextAt=$clock.Elapsed.TotalSeconds+[int]$ui.interval.Value;return}}
+            foreach($n in $names){if($form.Bounds.IntersectsWith($channels[$n].Region)){Record (Empty-Values) '監視器遮住數字，請移開或最小化' $stamp $false;$script:nextAt=$(if($script:autoMode){$clock.Elapsed.TotalSeconds}else{$clock.Elapsed.TotalSeconds+[int]$ui.interval.Value});return}}
         }
         # One CopyFromScreen snapshot covers all three boxes at the same instant.
+        if($script:autoMode -and (-not $rightPump.Running -or -not $rightPump.Armed)){return}
         $shot=[NineMonitor.Desktop]::Capture($union)
         foreach($n in $names){
             $r=$channels[$n].Region;$local=New-Object Drawing.Rectangle(($r.X-$union.X),($r.Y-$union.Y),$r.Width,$r.Height)
@@ -128,10 +134,10 @@ function Begin-Sample([bool]$test=$false){
         }
         $request=@{Core=(Join-Path $root 'Core.psm1');Items=$items}|ConvertTo-Json -Depth 5 -Compress
         $ps=[PowerShell]::Create();[void]$ps.AddScript($worker).AddArgument($request)
-        $handle=$ps.BeginInvoke();$script:job=@{PS=$ps;Handle=$handle;Items=$items;Stamp=$stamp;Test=$test;Generation=$generation}
+        $handle=$ps.BeginInvoke();$script:job=@{PS=$ps;Handle=$handle;Items=$items;Stamp=$stamp;Test=$test;Generation=$generation;Keys=$sampleKeys;Auto=$script:autoMode;KeyStart=$sampleKeys}
         Status '正在以同一次畫面辨識三色數值…';Controls
     }catch{foreach($i in $items){Remove-Item -LiteralPath $i.Path -ErrorAction SilentlyContinue};Record (Empty-Values) ('擷取失敗：'+$_.Exception.Message) $stamp $test}
-    finally{if($shot){$shot.Dispose()};$script:nextAt=$clock.Elapsed.TotalSeconds+[int]$ui.interval.Value}
+    finally{if($shot){$shot.Dispose()};$script:nextAt=$(if($script:autoMode){$clock.Elapsed.TotalSeconds}else{$clock.Elapsed.TotalSeconds+[int]$ui.interval.Value})}
 }
 function Poll-Ocr{
     if(-not $job -or -not $job.Handle.IsCompleted){return}
@@ -141,6 +147,8 @@ function Poll-Ocr{
         if($j.Generation -ne $generation){return};if(-not $r){throw ('沒有 OCR 結果：'+($j.PS.Streams.Error|Out-String))}
         $ui.raw.Text='橘色 OCR：'+$r.Texts.Orange+'　｜　粉紅 OCR：'+$r.Texts.Pink+'　｜　白色 OCR：'+$r.Texts.White
         $note=if($r.Error){$r.Error}elseif($null -ne $r.Values.Orange -and $null -ne $r.Values.Pink -and $null -ne $r.Values.White){'三項辨識完成'}else{'部分缺值或有多個數字，請縮小選框／校正顏色'}
+        $script:captureKeys=$j.Keys
+        if($j.Auto){$note+='；取樣時已送出 '+$j.Keys+' 次右鍵'}
         Record $r.Values $note $j.Stamp $j.Test
     }catch{if($j.Generation -eq $generation){Record (Empty-Values) ('辨識失敗：'+$_.Exception.Message) $j.Stamp $j.Test}}
     finally{$j.PS.Dispose();foreach($i in $j.Items){Remove-Item -LiteralPath $i.Path -ErrorAction SilentlyContinue};Controls}
@@ -156,10 +164,24 @@ foreach($n in $names){
     $ui[$n].reset.Add_Click({$channels[[string]$this.Tag].Rgb=-1;Update-RegionLabels;try{Save-Settings}catch{};Status '已恢復預設顏色範圍。'})
 }
 $ui.test.Add_Click({try{$form.Hide();[Windows.Forms.Application]::DoEvents();Start-Sleep -Milliseconds 200;Begin-Sample $true}finally{Show-App}})
-$ui.start.Add_Click({try{Save-Settings;$script:active=$true;$script:generation++;$script:latch=@{Active=$false};$script:nextAt=$clock.Elapsed.TotalSeconds+1
+$ui.start.Add_Click({try{$script:autoMode=$false;Save-Settings;$script:active=$true;$script:generation++;$script:latch=@{Active=$false};$script:nextAt=$clock.Elapsed.TotalSeconds+1
     foreach($n in $names){$b=New-Object NineMonitor.Border($channels[$n].Region);$b.Show();$script:borders+=,$b};[void][NineMonitor.Desktop]::SetThreadExecutionState(2147483651)
     $ok=$hotkey.Register();Controls;if($ui.minimize.Checked){$form.WindowState='Minimized'};Status $(if($ok){'監視中，三項同時嚴格超過門檻才報警。ESC 可停止。'}else{'監視中，ESC 被占用，請使用停止按鈕。'}) (-not $ok);$tray.Text='三色監視器：監視中'
 }catch{Stop-Monitor;Status $_.Exception.Message $true}})
+$ui.auto.Add_Click({
+    try{
+        Save-Settings
+        if((Get-ScreenSignature) -ne $signature){throw '螢幕配置已變更，請重新框選。'}
+        if(-not $hotkey.Register()){throw 'ESC 停止鍵被其他程式占用，請關閉衝突後重試。'}
+        $script:autoMode=$true;$script:active=$true;$script:generation++;$script:latch=@{Active=$false};$script:autoStarted=$clock.Elapsed.TotalSeconds
+        $script:nextAt=$clock.Elapsed.TotalSeconds+3.0
+        foreach($n in $names){$b=New-Object NineMonitor.Border($channels[$n].Region);$b.Show();$script:borders+=,$b}
+        [void][NineMonitor.Desktop]::SetThreadExecutionState(2147483651)
+        Controls;$form.WindowState='Minimized'
+        $tray.BalloonTipTitle='3 秒內點選目標圖表';$tray.BalloonTipText='之後每秒右移 5 次，持續辨識並記錄三色。ESC／切換視窗停止。';$tray.ShowBalloonTip(3000)
+        $rightPump.Start(3000);Status '3 秒內點選目標圖表。目標將被固定，切換視窗即停止。'
+    }catch{Stop-Monitor;Status $_.Exception.Message $true}
+})
 $ui.stop.Add_Click({Stop-Monitor});$hotkey.Add_Pressed({Stop-Monitor});$miStop.Add_Click({Stop-Monitor});$miShow.Add_Click({Show-App});$tray.Add_DoubleClick({Show-App});$miExit.Add_Click({$form.Close()})
 $ui.say.Add_Click({Speak-Alert (Empty-Values) $true})
 $ui.voice.Add_SelectedIndexChanged({try{$voice.SelectVoice([string]$ui.voice.SelectedItem);$script:voiceChinese=$voice.Voice.Culture.Name -like 'zh*'}catch{Status '所選語音無法使用。' $true}})
@@ -182,11 +204,23 @@ try{
 }catch{Status '先前設定無法完整還原，請重新設定三項。' $true}
 Update-RegionLabels;Controls
 $timer=New-Object Windows.Forms.Timer;$timer.Interval=200
-$timer.Add_Tick({try{Poll-Ocr;Poll-Update;if($active -and -not $job -and $clock.Elapsed.TotalSeconds -ge $nextAt){Begin-Sample $false}}catch{Stop-Monitor;Status ('執行錯誤：'+$_.Exception.Message) $true}})
+$timer.Add_Tick({try{
+    if($script:autoMode -and $script:active -and -not $rightPump.Running){
+        $why=$rightPump.StopReason;$count=$rightPump.SentCount;Stop-Monitor
+        $explanation=switch($why){'focus'{'目標視窗已切換、關閉或最小化'}'escape'{'已按 ESC'}'modifier'{'偵測到 Ctrl／Shift／Alt／Win 按鍵'}'input'{'Windows 無法送出按鍵，請檢查目標程式權限'}'target'{'未選到可操作的目標圖表'} default{'自動右移已停止'}}
+        Status ($explanation+'；本次共送出 '+$count+' 次右鍵。') $true
+    }
+    Poll-Ocr;Poll-Update
+    if($script:autoMode -and $script:active){
+        if($rightPump.Armed){$tray.Text='自動右移：已送出 '+$rightPump.SentCount+' 次'}
+        else{Status ('請點目標圖表，倒數 '+[Math]::Max(0,[Math]::Ceiling(3-($clock.Elapsed.TotalSeconds-$autoStarted)))+' 秒')}
+    }
+    if($active -and -not $job -and $clock.Elapsed.TotalSeconds -ge $nextAt -and (-not $script:autoMode -or $rightPump.Armed)){Begin-Sample $false}
+}catch{Stop-Monitor;Status ('執行錯誤：'+$_.Exception.Message) $true}})
 $form.Add_FormClosing({Stop-Monitor;try{Save-Settings}catch{};$timer.Stop()})
 if($SmokeTest){$smoke=New-Object Windows.Forms.Timer;$smoke.Interval=1600;$smoke.Add_Tick({$smoke.Stop();$form.Close()});$smoke.Start()}
 $timer.Start()
 try{[Windows.Forms.Application]::Run($form)}finally{
-    $timer.Dispose();$hotkey.Dispose();if($job){try{$job.PS.Stop();$job.PS.Dispose()}catch{};foreach($i in $job.Items){Remove-Item -LiteralPath $i.Path -ErrorAction SilentlyContinue}}
+    $timer.Dispose();$rightPump.Dispose();$hotkey.Dispose();if($job){try{$job.PS.Stop();$job.PS.Dispose()}catch{};foreach($i in $job.Items){Remove-Item -LiteralPath $i.Path -ErrorAction SilentlyContinue}}
     if($updateJob){try{$updateJob.PS.Stop();$updateJob.PS.Dispose()}catch{}};if($voice){$voice.Dispose()};$tray.Visible=$false;$tray.Dispose();$menu.Dispose();$form.Dispose();$mutex.ReleaseMutex();$mutex.Dispose()
 }

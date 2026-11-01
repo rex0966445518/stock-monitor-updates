@@ -143,4 +143,98 @@ namespace NineMonitor {
             }
         }
     }
+
+    public interface IRightInput {
+        bool CanArm(out string title);
+        bool StillTarget();
+        bool EscapePressed();
+        bool ModifiersPressed();
+        bool SendRight();
+    }
+    public sealed class RightCadence {
+        long next=200;
+        public bool Due(long elapsedMilliseconds) {
+            if(elapsedMilliseconds<next)return false;
+            next=(elapsedMilliseconds/200+1)*200;
+            return true;
+        }
+    }
+    public sealed class WindowsRightInput : IRightInput {
+        [StructLayout(LayoutKind.Sequential)] struct MOUSEINPUT {public int dx,dy;public uint data,flags,time;public UIntPtr extra;}
+        [StructLayout(LayoutKind.Sequential)] struct KEYBDINPUT {public ushort vk,scan;public uint flags,time;public UIntPtr extra;}
+        [StructLayout(LayoutKind.Explicit)] struct INPUTUNION {[FieldOffset(0)]public MOUSEINPUT mouse;[FieldOffset(0)]public KEYBDINPUT key;}
+        [StructLayout(LayoutKind.Sequential)] struct INPUT {public uint type;public INPUTUNION data;}
+        [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window,out uint processId);
+        [DllImport("user32.dll")] static extern bool IsWindow(IntPtr window);
+        [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr window);
+        [DllImport("user32.dll")] static extern bool IsIconic(IntPtr window);
+        [DllImport("user32.dll")] static extern short GetAsyncKeyState(int key);
+        [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr window,System.Text.StringBuilder text,int count);
+        [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr window,System.Text.StringBuilder text,int count);
+        [DllImport("user32.dll",SetLastError=true)] static extern uint SendInput(uint count,INPUT[] inputs,int size);
+        IntPtr target;uint targetPid;
+        public static int InputSize {get{return Marshal.SizeOf(typeof(INPUT));}}
+        public bool CanArm(out string title) {
+            title="";target=GetForegroundWindow();
+            if(target==IntPtr.Zero||!IsWindowVisible(target)||IsIconic(target))return false;
+            GetWindowThreadProcessId(target,out targetPid);
+            if(targetPid==(uint)System.Diagnostics.Process.GetCurrentProcess().Id)return false;
+            var name=new System.Text.StringBuilder(256);GetClassName(target,name,256);
+            if(name.ToString()=="Progman"||name.ToString()=="WorkerW"||name.ToString()=="Shell_TrayWnd")return false;
+            var text=new System.Text.StringBuilder(256);GetWindowText(target,text,256);title=text.ToString();
+            return true;
+        }
+        public bool StillTarget() {
+            uint pid;
+            return target!=IntPtr.Zero&&IsWindow(target)&&IsWindowVisible(target)&&!IsIconic(target)&&GetForegroundWindow()==target&&GetWindowThreadProcessId(target,out pid)!=0&&pid==targetPid;
+        }
+        public bool EscapePressed(){return (GetAsyncKeyState(27)&0x8000)!=0;}
+        public bool ModifiersPressed(){foreach(int k in new int[]{16,17,18,91,92})if((GetAsyncKeyState(k)&0x8000)!=0)return true;return false;}
+        public bool SendRight() {
+            if(!StillTarget()||EscapePressed()||ModifiersPressed())return false;
+            INPUT down=new INPUT();down.type=1;down.data.key.vk=0x27;down.data.key.scan=0x4d;down.data.key.flags=1;
+            INPUT up=down;up.data.key.flags=3;
+            uint sent=SendInput(2,new INPUT[]{down,up},InputSize);
+            if(sent==1)SendInput(1,new INPUT[]{up},InputSize);
+            return sent==2;
+        }
+    }
+    public sealed class AutoRightPump : IDisposable {
+        readonly IRightInput input;readonly object gate=new object();
+        System.Threading.ManualResetEvent cancel=new System.Threading.ManualResetEvent(false);
+        System.Threading.Thread thread;
+        volatile bool running,armed;string reason="",title="";long sent;
+        public bool Running{get{return running;}} public bool Armed{get{return armed;}}
+        public string StopReason{get{lock(gate)return reason;}}public string TargetTitle{get{lock(gate)return title;}}
+        public long SentCount{get{return System.Threading.Interlocked.Read(ref sent);}}
+        public AutoRightPump(IRightInput adapter){input=adapter;}
+        public void Start(int delayMilliseconds){
+            Stop();lock(gate){reason="";title="";sent=0;armed=false;cancel.Reset();running=true;}
+            thread=new System.Threading.Thread(delegate(){Run(delayMilliseconds);});thread.IsBackground=true;thread.Name="NineMonitor.RightArrow";thread.Start();
+        }
+        void End(string why){lock(gate){reason=why;running=false;armed=false;}cancel.Set();}
+        void Run(int delay){
+            try{
+                if(cancel.WaitOne(delay))return;
+                string selected;if(!input.CanArm(out selected)){End("target");return;}
+                lock(gate){title=selected;armed=true;}
+                var clock=System.Diagnostics.Stopwatch.StartNew();var schedule=new RightCadence();
+                while(!cancel.WaitOne(5)){
+                    lock(gate){
+                        if(cancel.WaitOne(0))break;
+                        if(input.EscapePressed()){End("escape");return;}
+                        if(!input.StillTarget()){End("focus");return;}
+                        if(input.ModifiersPressed()){End("modifier");return;}
+                        if(schedule.Due(clock.ElapsedMilliseconds)){
+                            if(!input.SendRight()){End("input");return;}
+                            System.Threading.Interlocked.Increment(ref sent);
+                        }
+                    }
+                }
+            }catch{End("error");}finally{running=false;armed=false;}
+        }
+        public void Stop(){lock(gate){cancel.Set();running=false;armed=false;}if(thread!=null&&thread!=System.Threading.Thread.CurrentThread){thread.Join();thread=null;}}
+        public void Dispose(){Stop();cancel.Dispose();}
+    }
 }
