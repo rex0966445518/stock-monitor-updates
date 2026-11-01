@@ -207,7 +207,14 @@ $timer=New-Object Windows.Forms.Timer;$timer.Interval=200
 $timer.Add_Tick({try{
     if($script:autoMode -and $script:active -and -not $rightPump.Running){
         $why=$rightPump.StopReason;$count=$rightPump.SentCount;Stop-Monitor
-        $explanation=switch($why){'focus'{'目標視窗已切換、關閉或最小化'}'escape'{'已按 ESC'}'modifier'{'偵測到 Ctrl／Shift／Alt／Win 按鍵'}'input'{'Windows 無法送出按鍵，請檢查目標程式權限'}'target'{'未選到可操作的目標圖表'} default{'自動右移已停止'}}
+        $explanation=switch($why){
+            'focus' {'目標視窗已切換、關閉或最小化'}
+            'escape' {'已按 ESC'}
+            'modifier' {'偵測到 Ctrl／Shift／Alt／Win 按鍵'}
+            'input' {'Windows 無法送出按鍵，請檢查目標程式權限'}
+            'target' {'未選到可操作的目標圖表'}
+            default {'自動右移已停止'}
+        }
         Status ($explanation+'；本次共送出 '+$count+' 次右鍵。') $true
     }
     Poll-Ocr;Poll-Update
