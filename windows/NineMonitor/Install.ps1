@@ -16,8 +16,8 @@ try{
     $renamed=$false
     if(Test-Path $target){for($i=0;$i -lt 15;$i++){try{[IO.Directory]::Move($target,$backup);$renamed=$true;break}catch{Start-Sleep -Milliseconds 300}};if(-not $renamed){throw '舊版程式仍在使用，請關閉監視器後重新安裝。'}}
     try{[IO.Directory]::Move($stage,$target)}catch{if($renamed -and -not (Test-Path $target)){[IO.Directory]::Move($backup,$target)};throw}
-    $shell=New-Object -ComObject WScript.Shell
-    foreach($folder in @([Environment]::GetFolderPath('Desktop'),(Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs'))){[void][IO.Directory]::CreateDirectory($folder);$link=$shell.CreateShortcut((Join-Path $folder '三色數值監視器.lnk'));$link.TargetPath=Join-Path $target 'NineMonitor.exe';$link.WorkingDirectory=$target;$link.Description='橘色、粉紅色、白色數值同時超過門檻才語音警報';$link.Save()}
+    Add-Type -TypeDefinition (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'SetupShell.cs') -Raw -Encoding UTF8)
+    foreach($folder in @([Environment]::GetFolderPath('Desktop'),(Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs'))){[void][IO.Directory]::CreateDirectory($folder);[NineMonitor.SetupShell]::Create((Join-Path $folder '三色數值監視器.lnk'),(Join-Path $target 'NineMonitor.exe'),$target)}
     $key='HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\NineMonitor-ThreeColor';[void](New-Item -Path $key -Force)
     $version=(Get-Content -LiteralPath (Join-Path $target 'version.json') -Raw -Encoding UTF8|ConvertFrom-Json).version
     $powershell=Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
