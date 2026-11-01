@@ -96,12 +96,12 @@ jobs:
           $exists = $false
           try { $null = Invoke-RestMethod "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/tags/$tag"; $exists = $true } catch { if ($_.Exception.Response.StatusCode.value__ -ne 404) { throw } }
           if ($exists) { throw "Version already published. Increment version.json before releasing again." }
-          gh release create $tag --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "三色數值監視器 v$v" --notes '三色同步門檻、語音提醒、EXE 安裝與專屬一鍵更新。核心、UI 與安裝器測試已執行；請在實際目標畫面先做辨識測試。' --prerelease --latest=false dist/NineMonitor-Setup.exe dist/SHA256SUMS.txt
+          gh release create $tag --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "三色數值監視器 v$v" --notes '三色同步門檻、語音提醒、EXE 安裝與專屬一鍵更新。核心、UI 與安裝器測試已執行；請在實際目標畫面先做辨識測試。' --prerelease '--latest=false' dist/NineMonitor-Setup.exe dist/SHA256SUMS.txt
           if ($LASTEXITCODE -ne 0) { throw 'Version release failed' }
           $channelExists = $false
           try { $null = Invoke-RestMethod "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/tags/ninemonitor-latest"; $channelExists = $true } catch { if ($_.Exception.Response.StatusCode.value__ -ne 404) { throw } }
           if (!$channelExists) {
-            gh release create ninemonitor-latest --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title '三色數值監視器：固定下載與更新通道' --notes '專屬更新通道；不取代其他軟體的 latest。' --prerelease --latest=false
+            gh release create ninemonitor-latest --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title '三色數值監視器：固定下載與更新通道' --notes '專屬更新通道；不取代其他軟體的 latest。' --prerelease '--latest=false'
             if ($LASTEXITCODE -ne 0) { throw 'Update channel creation failed' }
           }
           gh release upload ninemonitor-latest --repo $env:GITHUB_REPOSITORY --clobber dist/NineMonitor-Setup.exe dist/SHA256SUMS.txt
