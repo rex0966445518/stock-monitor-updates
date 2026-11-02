@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.stocklens",
-  "versionCode": 3,
-  "versionName": "1.0.2",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/stocklens/StockLens-v1.0.2.apk",
-  "bytes": 49685,
-  "sha256": "5582047e7a21ae716be44b84ea01bf0ce762a0fd320b91aac93d347c2f2455e5",
-  "notes": "新增下一交易日K線情境圖、日K與日內九段路徑、三情境切換與基準來源檢查。"
+  "versionCode": 4,
+  "versionName": "1.1.0",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/stocklens/StockLens-v1.1.0.apk",
+  "bytes": 74261,
+  "sha256": "f37b1db7ce47f9513d5fd9fb050a8ba3e4d4831adc111506b11aca0fb145d223",
+  "notes": "新增預測未來分頁、海外同類股逐日驗證、每輪加5次校準與次日沿用、首判紀錄與學習保存。"
 }
