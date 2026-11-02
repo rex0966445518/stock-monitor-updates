@@ -2,8 +2,8 @@
   "packageName": "tw.rex.stockfloat",
   "appName": "股票小助理",
   "author": "雷允澤設計",
-  "versionCode": 9,
-  "versionName": "1.0.8",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/stockfloat/releases/StockFloat-v1.0.8.apk",
-  "sha256": "8fa88fbdc6ffda74e37a949eb3874af07b5b352d2db59242566f6c01cb261944"
+  "versionCode": 10,
+  "versionName": "1.0.9",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/stockfloat/releases/StockFloat-v1.0.9.apk",
+  "sha256": "7047d3656a5e513b7f242e8d4feffec725a69ddc3dee35a0965bc699586185da"
 }
