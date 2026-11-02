@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.stocklens",
-  "versionCode": 4,
-  "versionName": "1.1.0",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/stocklens/StockLens-v1.1.0.apk",
-  "bytes": 74261,
-  "sha256": "f37b1db7ce47f9513d5fd9fb050a8ba3e4d4831adc111506b11aca0fb145d223",
-  "notes": "新增預測未來分頁、海外同類股逐日驗證、每輪加5次校準與次日沿用、首判紀錄與學習保存。"
+  "versionCode": 6,
+  "versionName": "1.1.2",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/stocklens/StockLens-v1.1.2.apk",
+  "bytes": 78357,
+  "sha256": "c06c7c9bd18b78d692180cc2714d8660cf24ea38cae39bcfed62449ab1997e34",
+  "notes": "修正開始確認、獨立進度心跳與同步、下載逾時及暫停中止、行情備援來源。"
 }
