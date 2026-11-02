@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 37,
-  "versionName": "1.36.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/b676cda687ad4edc6fc2a64f993d5f0526913052/synclab/packages/SyncLab-v1.36.0.apk.b64",
-  "sha256": "470eb2553f68e2f8bc580361e6d049353fd4ba2f33d82196597334fd29706b0f",
-  "bytes": 336566,
+  "versionCode": 38,
+  "versionName": "1.37.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/d830af2665f9257afdb05e8f4ab2737cad394357/synclab/packages/SyncLab-v1.37.0.apk.b64",
+  "sha256": "372f8b8ef83301fb78be128e879fb563cc6e3f071cba2baec7061a4d8aa6f628",
+  "bytes": 344758,
   "encoding": "base64",
-  "notes": "修正台股全天候探查器「查看前5名與配對明細」被背景刷新自動收合：結果未變時保留原卡片與焦點；結果變更、排名調整或篩選切換時，以搜尋線／任務ID／台股身分恢復展開狀態，手動收合仍維持，新任務不沿用舊狀態。保留SOX指數、TX日夜盤及三線獨立搜尋功能。"
+  "notes": "新增「查找已知股」：輸入3661等代號，從三條搜尋線、收藏、歷史最高與保存紀錄，快速列出最高同向前10名；支援研究／報告與全期間排序、條件股角色查找、樣本及驗證明細、同條件去重與來源標示。僅查本機、不重掃、不占用搜尋線。新搜尋保留每檔10名，換任務後仍保存統計摘要；舊版不足10名如實顯示。保留三線獨立搜尋及明細展開修正。"
 }
