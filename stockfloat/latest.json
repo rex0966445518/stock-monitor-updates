@@ -1,7 +1,7 @@
 {
   "packageName": "tw.rex.stockfloat",
-  "versionCode": 5,
-  "versionName": "1.0.4",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/stockfloat/releases/StockFloat-v1.0.4.apk",
-  "sha256": "070c0c0dda69ba039f9cba3c5606a0807ad649899069840951848e3f76e5484c"
+  "versionCode": 6,
+  "versionName": "1.0.5",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/stockfloat/releases/StockFloat-v1.0.5.apk",
+  "sha256": "db923e440a5d255ea9c34551bed6df5b39111a4ffb20621f5579d22b6ec03bd7"
 }
