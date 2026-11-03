@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.stocklens",
-  "versionCode": 8,
-  "versionName": "1.1.4",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/stocklens/StockLens-v1.1.4.apk",
+  "versionCode": 9,
+  "versionName": "1.1.5",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/stocklens/StockLens-v1.1.5.apk",
   "bytes": 82453,
-  "sha256": "1b3c02768fb8dfe6ebd660752c4c810cbbfb1d87140299932f849dc70a1305a2",
-  "notes": "判斷次數上限提高至50,000次，開始及繼續進度均支援；大量明細採分段顯示。"
+  "sha256": "4463592f427a8ad0341135a3e1a26496503e0b3ec3dd3eb12d15c6fbc8880ba4",
+  "notes": "判斷上限由用戶自行輸入，取消固定5萬次限制；開始與繼續均採輸入值，累積計數支援長整數。"
 }
