@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.stocklens",
-  "versionCode": 7,
-  "versionName": "1.1.3",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/stocklens/StockLens-v1.1.3.apk",
+  "versionCode": 8,
+  "versionName": "1.1.4",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/stocklens/StockLens-v1.1.4.apk",
   "bytes": 82453,
-  "sha256": "1cd99c86fe580ef81015320abebdb7b7543f19835820f85353caf0c566a3b278",
-  "notes": "日韓可留空，依指定參考股執行；新增費半、日經225與韓國綜合指數的逐日比較及自動採用。"
+  "sha256": "1b3c02768fb8dfe6ebd660752c4c810cbbfb1d87140299932f849dc70a1305a2",
+  "notes": "判斷次數上限提高至50,000次，開始及繼續進度均支援；大量明細採分段顯示。"
 }
