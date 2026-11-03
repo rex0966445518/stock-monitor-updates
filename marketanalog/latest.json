@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.marketanalog",
-  "versionCode": 3,
-  "versionName": "0.1.2",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.2.apk",
-  "sha256": "4baf94ad3fa5c634100c6f8f669a747a6e2737dd1f9d58ee2ce8eae9208b52fb",
-  "bytes": 131842,
-  "notes": "首頁加入一鍵更新、下載進度、取消及重試；檔案與簽章驗證後開啟Android安裝。四市場秒級行情仍需自有授權服務。"
+  "versionCode": 4,
+  "versionName": "0.1.3",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.3.apk",
+  "sha256": "7967414a1d91549896585c26d77aed1e8e954c09e8b73931eaf47882e7814e42",
+  "bytes": 135938,
+  "notes": "條件查詢開頁即自動帶入費半與期交所台指夜盤；盤中5秒刷新，收盤後保留最新來源值；移除範例數字，日韓缺資料明列排除。"
 }
