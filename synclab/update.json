@@ -1,10 +1,10 @@
 {
   "packageName": "com.rex.synclab",
-  "versionCode": 38,
-  "versionName": "1.37.0",
-  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/d830af2665f9257afdb05e8f4ab2737cad394357/synclab/packages/SyncLab-v1.37.0.apk.b64",
-  "sha256": "372f8b8ef83301fb78be128e879fb563cc6e3f071cba2baec7061a4d8aa6f628",
-  "bytes": 344758,
+  "versionCode": 39,
+  "versionName": "1.38.0",
+  "url": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/f21fa47779b972be4d029abaded1410c39d5a0b8/synclab/packages/SyncLab-v1.38.0.apk.b64",
+  "sha256": "f2df3940faf8437c0d0dfdd26b17ebc604fd80c3fbe76f7fd10b18a0ff266b2b",
+  "bytes": 348854,
   "encoding": "base64",
-  "notes": "新增「查找已知股」：輸入3661等代號，從三條搜尋線、收藏、歷史最高與保存紀錄，快速列出最高同向前10名；支援研究／報告與全期間排序、條件股角色查找、樣本及驗證明細、同條件去重與來源標示。僅查本機、不重掃、不占用搜尋線。新搜尋保留每檔10名，換任務後仍保存統計摘要；舊版不足10名如實顯示。保留三線獨立搜尋及明細展開修正。"
+  "notes": "新增日股夜盤（NK225.JPN／OSE日經225期貨）、韓股夜盤（K200.KRN／KRX KOSPI200期貨），台指期夜盤明確標為台股夜盤（TX）。條件股、對比股、必須股及查找已知股皆可選，選盤別自動填號。台股夜盤沿用期交所自動下載；日韓本版需至設置匯入獨立夜盤CSV，尚未提供自動下載。以實際含時區的開收盤處理跨午夜及週五夜盤接週一，不用日盤、全日或現貨替代。匯入版本按搜尋鎖定，缺漏不回填，保留三線及明細展開修正。"
 }
