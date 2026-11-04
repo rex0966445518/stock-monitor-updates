@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.marketanalog",
-  "versionCode": 11,
-  "versionName": "0.1.10",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.10.apk",
-  "sha256": "65b4a2b1bea7bc228d20fd06357496530f92bf5ed498c636d182cb55c464051e",
+  "versionCode": 12,
+  "versionName": "0.1.11",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.11.apk",
+  "sha256": "92b2e26c3fa0399778db482a977e6d7582320d1be79835c413cf056d07b597e9",
   "bytes": 177159,
-  "notes": "條件查詢改為明日預測：依輸入點數直接顯示偏漲／偏跌／偏平盤、歷史樣本比例與明細。平手或無樣本不強行判斷；輸入或自動行情改變即要求重算。軟件更新統一移到資料管理。"
+  "notes": "逐日預測紀錄每張卡片最下方新增台股實際漲跌點數、百分比與開盤／收盤數值。依收盤相對開盤計算，舊報告直接顯示，未收盤或缺資料不補零。"
 }
