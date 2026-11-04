@@ -1,0 +1,9 @@
+{
+  "packageName": "com.rex.highscanner",
+  "versionCode": 4,
+  "versionName": "1.2.0",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/high-scanner-updates/high-scanner/HighScanner-v1.2.0.apk",
+  "sha256": "cb3068298ac3e7152a333a740c31ce70c14150fb0888fbba489ba50d0cb35a8c",
+  "bytes": 41767,
+  "notes": "新增首頁一鍵更新：檢查版本、下載進度、SHA-256與同簽章驗證，交由Android確認安裝。保留原有設定。"
+}
