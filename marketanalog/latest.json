@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.marketanalog",
-  "versionCode": 12,
-  "versionName": "0.1.11",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.11.apk",
-  "sha256": "92b2e26c3fa0399778db482a977e6d7582320d1be79835c413cf056d07b597e9",
-  "bytes": 177159,
-  "notes": "逐日預測紀錄每張卡片最下方新增台股實際漲跌點數、百分比與開盤／收盤數值。依收盤相對開盤計算，舊報告直接顯示，未收盤或缺資料不補零。"
+  "versionCode": 13,
+  "versionName": "0.1.12",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.12.apk",
+  "sha256": "7f87cde9527222cfb95d0be5d0e190e55e699f236f6997aad39136c5505e4c5b",
+  "bytes": 181255,
+  "notes": "修正明日預測嚴格條件造成0樣本：預設以所有選定市場的標準化距離挑最相似21日（可調），依正面／負面票數給答案，另列三分類比例。自動模式先更新資料並鎖定所選日期09:00前已收盤訊號，顯示來源與時間；保留嚴格模式可切換。"
 }
