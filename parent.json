@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.parentcontrol",
-  "versionCode": 120,
-  "versionName": "1.2.0",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/LearningIsland-Parent-v1.2.0.apk",
-  "sha256": "e31a9a547d1d673eb493981209c0f7bf768175db7da3309858c6df0150afbe49",
-  "bytes": 70102,
-  "notes": "電視兒童學習神神器：海洋小鯊魚皮膚、271題一二年級五科與智力題、答題換觀看時間、配樂與10款成功音效、家長控制與一鍵更新。首頁鍵封鎖需Device Owner，影音暫停需播放器支援。"
+  "versionCode": 122,
+  "versionName": "1.2.2",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/LearningIsland-Parent-v1.2.2.apk",
+  "sha256": "ff8f43be9c232878016d86790e1620183eaf1c2c3b8053a5d20558fb62c09941",
+  "bytes": 74198,
+  "notes": "更名邊看邊學；修正16:9海洋插畫拉伸；智力題100題分四級各25題，家長選難度並依序出題；新增首頁鍵保護狀態與設定說明，未具備Device Owner時拒絕宣稱已鎖定。需兩端一起更新。"
 }
