@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.parentcontrol",
-  "versionCode": 122,
-  "versionName": "1.2.2",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/LearningIsland-Parent-v1.2.2.apk",
-  "sha256": "ff8f43be9c232878016d86790e1620183eaf1c2c3b8053a5d20558fb62c09941",
+  "versionCode": 123,
+  "versionName": "1.2.3",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/LearningIsland-Parent-v1.2.3.apk",
+  "sha256": "9af3a704ed5d8b550b5d567a2e0db37e4cd9f6393af839b97ef12bfe066693f1",
   "bytes": 74198,
-  "notes": "更名邊看邊學；修正16:9海洋插畫拉伸；智力題100題分四級各25題，家長選難度並依序出題；新增首頁鍵保護狀態與設定說明，未具備Device Owner時拒絕宣稱已鎖定。需兩端一起更新。"
+  "notes": "更名邊看邊學；修正16:9海洋插畫拉伸；智力題100題分四級各25題，家長選難度並依序出題；新增首頁鍵保護狀態與設定說明，未具備Device Owner時拒絕宣稱已鎖定。需兩端一起更新。 家長解除時同步停止答題保護並返回App首頁。"
 }
