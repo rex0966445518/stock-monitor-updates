@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.marketanalog",
-  "versionCode": 14,
-  "versionName": "0.1.13",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.13.apk",
-  "sha256": "8370f7e70e5e80d4a52617248cc5d9470644430f7a582b523ac51cd18cae56fc",
+  "versionCode": 15,
+  "versionName": "0.1.14",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.14.apk",
+  "sha256": "83f001ca651a154dcad4560c89017110ad3a02a1199a21876b8eb99f14938677",
   "bytes": 181255,
-  "notes": "解除只能選今天以後的日期限制，支援過去兩年歷史追溯；用所選日期09:00前訊號與更早樣本重建預測，另列當日實際漲跌與命中結果。顯示各市場真實資料範圍，可明確選擇四市場或美股＋台夜盤兩市場。"
+  "notes": "在預測的漲／跌／平盤三格正下方，新增獨立「當日台股實際漲跌」格，大字顯示實際漲跌點數與百分比，另列所選日期、開收盤及命中結果。計算維持收盤相對開盤；未收盤或缺資料顯示狀態。"
 }
