@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.learningtv",
-  "versionCode": 132,
-  "versionName": "1.3.2",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/LearningIsland-TV-v1.3.2.apk",
-  "sha256": "e50e89034022d2ca92336bd390693b478af2c82a6f0334b31d669366f6bf0243",
-  "bytes": 1345923,
-  "notes": "更新星空系列配套AI啟動圖示：電視端太空貓咪與書本，家長端愛心盾牌與太空兔；電視橫向應用封面同步更新。保留v1.3.1家長控制頁安全載入、首頁保護設定入口與錯誤紀錄。可覆蓋安裝，無需重新配對。"
+  "versionCode": 133,
+  "versionName": "1.3.3",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/LearningIsland-TV-v1.3.3.apk",
+  "sha256": "124631a5257b9fc0635aecbd1b252c1f8f71c4af8796eee8da0f7573ee9446f4",
+  "bytes": 1350019,
+  "notes": "修正電視「開始學習」及手機「套用題目並開始」被Device Owner授權阻擋：未啟用首頁保護也可一般答題，題目頁清楚顯示保護狀態。既有家長鎖、嚴格模式與答題換觀看不會繞過。僅需電視端更新；家長端維持v1.3.2。"
 }
