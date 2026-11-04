@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.marketanalog",
-  "versionCode": 7,
-  "versionName": "0.1.6",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.6.apk",
-  "sha256": "d6d562167a73e50a5f8f8ba222c222c3c03c5cd64925a28d33aa12232aac284a",
-  "bytes": 152453,
-  "notes": "新增自動回測：設定台股日期，逐日使用開盤前訊號預測並核對正負面，顯示進度、命中率、覆蓋率與基準比較。四市場缺日韓歷史會明示跳過，可明確選美股＋台指模式。提供日韓授權歷史服務設定與JSON匯出。"
+  "versionCode": 8,
+  "versionName": "0.1.7",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.7.apk",
+  "sha256": "a75e97aa687cf50f1bd548ca0d191a8f435cc0ad585680dab979f3a039f57c1a",
+  "bytes": 160711,
+  "notes": "已內建日經58筆、韓股57筆可驗證夜盤歷史，支援真正四市場回測。校正週末業務日期、排除JPX假日合併及韓股零成交占位；韓股可直接更新，日經可更新整理快照。資料尚未涵蓋兩年。"
 }
