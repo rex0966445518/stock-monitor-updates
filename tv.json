@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.learningtv",
-  "versionCode": 123,
-  "versionName": "1.2.3",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/LearningIsland-TV-v1.2.3.apk",
-  "sha256": "369e7c4530330c797097aded65165c485c958570ed37d318678b8ef7c781b3ce",
-  "bytes": 202246,
-  "notes": "更名邊看邊學；修正16:9海洋插畫拉伸；智力題100題分四級各25題，家長選難度並依序出題；新增首頁鍵保護狀態與設定說明，未具備Device Owner時拒絕宣稱已鎖定。需兩端一起更新。 家長解除時同步停止答題保護並返回App首頁。"
+  "versionCode": 130,
+  "versionName": "1.3.0",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/LearningIsland-TV-v1.3.0.apk",
+  "sha256": "a29578c46ad48946551f6b196dcfd44994824f204bdc26df950279e727fe7bc9",
+  "bytes": 1124358,
+  "notes": "新增海洋鯊魚樂園、奶油森林學園、星空夢想基地三套AI精緻皮膚。電視16:9與手機直式各自繪製背景、九款立體圖示、主題卡片及遙控器焦點。兩端可分別切換，手機可遙控電視皮膚；換皮膚不重置題目與倒數。需兩端一起更新。"
 }
