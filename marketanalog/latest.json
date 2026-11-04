@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.marketanalog",
-  "versionCode": 13,
-  "versionName": "0.1.12",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.12.apk",
-  "sha256": "7f87cde9527222cfb95d0be5d0e190e55e699f236f6997aad39136c5505e4c5b",
+  "versionCode": 14,
+  "versionName": "0.1.13",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.13.apk",
+  "sha256": "8370f7e70e5e80d4a52617248cc5d9470644430f7a582b523ac51cd18cae56fc",
   "bytes": 181255,
-  "notes": "修正明日預測嚴格條件造成0樣本：預設以所有選定市場的標準化距離挑最相似21日（可調），依正面／負面票數給答案，另列三分類比例。自動模式先更新資料並鎖定所選日期09:00前已收盤訊號，顯示來源與時間；保留嚴格模式可切換。"
+  "notes": "解除只能選今天以後的日期限制，支援過去兩年歷史追溯；用所選日期09:00前訊號與更早樣本重建預測，另列當日實際漲跌與命中結果。顯示各市場真實資料範圍，可明確選擇四市場或美股＋台夜盤兩市場。"
 }
