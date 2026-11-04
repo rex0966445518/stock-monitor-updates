@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.marketanalog",
-  "versionCode": 8,
-  "versionName": "0.1.7",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.7.apk",
-  "sha256": "a75e97aa687cf50f1bd548ca0d191a8f435cc0ad585680dab979f3a039f57c1a",
-  "bytes": 160711,
-  "notes": "已內建日經58筆、韓股57筆可驗證夜盤歷史，支援真正四市場回測。校正週末業務日期、排除JPX假日合併及韓股零成交占位；韓股可直接更新，日經可更新整理快照。資料尚未涵蓋兩年。"
+  "versionCode": 9,
+  "versionName": "0.1.8",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.8.apk",
+  "sha256": "f540196a5e9c7de6166591a54c3304fe308df863713d884f9c511b6705a28791",
+  "bytes": 172999,
+  "notes": "日經擴充至179筆；新增157筆韓股夜盤收盤／前日盤變化，另保留57筆完整開收盤，明確切換韓股基準。修正日經缺漏使韓股漏查、舊快照蓋掉新增資料；固定日期欄、新到舊與共同區間按鈕。完整兩年仍有缺口。"
 }
