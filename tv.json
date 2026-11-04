@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.learningtv",
-  "versionCode": 133,
-  "versionName": "1.3.3",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/LearningIsland-TV-v1.3.3.apk",
-  "sha256": "124631a5257b9fc0635aecbd1b252c1f8f71c4af8796eee8da0f7573ee9446f4",
-  "bytes": 1350019,
-  "notes": "修正電視「開始學習」及手機「套用題目並開始」被Device Owner授權阻擋：未啟用首頁保護也可一般答題，題目頁清楚顯示保護狀態。既有家長鎖、嚴格模式與答題換觀看不會繞過。僅需電視端更新；家長端維持v1.3.2。"
+  "versionCode": 134,
+  "versionName": "1.3.4",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/LearningIsland-TV-v1.3.4.apk",
+  "sha256": "913ea095ba31a1f2f3ab926626e0f73336e38c2598f8a06f307912c7a1f2fdb4",
+  "bytes": 1354115,
+  "notes": "修正答對後的觀看交接：立即移除題目遮罩、收起前景學習視窗／切回指定影音App，釋放音訊後送出播放指令；過期或家長鎖時不恢復。兩端明確區分純答題與邊看邊學；家長可確認啟用未封鎖首頁鍵的一般觀看模式。請兩端一起更新。"
 }
