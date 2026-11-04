@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.marketanalog",
-  "versionCode": 16,
-  "versionName": "0.1.15",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.15.apk",
-  "sha256": "fa19db85476b5e6bf3878cc3b40cd4cd2faa72c9882fc81c9a9b4908d1c8bfd2",
-  "bytes": 181255,
-  "notes": "自動回測新增兩種平盤判定：選項1把平盤併入負面，按漲對跌＋平盤比例判定；選項2剔除平盤訓練與投票樣本，只比較漲跌比例，實際平盤日不計命中率。設定自動保存，卡片列投票百分比，舊報告標示原規則。"
+  "versionCode": 17,
+  "versionName": "0.1.16",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.16.apk",
+  "sha256": "5a638f3760c9979025cafc691926a830513b59b807df8ed88dd43d9c9d57f62c",
+  "bytes": 185418,
+  "notes": "修正有11/4日經收盤資料仍顯示無法預測：已收盤報價依日期與合約保存，隔天報價不覆蓋歷史；補入已保存的11/4收盤快照。未手動鎖定時，明確切換該日可用的前結算等基準。歷史更新與備份包含收盤快照，仍只採所選日09:00前資料。"
 }
