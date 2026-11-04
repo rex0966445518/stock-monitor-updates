@@ -1,9 +1,9 @@
 {
   "packageName": "com.rex.highscanner",
-  "versionCode": 5,
-  "versionName": "1.2.1",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/high-scanner-updates/high-scanner/HighScanner-v1.2.1.apk",
-  "sha256": "f83851e9b6733e54cfbe061b3aabe985b00cbf8e4e392cfb6db19bf850ee70d8",
-  "bytes": 41767,
-  "notes": "新增最低／最高收盤價範圍；上下限均包含、留空不限，設定自動保存，結果與匯出依價格範圍篩選。"
+  "versionCode": 6,
+  "versionName": "1.2.2",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/high-scanner-updates/high-scanner/HighScanner-v1.2.2.apk",
+  "sha256": "04637b1b2ca9d193ad43fcbecbbb6c81c27c9a1b2682dc56dd8cd42ed5da7f75",
+  "bytes": 45863,
+  "notes": "一鍵更新移到標題下方獨立列，增加頂部安全留白，修正Android狀態列與瀏海遮擋。"
 }
