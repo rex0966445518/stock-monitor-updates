@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.marketanalog",
-  "versionCode": 6,
-  "versionName": "0.1.5",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.5.apk",
-  "sha256": "de25fd28640898b8612c446223a2fd62fbe36c8b87972a4531e81f268bd80b16",
-  "bytes": 144130,
-  "notes": "日經改用隔離內嵌網頁與現行Pinia狀態自動讀取，HTTP作備援；來源頁返回直接回填。修正台指日盤重置後夜盤日期無法確認；保留延遲與比較基準標示。"
+  "versionCode": 7,
+  "versionName": "0.1.6",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.6.apk",
+  "sha256": "d6d562167a73e50a5f8f8ba222c222c3c03c5cd64925a28d33aa12232aac284a",
+  "bytes": 152453,
+  "notes": "新增自動回測：設定台股日期，逐日使用開盤前訊號預測並核對正負面，顯示進度、命中率、覆蓋率與基準比較。四市場缺日韓歷史會明示跳過，可明確選美股＋台指模式。提供日韓授權歷史服務設定與JSON匯出。"
 }
