@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.learningtv",
-  "versionCode": 130,
-  "versionName": "1.3.0",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/LearningIsland-TV-v1.3.0.apk",
-  "sha256": "a29578c46ad48946551f6b196dcfd44994824f204bdc26df950279e727fe7bc9",
-  "bytes": 1124358,
-  "notes": "新增海洋鯊魚樂園、奶油森林學園、星空夢想基地三套AI精緻皮膚。電視16:9與手機直式各自繪製背景、九款立體圖示、主題卡片及遙控器焦點。兩端可分別切換，手機可遙控電視皮膚；換皮膚不重置題目與倒數。需兩端一起更新。"
+  "versionCode": 132,
+  "versionName": "1.3.2",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/LearningIsland-TV-v1.3.2.apk",
+  "sha256": "e50e89034022d2ca92336bd390693b478af2c82a6f0334b31d669366f6bf0243",
+  "bytes": 1345923,
+  "notes": "更新星空系列配套AI啟動圖示：電視端太空貓咪與書本，家長端愛心盾牌與太空兔；電視橫向應用封面同步更新。保留v1.3.1家長控制頁安全載入、首頁保護設定入口與錯誤紀錄。可覆蓋安裝，無需重新配對。"
 }
