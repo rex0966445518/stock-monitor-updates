@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.learningtv",
-  "versionCode": 137,
-  "versionName": "1.3.7",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/LearningIsland-TV-v1.3.7.apk",
-  "sha256": "db8033e0a38f25a38c728c4e35660995042cf404a90a99b4ba0a5874e188d248",
-  "bytes": 7289500,
-  "notes": "練題答對立即換下一題，不再等待出題間隔；加入練題答對／答錯音效。331題內建題目離線語音直接包含在APK（332段題目及提示錄音），沒有系統TTS也可播放；觀看遮罩新增再唸一次。自訂題目無內建錄音時使用系統語音或通用提示。僅需更新電視，家長端維持v1.3.6。"
+  "versionCode": 139,
+  "versionName": "1.3.9",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/LearningIsland-TV-v1.3.9.apk",
+  "sha256": "41f0c251ab7f016065bbfb65bab7f6e23cc55909e799aa022b1f1e743e9c3554",
+  "bytes": 8276783,
+  "notes": "學習日曆與逐題用時、保留完整新紀錄、首頁背景音樂開關、內建中英文離線女聲；保留多家長配對。兩端請更新至1.3.9。"
 }

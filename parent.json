@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.parentcontrol",
-  "versionCode": 136,
-  "versionName": "1.3.6",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/LearningIsland-Parent-v1.3.6.apk",
-  "sha256": "7d1ffce6e5703cca3e1eca227397f4882b11b757d3d7ca9d25fcea10f5e3f6c0",
-  "bytes": 1164627,
-  "notes": "修正開始邊看邊學時 Value true / Boolean 不能轉為JSONArray錯誤：自訂題開關與題庫內容分開儲存，保留有效舊題庫並修復舊布林值設定；連續多次套用不再覆寫題庫。僅需手機家長端更新，電視端維持v1.3.5。"
+  "versionCode": 139,
+  "versionName": "1.3.9",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/LearningIsland-Parent-v1.3.9.apk",
+  "sha256": "21cc80ebc8f26f9a0f17b8ca99cc24b295d88e75508aec855cdd8188ccb0ca0c",
+  "bytes": 1168723,
+  "notes": "學習日曆與逐題用時、保留完整新紀錄、首頁背景音樂開關、內建中英文離線女聲；保留多家長配對。兩端請更新至1.3.9。"
 }
