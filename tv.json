@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.learningtv",
-  "versionCode": 142,
-  "versionName": "1.3.12",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/LearningIsland-TV-v1.3.12.apk",
-  "sha256": "356e426254e2956235c3de1adefda10c689276b7336aa87346a36ae7aba2ac9a",
-  "bytes": 8801220,
-  "notes": "整合 YouTube 入口與搜尋；電視自動搜尋並列出家長手機，選取後由手機及電視確認，免輸六位碼；兩端請更新至1.3.12。"
+  "versionCode": 143,
+  "versionName": "1.3.13",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/LearningIsland-TV-v1.3.13.apk",
+  "sha256": "324a4357aeeaf0cb77430027586ab7307f9c5447b352da4335f032d8cc808205",
+  "bytes": 8813508,
+  "notes": "YouTube 內建選片及官方嵌入播放，無需安裝外部 YouTube 或瀏覽器；接上答題暫停／續播。電視需系統 WebView；家長端沿用1.3.12。"
 }

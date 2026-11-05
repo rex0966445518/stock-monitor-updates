@@ -1,0 +1,60 @@
+PASS timer stays usable before deadline
+PASS timer expires at boundary
+PASS moving wall clock backward cannot extend countdown
+PASS unlock cancels timer
+PASS reboot during countdown requires parent unlock
+PASS reboot without countdown does not add lock
+PASS English letters filter selects 26 questions
+PASS Chinese phonetics filter selects 15 questions
+PASS empty subject and topic combination rejected
+PASS valid parent custom question accepted
+PASS answer outside choices rejected
+PASS duplicate choices rejected
+PASS negative interval rejected
+13 checks passed
+PASS start requires a correct answer before viewing
+PASS correct answer grants exactly configured 30 seconds
+PASS reward remains before deadline
+PASS question returns at deadline
+PASS wrong answer grants no viewing time
+PASS correct choice grants viewing
+PASS repeated submission does not stack time
+PASS correct answer cannot bypass parent lock
+PASS parent lock overrides earned viewing
+PASS reboot requires another correct answer
+PASS parent stopping mode removes quiz requirement
+PASS zero reward interval rejected
+PASS grade 1 subject 0 has eligible questions
+PASS grade 1 subject 1 has eligible questions
+PASS grade 1 subject 2 has eligible questions
+PASS grade 1 subject 3 has eligible questions
+PASS grade 1 subject 4 has eligible questions
+PASS grade 1 subject 5 has eligible questions
+PASS grade 2 subject 0 has eligible questions
+PASS grade 2 subject 1 has eligible questions
+PASS grade 2 subject 2 has eligible questions
+PASS grade 2 subject 3 has eligible questions
+PASS grade 2 subject 4 has eligible questions
+PASS grade 2 subject 5 has eligible questions
+PASS update manifest matches package and trusted endpoint
+PASS wrong update package rejected
+PASS untrusted update host rejected
+27 checks passed
+PASS correct-answer handoff completes
+PASS remove overlay and prompt, restore video, release audio, then schedule play
+PASS do not send play before the video task has time to return
+PASS play once after return
+PASS no repeated delayed playback
+PASS wrong/locked/expired answer cannot dismiss anything
+PASS failed removal keeps video paused for retry
+PASS failed task return does not send play
+PASS parent lock arriving during handoff cancels play
+PASS expired reward arriving during handoff cancels play
+PASS ending session cancels delayed play
+PASS remaining cover prevents play
+PASS visible overlay forbids resume: IDLE
+PASS visible overlay forbids resume: WATCHING
+PASS visible overlay forbids resume: QUESTION
+PASS visible overlay forbids resume: PARENT_LOCK
+16 checks passed
+18 YouTube URL checks passed

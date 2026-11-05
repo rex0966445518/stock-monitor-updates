@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="tw.rex.learningtv" android:versionCode="142" android:versionName="1.3.12">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="tw.rex.learningtv" android:versionCode="143" android:versionName="1.3.13">
  <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="35"/>
  <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
  <uses-feature android:name="android.software.leanback" android:required="false"/>
@@ -7,6 +7,7 @@
  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
  <application android:label="邊看邊學" android:icon="@drawable/icon" android:banner="@drawable/banner" android:theme="@android:style/Theme.Material.NoActionBar" android:allowBackup="false" android:supportsRtl="true">
   <activity android:name=".MainActivity" android:launchMode="singleTask" android:exported="true" android:screenOrientation="landscape"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/><category android:name="android.intent.category.LEANBACK_LAUNCHER"/></intent-filter></activity>
+  <activity android:name=".YouTubeActivity" android:exported="false" android:screenOrientation="landscape" android:launchMode="singleTop" android:configChanges="orientation|screenSize|keyboardHidden"/>
   <service android:name=".TvService" android:exported="false" android:foregroundServiceType="connectedDevice"/>
   <receiver android:name=".AdminReceiver" android:permission="android.permission.BIND_DEVICE_ADMIN" android:exported="true"><meta-data android:name="android.app.device_admin" android:resource="@xml/admin"/><intent-filter><action android:name="android.app.action.DEVICE_ADMIN_ENABLED"/></intent-filter></receiver>
   <receiver android:name=".BootReceiver" android:exported="false"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED"/></intent-filter></receiver>
