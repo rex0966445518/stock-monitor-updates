@@ -1,0 +1,3 @@
+package tw.rex.learningtv;
+import android.content.*;import android.os.Build;
+public class BootReceiver extends BroadcastReceiver {public void onReceive(Context c,Intent i){android.content.SharedPreferences p=c.getSharedPreferences("control",0);if(p.getBoolean("timer",false))p.edit().putBoolean("timer",false).putBoolean("locked",true).commit();if(p.getBoolean("locked",false)||!p.getString("secret","").isEmpty())try{Intent s=new Intent(c,TvService.class);if(Build.VERSION.SDK_INT>=26)c.startForegroundService(s);else c.startService(s);}catch(Exception e){p.edit().putString("result","系統限制開機啟動，請開啟邊看邊學").apply();}}}

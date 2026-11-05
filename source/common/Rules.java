@@ -1,0 +1,11 @@
+package tw.rex.link;
+import org.json.*;import java.util.*;
+public final class Rules {
+ public static boolean expired(boolean running,long elapsedDeadline,long wallDeadline,long elapsedNow,long wallNow){return running&&(elapsedNow>=elapsedDeadline||wallNow>=wallDeadline);}
+ public static boolean rebootLock(boolean running,int savedBoot,int currentBoot){return running&&savedBoot!=currentBoot;}
+ public static int validate(JSONObject b,JSONArray built)throws Exception{
+ int subject=b.getInt("subject"),seconds=b.getInt("seconds"),limit=b.getInt("limit");if(subject<0||subject>6||seconds<0||seconds>3600||(limit!=0&&limit!=10&&limit!=20))throw new Exception("設定範圍錯誤");int grade=b.optInt("grade",1);if(grade<1||grade>2)throw new Exception("僅支援一、二年級");JSONArray topics=b.getJSONArray("topics"),custom=b.getJSONArray("custom");if(topics.length()==0||custom.length()>100||b.toString().getBytes("UTF-8").length>60000)throw new Exception("題庫數量或長度錯誤");HashSet<String> ts=new HashSet<String>();HashSet<String> allowed=new HashSet<String>(Arrays.asList("letters","words","zhuyin","language","custom","math","life","health","logic"));for(int i=0;i<topics.length();i++){String t=topics.getString(i);if(!allowed.contains(t))throw new Exception("不支援此題型");ts.add(t);}
+ for(int i=0;i<custom.length();i++){JSONObject q=custom.getJSONObject(i);JSONArray opts=q.getJSONArray("options");HashSet<String> seen=new HashSet<String>();if(q.getString("question").trim().isEmpty()||q.getString("question").length()>150||q.optString("explanation").length()>150||q.getInt("subject")<0||q.getInt("subject")>5||q.optInt("grade",1)<1||q.optInt("grade",1)>2||opts.length()!=3)throw new Exception("自訂題目格式錯誤");for(int j=0;j<3;j++){String s=opts.getString(j);if(s.trim().isEmpty()||s.length()>60||!seen.add(s))throw new Exception("選項格式錯誤");}if(!seen.contains(q.getString("answer")))throw new Exception("正解格式錯誤");q.put("topic","custom");q.put("explanation",q.optString("explanation"));}
+ Set<String> difficulty=QuestionCatalog.levels(b.optJSONArray("logicLevels"));int eligible=0;for(int batch=0;batch<2;batch++){JSONArray list=batch==0?built:custom;for(int i=0;i<list.length();i++){JSONObject q=list.getJSONObject(i);if(QuestionCatalog.matches(q,subject,grade,ts,difficulty))eligible++;}}if(eligible==0)throw new Exception("選取的科目與題型沒有可出的題目");return eligible;
+ }
+}

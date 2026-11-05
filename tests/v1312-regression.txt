@@ -1,0 +1,440 @@
+RulesTest exit=0
+PASS timer stays usable before deadline
+PASS timer expires at boundary
+PASS moving wall clock backward cannot extend countdown
+PASS unlock cancels timer
+PASS reboot during countdown requires parent unlock
+PASS reboot without countdown does not add lock
+PASS English letters filter selects 26 questions
+PASS Chinese phonetics filter selects 15 questions
+PASS empty subject and topic combination rejected
+PASS valid parent custom question accepted
+PASS answer outside choices rejected
+PASS duplicate choices rejected
+PASS negative interval rejected
+13 checks passed
+
+WatchTest exit=0
+PASS start requires a correct answer before viewing
+PASS correct answer grants exactly configured 30 seconds
+PASS reward remains before deadline
+PASS question returns at deadline
+PASS wrong answer grants no viewing time
+PASS correct choice grants viewing
+PASS repeated submission does not stack time
+PASS correct answer cannot bypass parent lock
+PASS parent lock overrides earned viewing
+PASS reboot requires another correct answer
+PASS parent stopping mode removes quiz requirement
+PASS zero reward interval rejected
+PASS grade 1 subject 0 has eligible questions
+PASS grade 1 subject 1 has eligible questions
+PASS grade 1 subject 2 has eligible questions
+PASS grade 1 subject 3 has eligible questions
+PASS grade 1 subject 4 has eligible questions
+PASS grade 1 subject 5 has eligible questions
+PASS grade 2 subject 0 has eligible questions
+PASS grade 2 subject 1 has eligible questions
+PASS grade 2 subject 2 has eligible questions
+PASS grade 2 subject 3 has eligible questions
+PASS grade 2 subject 4 has eligible questions
+PASS grade 2 subject 5 has eligible questions
+PASS update manifest matches package and trusted endpoint
+PASS wrong update package rejected
+PASS untrusted update host rejected
+27 checks passed
+
+WatchReturnTest exit=0
+PASS correct-answer handoff completes
+PASS remove overlay and prompt, restore video, release audio, then schedule play
+PASS do not send play before the video task has time to return
+PASS play once after return
+PASS no repeated delayed playback
+PASS wrong/locked/expired answer cannot dismiss anything
+PASS failed removal keeps video paused for retry
+PASS failed task return does not send play
+PASS parent lock arriving during handoff cancels play
+PASS expired reward arriving during handoff cancels play
+PASS ending session cancels delayed play
+PASS remaining cover prevents play
+PASS visible overlay forbids resume: IDLE
+PASS visible overlay forbids resume: WATCHING
+PASS visible overlay forbids resume: QUESTION
+PASS visible overlay forbids resume: PARENT_LOCK
+16 checks passed
+
+ParentFormTest exit=0
+PASS numeric grade preserved
+PASS legacy string grade read safely
+PASS invalid numeric setting falls back
+PASS missing setting falls back
+PASS unexpected setting type does not throw
+PASS legacy numeric seconds remain readable
+PASS missing seconds have default
+PASS string boolean enabled
+PASS string boolean disabled
+PASS boolean preference preserved
+PASS lockout timestamp preserves precision
+PASS negative picker selection clamps
+PASS out of range subject selection clamps
+PASS valid selection preserved
+PASS empty option list is safe
+15 checks passed
+
+ParentContentTest exit=0
+PASS non-array legacy JSON is rejected (exception wording varies by runtime)
+PASS legacy non-array becomes usable empty questions: true
+PASS repair preserves parent PIN and grade: true
+PASS repair is idempotent: true
+PASS legacy non-array becomes usable empty questions: false
+PASS repair preserves parent PIN and grade: false
+PASS repair is idempotent: false
+PASS legacy non-array becomes usable empty questions: true
+PASS repair preserves parent PIN and grade: true
+PASS repair is idempotent: true
+PASS legacy non-array becomes usable empty questions: false
+PASS repair preserves parent PIN and grade: false
+PASS repair is idempotent: false
+PASS legacy non-array becomes usable empty questions: 42
+PASS repair preserves parent PIN and grade: 42
+PASS repair is idempotent: 42
+PASS legacy non-array becomes usable empty questions: not JSON
+PASS repair preserves parent PIN and grade: not JSON
+PASS repair is idempotent: not JSON
+PASS legacy non-array becomes usable empty questions: null
+PASS repair preserves parent PIN and grade: null
+PASS repair is idempotent: null
+PASS valid legacy custom question preserved
+PASS legacy topic disabled setting preserved
+PASS question JSON is not read as a false toggle
+PASS repeated start yields valid config round 0
+PASS question list remains an array round 0
+PASS watch payload booleans remain booleans round 0
+PASS toggle never overwrites question content round 0
+PASS repeated start yields valid config round 1
+PASS question list remains an array round 1
+PASS watch payload booleans remain booleans round 1
+PASS toggle never overwrites question content round 1
+PASS repeated start yields valid config round 2
+PASS question list remains an array round 2
+PASS watch payload booleans remain booleans round 2
+PASS toggle never overwrites question content round 2
+PASS repeated start yields valid config round 3
+PASS question list remains an array round 3
+PASS watch payload booleans remain booleans round 3
+PASS toggle never overwrites question content round 3
+PASS intentional deletion does not restore old legacy questions
+PASS invalid new storage can recover valid legacy JSON
+PASS legacy false custom checkbox preserved
+PASS topic and questions have separate storage keys
+45 checks passed
+
+LearningStartTest exit=0
+PASS unpaired TV can start regular questions
+PASS paired Xiaomi without Device Owner can start regular questions
+PASS managed paired TV still starts with protection
+PASS unpaired TV does not enter kiosk without parent recovery
+PASS explicit strict mode cannot silently become basic
+PASS already protected session can start
+PASS parent lock dominates state 0
+PASS parent lock dominates state 1
+PASS parent lock dominates state 2
+PASS parent lock dominates state 3
+PASS parent lock dominates state 4
+PASS parent lock dominates state 5
+PASS parent lock dominates state 6
+PASS parent lock dominates state 7
+PASS parent lock dominates state 8
+PASS parent lock dominates state 9
+PASS parent lock dominates state 10
+PASS parent lock dominates state 11
+PASS parent lock dominates state 12
+PASS parent lock dominates state 13
+PASS parent lock dominates state 14
+PASS parent lock dominates state 15
+PASS parent lock dominates state 16
+PASS parent lock dominates state 17
+PASS parent lock dominates state 18
+PASS parent lock dominates state 19
+PASS parent lock dominates state 20
+PASS parent lock dominates state 21
+PASS parent lock dominates state 22
+PASS parent lock dominates state 23
+PASS parent lock dominates state 24
+PASS parent lock dominates state 25
+PASS parent lock dominates state 26
+PASS parent lock dominates state 27
+PASS parent lock dominates state 28
+PASS parent lock dominates state 29
+PASS parent lock dominates state 30
+PASS parent lock dominates state 31
+PASS watch reward/overlay cannot be bypassed 0
+PASS watch reward/overlay cannot be bypassed 1
+PASS watch reward/overlay cannot be bypassed 2
+PASS watch reward/overlay cannot be bypassed 3
+PASS watch reward/overlay cannot be bypassed 4
+PASS watch reward/overlay cannot be bypassed 5
+PASS watch reward/overlay cannot be bypassed 6
+PASS watch reward/overlay cannot be bypassed 7
+PASS watch reward/overlay cannot be bypassed 8
+PASS watch reward/overlay cannot be bypassed 9
+PASS watch reward/overlay cannot be bypassed 10
+PASS watch reward/overlay cannot be bypassed 11
+PASS watch reward/overlay cannot be bypassed 12
+PASS watch reward/overlay cannot be bypassed 13
+PASS watch reward/overlay cannot be bypassed 14
+PASS watch reward/overlay cannot be bypassed 15
+54 checks passed
+
+StudyTimerTest exit=0
+PASS active time, repeated pause/resume, background exclusion, next-attempt reset
+
+Logic100Test exit=0
+PASS question L001 has three choices and an answer
+PASS question L001 includes explanation
+PASS question L002 has three choices and an answer
+PASS question L002 includes explanation
+PASS question L003 has three choices and an answer
+PASS question L003 includes explanation
+PASS question L004 has three choices and an answer
+PASS question L004 includes explanation
+PASS question L005 has three choices and an answer
+PASS question L005 includes explanation
+PASS question L006 has three choices and an answer
+PASS question L006 includes explanation
+PASS question L007 has three choices and an answer
+PASS question L007 includes explanation
+PASS question L008 has three choices and an answer
+PASS question L008 includes explanation
+PASS question L009 has three choices and an answer
+PASS question L009 includes explanation
+PASS question L010 has three choices and an answer
+PASS question L010 includes explanation
+PASS question L011 has three choices and an answer
+PASS question L011 includes explanation
+PASS question L012 has three choices and an answer
+PASS question L012 includes explanation
+PASS question L013 has three choices and an answer
+PASS question L013 includes explanation
+PASS question L014 has three choices and an answer
+PASS question L014 includes explanation
+PASS question L015 has three choices and an answer
+PASS question L015 includes explanation
+PASS question L016 has three choices and an answer
+PASS question L016 includes explanation
+PASS question L017 has three choices and an answer
+PASS question L017 includes explanation
+PASS question L018 has three choices and an answer
+PASS question L018 includes explanation
+PASS question L019 has three choices and an answer
+PASS question L019 includes explanation
+PASS question L020 has three choices and an answer
+PASS question L020 includes explanation
+PASS question L021 has three choices and an answer
+PASS question L021 includes explanation
+PASS question L022 has three choices and an answer
+PASS question L022 includes explanation
+PASS question L023 has three choices and an answer
+PASS question L023 includes explanation
+PASS question L024 has three choices and an answer
+PASS question L024 includes explanation
+PASS question L025 has three choices and an answer
+PASS question L025 includes explanation
+PASS question L026 has three choices and an answer
+PASS question L026 includes explanation
+PASS question L027 has three choices and an answer
+PASS question L027 includes explanation
+PASS question L028 has three choices and an answer
+PASS question L028 includes explanation
+PASS question L029 has three choices and an answer
+PASS question L029 includes explanation
+PASS question L030 has three choices and an answer
+PASS question L030 includes explanation
+PASS question L031 has three choices and an answer
+PASS question L031 includes explanation
+PASS question L032 has three choices and an answer
+PASS question L032 includes explanation
+PASS question L033 has three choices and an answer
+PASS question L033 includes explanation
+PASS question L034 has three choices and an answer
+PASS question L034 includes explanation
+PASS question L035 has three choices and an answer
+PASS question L035 includes explanation
+PASS question L036 has three choices and an answer
+PASS question L036 includes explanation
+PASS question L037 has three choices and an answer
+PASS question L037 includes explanation
+PASS question L038 has three choices and an answer
+PASS question L038 includes explanation
+PASS question L039 has three choices and an answer
+PASS question L039 includes explanation
+PASS question L040 has three choices and an answer
+PASS question L040 includes explanation
+PASS question L041 has three choices and an answer
+PASS question L041 includes explanation
+PASS question L042 has three choices and an answer
+PASS question L042 includes explanation
+PASS question L043 has three choices and an answer
+PASS question L043 includes explanation
+PASS question L044 has three choices and an answer
+PASS question L044 includes explanation
+PASS question L045 has three choices and an answer
+PASS question L045 includes explanation
+PASS question L046 has three choices and an answer
+PASS question L046 includes explanation
+PASS question L047 has three choices and an answer
+PASS question L047 includes explanation
+PASS question L048 has three choices and an answer
+PASS question L048 includes explanation
+PASS question L049 has three choices and an answer
+PASS question L049 includes explanation
+PASS question L050 has three choices and an answer
+PASS question L050 includes explanation
+PASS question L051 has three choices and an answer
+PASS question L051 includes explanation
+PASS question L052 has three choices and an answer
+PASS question L052 includes explanation
+PASS question L053 has three choices and an answer
+PASS question L053 includes explanation
+PASS question L054 has three choices and an answer
+PASS question L054 includes explanation
+PASS question L055 has three choices and an answer
+PASS question L055 includes explanation
+PASS question L056 has three choices and an answer
+PASS question L056 includes explanation
+PASS question L057 has three choices and an answer
+PASS question L057 includes explanation
+PASS question L058 has three choices and an answer
+PASS question L058 includes explanation
+PASS question L059 has three choices and an answer
+PASS question L059 includes explanation
+PASS question L060 has three choices and an answer
+PASS question L060 includes explanation
+PASS question L061 has three choices and an answer
+PASS question L061 includes explanation
+PASS question L062 has three choices and an answer
+PASS question L062 includes explanation
+PASS question L063 has three choices and an answer
+PASS question L063 includes explanation
+PASS question L064 has three choices and an answer
+PASS question L064 includes explanation
+PASS question L065 has three choices and an answer
+PASS question L065 includes explanation
+PASS question L066 has three choices and an answer
+PASS question L066 includes explanation
+PASS question L067 has three choices and an answer
+PASS question L067 includes explanation
+PASS question L068 has three choices and an answer
+PASS question L068 includes explanation
+PASS question L069 has three choices and an answer
+PASS question L069 includes explanation
+PASS question L070 has three choices and an answer
+PASS question L070 includes explanation
+PASS question L071 has three choices and an answer
+PASS question L071 includes explanation
+PASS question L072 has three choices and an answer
+PASS question L072 includes explanation
+PASS question L073 has three choices and an answer
+PASS question L073 includes explanation
+PASS question L074 has three choices and an answer
+PASS question L074 includes explanation
+PASS question L075 has three choices and an answer
+PASS question L075 includes explanation
+PASS question L076 has three choices and an answer
+PASS question L076 includes explanation
+PASS question L077 has three choices and an answer
+PASS question L077 includes explanation
+PASS question L078 has three choices and an answer
+PASS question L078 includes explanation
+PASS question L079 has three choices and an answer
+PASS question L079 includes explanation
+PASS question L080 has three choices and an answer
+PASS question L080 includes explanation
+PASS question L081 has three choices and an answer
+PASS question L081 includes explanation
+PASS question L082 has three choices and an answer
+PASS question L082 includes explanation
+PASS question L083 has three choices and an answer
+PASS question L083 includes explanation
+PASS question L084 has three choices and an answer
+PASS question L084 includes explanation
+PASS question L085 has three choices and an answer
+PASS question L085 includes explanation
+PASS question L086 has three choices and an answer
+PASS question L086 includes explanation
+PASS question L087 has three choices and an answer
+PASS question L087 includes explanation
+PASS question L088 has three choices and an answer
+PASS question L088 includes explanation
+PASS question L089 has three choices and an answer
+PASS question L089 includes explanation
+PASS question L090 has three choices and an answer
+PASS question L090 includes explanation
+PASS question L091 has three choices and an answer
+PASS question L091 includes explanation
+PASS question L092 has three choices and an answer
+PASS question L092 includes explanation
+PASS question L093 has three choices and an answer
+PASS question L093 includes explanation
+PASS question L094 has three choices and an answer
+PASS question L094 includes explanation
+PASS question L095 has three choices and an answer
+PASS question L095 includes explanation
+PASS question L096 has three choices and an answer
+PASS question L096 includes explanation
+PASS question L097 has three choices and an answer
+PASS question L097 includes explanation
+PASS question L098 has three choices and an answer
+PASS question L098 includes explanation
+PASS question L099 has three choices and an answer
+PASS question L099 includes explanation
+PASS question L100 has three choices and an answer
+PASS question L100 includes explanation
+PASS exactly 100 numbered reasoning questions
+PASS grade 1 easy selects exactly 25
+PASS grade 1 starter selects exactly 25
+PASS grade 1 intermediate selects exactly 25
+PASS grade 1 advanced selects exactly 25
+PASS grade 1 all categories selects 100
+PASS grade 2 easy selects exactly 25
+PASS grade 2 starter selects exactly 25
+PASS grade 2 intermediate selects exactly 25
+PASS grade 2 advanced selects exactly 25
+PASS grade 2 all categories selects 100
+PASS multiple difficulties combine without duplicates
+PASS no difficulty yields no valid logic-only configuration
+PASS unknown difficulty is rejected
+PASS all 100 are served in increasing difficulty and question order
+PASS wraps to first only after full sequence
+PASS intermediate-only starts at number 51
+PASS intermediate-only wraps within selected category
+218 checks passed
+
+ArtLayoutTest exit=0
+PASS proportional artwork fits 1920x1080
+PASS proportional artwork fits 1280x720
+PASS proportional artwork fits 900x85
+PASS proportional artwork fits 220x120
+PASS proportional artwork fits 320x180
+
+PairingRulesTest exit=0
+8 pairing authorization checks passed
+
+tw.rex.parentcontrol.AutoPairTest exit=0
+12 parent invitation handshake checks passed
+
+tw.rex.parentcontrol.MultiParentTest exit=0
+PASS first phone identity
+PASS second phone identity
+PASS first phone authenticated
+PASS second phone authenticated independently
+PASS other parent key cannot authenticate this phone
+PASS unacknowledged command retried
+PASS another parent's acknowledgment cannot drop command
+PASS matching acknowledgment removes command
+PASS authenticated add-parent command delivered
+PASS broadcast destination IPv4
+PASS public discovery source rejected
+PASS loopback discovery source rejected
+SKIP actual private-LAN response: sandbox has no private IPv4 interface
+12 checks passed

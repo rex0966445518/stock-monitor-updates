@@ -1,0 +1,15 @@
+import tw.rex.link.*;import org.json.*;import java.nio.file.*;
+public class WatchTest {
+ static int n;static void ok(boolean v,String label){if(!v)throw new AssertionError(label);n++;System.out.println("PASS "+label);}
+ public static void main(String[] args)throws Exception{
+ ok(WatchRules.phase(false,true,0,0,1,1,100,100)==WatchRules.Phase.QUESTION,"start requires a correct answer before viewing");
+ long deadline=WatchRules.rewardDeadline(1000,30);ok(deadline==31000,"correct answer grants exactly configured 30 seconds");
+ ok(WatchRules.phase(false,true,deadline,31000,1,1,30999,30999)==WatchRules.Phase.WATCHING,"reward remains before deadline");ok(WatchRules.phase(false,true,deadline,31000,1,1,31000,31000)==WatchRules.Phase.QUESTION,"question returns at deadline");
+ ok(!WatchRules.grantsReward("A","B",false,false),"wrong answer grants no viewing time");ok(WatchRules.grantsReward("A","A",false,false),"correct choice grants viewing");ok(!WatchRules.grantsReward("A","A",true,false),"repeated submission does not stack time");ok(!WatchRules.grantsReward("A","A",false,true),"correct answer cannot bypass parent lock");
+ ok(WatchRules.phase(true,true,deadline,31000,1,1,2000,2000)==WatchRules.Phase.PARENT_LOCK,"parent lock overrides earned viewing");ok(WatchRules.phase(false,true,deadline,31000,1,2,2000,2000)==WatchRules.Phase.QUESTION,"reboot requires another correct answer");ok(WatchRules.phase(false,false,0,0,1,1,2000,2000)==WatchRules.Phase.IDLE,"parent stopping mode removes quiz requirement");
+ try{WatchRules.rewardDeadline(0,0);throw new AssertionError();}catch(IllegalArgumentException e){ok(true,"zero reward interval rejected");}
+ JSONArray bank=new JSONArray(new String(Files.readAllBytes(Paths.get("tv-learning/assets/questions.json")),"UTF-8"));String[] topic={"language","math","life","words","health","logic"};for(int grade=1;grade<=2;grade++)for(int subject=0;subject<6;subject++){JSONObject c=new JSONObject().put("grade",grade).put("subject",subject).put("seconds",10).put("limit",0).put("topics",new JSONArray().put(topic[subject])).put("custom",new JSONArray());ok(Rules.validate(c,bank)>=10,"grade "+grade+" subject "+subject+" has eligible questions");}
+ JSONObject update=new JSONObject().put("packageName","tw.rex.learningtv").put("versionCode",120).put("bytes",100).put("sha256",new String(new char[64]).replace('\0','a')).put("apkUrl","https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/TV.apk");UpdateRules.validate(update,"tw.rex.learningtv");ok(true,"update manifest matches package and trusted endpoint");update.put("packageName","wrong.package");try{UpdateRules.validate(update,"tw.rex.learningtv");throw new AssertionError();}catch(Exception e){ok(true,"wrong update package rejected");}update.put("packageName","tw.rex.learningtv").put("apkUrl","https://evil.example/TV.apk");try{UpdateRules.validate(update,"tw.rex.learningtv");throw new AssertionError();}catch(Exception e){ok(true,"untrusted update host rejected");}
+ System.out.println(n+" checks passed");
+ }
+}

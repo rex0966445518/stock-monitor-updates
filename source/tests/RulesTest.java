@@ -1,0 +1,11 @@
+import tw.rex.link.Rules;import org.json.*;import java.nio.file.*;
+public class RulesTest {
+ static int checks;static void ok(boolean b,String name){if(!b)throw new AssertionError(name);checks++;System.out.println("PASS "+name);}
+ static JSONObject config(int subject,String topic)throws Exception{return new JSONObject().put("subject",subject).put("seconds",10).put("limit",10).put("topics",new JSONArray().put(topic)).put("custom",new JSONArray());}
+ public static void main(String[] args)throws Exception{
+ ok(!Rules.expired(true,10000,20000,9999,19999),"timer stays usable before deadline");ok(Rules.expired(true,10000,20000,10000,19999),"timer expires at boundary");ok(Rules.expired(true,10000,20000,10001,0),"moving wall clock backward cannot extend countdown");ok(!Rules.expired(false,0,0,10000,10000),"unlock cancels timer");ok(Rules.rebootLock(true,1,2),"reboot during countdown requires parent unlock");ok(!Rules.rebootLock(false,1,2),"reboot without countdown does not add lock");
+ JSONArray bank=new JSONArray(new String(Files.readAllBytes(Paths.get("tv-learning/assets/questions.json")),"UTF-8"));ok(Rules.validate(config(3,"letters"),bank)==26,"English letters filter selects 26 questions");ok(Rules.validate(config(0,"zhuyin"),bank)==15,"Chinese phonetics filter selects 15 questions");try{Rules.validate(config(0,"letters"),bank);throw new AssertionError();}catch(Exception e){ok(true,"empty subject and topic combination rejected");}
+ JSONObject c=config(6,"custom");JSONObject q=new JSONObject().put("subject",1).put("question","哪一個是動物？").put("options",new JSONArray().put("貓").put("桌子").put("鉛筆")).put("answer","貓").put("explanation","貓是動物。");c.getJSONArray("custom").put(q);ok(Rules.validate(c,bank)==1,"valid parent custom question accepted");q.put("answer","不存在");try{Rules.validate(c,bank);throw new AssertionError();}catch(Exception e){ok(true,"answer outside choices rejected");}q.put("answer","貓");q.put("options",new JSONArray().put("貓").put("貓").put("狗"));try{Rules.validate(c,bank);throw new AssertionError();}catch(Exception e){ok(true,"duplicate choices rejected");}JSONObject invalid=config(3,"letters");invalid.put("seconds",-1);try{Rules.validate(invalid,bank);throw new AssertionError();}catch(Exception e){ok(true,"negative interval rejected");}
+ System.out.println(checks+" checks passed");
+ }
+}
