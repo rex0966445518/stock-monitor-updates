@@ -29,3 +29,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create learning-island-family-v3.0.0 LearningIsland-Family-TV-v3.0.0.apk LearningIsland-Family-Parent-v3.0.0.apk --target "$(git rev-parse HEAD)" --title "學習島・家庭版 3.0.0" --latest=false --notes "家庭版與舊版並存。首次請電視與家長手機各安裝一次並重新配對，後續在家庭版內使用一鍵更新。包含六套全屏背景及新版答題動畫。舊版資料保留，不會自動搬移。雙端編譯、正式簽章與檔案驗證通過，實機體驗待確認。"
+
+# Certificate verification supports current Android build-tools output.
