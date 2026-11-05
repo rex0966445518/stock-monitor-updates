@@ -1,9 +1,9 @@
 {
-  "packageName": "tw.rex.learningtvnext",
-  "versionCode": 214,
-  "versionName": "2.1.4",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-next/LearningIsland-TV-v2.1.4.apk",
-  "sha256": "40da22dcd330c7968ad16a41c52456c3bc45ea5f253a4a4f73511ce658e60723",
-  "bytes": 37445870,
-  "notes": "更新「嘟嘟一家在遊樂園」皮膚、電視首頁與手機布局。保留配對、學習紀錄及 YouTube 功能。請電視與家長端都更新；實機使用效果待確認。"
+  "packageName": "tw.rex.learningtvfamily",
+  "versionCode": 300,
+  "versionName": "3.0.0",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.0.0.apk",
+  "sha256": "2eb10978a821a54926e5d7ac3dd78aca508f945aafd07c9803d9c369739ac48d",
+  "bytes": 40240443,
+  "notes": "家庭版首次發布：六套全屏高清背景、答錯指向正確答案與音效、答對呼拉圈動畫。與舊版並存，首次安裝需重新配對；後續沿用本更新通道。"
 }
