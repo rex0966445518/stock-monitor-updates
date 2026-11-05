@@ -1,9 +1,0 @@
-{
-  "packageName": "tw.rex.marketanalog",
-  "versionCode": 17,
-  "versionName": "0.1.16",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.16.apk",
-  "sha256": "5a638f3760c9979025cafc691926a830513b59b807df8ed88dd43d9c9d57f62c",
-  "bytes": 185418,
-  "notes": "修正有11/4日經收盤資料仍顯示無法預測：已收盤報價依日期與合約保存，隔天報價不覆蓋歷史；補入已保存的11/4收盤快照。未手動鎖定時，明確切換該日可用的前結算等基準。歷史更新與備份包含收盤快照，仍只採所選日09:00前資料。"
-}
