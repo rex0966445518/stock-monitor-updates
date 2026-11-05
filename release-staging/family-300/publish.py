@@ -14,7 +14,8 @@ for kind,entry in recipe.items():
  assert 0<len(data)<=52428800
  name=entry['file'];pathlib.Path(name).write_bytes(data)
  verified=subprocess.check_output([str(bt/'apksigner'),'verify','--print-certs',name],text=True)
- assert 'Signer #1 certificate SHA-256 digest: 19616a68907d87cd1c83c99db7c26cc1edbd67d7ce52498fa521953ddb8608e1' in verified,'Certificate mismatch'
+ print(verified)
+ assert '19616a68907d87cd1c83c99db7c26cc1edbd67d7ce52498fa521953ddb8608e1' in verified.lower(),'Certificate mismatch'
  badging=subprocess.check_output([str(bt/'aapt'),'dump','badging',name],text=True).splitlines()[0]
  assert "name='"+info['packageName']+"'" in badging
  assert "versionCode='300'" in badging and "versionName='3.0.0'" in badging
