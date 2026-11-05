@@ -1,0 +1,6 @@
+PASS TV: Java/DEX build, APK signatures v1/v2/v3, original certificate match, package version 140, eight wallpaper assets, update size and SHA256.
+package: name='tw.rex.learningtv' versionCode='140' versionName='1.3.10' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'
+PASS Parent: Java/DEX build, APK signatures v1/v2/v3, original certificate match, package version 140, eight wallpaper assets, update size and SHA256.
+package: name='tw.rex.parentcontrol' versionCode='140' versionName='1.3.10' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'
+8K design masters: TV 7680x4320, phone 4320x7680, Lanczos upscale from generated 1672x941 / 941x1672. Runtime: 1920x1080 / 1080x1920.
+Not run: physical TV/phone interaction, LAN pairing, remote update installation.

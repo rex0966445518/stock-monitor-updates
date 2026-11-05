@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.parentcontrol",
-  "versionCode": 139,
-  "versionName": "1.3.9",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/LearningIsland-Parent-v1.3.9.apk",
-  "sha256": "21cc80ebc8f26f9a0f17b8ca99cc24b295d88e75508aec855cdd8188ccb0ca0c",
-  "bytes": 1168723,
-  "notes": "學習日曆與逐題用時、保留完整新紀錄、首頁背景音樂開關、內建中英文離線女聲；保留多家長配對。兩端請更新至1.3.9。"
+  "versionCode": 140,
+  "versionName": "1.3.10",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-updates/LearningIsland-Parent-v1.3.10.apk",
+  "sha256": "c1f35c7fa86ff37acd56314b6c110b5767cbf4eff7aee308890af22a623b7dc9",
+  "bytes": 1689064,
+  "notes": "新增第四套「彩繪貓咪花園」：原創三位貓耳女孩、電視橫式與家長手機直式背景、配套按鈕與角色卡片；保留原三套皮膚。兩端請更新至1.3.10。"
 }
