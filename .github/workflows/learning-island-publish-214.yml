@@ -1,0 +1,38 @@
+name: Publish verified LearningIsland 2.1.4
+on:
+  push:
+    branches: [learning-island-next]
+    paths: ['.github/workflows/learning-island-publish-214.yml']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: learning-island-next
+      - name: Download and verify signed release APKs
+        shell: python
+        run: |
+          import hashlib, json, pathlib, urllib.request
+          manifests = json.loads("{\"tv\":{\"packageName\":\"tw.rex.learningtvnext\",\"versionCode\":214,\"versionName\":\"2.1.4\",\"apkUrl\":\"https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-next/LearningIsland-TV-v2.1.4.apk\",\"sha256\":\"40da22dcd330c7968ad16a41c52456c3bc45ea5f253a4a4f73511ce658e60723\",\"bytes\":37445870,\"notes\":\"更新「嘟嘟一家在遊樂園」皮膚、電視首頁與手機布局。保留配對、學習紀錄及 YouTube 功能。請電視與家長端都更新；實機使用效果待確認。\"},\"parent\":{\"packageName\":\"tw.rex.parentcontrolnext\",\"versionCode\":214,\"versionName\":\"2.1.4\",\"apkUrl\":\"https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-next/LearningIsland-Parent-v2.1.4.apk\",\"sha256\":\"21ad64f9a0bff3e7e1a0a410f1a77c0c38b705ee495eb5b772744eecc29d0771\",\"bytes\":27482547,\"notes\":\"更新「嘟嘟一家在遊樂園」皮膚、電視首頁與手機布局。保留配對、學習紀錄及 YouTube 功能。請電視與家長端都更新；實機使用效果待確認。\"}}")
+          base = "https://github.com/rex0966445518/stock-monitor-updates/releases/download/learning-island-v2.1.4/"
+          for kind, info in manifests.items():
+              name = info["apkUrl"].rsplit("/", 1)[1]
+              with urllib.request.urlopen(base + name, timeout=120) as response:
+                  data = response.read()
+              assert len(data) == info["bytes"], "APK size mismatch"
+              assert hashlib.sha256(data).hexdigest() == info["sha256"], "APK hash mismatch"
+              pathlib.Path(name).write_bytes(data)
+          for kind, info in manifests.items():
+              pathlib.Path(kind + ".json").write_text(json.dumps(info, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+      - name: Publish APKs and both update manifests atomically
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add LearningIsland-TV-v2.1.4.apk LearningIsland-Parent-v2.1.4.apk tv.json parent.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Publish verified LearningIsland TV and Parent 2.1.4 updates"
+          git push origin HEAD:learning-island-next
