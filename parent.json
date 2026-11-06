@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.parentcontrolfamily",
-  "versionCode": 300,
-  "versionName": "3.0.0",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-Parent-v3.0.0.apk",
-  "sha256": "3e087162fd90536e7100b3adadca9c9566fb89618a90109eb008002cd770215f",
-  "bytes": 30526827,
-  "notes": "家庭版首次發布：六套全屏高清背景、答錯指向正確答案與音效、答對呼拉圈動畫。與舊版並存，首次安裝需重新配對；後續沿用本更新通道。"
+  "versionCode": 301,
+  "versionName": "3.0.1",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-Parent-v3.0.1.apk",
+  "sha256": "53191dbd10cb05f0d93aacb5b62a039a36359fa1a846f7665c78b2bd9eaddf6f",
+  "bytes": 30870977,
+  "notes": "修正嘟嘟一家答題人物重疊：做題專用無人物遊樂園背景；重製寶寶與嘟嘟持步槍連發動畫、槍聲與答案彈孔，答對動畫結束後再換題。保留家庭版配對與資料。"
 }
