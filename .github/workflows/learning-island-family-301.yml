@@ -1,0 +1,31 @@
+name: Publish verified LearningIsland Family 3.0.1
+on:
+  push:
+    branches: [learning-island-family]
+    paths: ['.github/workflows/learning-island-family-301.yml']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: learning-island-family
+      - name: Reconstruct and verify both signed APKs
+        run: python release-staging/family-301/publish.py
+      - name: Publish family update channel atomically
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add LearningIsland-Family-TV-v3.0.1.apk LearningIsland-Family-Parent-v3.0.1.apk tv.json parent.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Publish signed LearningIsland Family 3.0.1 update channel"
+            git push origin HEAD:learning-island-family
+          fi
+      - name: Create public download release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create learning-island-family-v3.0.1 LearningIsland-Family-TV-v3.0.1.apk LearningIsland-Family-Parent-v3.0.1.apk --target "$(git rev-parse HEAD)" --title "學習島・家庭版 3.0.1" --latest=false --notes "修正嘟嘟一家做題時人物重疊：專用無人物背景；重製寶寶、嘟嘟持步槍射向正確答案的連發動畫與彈孔，動畫完成後再換題。沿用家庭版簽章與配對資料。雙端編譯及簽章檢查通過，實機動態效果待確認。"
