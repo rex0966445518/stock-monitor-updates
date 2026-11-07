@@ -1,0 +1,28 @@
+name: Publish LearningIsland Family TV 3.1.8
+on:
+  push:
+    branches: [learning-island-family]
+    paths: ['.github/workflows/learning-island-family-318.yml']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify signed TV package and publish update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          apk=LearningIsland-Family-TV-v3.1.8.apk
+          zstd -qd --patch-from=LearningIsland-Family-TV-v3.1.6.apk release-staging/family-318/tv.zst -o "$apk"
+          echo "c79b7c99dc29dd94c523edee4cf2fd7f1cb638e2e2f1748c0c85f073e4840ed5  $apk" | sha256sum -c -
+          test "$(jq -r .versionCode tv.json)" -le 318
+          cp release-staging/family-318/tv.json tv.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$apk" tv.json
+          git commit -m "Publish signed TV v3.1.8 with Dudu Space"
+          git push origin HEAD:learning-island-family
+          gh release create learning-island-family-v3.1.8 "$apk" --target "$(git rev-parse HEAD)" --latest=false --title "邊看邊學電視版 v3.1.8" --notes "駕駛艙三人互動、低血量船體搖晃、警示燈與濃煙，以及放大的航行障礙。"
