@@ -1,0 +1,9 @@
+{
+  "packageName": "tw.rex.learningtvfamily",
+  "versionCode": 311,
+  "versionName": "3.1.1",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.1.1.apk",
+  "sha256": "b6742739b30bf192f6c99f6b53ee8fc0f503f281599fe32c1f50cc322770ffc4",
+  "bytes": 42906211,
+  "notes": "飛船自動迎擊三種障礙，新增血條、模組射擊音效和能量石回收。"
+}
