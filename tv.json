@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.learningtvfamily",
-  "versionCode": 309,
-  "versionName": "3.0.9",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.0.9.apk",
-  "sha256": "ffbffeb845c0d214f83c8afd873d2c4a9e2555487ed5b876a447fb75f30583e8",
-  "bytes": 42462253,
-  "notes": "完整飛船機庫與客艙、推進、搜索及飛彈模組商店。"
+  "versionCode": 310,
+  "versionName": "3.1.0",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.1.0.apk",
+  "sha256": "959f7db238910579a81c8a1074368f3d3a7592cb4578e269532f517ef454a3c4",
+  "bytes": 42906211,
+  "notes": "能量石補給、稀有外星人搜救與 300 張職業夥伴圖鑑。"
 }
