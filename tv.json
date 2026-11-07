@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.learningtvfamily",
-  "versionCode": 323,
-  "versionName": "3.2.3",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.2.3.apk",
-  "sha256": "b4854b0afc886441852d721b90febe78a865d69acd8f6411a337a97faada34c2",
-  "bytes": 45429313,
-  "notes": "以一號家庭艇為原型，重繪二至十號夢幻船體，商店與飛行套用相同圖像。"
+  "versionCode": 324,
+  "versionName": "3.2.4",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.2.4.apk",
+  "sha256": "6e159bafd73026db4db65762dcb8704f7d8efa5ba47852efe59e10156a90d899",
+  "bytes": 46121537,
+  "notes": "重繪十款夢幻星艦武器模組，商店與飛行裝備共用圖像。"
 }
