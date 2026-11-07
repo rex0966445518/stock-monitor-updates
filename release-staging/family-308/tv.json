@@ -1,0 +1,9 @@
+{
+  "packageName": "tw.rex.learningtvfamily",
+  "versionCode": 308,
+  "versionName": "3.0.8",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.0.8.apk",
+  "sha256": "1ff7df0fa5cafb26c16dd0efd856c82b0c292f7957d03c873950bb5b1897fd6c",
+  "bytes": 42462253,
+  "notes": "修正家庭乘員容量與節能遇襲，新增船體損傷、維修與每日登入效果。"
+}
