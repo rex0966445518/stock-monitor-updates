@@ -1,0 +1,9 @@
+{
+  "packageName": "tw.rex.learningtvfamily",
+  "versionCode": 330,
+  "versionName": "3.3.0",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.3.0.apk",
+  "sha256": "e4917330480794ad76c94504e1f679725a70ac326ed16d753851b863fb791966",
+  "bytes": 48101912,
+  "notes": "下載分段寫入、顯示驗證進度，完成後直接開啟安裝，可重試。"
+}
