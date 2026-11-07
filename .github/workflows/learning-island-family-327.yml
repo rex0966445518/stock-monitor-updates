@@ -1,0 +1,28 @@
+name: Publish LearningIsland Family Parent 3.2.7
+on:
+  push:
+    branches: [learning-island-family]
+    paths: ['.github/workflows/learning-island-family-327.yml']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify signed Parent package and publish update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          apk=LearningIsland-Family-Parent-v3.2.7.apk
+          zstd -qd --patch-from=LearningIsland-Family-Parent-v3.2.5.apk release-staging/family-327/parent.zst -o "$apk"
+          echo "11a2bf69fad52da3e2e7f12145dad72a437a67d913c8127d505aaf759cb356c3  $apk" | sha256sum -c -
+          test "$(jq -r .versionCode parent.json)" -le 327
+          cp release-staging/family-327/parent.json parent.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$apk" parent.json
+          git commit -m "Publish signed Parent v3.2.7 with Dudu Space"
+          git push origin HEAD:learning-island-family
+          gh release create learning-island-family-v3.2.7 "$apk" --target "$(git rev-parse HEAD)" --latest=false --title "邊看邊學家長端 v3.2.7" --notes "裝置清單新增取消並重新配對，區分連線、配對中和離線狀態，修正家長端版本文字。"

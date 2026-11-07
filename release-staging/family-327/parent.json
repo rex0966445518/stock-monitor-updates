@@ -1,0 +1,9 @@
+{
+  "packageName": "tw.rex.parentcontrolfamily",
+  "versionCode": 327,
+  "versionName": "3.2.7",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-Parent-v3.2.7.apk",
+  "sha256": "11a2bf69fad52da3e2e7f12145dad72a437a67d913c8127d505aaf759cb356c3",
+  "bytes": 30875073,
+  "notes": "裝置清單新增取消並重新配對，區分連線、配對中和離線狀態，修正家長端版本文字。"
+}
