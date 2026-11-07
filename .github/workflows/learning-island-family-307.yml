@@ -1,0 +1,28 @@
+name: Publish LearningIsland Family TV 3.0.7
+on:
+  push:
+    branches: [learning-island-family]
+    paths: ['.github/workflows/learning-island-family-307.yml']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify signed TV package and publish update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          apk=LearningIsland-Family-TV-v3.0.7.apk
+          zstd -qd --patch-from=LearningIsland-Family-TV-v3.0.6.apk release-staging/family-307/tv.zst -o "$apk"
+          echo "9cb9f90e5c0aa6782e2f08c26893dc55e65cc58b2e454fc56c5e4a3310cf3e4e  $apk" | sha256sum -c -
+          test "$(jq -r .versionCode tv.json)" -le 307
+          cp release-staging/family-307/tv.json tv.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$apk" tv.json
+          git commit -m "Publish signed TV v3.0.7 with Dudu Space"
+          git push origin HEAD:learning-island-family
+          gh release create learning-island-family-v3.0.7 "$apk" --target "$(git rev-parse HEAD)" --latest=false --title "邊看邊學電視版 v3.0.7" --notes "白橘飛船家庭駕駛艙與五項即時航行儀表。"
