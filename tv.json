@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.learningtvfamily",
-  "versionCode": 306,
-  "versionName": "3.0.6",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.0.6.apk",
-  "sha256": "b7a9da8b00721a14b64a989ed3089cce5d3a3346e868ba1d0d1141ffa3426f24",
-  "bytes": 42380333,
-  "notes": "全景家庭飛船、嘟嘟搜尋動作與飛行配樂。"
+  "versionCode": 307,
+  "versionName": "3.0.7",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.0.7.apk",
+  "sha256": "9cb9f90e5c0aa6782e2f08c26893dc55e65cc58b2e454fc56c5e4a3310cf3e4e",
+  "bytes": 42462253,
+  "notes": "白橘飛船家庭駕駛艙與五項即時航行儀表。"
 }
