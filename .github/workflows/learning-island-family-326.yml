@@ -1,0 +1,29 @@
+name: Publish LearningIsland Family TV 3.2.6
+on:
+  push:
+    branches: [learning-island-family]
+    paths: ['.github/workflows/learning-island-family-326.yml']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify signed TV package and publish update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          apk=LearningIsland-Family-TV-v3.2.6.apk
+          cat release-staging/family-326/part* > /tmp/tv.zst
+          zstd -qd --patch-from=LearningIsland-Family-TV-v3.2.5.apk /tmp/tv.zst -o "$apk"
+          echo "dac757f61d0f3176cec9fdcdd152aefbc3739d786ef9c586801e29c5cf79e45f  $apk" | sha256sum -c -
+          test "$(jq -r .versionCode tv.json)" -le 326
+          cp release-staging/family-326/tv.json tv.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$apk" tv.json
+          git commit -m "Publish signed TV v3.2.6 with Dudu Space"
+          git push origin HEAD:learning-island-family
+          gh release create learning-island-family-v3.2.6 "$apk" --target "$(git rev-parse HEAD)" --latest=false --title "邊看邊學電視版 v3.2.6" --notes "十款飛船單人駕駛維修畫面、母嬰艙外電焊、二十種怪物與武器強度連動遭遇。"
