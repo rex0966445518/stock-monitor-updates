@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.learningtvfamily",
-  "versionCode": 301,
-  "versionName": "3.0.1",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.0.1.apk",
-  "sha256": "d8d17281fab48699b4a28097c060214951e3a466f3e0fe89c1edbe2182a2565f",
-  "bytes": 40818211,
-  "notes": "修正嘟嘟一家答題人物重疊：做題專用無人物遊樂園背景；重製寶寶與嘟嘟持步槍連發動畫、槍聲與答案彈孔，答對動畫結束後再換題。保留家庭版配對與資料。"
+  "versionCode": 303,
+  "versionName": "3.0.3",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.0.3.apk",
+  "sha256": "2013cddc6bd4d316d13984fe34aa90cc2244aeeae4de5496bf6da6427c247ec2",
+  "bytes": 40986543,
+  "notes": "新增嘟嘟太空探索。"
 }
