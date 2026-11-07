@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.learningtvfamily",
-  "versionCode": 328,
-  "versionName": "3.2.8",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.2.8.apk",
-  "sha256": "a1aa7f9874b38634567895b9ef58dad865c72e171fe89c4be6c95daa10e08990",
-  "bytes": 48097816,
-  "notes": "家長連線頁新增針對指定已配對手機重新配對。"
+  "versionCode": 329,
+  "versionName": "3.2.9",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.2.9.apk",
+  "sha256": "72d356ffb1495ebd3cc6fc37ee285d105d6bd3a1b5f74a52371cd2d0fbd2481f",
+  "bytes": 48101912,
+  "notes": "武器掛點輪流發射、全船型駕駛表情與引擎尾焰、家長首頁派遣外星人。"
 }
