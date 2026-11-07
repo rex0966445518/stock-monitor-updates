@@ -1,0 +1,33 @@
+name: Publish LearningIsland Family TV 3.2.5
+on:
+  push:
+    branches: [learning-island-family]
+    paths: ['.github/workflows/learning-island-family-325.yml']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify signed TV package and publish update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for role in TV Parent; do
+            meta=$(echo "$role" | tr '[:upper:]' '[:lower:]').json
+            stage=release-staging/family-325
+            apk=LearningIsland-Family-$role-v3.2.5.apk
+            cat "$stage/$role".? > /tmp/package.zst
+            zstd -qd --patch-from=LearningIsland-Family-TV-v3.2.4.apk /tmp/package.zst -o "$apk"
+            echo "$(jq -r .sha256 "$stage/$meta")  $apk" | sha256sum -c -
+            test "$(jq -r .versionCode "$meta")" -lt 325
+            cp "$stage/$meta" "$meta"
+            git add "$meta" "$apk"
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Publish signed family TV and Parent v3.2.5"
+          git push origin HEAD:learning-island-family
+          gh release create learning-island-family-v3.2.5 LearningIsland-Family-*-v3.2.5.apk --target "$(git rev-parse HEAD)" --latest=false --title "邊看邊學家庭版 v3.2.5" --notes "飛船商店十款獨立縮圖、雙側放大武器、數字能量與家長派遣外星人。"
