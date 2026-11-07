@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.learningtvfamily",
-  "versionCode": 318,
-  "versionName": "3.1.8",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.1.8.apk",
-  "sha256": "c79b7c99dc29dd94c523edee4cf2fd7f1cb638e2e2f1748c0c85f073e4840ed5",
-  "bytes": 44732602,
-  "notes": "駕駛艙三人互動、低血量船體搖晃、警示燈與濃煙，以及放大的航行障礙。"
+  "versionCode": 320,
+  "versionName": "3.2.0",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.2.0.apk",
+  "sha256": "bfc4af2bdebe4935512d7e67ee9c74ba0ccfbfb5cb1b07128d3b32c52d8343db",
+  "bytes": 44736833,
+  "notes": "修正電視進入太空探索時的第 113 行語法錯誤，加入主畫面出艙維修與 HP 回升動畫。"
 }
