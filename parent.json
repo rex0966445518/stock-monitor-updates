@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.parentcontrolfamily",
-  "versionCode": 325,
-  "versionName": "3.2.5",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-Parent-v3.2.5.apk",
-  "sha256": "3d61cb7232f2b23576ec45029c399687ae0ddb7db18090d4bc9d0d18d2a9f670",
+  "versionCode": 327,
+  "versionName": "3.2.7",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-Parent-v3.2.7.apk",
+  "sha256": "11a2bf69fad52da3e2e7f12145dad72a437a67d913c8127d505aaf759cb356c3",
   "bytes": 30875073,
-  "notes": "飛船商店十款獨立縮圖、雙側放大武器、數字能量與家長派遣外星人。"
+  "notes": "裝置清單新增取消並重新配對，區分連線、配對中和離線狀態，修正家長端版本文字。"
 }
