@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.learningtvfamily",
-  "versionCode": 326,
-  "versionName": "3.2.6",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.2.6.apk",
-  "sha256": "dac757f61d0f3176cec9fdcdd152aefbc3739d786ef9c586801e29c5cf79e45f",
+  "versionCode": 328,
+  "versionName": "3.2.8",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.2.8.apk",
+  "sha256": "a1aa7f9874b38634567895b9ef58dad865c72e171fe89c4be6c95daa10e08990",
   "bytes": 48097816,
-  "notes": "十款飛船單人駕駛維修畫面、母嬰艙外電焊、二十種怪物與武器強度連動遭遇。"
+  "notes": "家長連線頁新增針對指定已配對手機重新配對。"
 }
