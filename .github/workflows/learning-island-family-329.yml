@@ -1,0 +1,35 @@
+name: Publish LearningIsland Family TV 3.2.9
+on:
+  push:
+    branches: [learning-island-family]
+    paths: ['.github/workflows/learning-island-family-329.yml']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify signed TV package and publish update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for role in TV Parent; do
+            meta=$(echo "$role" | tr '[:upper:]' '[:lower:]').json
+            stage=release-staging/family-329
+            apk=LearningIsland-Family-$role-v3.2.9.apk
+            cat "$stage/$role".? > /tmp/package.zst
+            old=8
+            if [ "$role" = Parent ]; then old=7; fi
+            zstd -qd --patch-from=LearningIsland-Family-$role-v3.2.$old.apk /tmp/package.zst -o "$apk"
+            echo "$(jq -r .sha256 "$stage/$meta")  $apk" | sha256sum -c -
+            test "$(jq -r .versionCode "$meta")" -lt 329
+            cp "$stage/$meta" "$meta"
+            git add "$meta" "$apk"
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Publish signed family TV and Parent v3.2.9"
+          git push origin HEAD:learning-island-family
+          gh release create learning-island-family-v3.2.9 LearningIsland-Family-*-v3.2.9.apk --target "$(git rev-parse HEAD)" --latest=false --title "邊看邊學家庭版 v3.2.9" --notes "武器掛點輪流發射、全船型駕駛表情與引擎尾焰、家長首頁派遣外星人。"
