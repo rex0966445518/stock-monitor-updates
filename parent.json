@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.parentcontrolfamily",
-  "versionCode": 301,
-  "versionName": "3.0.1",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-Parent-v3.0.1.apk",
-  "sha256": "53191dbd10cb05f0d93aacb5b62a039a36359fa1a846f7665c78b2bd9eaddf6f",
-  "bytes": 30870977,
-  "notes": "修正嘟嘟一家答題人物重疊：做題專用無人物遊樂園背景；重製寶寶與嘟嘟持步槍連發動畫、槍聲與答案彈孔，答對動畫結束後再換題。保留家庭版配對與資料。"
+  "versionCode": 325,
+  "versionName": "3.2.5",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-Parent-v3.2.5.apk",
+  "sha256": "3d61cb7232f2b23576ec45029c399687ae0ddb7db18090d4bc9d0d18d2a9f670",
+  "bytes": 30875073,
+  "notes": "飛船商店十款獨立縮圖、雙側放大武器、數字能量與家長派遣外星人。"
 }
