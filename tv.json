@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.learningtvfamily",
-  "versionCode": 312,
-  "versionName": "3.1.2",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.1.2.apk",
-  "sha256": "f7676c76611b07230c0b25c8c1355529176c1aed2db24f1aadf6cad80c2fce7d",
+  "versionCode": 313,
+  "versionName": "3.1.3",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.1.3.apk",
+  "sha256": "476b794ecc64360aa4bc3e125e497527ac8bb5da72e360941b1f2f5ab2ac2613",
   "bytes": 42910307,
-  "notes": "精英襲擊艦、護盾吸收傷害、紅色停航警報與手動維修。"
+  "notes": "遊戲動作音效、航行畫質與各功能頁動畫效能優化。"
 }
