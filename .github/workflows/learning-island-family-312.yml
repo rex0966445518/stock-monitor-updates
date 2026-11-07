@@ -1,0 +1,28 @@
+name: Publish LearningIsland Family TV 3.1.2
+on:
+  push:
+    branches: [learning-island-family]
+    paths: ['.github/workflows/learning-island-family-312.yml']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify signed TV package and publish update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          apk=LearningIsland-Family-TV-v3.1.2.apk
+          zstd -qd --patch-from=LearningIsland-Family-TV-v3.1.1.apk release-staging/family-312/tv.zst -o "$apk"
+          echo "f7676c76611b07230c0b25c8c1355529176c1aed2db24f1aadf6cad80c2fce7d  $apk" | sha256sum -c -
+          test "$(jq -r .versionCode tv.json)" -le 312
+          cp release-staging/family-312/tv.json tv.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$apk" tv.json
+          git commit -m "Publish signed TV v3.1.2 with Dudu Space"
+          git push origin HEAD:learning-island-family
+          gh release create learning-island-family-v3.1.2 "$apk" --target "$(git rev-parse HEAD)" --latest=false --title "邊看邊學電視版 v3.1.2" --notes "精英襲擊艦、護盾吸收傷害、紅色停航警報與手動維修。"
