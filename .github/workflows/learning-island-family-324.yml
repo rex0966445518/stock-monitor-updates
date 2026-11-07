@@ -1,0 +1,28 @@
+name: Publish LearningIsland Family TV 3.2.4
+on:
+  push:
+    branches: [learning-island-family]
+    paths: ['.github/workflows/learning-island-family-324.yml']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify signed TV package and publish update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          apk=LearningIsland-Family-TV-v3.2.4.apk
+          zstd -qd --patch-from=LearningIsland-Family-TV-v3.2.3.apk release-staging/family-324/tv.zst -o "$apk"
+          echo "6e159bafd73026db4db65762dcb8704f7d8efa5ba47852efe59e10156a90d899  $apk" | sha256sum -c -
+          test "$(jq -r .versionCode tv.json)" -le 324
+          cp release-staging/family-324/tv.json tv.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$apk" tv.json
+          git commit -m "Publish signed TV v3.2.4 with Dudu Space"
+          git push origin HEAD:learning-island-family
+          gh release create learning-island-family-v3.2.4 "$apk" --target "$(git rev-parse HEAD)" --latest=false --title "邊看邊學電視版 v3.2.4" --notes "重繪十款夢幻星艦武器模組，商店與飛行裝備共用圖像。"
