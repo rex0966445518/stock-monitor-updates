@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.learningtvfamily",
-  "versionCode": 321,
-  "versionName": "3.2.1",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.2.1.apk",
-  "sha256": "e8d1d7d87c7203e61be261c998628a1a3b302b52c89f142c1d1ab8533941649e",
-  "bytes": 44790337,
-  "notes": "改善受損煙霧，統一商店與飛行畫面的船體、防護盾、武器與推進器圖像。"
+  "versionCode": 322,
+  "versionName": "3.2.2",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.2.2.apk",
+  "sha256": "1e29458f161d57219a18bce1a953ea285f3143488446e48e0d33cebc977883a8",
+  "bytes": 44794433,
+  "notes": "十款家庭飛船共用三人駕駛艙，依價格逐級增加艙段、翼面與船體尺寸。"
 }
