@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.learningtvfamily",
-  "versionCode": 316,
-  "versionName": "3.1.6",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.1.6.apk",
-  "sha256": "350e1a6619e2789f885f0bb5b36db15471af8b3e352b971da38e1b7e72ad1c73",
-  "bytes": 43484314,
-  "notes": "重繪航行障礙、降低遭遇頻率、新增船體血條、家庭表情及四人艙外救援。"
+  "versionCode": 318,
+  "versionName": "3.1.8",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/learning-island-family/LearningIsland-Family-TV-v3.1.8.apk",
+  "sha256": "c79b7c99dc29dd94c523edee4cf2fd7f1cb638e2e2f1748c0c85f073e4840ed5",
+  "bytes": 44732602,
+  "notes": "駕駛艙三人互動、低血量船體搖晃、警示燈與濃煙，以及放大的航行障礙。"
 }
