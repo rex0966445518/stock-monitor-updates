@@ -1,9 +1,9 @@
 {
   "packageName": "com.rex.highscanner",
-  "versionCode": 9,
-  "versionName": "1.4.0",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/high-scanner-updates/high-scanner/HighScanner-v1.4.0.apk",
-  "sha256": "e91898526024a6a70d397b384f293cf096f33d8e8f91592e61dc4e6796503cc2",
-  "bytes": 74740,
-  "notes": "新增外資持股低於5～50%可調上限、大戶減持、散戶增持獨立必要條件；卡片與CSV顯示持股比例、週增減、日期及來源。缺資料不判符合。"
+  "versionCode": 10,
+  "versionName": "1.5.0",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/high-scanner-updates/high-scanner/HighScanner-v1.5.0.apk",
+  "sha256": "32c02a9f4205771ab24aa7f36309988255b9d21bdbc64a2f6c99360123a0a078",
+  "bytes": 103829,
+  "notes": "新增四分頁歷史掃描，自動抓取證交所上市日線與暖機資料，保留原有掃描和一鍵更新。"
 }
