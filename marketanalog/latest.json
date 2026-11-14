@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.marketanalog",
-  "versionCode": 22,
-  "versionName": "0.1.21",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.21.apk",
-  "sha256": "ffc8a77bb3f49e1239dbe2f4e10b1a80e7dc64122ca7103c897484e04ce2897e",
-  "bytes": 263707,
-  "notes": "新增自動機器人探查：勾選為每組必選，其餘自動加入或排除，最多511組。每組完成自動保存斷點，可暫停／續查；探索期前十名再做保留期驗證，顯示樣本、涵蓋與基準。持續模式檢查新收盤資料再開新輪，相同資料不重複累加；App離開前景暫停。"
+  "versionCode": 23,
+  "versionName": "0.1.22",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.22.apk",
+  "sha256": "f630d926e8cf64385b5639b222bfbac2fb671681ac7513bfa05117d685eab233",
+  "bytes": 267878,
+  "notes": "統一明日預測、自動回測與機器人的百分比距離、回看與投票規則。預測／回測共用樣本與平盤設定；機器人套用組合一併帶入原參數。缺訓練或夜盤開盤基準明示缺漏，不再換基準硬算。910筆逐日一致性檢查通過；樣本比例不代表命中率。"
 }
