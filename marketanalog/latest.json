@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.marketanalog",
-  "versionCode": 18,
-  "versionName": "0.1.17",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.17.apk",
-  "sha256": "949e517227a6e08e9cb4d171e9cc31d439e49d1b5f22c80838ea127c090bb6e5",
+  "versionCode": 19,
+  "versionName": "0.1.18",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.18.apk",
+  "sha256": "51515df0406030a3a7bcc0f05b54bde1ec265364cf27b9c7f506f78ff6ae0a31",
   "bytes": 210057,
-  "notes": "新增第5條件台幣銀行間收盤升貶與第6條件美元指數DXY，每次預測自動更新並參與歷史比對及逐日回測；顯示收盤值、前收、日期與來源，排除未完成日線與開盤後數據，缺漏時明確提示。"
+  "notes": "新增四條件專用模式：固定前一費半正常時段收盤＋日本夜盤＋韓國夜盤＋台股夜盤；不納入亦不下載台幣與DXY。同步支援預測、逐日回測、明細與匯出；原六條件模式保留。"
 }
