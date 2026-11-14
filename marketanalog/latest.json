@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.marketanalog",
-  "versionCode": 19,
-  "versionName": "0.1.18",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.18.apk",
-  "sha256": "51515df0406030a3a7bcc0f05b54bde1ec265364cf27b9c7f506f78ff6ae0a31",
+  "versionCode": 20,
+  "versionName": "0.1.19",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.19.apk",
+  "sha256": "912dc4be8cb9122cf188cd69a4661733a3531b0882a0df09f3ec6fd1f2345a6a",
   "bytes": 210057,
-  "notes": "新增四條件專用模式：固定前一費半正常時段收盤＋日本夜盤＋韓國夜盤＋台股夜盤；不納入亦不下載台幣與DXY。同步支援預測、逐日回測、明細與匯出；原六條件模式保留。"
+  "notes": "預測與回測選單中的美股統一改為費半，三種模式皆固定使用^SOX。同步更新費半條件卡與歷史欄位；其他指數舊草稿不沿用手動點數，舊報告保留實際來源。"
 }
