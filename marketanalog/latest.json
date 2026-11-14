@@ -1,9 +1,9 @@
 {
   "packageName": "tw.rex.marketanalog",
-  "versionCode": 20,
-  "versionName": "0.1.19",
-  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.19.apk",
-  "sha256": "912dc4be8cb9122cf188cd69a4661733a3531b0882a0df09f3ec6fd1f2345a6a",
-  "bytes": 210057,
-  "notes": "預測與回測選單中的美股統一改為費半，三種模式皆固定使用^SOX。同步更新費半條件卡與歷史欄位；其他指數舊草稿不沿用手動點數，舊報告保留實際來源。"
+  "versionCode": 21,
+  "versionName": "0.1.20",
+  "apkUrl": "https://raw.githubusercontent.com/rex0966445518/stock-monitor-updates/main/marketanalog/MarketAnalog-v0.1.20.apk",
+  "sha256": "6454de2d6ad1f44a1ef1517d85c1cc439ec2e1fab372962179f6a9b46b64d51d",
+  "bytes": 251222,
+  "notes": "參與市場改為九項自由勾選：台指夜盤、日夜盤、韓夜盤、費半、NVDA、TSM、電子期貨TE夜盤、美元指數、台幣匯率。預測與回測共用並保存組合；只用勾選條件，動態明細與匯出。新增實際NVDA/TSM歷史與512筆TE獨立夜盤；缺資料明確提示。"
 }
