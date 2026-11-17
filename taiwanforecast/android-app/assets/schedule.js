@@ -14,13 +14,7 @@ function equityClose(date){
 function scheduleFor(i,cal){
 
  if([4,5,6].includes(i)){
-  for(let d=shift(cal.target,-1);d>=cal.prev;d=shift(d,-1)){
-   const list=holidays[d.slice(0,4)];
-   if(!list)return {note:'美股交易日曆待確認'};
-   const wd=new Date(at(d,'12:00')).getUTCDay();
-   if(wd!==0&&wd!==6&&!list.split(' ').includes(d.slice(5)))return {time:equityClose(d)};
-  }
-  return {note:'美股休市，本期無隔夜收盤資料'};
+  try{return {time:equityClose(latestUSSession(Math.min(Date.now(),at(cal.target,'05:10'))))}}catch(e){return {note:e.message}};
  }
  if([20,21].includes(i))return {time:at(cal.target,'08:55')};
  if([1,7].includes(i))return {time:at(cal.target,'05:10')};

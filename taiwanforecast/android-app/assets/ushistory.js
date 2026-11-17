@@ -1,3 +1,24 @@
+// Resolve the most recent completed US session, including weekends and holidays.
+function latestUSSession(cut){
+ for(let d=day(cut,'America/New_York'),n=0;n<370;n++,d=shift(d,-1)){
+  const list=holidays[d.slice(0,4)];if(!list)throw Error('美股交易日曆待確認：'+d);
+  const wd=new Date(d+'T12:00:00Z').getUTCDay();
+  if(wd!==0&&wd!==6&&!list.split(' ').includes(d.slice(5))&&equityClose(d)<=cut)return d;
+ }
+ throw Error('找不到已收盤的美股交易日');
+}
+function completedUSReturn(bars,cut){
+ const date=latestUSSession(cut),previous=latestUSSession(equityClose(date)-1);
+ const a=bars.find(x=>x.date===previous),b=bars.find(x=>x.date===date);
+ if(!a||!b||!(a.c>0)||!(b.c>0))throw Error('缺美股 '+(!b?date:previous)+' 收盤資料');
+ return {r:ret(b.c,a.c),date};
+}
+function historicalNQWindow(cut){
+ const date=latestUSSession(cut),base=equityClose(date);
+ // The session's following Taipei morning, never the next reopening.
+ const end=at(shift(date,1),'05:10');
+ return {date,base,cut:Math.min(cut,end),carried:end<cut};
+}
 // Only completed bars ending at the required cutoff qualify; never use later bars.
 function nqWeekendClosed(time){
  const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(time);

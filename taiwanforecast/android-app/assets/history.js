@@ -31,10 +31,10 @@ function showMissing(items,label){
 function savePremarket(snapshot){
  const {cal,rows}=snapshot, time=Date.now();
  if(!cal.confirmed||time>=at(cal.target,'09:00')||!rows.some(r=>fin(r?.v)))return;
- const archive=saved('premarket-nqsession-split-v1');
+ const archive=saved('premarket-usprevious-v1');
  const scores=scorePair(rows);
  if(archive[cal.target]?.scores.some((s,i)=>s.coverage>scores[i].coverage))return;
- archive[cal.target]={scores,time,missing:missingIndicators(rows)};localStorage.setItem('premarket-nqsession-split-v1',JSON.stringify(archive));
+ archive[cal.target]={scores,time,missing:missingIndicators(rows)};localStorage.setItem('premarket-usprevious-v1',JSON.stringify(archive));
 }
 async function actualMonth(d){
  const r=await tw('TAIEX/MI_5MINS_HIST',d);
@@ -49,7 +49,7 @@ function comparison(score,change){
  return score.dir===Math.sign(change)?'命中':'未命中';
 }
 function stats(){
- const records=Object.values(saved('history-results-nqsession-split-v1'));
+ const records=Object.values(saved('history-results-usprevious-v1'));
  const lines=[];
  for(const source of ['盤前留存','歷史重算']){
   const group=records.filter(r=>r.source===source);
@@ -66,7 +66,7 @@ const histDate=historyEl('histDate'),histRun=historyEl('histRun'),histResult=his
 histDate.max=day();histDate.value=day();
 histDate.onchange=()=>{
  historyEl('histPoster').hidden=true;historyEl('histDetail').hidden=false;histResult.textContent='';
- const cached=saved('history-results-nqsession-split-v1')[histDate.value];historyEl('histRaw').textContent='';historyEl('histDetail').hidden=!cached;
+ const cached=saved('history-results-usprevious-v1')[histDate.value];historyEl('histRaw').textContent='';historyEl('histDetail').hidden=!cached;
  showMissing(cached?.missing,cached?'上次查詢・'+cached.source:'');
 };
 histRun.onclick=async()=>{
@@ -80,7 +80,7 @@ histRun.onclick=async()=>{
   const previous=idx?month[idx-1]:last(await actualMonth(shift(target.slice(0,7)+'-01',-1)));
   const [o,h,l,c]=month[idx].values,pc=previous?.values[3];
   if(![o,h,l,c,pc].every(x=>fin(x)&&x>0))throw Error('缺少完整指數行情。');
-  const changes=[o-pc,c-o],record=saved('premarket-nqsession-split-v1')[target];
+  const changes=[o-pc,c-o],record=saved('premarket-usprevious-v1')[target];
   const source=record?'盤前留存':'歷史重算';
   let scores=record?.scores,missing=record?.missing,backups=[];
   if(!scores){const rows=Array(rules.length).fill(null);await collect({target,prev:previous.date,confirmed:true,replay:true},rows,()=>{});scores=scorePair(rows);missing=missingIndicators(rows);backups=rows.flatMap((r,i)=>r?.backup?[rules[i][1]+'｜'+r.source+'｜'+r.info]:[])}
@@ -89,7 +89,7 @@ histRun.onclick=async()=>{
   const lines=[target+' 加權指數｜證交所','昨收 '+fmt(pc)+' → 開盤 '+fmt(o)+' → 收盤 '+fmt(c),'最高 '+fmt(h)+'　最低 '+fmt(l),'收盤較昨收 '+sign(c-pc)+' 點（'+sign(ret(c,pc))+'%）',source+(record?' · '+taipeiStamp(record.time):' · 日韓截止 08:55，其餘截止 05:10；歷史資料可能經修訂')];
   scores.forEach((s,i)=>{const labels=i?['走低','走高']:['開低','開高'];const d=changes[i];lines.push((i?'盤中走勢':'開盤跳空')+'｜'+(s.coverage?s.score+' 分':'待評分')+' · 覆蓋 '+fmt(s.coverage)+'%\n預測 '+(s.dir===null?'暫不判定':s.dir===0?'觀望':labels[+(s.dir>0)])+'／實際 '+(d===0?'平盤':labels[+(d>0)])+' '+sign(d)+' 點（'+sign(d/(i?o:pc)*100)+'%） · '+outcomes[i]);});
   if(backups.length)lines.push('備援補齊 '+backups.length+' 項\n'+backups.join('\n'));
-  showMissing(missing,source);historyEl('histRaw').textContent=lines.join('\n');historyPoster({target,source,scores,outcomes,pc,o,c});histResult.textContent='';historyEl('histDetail').hidden=false;const records=saved('history-results-nqsession-split-v1');records[target]={source,outcomes,missing};localStorage.setItem('history-results-nqsession-split-v1',JSON.stringify(records));stats();
+  showMissing(missing,source);historyEl('histRaw').textContent=lines.join('\n');historyPoster({target,source,scores,outcomes,pc,o,c});histResult.textContent='';historyEl('histDetail').hidden=false;const records=saved('history-results-usprevious-v1');records[target]={source,outcomes,missing};localStorage.setItem('history-results-usprevious-v1',JSON.stringify(records));stats();
  }catch(e){histResult.textContent=target+'｜'+e.message+' 本次未新增樣本。'}finally{histRun.disabled=histDate.disabled=false}
 };
 stats();

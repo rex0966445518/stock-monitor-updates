@@ -139,7 +139,7 @@ async function collect(cal,rows,draw){
  });
  add([14],'FinMind · TX 外資',async put=>{let [daily,inst,ts]=await Promise.all([future,fm('TaiwanFuturesInstitutionalInvestors',from,prev,'TX'),tseries]),old=ts[ts.length-2].date;
  let net=d=>{let x=inst.find(r=>r.date===d&&/外資|Foreign/i.test(r.institutional_investors));return num(x?.long_open_interest_balance_volume)-num(x?.short_open_interest_balance_volume)},oi=daily.filter(x=>x.date===old&&x.trading_session==='position'&&/^\d{6}$/.test(x.contract_date)).reduce((s,r)=>s+num(r.open_interest),0),v=(net(prev)-net(old))/oi*100;if(!(oi>0)||!fin(v))throw Error('缺指定日期 TX 部位或市場未平倉口數');put(14,level(v,1,2),fmt(v)+'%');markSources(rows,[14],{source:'FinMind · TX 外資'},ts)});
- const amer=async sym=>{const a=(await series(sym)).filter(x=>{const ny=day(cut,'America/New_York'),hour=+new Intl.DateTimeFormat('en-GB',{timeZone:'America/New_York',hour:'2-digit',hourCycle:'h23'}).format(cut);return x.date<ny||x.date===ny&&cut>=equityClose(x.date)});let d=last(a);if(!d||d.date<prev||d.date>=target||a.length<2)throw Error('尚無對應隔夜收盤');return {r:ret(d.c,a[a.length-2].c),date:d.date}};
+ const amer=async sym=>completedUSReturn(await series(sym),cut);
  const sox=amer('^SOX');sox.catch(()=>{});
  add([5],'Yahoo · SOX',async put=>{let s=await sox;put(5,level(s.r,.5,1.5),fmt(s.r)+'%',s.date)});
  add([4],'Yahoo · TSM／SOX',async put=>{let [a,b]=await Promise.all([amer('TSM'),sox]);if(a.date===b.date)put(4,level(a.r-b.r,.5,1.5),fmt(a.r-b.r)+' 百分點',a.date)});
@@ -148,15 +148,15 @@ async function collect(cal,rows,draw){
  const bar=(a,time)=>last(a.filter(x=>x.t+60000<=time&&x.t>=time-180000));
  add([7],'Yahoo · NQ 歷史分時備援',async put=>{
  if(cut<at(target,'05:10'))return;
- if(nqWeekendClosed(cut)){rows[7]={status:'marketClosed',source:'CME 週末交易時段',info:'指定截點 '+taipeiStamp(cut)+'（台灣）仍在週末休市，沒有成交資料；不採用之後開盤的價格'};return}
- const s=await amer('^GSPC'),base=equityClose(s.date);
- try{const q=await historicalNQ(target,base,cut,series);put(7,level(q.value,.15,.4),fmt(q.value)+'% · '+taipeiStamp(base)+' → '+taipeiStamp(cut),target);rows[7].source=q.source;rows[7].backup=q.backup}catch(e){rows[7]={source:'Nasdaq 100 期貨 · 備援查詢',status:e.marketClosed?'marketClosed':'unavailable',info:e.message}}
+ const window=historicalNQWindow(cut),{base,date}=window;
+ try{const q=await historicalNQ(target,base,window.cut,series);put(7,level(q.value,.15,.4),fmt(q.value)+'% · 美股交易日 '+date+' · '+taipeiStamp(base)+' → '+taipeiStamp(window.cut)+(window.carried?' · 休市沿用最近已收盤交易日':''),date);rows[7].source=q.source;rows[7].backup=q.backup}catch(e){rows[7]={source:'Nasdaq 100 期貨 · '+date+' 歷史備援',status:'unavailable',info:e.message}}
+
  });
  add([20,21],'Yahoo · 日經／KOSPI · 08:55 截點',async put=>{const asiaCut=Math.min(Date.now(),at(target,'08:55'));if(asiaCut<at(target,'08:00'))return;const values=await Promise.all(['^N225','^KS11'].map(async sym=>{let [a,b]=await Promise.all([series(sym,'1m'),series(sym)]),q=bar(a,asiaCut),op=a.find(x=>x.date===target&&x.t===at(target,'08:00')),prior=last(b.filter(x=>x.date<target));if(!q||q.date!==target)return [NaN,NaN];return [ret(q.c,prior?.c),ret(q.c,op?.o)]}));for(const [i,k,x,y] of [[20,0,.3,.8],[21,1,.15,.4]]){let a=values[0][k],b=values[1][k];put(i,agree(level(a,x,y),level(b,x,y)),fmt(a)+'%／'+fmt(b)+'%',target)}});
  add([18],'中央銀行 · 銀行間收盤匯率',async put=>{let r=await json('https://cpx.cbc.gov.tw/api/OpenData/FTDOpenData_Day'),entries=[];function visit(o){if(!o||typeof o!=='object')return;let vals=Object.values(o),d=vals.map(dateNorm).find(v=>/^\d{4}-\d\d-\d\d$/.test(v)),rate=vals.map(num).find(n=>n>10&&n<100);if(d&&rate)entries.push({d,rate});else vals.forEach(visit)}visit(r);entries=entries.filter(x=>x.d<=prev).sort((a,b)=>a.d.localeCompare(b.d));if(last(entries)?.d!==prev||cut<at(prev,'17:00'))return;let v=ret(last(entries).rate,entries[entries.length-2]?.rate);put(18,-level(v,.15,.4),fmt(v)+'%')});
  await Promise.allSettled(jobs);
  if(cal.replay&&cut===at(target,'05:10')){
-  const key='replay-nqsession-split-v1-'+target;
+  const key='replay-usprevious-v1-'+target;
   try{
    const previous=JSON.parse(localStorage.getItem(key)||'[]');
    rows.forEach((row,i)=>{

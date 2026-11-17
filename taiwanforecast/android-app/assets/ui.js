@@ -36,7 +36,7 @@ function render(){
 }
 async function refresh(){if(busy)return;busy=true;el('refresh').disabled=true;el('poster').disabled=true;el('status').textContent='正在核對交易日…';requests.clear();
  try{let cal=await calendar(),old=snap;snap={cal,time:Date.now(),rows:Array(rules.length).fill(null)};render();pollUS();pollTX();pollGlobal();await collect(cal,snap.rows,render);savePremarket(snap);
- if(!snap.rows.some(r=>fin(r?.v))&&old&&old.cal.target===cal.target&&old.rows.some(r=>fin(r?.v))){snap=old;el('status').textContent='連線失敗，保留上次查詢'}else if(snap.rows.some(r=>fin(r?.v)))localStorage.setItem('forecast-nqsession-split',JSON.stringify(snap));
+ if(!snap.rows.some(r=>fin(r?.v))&&old&&old.cal.target===cal.target&&old.rows.some(r=>fin(r?.v))){snap=old;el('status').textContent='連線失敗，保留上次查詢'}else if(snap.rows.some(r=>fin(r?.v)))localStorage.setItem('forecast-usprevious',JSON.stringify(snap));
  }catch(e){el('status').textContent='更新失敗：'+e.message}finally{retry=Date.now()+300000;busy=false;el('refresh').disabled=false;render()}}
 el('refresh').onclick=refresh;
 el('poster').onclick=()=>{
@@ -53,7 +53,7 @@ el('poster').onclick=()=>{
 };
 el('save').onclick=()=>{if(window.Poster)window.Poster.savePoster(posterData);else{let a=document.createElement('a');a.href=posterData;a.download='Taiwan-Forecast.png';a.click()}};
 el('closeDlg').onclick=()=>el('dlg').close();
-try{snap=JSON.parse(localStorage.getItem('forecast-nqsession-split'));if(snap)render()}catch{snap=null}
+try{snap=JSON.parse(localStorage.getItem('forecast-usprevious'));if(snap)render()}catch{snap=null}
 let lastAuto=0;
 function tick(){
  if(document.hidden||busy||!snap)return;
