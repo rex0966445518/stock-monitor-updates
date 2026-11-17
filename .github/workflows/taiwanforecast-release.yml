@@ -1,0 +1,27 @@
+name: Publish Taiwan Forecast APK
+on:
+  push:
+    branches: [main]
+    paths: ['taiwanforecast/latest.json']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish verified APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          code=$(jq -er '.versionCode | numbers' taiwanforecast/latest.json)
+          name=$(jq -er '.versionName' taiwanforecast/latest.json)
+          hash=$(jq -er '.sha256' taiwanforecast/latest.json)
+          apk="taiwanforecast/$code/TaiwanForecast.apk"
+          echo "$hash  $apk" | sha256sum -c -
+          tag="taiwanforecast-$code"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" "$apk" --target "$GITHUB_SHA" --title "台股隔日預測神器 $name" --notes "Android APK" --latest=false
+          fi
