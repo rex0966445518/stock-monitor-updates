@@ -1,4 +1,2 @@
-<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-  <background android:drawable="@color/forecast_icon_background"/>
-  <foreground><inset android:inset="18%"><bitmap android:src="@drawable/ic_forecast" android:gravity="fill"/></inset></foreground>
-</adaptive-icon>
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@color/icon_background"/><foreground android:drawable="@drawable/ic_forecast_foreground"/></adaptive-icon>
