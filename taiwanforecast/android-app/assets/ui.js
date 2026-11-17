@@ -31,12 +31,12 @@ function render(){
  if(upcoming.length)notice.textContent='下一次擷取　'+taipeiStamp(upcoming[0].time)+'（台灣）｜還有 '+countdown(upcoming[0].time-now);
  const box=el('groups');box.querySelectorAll('details').forEach(d=>d.open?expanded.add(d.dataset.group):expanded.delete(d.dataset.group));
  box.innerHTML=[...new Set(rules.map(r=>r[0]))].map(gr=>{let group=rules.map((r,i)=>[r,i]).filter(([r])=>r[0]===gr);
- return '<details data-group="'+gr+'" '+(expanded.has(gr)?'open':'')+'><summary>'+gr+'　<small>'+group.filter(([r,i])=>fin(rows[i]?.v)).length+'／'+group.length+'</small></summary>'+group.map(([r,i])=>{let a=rows[i],ok=fin(a?.v);return '<div class="row"><div class="item-head"><span><span class="badge '+(ok?'yes':'pending')+'" aria-hidden="true">'+(ok?'✓':'?')+'</span> '+safe(a?.title||r[1])+'</span>'+itemScore(r,a?.v)+'</div><small class="'+(ok?'yes':'pending')+'">'+(a?.live?(ok?'動態評分 · 已納入總分':'動態行情待更新'):(ok?'已取得資料':a?.status==='unavailable'?'已收盤 · 計算資料不足':'尚未取得資料'))+'</small>'+'<small>'+safe(a?.source||'等待更新')+' · '+safe(a?.date||'')+' '+safe(!ok&&!a?.live&&(slots[i].time>now||slots[i].note)?'':a?.info||'')+'</small><small>'+ (a?.status==='unavailable'?'缺少計算基準，並非等待開盤；來源補齊後才能計分':a?.live?(i===19?'每 2 分鐘查詢；報價時間以來源為準':'每 10 秒查詢；報價時間以來源為準'):ok?'':safe(waitingText(slots[i],now,busy&&!a,cal,retry)))+'</small><p class="explain">'+safe(explainItem(i,a?.v))+'</p></div>'}).join('')+'</details>'}).join('');
+ return '<details data-group="'+gr+'" '+(expanded.has(gr)?'open':'')+'><summary>'+gr+'　<small>'+group.filter(([r,i])=>fin(rows[i]?.v)).length+'／'+group.length+'</small></summary>'+group.map(([r,i])=>{let a=rows[i],ok=fin(a?.v);return '<div class="row"><div class="item-head"><span><span class="badge '+(ok?'yes':'pending')+'" aria-hidden="true">'+(ok?'✓':'?')+'</span> '+safe(a?.title||r[1])+'</span>'+itemScore(r,a?.v)+'</div><small class="'+(ok?'yes':'pending')+'">'+(a?.live?(ok?'動態評分 · 已納入總分':'動態行情待更新'):(ok?'已取得資料':a?.status==='marketClosed'?'截點休市 · 不計分':a?.status==='unavailable'?'計算資料不足':'尚未取得資料'))+'</small>'+'<small>'+safe(a?.source||'等待更新')+' · '+safe(a?.date||'')+' '+safe(!ok&&!a?.live&&(slots[i].time>now||slots[i].note)?'':a?.info||'')+'</small><small>'+ (a?.status==='marketClosed'?'該時點無成交，切換來源也不能補造行情':a?.status==='unavailable'?'缺少計算基準；可用來源補齊後才能計分':a?.live?(i===19?'每 2 分鐘查詢；報價時間以來源為準':'每 10 秒查詢；報價時間以來源為準'):ok?'':safe(waitingText(slots[i],now,busy&&!a,cal,retry)))+'</small><p class="explain">'+safe(explainItem(i,a?.v))+'</p></div>'}).join('')+'</details>'}).join('');
  el('poster').disabled=busy||!rows.some(r=>fin(r?.v));snap.verdict=verdict;snap.reason=reason;snap.scores=[t,g];el('status').textContent=(busy?'更新中　':'最近查詢　')+new Date(snap.time).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false})+'（台灣）';
 }
 async function refresh(){if(busy)return;busy=true;el('refresh').disabled=true;el('poster').disabled=true;el('status').textContent='正在核對交易日…';requests.clear();
  try{let cal=await calendar(),old=snap;snap={cal,time:Date.now(),rows:Array(rules.length).fill(null)};render();pollUS();pollTX();pollGlobal();await collect(cal,snap.rows,render);savePremarket(snap);
- if(!snap.rows.some(r=>fin(r?.v))&&old&&old.cal.target===cal.target&&old.rows.some(r=>fin(r?.v))){snap=old;el('status').textContent='連線失敗，保留上次查詢'}else if(snap.rows.some(r=>fin(r?.v)))localStorage.setItem('forecast-nightopen-split',JSON.stringify(snap));
+ if(!snap.rows.some(r=>fin(r?.v))&&old&&old.cal.target===cal.target&&old.rows.some(r=>fin(r?.v))){snap=old;el('status').textContent='連線失敗，保留上次查詢'}else if(snap.rows.some(r=>fin(r?.v)))localStorage.setItem('forecast-nqsession-split',JSON.stringify(snap));
  }catch(e){el('status').textContent='更新失敗：'+e.message}finally{retry=Date.now()+300000;busy=false;el('refresh').disabled=false;render()}}
 el('refresh').onclick=refresh;
 el('poster').onclick=()=>{
@@ -53,7 +53,7 @@ el('poster').onclick=()=>{
 };
 el('save').onclick=()=>{if(window.Poster)window.Poster.savePoster(posterData);else{let a=document.createElement('a');a.href=posterData;a.download='Taiwan-Forecast.png';a.click()}};
 el('closeDlg').onclick=()=>el('dlg').close();
-try{snap=JSON.parse(localStorage.getItem('forecast-nightopen-split'));if(snap)render()}catch{snap=null}
+try{snap=JSON.parse(localStorage.getItem('forecast-nqsession-split'));if(snap)render()}catch{snap=null}
 let lastAuto=0;
 function tick(){
  if(document.hidden||busy||!snap)return;
