@@ -35,7 +35,7 @@ function render(){
  el('poster').disabled=busy||!rows.some(r=>fin(r?.v));snap.verdict=verdict;snap.reason=reason;snap.scores=[t,g];el('status').textContent=(busy?'更新中　':'最近查詢　')+new Date(snap.time).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false})+'（台灣）';
 }
 async function refresh(){if(busy)return;busy=true;el('refresh').disabled=true;el('poster').disabled=true;el('status').textContent='正在核對交易日…';requests.clear();
- try{let cal=await calendar(),old=snap;snap={cal,time:Date.now(),rows:Array(rules.length).fill(null)};render();pollUS();pollTX();await collect(cal,snap.rows,render);savePremarket(snap);
+ try{let cal=await calendar(),old=snap;snap={cal,time:Date.now(),rows:Array(rules.length).fill(null)};render();pollUS();pollTX();pollGlobal();await collect(cal,snap.rows,render);savePremarket(snap);
  if(!snap.rows.some(r=>fin(r?.v))&&old&&old.cal.target===cal.target&&old.rows.some(r=>fin(r?.v))){snap=old;el('status').textContent='連線失敗，保留上次查詢'}else if(snap.rows.some(r=>fin(r?.v)))localStorage.setItem('forecast-0510',JSON.stringify(snap));
  }catch(e){el('status').textContent='更新失敗：'+e.message}finally{retry=Date.now()+300000;busy=false;el('refresh').disabled=false;render()}}
 el('refresh').onclick=refresh;
@@ -66,3 +66,5 @@ refresh();setInterval(tick,15000);document.addEventListener('visibilitychange',t
 setInterval(pollUS,10000);document.addEventListener('visibilitychange',()=>{if(!document.hidden){render();pollUS()}});
 
 setInterval(pollTX,10000);document.addEventListener("visibilitychange",()=>{if(!document.hidden)pollTX()});
+
+setInterval(pollGlobal,10000);document.addEventListener("visibilitychange",()=>{if(!document.hidden)pollGlobal()});
