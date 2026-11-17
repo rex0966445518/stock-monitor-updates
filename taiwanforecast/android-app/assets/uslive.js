@@ -1,6 +1,6 @@
 // Foreground-only polling. Live rows never overwrite archived closing-price rows.
 const usLive={target:null,rows:{},busy:false,last:0,error:''};
-function liveJSON(url){return new Promise((resolve,reject)=>{const x=new XMLHttpRequest();x.open('GET',url);x.timeout=8000;x.onload=()=>{try{if(x.status!==200)throw Error('HTTP '+x.status);resolve(JSON.parse(x.responseText))}catch(e){reject(e)}};x.onerror=()=>reject(Error('連線失敗'));x.ontimeout=()=>reject(Error('查詢逾時'));x.send()})}
+function liveJSON(url,headers={}){return new Promise((resolve,reject)=>{const x=new XMLHttpRequest();x.open('GET',url);Object.entries(headers).forEach(([k,v])=>x.setRequestHeader(k,v));x.timeout=8000;x.onload=()=>{try{if(x.status!==200)throw Error('HTTP '+x.status);resolve(JSON.parse(x.responseText))}catch(e){reject(e)}};x.onerror=()=>reject(Error('連線失敗'));x.ontimeout=()=>reject(Error('查詢逾時'));x.send()})}
 async function liveChart(symbol,interval='1d'){
  let err;for(const host of ['query1','query2'])try{
  const r=await liveJSON('https://'+host+'.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(symbol)+'?range=5d&interval='+interval+'&_='+Date.now());
@@ -18,7 +18,7 @@ function liveQuote(c,now){
  return {p,t,d,r:ret(p,previous.c),closed};
 }
 function liveRows(snapshot,now=Date.now()){
- const rows=snapshot.rows.slice();
+ const rows=txDynamicRows(snapshot,now);
  if(usLive.target!==snapshot.cal.target||now>=at(snapshot.cal.target,'05:10'))return rows;
  for(const i of [4,5,6,7]){const r=usLive.rows[i];if(r){rows[i]=now-r.checked<=30000?r:{v:NaN,source:'Yahoo · 動態行情',info:'更新中斷，暫停計分'};}}
  return rows;

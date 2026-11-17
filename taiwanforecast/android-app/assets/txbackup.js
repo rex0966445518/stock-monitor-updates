@@ -1,5 +1,5 @@
 // Exchange files contain the entire trading day. Keep only trades observed by each cutoff.
-const txWindows={'04:00':14400,'05:00':18000,'05:10':32100};
+const txWindows={'04:00':14400,'05:00':18000,'05:10':18600};
 function txObservations(csv,date,nightDate){
  const contracts={};
  for(const line of csv.split('\n')){
