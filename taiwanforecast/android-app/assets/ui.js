@@ -12,7 +12,7 @@ function render(){
  const {cal}=snap,rows=liveRows(snap),t=result(rows,2),g=result(rows,3),stage=Date.now()<at(cal.target,'05:10')?'盤前初估':Date.now()<at(cal.target,'08:55')?'05:10 基準 · 日韓更新至 08:55':'固定評分 · 日韓 08:55／其餘 05:10';
  if(!cal.confirmed){g.dir=null;t.dir=null}
  const verdict=!cal.confirmed?'交易日待確認':joint(t,g);
- el('when').textContent=cal.target+' 預測　·　'+stage+(rows.some(r=>r?.live)?' · 動態暫估（每 10 秒查詢）':'');
+ el('when').textContent=cal.target+' 預測　·　'+stage+(rows.some(r=>r?.live)?' · 動態暫估（美元 2 分鐘／其他 10 秒）':'');
  el('out').textContent=verdict;
  for(const [id,c,k] of [['trend',t,'ct'],['gap',g,'cg']]){
  const pin=el(id+'Pin');
@@ -31,7 +31,7 @@ function render(){
  if(upcoming.length)notice.textContent='下一次擷取　'+taipeiStamp(upcoming[0].time)+'（台灣）｜還有 '+countdown(upcoming[0].time-now);
  const box=el('groups');box.querySelectorAll('details').forEach(d=>d.open?expanded.add(d.dataset.group):expanded.delete(d.dataset.group));
  box.innerHTML=[...new Set(rules.map(r=>r[0]))].map(gr=>{let group=rules.map((r,i)=>[r,i]).filter(([r])=>r[0]===gr);
- return '<details data-group="'+gr+'" '+(expanded.has(gr)?'open':'')+'><summary>'+gr+'　<small>'+group.filter(([r,i])=>fin(rows[i]?.v)).length+'／'+group.length+'</small></summary>'+group.map(([r,i])=>{let a=rows[i],ok=fin(a?.v);return '<div class="row"><div class="item-head"><span><span class="badge '+(ok?'yes':'pending')+'" aria-hidden="true">'+(ok?'✓':'?')+'</span> '+safe(a?.title||r[1])+'</span>'+itemScore(r,a?.v)+'</div><small class="'+(ok?'yes':'pending')+'">'+(a?.live?(ok?'動態評分 · 已納入總分':'動態行情待更新'):(ok?'已取得資料':'尚未取得資料'))+'</small>'+'<small>'+safe(a?.source||'等待更新')+' · '+safe(a?.date||'')+' '+safe(!ok&&!a?.live&&(slots[i].time>now||slots[i].note)?'':a?.info||'')+'</small><small>'+ (a?.live?'每 10 秒查詢；報價時間以來源為準':ok?'':safe(waitingText(slots[i],now,busy&&!a,cal,retry)))+'</small><p class="explain">'+safe(explainItem(i,a?.v))+'</p></div>'}).join('')+'</details>'}).join('');
+ return '<details data-group="'+gr+'" '+(expanded.has(gr)?'open':'')+'><summary>'+gr+'　<small>'+group.filter(([r,i])=>fin(rows[i]?.v)).length+'／'+group.length+'</small></summary>'+group.map(([r,i])=>{let a=rows[i],ok=fin(a?.v);return '<div class="row"><div class="item-head"><span><span class="badge '+(ok?'yes':'pending')+'" aria-hidden="true">'+(ok?'✓':'?')+'</span> '+safe(a?.title||r[1])+'</span>'+itemScore(r,a?.v)+'</div><small class="'+(ok?'yes':'pending')+'">'+(a?.live?(ok?'動態評分 · 已納入總分':'動態行情待更新'):(ok?'已取得資料':'尚未取得資料'))+'</small>'+'<small>'+safe(a?.source||'等待更新')+' · '+safe(a?.date||'')+' '+safe(!ok&&!a?.live&&(slots[i].time>now||slots[i].note)?'':a?.info||'')+'</small><small>'+ (a?.live?(i===19?'每 2 分鐘查詢；報價時間以來源為準':'每 10 秒查詢；報價時間以來源為準'):ok?'':safe(waitingText(slots[i],now,busy&&!a,cal,retry)))+'</small><p class="explain">'+safe(explainItem(i,a?.v))+'</p></div>'}).join('')+'</details>'}).join('');
  el('poster').disabled=busy||!rows.some(r=>fin(r?.v));snap.verdict=verdict;snap.reason=reason;snap.scores=[t,g];el('status').textContent=(busy?'更新中　':'最近查詢　')+new Date(snap.time).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false})+'（台灣）';
 }
 async function refresh(){if(busy)return;busy=true;el('refresh').disabled=true;el('poster').disabled=true;el('status').textContent='正在核對交易日…';requests.clear();
