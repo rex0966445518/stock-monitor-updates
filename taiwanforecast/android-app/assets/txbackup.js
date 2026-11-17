@@ -1,5 +1,5 @@
 // Exchange files contain the entire trading day. Keep only trades observed by each cutoff.
-const txWindows={'04:00':14400,'05:00':18000,'05:10':18600};
+const txWindows={'04:00':14400,'05:00':18000};
 function txObservations(csv,date,nightDate){
  const contracts={};
  for(const line of csv.split('\n')){
@@ -7,14 +7,19 @@ function txObservations(csv,date,nightDate){
   if(symbol!=='TX'||!/^\d{6}$/.test(month)||!/^\d{6}$/.test(clock)||!(Number(value)>0))continue;
   const seconds=Number(clock.slice(0,2))*3600+Number(clock.slice(2,4))*60+Number(clock.slice(4));
   for(const [time,end] of Object.entries(txWindows)){
-   if(day!==(time==='05:10'?date:nightDate).replaceAll('-','')||seconds>end||seconds<end-120)continue;
+   if(day!==nightDate.replaceAll('-','')||seconds>end||seconds<end-120)continue;
    const obs=contracts[month]??={};
    if(!obs[time]||seconds>=obs[time].seconds)obs[time]={seconds,price:Number(value)};
   }
  }
  return contracts;
 }
+const txArchiveCache=new Map();
 async function txArchive(date,format,nightDate){
+ const key=date+format+nightDate,old=txArchiveCache.get(key);if(old&&Date.now()-old.time<300000)return old.promise;
+ const promise=txArchiveRead(date,format,nightDate);txArchiveCache.set(key,{time:Date.now(),promise});return promise;
+}
+async function txArchiveRead(date,format,nightDate){
  const name='Daily_'+date.replaceAll('-','_');
  const folder=format==='CSV'?'DailydownloadCSV':'Dailydownload';
  const url='https://www.taifex.com.tw/file/taifex/Dailydownload/'+folder+'/'+name+'.zip';
@@ -33,6 +38,7 @@ async function txArchive(date,format,nightDate){
 }
 async function fillTxPrices(date,month,prices,required,replay,nightDate){
  const notes=[],sources={};
+ try{const h=JSON.parse(localStorage.getItem('tx-snapshot-hour-v1'));if(h?.key===shift(nightDate,-1)+'-'+month)for(const time of required){const end=at(nightDate,time),p=h.points.filter(x=>x.t<=end&&x.t>=end-120000&&fin(x.p)&&x.p>0).sort((a,b)=>a.t-b.t).pop();if(p&&!fin(prices[time])){prices[time]=p.p;sources[time]='FinMind 即時成交・本機留存'}}}catch{}
  function fill(data,label){
   for(const time of required){
    const value=data?.[month]?.[time]?.price;
@@ -64,7 +70,7 @@ async function txReport(date,night){
  for(const row of doc.querySelectorAll('tr')){
   const c=[...row.children].map(td=>td.textContent.trim());
   if(c[0]!=='TX'||!/^\d{6}$/.test(c[1])||!(num(c[5])>0))continue;
-  records.push({date,contract_date:c[1],trading_session:night?'after_market':'position',max:num(c[3]),min:num(c[4]),close:num(c[5]),volume:num(c[night?8:9])});
+  records.push({date,contract_date:c[1],trading_session:night?'after_market':'position',open:num(c[2]),max:num(c[3]),min:num(c[4]),close:num(c[5]),volume:num(c[night?8:9])});
  }
  if(!records.length)throw Error('期交所缺 TX 同月合約行情');
  return records;

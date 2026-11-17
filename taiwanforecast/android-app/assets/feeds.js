@@ -111,9 +111,9 @@ async function collect(cal,rows,draw){
  const days=all.filter(r=>r.date===prev&&r.trading_session==='position'&&/^\d{6}$/.test(r.contract_date)&&num(r.close)>0).sort((a,b)=>b.volume-a.volume);
  const overnight=all.filter(r=>r.date===target&&r.trading_session==='after_market'&&num(r.close)>0);let d=days.find(d=>overnight.some(r=>r.contract_date===d.contract_date))||days[0];if(!d)return;let night=overnight.find(r=>r.contract_date===d.contract_date);
  let nc=num(night?.close);const log=v=>fmt(v)+'% · TX '+d.contract_date;
- if(night){let n=ret(nc,num(d.close)),p=pos({c:nc,h:num(night.max),l:num(night.min)});put(0,level(n,.3,.8),log(n),target);put(3,band(p,70,90),fmt(p)+'%',target)}
- if(dailyFallback)for(const i of [0,3])if(fin(rows[i]?.v)){rows[i].source='期交所／FinMind・每日行情';rows[i].backup=true}
- const prices={},need=['04:00','05:00'];if(cut>=at(target,'05:10'))need.push('05:10');
+ if(night){let n=ret(nc,num(d.close)),p=pos({c:nc,h:num(night.max),l:num(night.min)});put(0,level(n,.3,.8),log(n),target);put(3,band(p,70,90),fmt(p)+'%',target);const oc=ret(nc,num(night.open));put(1,level(oc,.15,.4),log(oc)+' · 夜盤開盤至收盤',target)}
+ if(dailyFallback)for(const i of [0,1,3])if(fin(rows[i]?.v)){rows[i].source='期交所／FinMind・每日行情';rows[i].backup=true}
+ const prices={},need=['04:00','05:00'];
  let error='';
  try{
   const ticks=await fm('TaiwanFuturesTick',target,target,'TX');
@@ -124,7 +124,7 @@ async function collect(cal,rows,draw){
   }
  }catch(e){error=e.message}
  if(fin(nc))prices['05:00']=nc;
- const {sources,notes}=await fillTxPrices(target,String(d.contract_date),prices,need,cal.replay,shift(prev,1));
+ const {sources,notes}=await fillTxPrices(target,String(d.contract_date),prices,need,cal.replay||cut>=at(target,'05:00'),shift(prev,1));
  nc=prices['05:00'];
  function complete(i,v,t,threshold,strong){
   put(i,level(v,threshold,strong),log(v),target);
@@ -134,7 +134,8 @@ async function collect(cal,rows,draw){
  }
  if(!fin(rows[0]?.v))complete(0,ret(nc,num(d.close)),'05:00',.3,.8);
  complete(2,ret(nc,prices['04:00']),'04:00',.15,.4);
- if(need.includes('05:10'))complete(1,ret(prices['05:10'],nc),'05:10',.15,.4);
+ if(!fin(rows[1]?.v))rows[1]={source:'FinMind／期交所・夜盤每日行情',status:'unavailable',info:'夜盤已收盤，但來源未提供同月夜盤開盤價；不能以 05:10 價格代替'};
+ if(!fin(rows[2]?.v))rows[2]={...rows[2],status:'unavailable',info:'夜盤已收盤；缺 04:00 同月成交基準，無法計算最後一小時。'+(rows[2]?.info||'')};
  });
  add([14],'FinMind · TX 外資',async put=>{let [daily,inst,ts]=await Promise.all([future,fm('TaiwanFuturesInstitutionalInvestors',from,prev,'TX'),tseries]),old=ts[ts.length-2].date;
  let net=d=>{let x=inst.find(r=>r.date===d&&/外資|Foreign/i.test(r.institutional_investors));return num(x?.long_open_interest_balance_volume)-num(x?.short_open_interest_balance_volume)},oi=daily.filter(x=>x.date===old&&x.trading_session==='position'&&/^\d{6}$/.test(x.contract_date)).reduce((s,r)=>s+num(r.open_interest),0),v=(net(prev)-net(old))/oi*100;if(!(oi>0)||!fin(v))throw Error('缺指定日期 TX 部位或市場未平倉口數');put(14,level(v,1,2),fmt(v)+'%');markSources(rows,[14],{source:'FinMind · TX 外資'},ts)});
@@ -151,7 +152,7 @@ async function collect(cal,rows,draw){
  add([18],'中央銀行 · 銀行間收盤匯率',async put=>{let r=await json('https://cpx.cbc.gov.tw/api/OpenData/FTDOpenData_Day'),entries=[];function visit(o){if(!o||typeof o!=='object')return;let vals=Object.values(o),d=vals.map(dateNorm).find(v=>/^\d{4}-\d\d-\d\d$/.test(v)),rate=vals.map(num).find(n=>n>10&&n<100);if(d&&rate)entries.push({d,rate});else vals.forEach(visit)}visit(r);entries=entries.filter(x=>x.d<=prev).sort((a,b)=>a.d.localeCompare(b.d));if(last(entries)?.d!==prev||cut<at(prev,'17:00'))return;let v=ret(last(entries).rate,entries[entries.length-2]?.rate);put(18,-level(v,.15,.4),fmt(v)+'%')});
  await Promise.allSettled(jobs);
  if(cal.replay&&cut===at(target,'05:10')){
-  const key='replay-split0510-0855-v1-'+target;
+  const key='replay-nightopen-split-v1-'+target;
   try{
    const previous=JSON.parse(localStorage.getItem(key)||'[]');
    rows.forEach((row,i)=>{
