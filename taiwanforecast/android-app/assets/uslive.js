@@ -36,13 +36,28 @@ async function pollUS(){
  put(4,()=>{const a=quote(0),b=quote(1);pair(a,b);return {v:level(a.r-b.r,.5,1.5),date:a.d,info:fmt(a.r-b.r)+' 百分點 · '+info(a)}});
  put(6,()=>{const a=quote(2),b=quote(3);pair(a,b);return {v:agree(level(a.r,.3,.8),level(b.r,.3,.8)),date:a.d,info:fmt(a.r)+'%／'+fmt(b.r)+'% · '+info(a)}});
  put(7,()=>{
- const r=settled[4];if(r.status!=='fulfilled')throw r.reason;const c=r.value,m=c.meta||{},t=m.regularMarketTime*1000,p=m.regularMarketPrice;
- if(!fin(p)||p<=0||!fin(t)||t>now+60000||now-t>120000)throw Error('期貨報價過期，等待更新');
- const s=quote(3),base=equityClose(s.d);if(now<base)throw Error('等待美股收盤建立期貨比較基準');
- const closes=c.indicators?.quote?.[0]?.close||[],bars=(c.timestamp||[]).map((v,i)=>({t:v*1000,c:closes[i]}));
- const b=bars.filter(x=>x.t+60000<=base&&x.t>=base-180000&&fin(x.c)).pop();if(!b||t<base)throw Error('缺美股收盤時的期貨基準');
- const v=ret(p,b.c);return {v:level(v,.15,.4),date:target,info:fmt(v)+'%（相對美股收盤） · 報價 '+taipeiStamp(t)+' · 動態暫估'};
+ const r=settled[4];if(r.status!=='fulfilled')throw r.reason;return liveFuture(r.value,now,target);
  });
  if(snap?.cal.target===target){usLive.target=target;usLive.rows=out;usLive.last=now;render()}
  }finally{usLive.busy=false}
+}
+
+function liveFuture(c,now,target){
+ const m=c.meta||{},closes=c.indicators?.quote?.[0]?.close||[];
+ const bars=(c.timestamp||[]).map((v,i)=>({t:v*1000,c:closes[i]})).filter(x=>fin(x.c)&&x.c>0&&x.t<=now);
+ const candidates=bars.map(x=>({t:x.t,p:x.c}));
+ if(fin(m.regularMarketPrice)&&m.regularMarketPrice>0&&fin(m.regularMarketTime)&&m.regularMarketTime*1000<=now)candidates.push({t:m.regularMarketTime*1000,p:m.regularMarketPrice});
+ const q=candidates.sort((a,b)=>a.t-b.t).pop();
+ if(!q||now-q.t>20*60000)throw Error('期貨報價延遲超過 20 分鐘，暫停計分');
+ let d=day(now,'America/New_York'),base=null;
+ for(let n=0;n<7;n++,d=shift(d,-1)){
+ const wd=new Date(d+'T12:00:00Z').getUTCDay(),h=holidays[d.slice(0,4)];
+ if(!h)throw Error('美股交易日曆待確認');
+ if(wd!==0&&wd!==6&&!h.split(' ').includes(d.slice(5))&&equityClose(d)<=q.t){base=equityClose(d);break}
+ }
+ if(!base)throw Error('缺比較基準時間');
+ const b=bars.filter(x=>x.t+60000<=base&&x.t>=base-180000).pop();
+ if(!b)throw Error('缺最近已完成美股收盤時的期貨基準');
+ const v=ret(q.p,b.c),delay=Math.max(0,Math.floor((now-q.t)/60000));
+ return {v:level(v,.15,.4),date:day(q.t),info:fmt(q.p)+' · '+fmt(v)+'%（相對 '+taipeiStamp(base)+' 美股收盤時期貨價） · 報價 '+taipeiStamp(q.t)+' · '+(delay>=2?'延遲約 '+delay+' 分鐘，延遲行情暫估':'動態暫估')};
 }
