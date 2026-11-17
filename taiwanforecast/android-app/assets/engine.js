@@ -11,10 +11,10 @@ const level=(v,a,b)=>fin(v)?Math.sign(v)*(Math.abs(v)>=b?1:Math.abs(v)>=a?.5:0):
 const band=(v,a,b)=>level(v-50,a-50,b-50);
 const agree=(a,b)=>!fin(a)||!fin(b)?NaN:a*b>0?Math.sign(a)*Math.min(Math.abs(a),Math.abs(b)):0;
 const pos=x=>x.h>x.l?100*(x.c-x.l)/(x.h-x.l):NaN;
-const state=n=>n>=600?1:n<=400?-1:0;
+const state=(n,col=2)=>n>=(col===3?540:600)?1:n<=400?-1:0;
 function result(rows,col){
  let sum=500,weight=0;rows.forEach((r,i)=>{if(r&&fin(r.v)){sum+=r.v*rules[i][col];weight+=rules[i][col]}});
- const score=Math.round(sum);return {score,coverage:weight/5,dir:weight>=400?state(score):null};
+ const score=Math.round(sum);return {score,coverage:weight/5,dir:weight>=400?state(score,col):null};
 }
 function joint(t,g){if(t.dir===null||g.dir===null)return '資料不足';if(!t.dir&&!g.dir)return '多空觀望';return (g.dir===1?'開高':g.dir===-1?'開低':'開盤方向未明')+(t.dir===1?'走高':t.dir===-1?'走低':'・走勢觀望')}
 function tech(x,put){

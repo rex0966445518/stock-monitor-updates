@@ -18,7 +18,7 @@ function render(){
  const pin=el(id+'Pin');
  pin.hidden=!c.coverage;
  pin.style.left=(c.score/10)+'%';
- const zone=state(c.score);
+ const zone=state(c.score,id==='gap'?3:2);
  el(id+'Band').textContent=c.coverage?'分數落在'+(zone<0?'偏空區':zone>0?'偏多區':'觀望區'):'等待評分';
  el(id).style.color=!c.coverage||!zone?'#e0edf0':zone<0?'#80e8a7':'#ff9292';
  el(id).textContent=c.coverage?String(c.score):'—';el(k).textContent='覆蓋 '+fmt(c.coverage)+'% · '+(c.dir===null?'暫不判定':c.dir>0?'偏多':c.dir<0?'偏空':'觀望')}
