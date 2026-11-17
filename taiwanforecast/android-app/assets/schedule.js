@@ -22,7 +22,8 @@ function scheduleFor(i,cal){
   }
   return {note:'美股休市，本期無隔夜收盤資料'};
  }
- if([1,7,20,21].includes(i))return {time:at(cal.target,'05:10')};
+ if([20,21].includes(i))return {time:at(cal.target,'08:55')};
+ if([1,7].includes(i))return {time:at(cal.target,'05:10')};
  if([0,2,3].includes(i))return {time:at(cal.target,'05:00')};
  if(i===18)return {time:at(cal.prev,'17:00')};
  if([8,9,10,11,12,22,23,24,25].includes(i))return {time:at(cal.prev,'13:31')};

@@ -147,16 +147,16 @@ async function collect(cal,rows,draw){
  const bar=(a,time)=>last(a.filter(x=>x.t+60000<=time&&x.t>=time-180000));
  add([7],'Yahoo · NQ 近月連續報價',async put=>{if(cut<at(target,'05:10'))return;let [a,s]=await Promise.all([series('NQ=F','1m'),amer('^GSPC')]);const base=at(shift(s.date,1),'04:00'),usclose=day(base,'America/New_York')===s.date&&new Date(base).toLocaleTimeString('en-GB',{timeZone:'America/New_York'}).startsWith('16:')?base:base+3600000;
  const v=ret(bar(a,cut)?.c,bar(a,usclose)?.c);put(7,level(v,.15,.4),fmt(v)+'%',target)});
- add([20,21],'Yahoo · 日經／KOSPI',async put=>{if(cut<at(target,'05:10'))return;const values=await Promise.all(['^N225','^KS11'].map(async sym=>{let [a,b]=await Promise.all([series(sym,'1m'),series(sym)]),q=bar(a,cut),op=a.find(x=>x.date===target&&x.t===at(target,'08:00')),prior=last(b.filter(x=>x.date<target));if(!q||q.date!==target)return [NaN,NaN];return [ret(q.c,prior?.c),ret(q.c,op?.o)]}));for(const [i,k,x,y] of [[20,0,.3,.8],[21,1,.15,.4]]){let a=values[0][k],b=values[1][k];put(i,agree(level(a,x,y),level(b,x,y)),fmt(a)+'%／'+fmt(b)+'%',target)}});
+ add([20,21],'Yahoo · 日經／KOSPI · 08:55 截點',async put=>{const asiaCut=Math.min(Date.now(),at(target,'08:55'));if(asiaCut<at(target,'08:00'))return;const values=await Promise.all(['^N225','^KS11'].map(async sym=>{let [a,b]=await Promise.all([series(sym,'1m'),series(sym)]),q=bar(a,asiaCut),op=a.find(x=>x.date===target&&x.t===at(target,'08:00')),prior=last(b.filter(x=>x.date<target));if(!q||q.date!==target)return [NaN,NaN];return [ret(q.c,prior?.c),ret(q.c,op?.o)]}));for(const [i,k,x,y] of [[20,0,.3,.8],[21,1,.15,.4]]){let a=values[0][k],b=values[1][k];put(i,agree(level(a,x,y),level(b,x,y)),fmt(a)+'%／'+fmt(b)+'%',target)}});
  add([18],'中央銀行 · 銀行間收盤匯率',async put=>{let r=await json('https://cpx.cbc.gov.tw/api/OpenData/FTDOpenData_Day'),entries=[];function visit(o){if(!o||typeof o!=='object')return;let vals=Object.values(o),d=vals.map(dateNorm).find(v=>/^\d{4}-\d\d-\d\d$/.test(v)),rate=vals.map(num).find(n=>n>10&&n<100);if(d&&rate)entries.push({d,rate});else vals.forEach(visit)}visit(r);entries=entries.filter(x=>x.d<=prev).sort((a,b)=>a.d.localeCompare(b.d));if(last(entries)?.d!==prev||cut<at(prev,'17:00'))return;let v=ret(last(entries).rate,entries[entries.length-2]?.rate);put(18,-level(v,.15,.4),fmt(v)+'%')});
  await Promise.allSettled(jobs);
  if(cal.replay&&cut===at(target,'05:10')){
-  const key='replay-0855-v2-'+target;
+  const key='replay-split0510-0855-v1-'+target;
   try{
    const previous=JSON.parse(localStorage.getItem(key)||'[]');
    rows.forEach((row,i)=>{
     if(!fin(row?.v)&&fin(previous[i]?.v)){
-     rows[i]={...previous[i],source:previous[i].source+'・同日 05:10 留存',backup:true};
+     rows[i]={...previous[i],source:previous[i].source+'・同日分時截點留存',backup:true};
     }else if(fin(row?.v)){previous[i]=row}
    });
    localStorage.setItem(key,JSON.stringify(previous));

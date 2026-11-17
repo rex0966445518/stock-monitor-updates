@@ -9,7 +9,7 @@ function itemScore(rule, value) {
 }
 function render(){
  if(!snap)return;
- const {cal}=snap,rows=liveRows(snap),t=result(rows,2),g=result(rows,3),stage=snap.time<at(cal.target,'05:10')?'盤前初估':'05:10 模型';
+ const {cal}=snap,rows=liveRows(snap),t=result(rows,2),g=result(rows,3),stage=Date.now()<at(cal.target,'05:10')?'盤前初估':Date.now()<at(cal.target,'08:55')?'05:10 基準 · 日韓更新至 08:55':'固定評分 · 日韓 08:55／其餘 05:10';
  if(!cal.confirmed){g.dir=null;t.dir=null}
  const verdict=!cal.confirmed?'交易日待確認':joint(t,g);
  el('when').textContent=cal.target+' 預測　·　'+stage+(rows.some(r=>r?.live)?' · 動態暫估（每 10 秒查詢）':'');
@@ -36,7 +36,7 @@ function render(){
 }
 async function refresh(){if(busy)return;busy=true;el('refresh').disabled=true;el('poster').disabled=true;el('status').textContent='正在核對交易日…';requests.clear();
  try{let cal=await calendar(),old=snap;snap={cal,time:Date.now(),rows:Array(rules.length).fill(null)};render();pollUS();pollTX();pollGlobal();await collect(cal,snap.rows,render);savePremarket(snap);
- if(!snap.rows.some(r=>fin(r?.v))&&old&&old.cal.target===cal.target&&old.rows.some(r=>fin(r?.v))){snap=old;el('status').textContent='連線失敗，保留上次查詢'}else if(snap.rows.some(r=>fin(r?.v)))localStorage.setItem('forecast-0510',JSON.stringify(snap));
+ if(!snap.rows.some(r=>fin(r?.v))&&old&&old.cal.target===cal.target&&old.rows.some(r=>fin(r?.v))){snap=old;el('status').textContent='連線失敗，保留上次查詢'}else if(snap.rows.some(r=>fin(r?.v)))localStorage.setItem('forecast-split0510-0855',JSON.stringify(snap));
  }catch(e){el('status').textContent='更新失敗：'+e.message}finally{retry=Date.now()+300000;busy=false;el('refresh').disabled=false;render()}}
 el('refresh').onclick=refresh;
 el('poster').onclick=()=>{
@@ -53,7 +53,7 @@ el('poster').onclick=()=>{
 };
 el('save').onclick=()=>{if(window.Poster)window.Poster.savePoster(posterData);else{let a=document.createElement('a');a.href=posterData;a.download='Taiwan-Forecast.png';a.click()}};
 el('closeDlg').onclick=()=>el('dlg').close();
-try{snap=JSON.parse(localStorage.getItem('forecast-0510'));if(snap)render()}catch{snap=null}
+try{snap=JSON.parse(localStorage.getItem('forecast-split0510-0855'));if(snap)render()}catch{snap=null}
 let lastAuto=0;
 function tick(){
  if(document.hidden||busy||!snap)return;
