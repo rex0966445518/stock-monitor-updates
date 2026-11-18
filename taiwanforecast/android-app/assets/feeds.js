@@ -51,20 +51,40 @@ async function collect(cal,rows,draw){
  const mi=tw('afterTrading/MI_INDEX',prev,'&type=ALLBUT0999').then(r=>{if(dateNorm(r.date)!==prev)throw Error('交易日不符');return r.tables||[]});mi.catch(()=>{});
  add([9,11],'證交所／期交所權重表',async put=>{const ts=await mi,tab=ts.find(x=>x.fields?.includes('證券代號')),f=tab.fields,idx=f.findIndex(x=>x.includes('漲跌(+/-)')||x.includes('漲跌(+／-)')),id=f.indexOf('證券代號'),sg=r=>{let s=String(r[idx]).replace(/<[^>]+>/g,'');return s.includes('+')?1:s.includes('-')?-1:0};
  const breadth=ts.find(t=>t.fields?.some(v=>v==='股票')&&t.data?.some(r=>String(r[0]).includes('上漲')));if(breadth){const j=breadth.fields.indexOf('股票'),ct=k=>num(String(breadth.data.find(r=>String(r[0]).includes(k))[j]).split('(')[0]),u=ct('上漲'),d=ct('下跌');put(9,band(100*u/(u+d),55,65),u+' 漲／'+d+' 跌')}
- const doc=new DOMParser().parseFromString(await wire('https://www.taifex.com.tw/cht/2/weightedPropertion').catch(()=> ''),'text/html'),stamp=dateNorm(doc.body.textContent.match(/資料日期[^\d]*(\d{4}[/\-]\d{1,2}[/\-]\d{1,2})/)?.[1]||'');
- if(idx<0)throw Error('行情表缺少漲跌方向欄位');const top=new Map();
- let weightDate=stamp;
- if(stamp&&stamp<prev&&stamp>=shift(prev,-65)){
+ if(idx<0)throw Error('行情表缺少漲跌方向欄位');
+ const weightUrl='https://www.taifex.com.tw/cht/2/weightedPropertion';
+ const top=new Map();let weightDate='',weightSource='期交所';
+ function readWeights(html){
+  const doc=new DOMParser().parseFromString(html,'text/html');
+  const stamp=dateNorm(doc.body.textContent.match(/資料日期[^\d]*(\d{4}[/\-]\d{1,2}[/\-]\d{1,2})/)?.[1]||'');
+  if(!stamp||stamp>=prev||stamp<shift(prev,-65))return;
+  const ranks=new Map();
   for(const tr of doc.querySelectorAll('tr')){
    const cells=[...tr.querySelectorAll(':scope > td')].map(x=>x.textContent.trim());
-   for(let j=0;j<cells.length-1;j++)if(/^([1-9]|10)$/.test(cells[j])&&/^\d{4}$/.test(cells[j+1]))top.set(+cells[j],cells[j+1]);
+   for(let j=0;j<cells.length-1;j++)if(/^([1-9]|10)$/.test(cells[j])&&/^\d{4}$/.test(cells[j+1])){
+    const rank=Number(cells[j]);if(ranks.has(rank)&&ranks.get(rank)!==cells[j+1])return;
+    ranks.set(rank,cells[j+1]);
+   }
   }
+  if(new Set(ranks.values()).size===10){for(const [rank,code] of ranks)top.set(rank,code);weightDate=stamp}
  }
+ readWeights(await wire(weightUrl).catch(()=>''));
  if(top.size!==10&&weightSnapshot.date<prev&&weightSnapshot.date>=shift(prev,-32)){
   top.clear();weightSnapshot.codes.forEach((code,i)=>top.set(i+1,code));weightDate=weightSnapshot.date;
  }
+ if(top.size!==10){
+  const until=shift(prev,-1).replaceAll('-','')+'155959';
+  const since=shift(prev,-65).replaceAll('-','');
+  const query=new URLSearchParams({url:weightUrl,from:since,to:until,output:'json',filter:'statuscode:200',fl:'timestamp',limit:'-5'});
+  const captures=await json('https://web.archive.org/cdx/search/cdx?'+query);
+  for(const [stamp] of captures.slice(1).reverse()){
+   if(!/^\d{14}$/.test(stamp)||stamp>until)continue;
+   readWeights(await wire('https://web.archive.org/web/'+stamp+'id_/'+weightUrl).catch(()=>''));
+   if(top.size===10){weightSource='期交所・Internet Archive 歷史備份';break}
+  }
+ }
  if(top.size!==10)throw Error('查無交易日前適用的完整十大權重名單');
- let arr=[...top.values()].map(code=>tab.data.find(r=>r[id]===code));if(!arr.every(Boolean))throw Error('行情表缺少權值股：'+[...top.values()].filter((c,i)=>!arr[i]).join('、'));{let up=arr.filter(r=>sg(r)>0).length,dn=arr.filter(r=>sg(r)<0).length;put(11,up>=8?1:up>=6?.5:dn>=8?-1:dn>=6?-.5:0,up+' 漲／'+dn+' 跌，權重 '+weightDate)}});
+ let arr=[...top.values()].map(code=>tab.data.find(r=>r[id]===code));if(!arr.every(Boolean))throw Error('行情表缺少權值股：'+[...top.values()].filter((c,i)=>!arr[i]).join('、'));{let up=arr.filter(r=>sg(r)>0).length,dn=arr.filter(r=>sg(r)<0).length;put(11,up>=8?1:up>=6?.5:dn>=8?-1:dn>=6?-.5:0,up+' 漲／'+dn+' 跌，權重 '+weightDate+'（'+weightSource+'）')}});
  add([12],'櫃買中心／Goodinfo／證交所',async put=>{
   const [ts,sg,otc]=await Promise.all([mi,flags,otcDirection(prev)]);
   const tab=ts.find(t=>t.fields?.[0]==='指數'&&t.data?.some(r=>r[0]==='金融保險類指數'));
