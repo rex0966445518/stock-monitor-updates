@@ -1,0 +1,29 @@
+name: Publish Taiwan Forecast US Backup APK
+on:
+  push:
+    branches: [main]
+    paths: ['taiwanbackupus/latest.json']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish verified APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          code=$(jq -er '.versionCode | numbers' taiwanbackupus/latest.json)
+          name=$(jq -er '.versionName' taiwanbackupus/latest.json)
+          hash=$(jq -er '.sha256' taiwanbackupus/latest.json)
+          apk="taiwanbackupus/$code/TaiwanForecast.apk"
+          echo "$hash  $apk" | sha256sum -c -
+          signer=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
+          "$signer" verify --print-certs "$apk" | grep -Fi 'ec0c355317f8c4c6f84fba0cfae7cf0048530e3157efe64358be87b245f4a191'
+          tag="taiwanbackupus-$code"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" "$apk" --target "$GITHUB_SHA" --title "台股預測・美股備援獨立版 $name" --notes "Android APK" --latest=false
+          fi
