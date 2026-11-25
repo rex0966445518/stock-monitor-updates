@@ -1,8 +1,8 @@
-name: Short Radar APK build and verify
+name: Short Radar v0.3.0 build and publish
 on:
   workflow_dispatch:
   push:
-    branches: ['short-radar-v0.2.0']
+    branches: ['short-radar-v0.3.0']
 permissions:
   contents: write
 jobs:
@@ -22,36 +22,57 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - run: gradle -p android --no-daemon clean assembleDebug
-      - name: Verify signature and identity
+      - name: Build APK (persistent signing if configured)
+        env:
+          KEYSTORE_B64: ${{ secrets.SHORT_RADAR_KEYSTORE_B64 }}
+          RADAR_SIGN_PASSWORD: ${{ secrets.SHORT_RADAR_STORE_PASSWORD }}
+          RADAR_SIGN_ALIAS: ${{ secrets.SHORT_RADAR_KEY_ALIAS }}
+          RADAR_KEY_PASSWORD: ${{ secrets.SHORT_RADAR_KEY_PASSWORD }}
         shell: bash
         run: |
           set -euo pipefail
-          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          if [ -n "$KEYSTORE_B64" ]; then
+            umask 077
+            export RADAR_SIGN_PATH="$RUNNER_TEMP/short-radar.jks"
+            trap 'rm -f "$RADAR_SIGN_PATH"' EXIT
+            printf '%s' "$KEYSTORE_B64" | base64 -d > "$RADAR_SIGN_PATH"
+            gradle -p android --no-daemon clean assembleRelease
+            cp android/app/build/outputs/apk/release/app-release.apk ShortRadar-v0.3.0.apk
+            echo "SIGN_MODE=persistent" >> "$GITHUB_ENV"
+          else
+            gradle -p android --no-daemon clean assembleDebug
+            cp android/app/build/outputs/apk/debug/app-debug.apk ShortRadar-v0.3.0.apk
+            echo "SIGN_MODE=debug" >> "$GITHUB_ENV"
+          fi
+      - name: Verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
           BT="$ANDROID_HOME/build-tools/35.0.0"
-          "$BT/apksigner" verify --verbose --print-certs "$APK"
-          "$BT/aapt" dump badging "$APK" > apk-badging.txt
+          "$BT/apksigner" verify --verbose --print-certs ShortRadar-v0.3.0.apk | tee signing-info.txt
+          "$BT/aapt" dump badging ShortRadar-v0.3.0.apk > apk-badging.txt
           grep -F "name='tw.radar.shortscan'" apk-badging.txt
-          grep -F "versionName='0.2.0'" apk-badging.txt
-          cp "$APK" ShortRadar-v0.2.0-debug.apk
-          sha256sum ShortRadar-v0.2.0-debug.apk > SHA256.txt
+          grep -F "versionName='0.3.0'" apk-badging.txt
+          sha256sum ShortRadar-v0.3.0.apk > SHA256.txt
+          echo "$SIGN_MODE" > signing-mode.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: short-radar-v0.2.0-debug-verified
+          name: short-radar-v0.3.0-verified
           path: |
-            ShortRadar-v0.2.0-debug.apk
+            ShortRadar-v0.3.0.apk
             SHA256.txt
             apk-badging.txt
-      - name: Publish verified test APK
-        if: github.ref == 'refs/heads/short-radar-v0.2.0'
+            signing-info.txt
+            signing-mode.txt
+      - name: Publish verified APK
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          TAG=short-radar-v0.2.0-test
+          TAG=short-radar-v0.3.0-test
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Test release already exists; do not replace its signing identity."
+            echo "Existing release preserved; use a new version."
             exit 1
           fi
-          gh release create "$TAG" ShortRadar-v0.2.0-debug.apk SHA256.txt apk-badging.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "盤中做空雷達 v0.2.0 測試版" --notes "已通過編譯及 APK 簽章檢查的 debug 測試版。預設模擬模式；正式富邦行情需另行部署後端並授權。未完成真機、實盤與延遲驗收。此版簽章不保證能直接升級至後續版本。" --prerelease --latest=false
+          gh release create "$TAG" ShortRadar-v0.3.0.apk SHA256.txt apk-badging.txt signing-info.txt signing-mode.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "盤中做空雷達 v0.3.0｜極空掃描與一鍵更新" --notes "Android 測試版；簽章模式：$SIGN_MODE。預設模擬，正式掃描需部署 v0.3.0 後端。一鍵更新會驗證同套件、較新版本、SHA256 和同一發行憑證。debug 簽章無法保證跨版本覆蓋，須設定固定簽章。真機與正式行情尚未驗收。" --prerelease --latest=false
