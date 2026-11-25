@@ -4,7 +4,7 @@ on:
   push:
     branches: ['short-radar-v0.2.0']
 permissions:
-  contents: read
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -42,3 +42,16 @@ jobs:
             ShortRadar-v0.2.0-debug.apk
             SHA256.txt
             apk-badging.txt
+      - name: Publish verified test APK
+        if: github.ref == 'refs/heads/short-radar-v0.2.0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG=short-radar-v0.2.0-test
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Test release already exists; do not replace its signing identity."
+            exit 1
+          fi
+          gh release create "$TAG" ShortRadar-v0.2.0-debug.apk SHA256.txt apk-badging.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "盤中做空雷達 v0.2.0 測試版" --notes "已通過編譯及 APK 簽章檢查的 debug 測試版。預設模擬模式；正式富邦行情需另行部署後端並授權。未完成真機、實盤與延遲驗收。此版簽章不保證能直接升級至後續版本。" --prerelease --latest=false
