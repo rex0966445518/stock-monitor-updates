@@ -1,4 +1,2 @@
-# 盤中做空雷達 v0.3.0
-獨立 Android 客戶端，保留盤中雷達、加入 15 項極空掃描條件及 GitHub 更新檢查。預設模擬；正式極空掃描需部署 v0.3.0 backend（原始碼交付 ZIP），不需要富邦 API Key；盤中即時行情另需授權。
-更新器只接受 short-radar-vX.Y.Z 或 -test 標籤下同名 APK，核對 SHA256、版本、套件與簽章。Android 要求使用者確認安裝。
-固定簽章：在 GitHub Actions secrets 設 SHORT_RADAR_KEYSTORE_B64, SHORT_RADAR_STORE_PASSWORD, SHORT_RADAR_KEY_ALIAS, SHORT_RADAR_KEY_PASSWORD。未設時僅建置 debug 測試 APK；不同簽章無法覆蓋更新，需先備份設定，再進行一次性遷移。私鑰不可放在公開 GitHub 倉庫。
+# 盤中做空雷達 v0.3.2 固定簽章遷移
+v0.3.0 與 v0.3.1 使用不同的臨時 debug 憑證，不能覆蓋更新。此分支禁止 debug APK 發布，必須先設定固定發行私鑰和公開憑證 SHA256。請在自己的 Windows 電腦上執行 setup-fixed-signing.ps1（需要 JDK 17+ 和 GitHub CLI）。腳本將密鑰存放於使用者本機並上傳至 GitHub Actions 加密 secrets，不進入 Git repository。完成後觸發編譯。舊 debug 版本必須先手動記錄設定，再一次性卸載並安裝成功簽章的新版。日後保持同一金鑰，正常覆蓋更新。不要重建或公開私鑰。盤後資料仍待手機驗證。
