@@ -1,1 +1,0 @@
-每次發布須沿用美股備援獨立版簽章與套件 tw.rex.nextmarket.usbackup，保留舊 APK。更新頁首「作者雷允澤」旁的版本號，遞增 versionCode，將簽署完成的 APK 放在 taiwanbackupus/<versionCode>/TaiwanForecast.apk，並同步更新 latest.json 供 App 一鍵更新。發布後核對遠端版本及 APK SHA-256。

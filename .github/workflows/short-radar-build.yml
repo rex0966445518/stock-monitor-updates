@@ -1,0 +1,41 @@
+name: Short Radar APK build and verify
+on:
+  workflow_dispatch:
+  push:
+    branches: ['short-radar-v0.2.0']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - run: gradle -p android --no-daemon clean assembleDebug
+      - name: Verify signature and identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          "$BT/apksigner" verify --verbose --print-certs "$APK"
+          "$BT/aapt" dump badging "$APK" > apk-badging.txt
+          grep -F "name='tw.radar.shortscan'" apk-badging.txt
+          grep -F "versionName='0.2.0'" apk-badging.txt
+          cp "$APK" ShortRadar-v0.2.0-debug.apk
+          sha256sum ShortRadar-v0.2.0-debug.apk > SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: short-radar-v0.2.0-debug-verified
+          path: |
+            ShortRadar-v0.2.0-debug.apk
+            SHA256.txt
+            apk-badging.txt
