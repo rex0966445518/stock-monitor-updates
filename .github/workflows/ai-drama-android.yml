@@ -8,6 +8,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ai-drama-publish
+  cancel-in-progress: false
 jobs:
   build:
     if: github.ref == 'refs/heads/ai-drama-app'
@@ -43,7 +46,7 @@ jobs:
         with:
           name: AI-Drama-Search-debug-APK
           path: ai-drama/app/build/outputs/apk/debug/app-debug.apk
-      - name: Sign and release if dedicated credentials are configured
+      - name: Publish verified APK (formal or clearly marked test release)
         env:
           KEYSTORE_B64: ${{ secrets.DRAMA_KEYSTORE_B64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.DRAMA_KEYSTORE_PASSWORD }}
@@ -52,8 +55,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          version=$(sed -n "s/.*versionName '\([^']*\)'.*/\1/p" app/build.gradle)
+          test -n "$version"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           if [[ -z "$KEYSTORE_B64" || -z "$ANDROID_KEYSTORE_PASSWORD" || -z "$ANDROID_KEY_ALIAS" || -z "$ANDROID_KEY_PASSWORD" ]]; then
-            echo "Dedicated signing secrets not configured; debug artifact only."
+            tag="ai-drama-test-v$version"
+            if ! gh release view "$tag" >/dev/null 2>&1; then
+              cp app/build/outputs/apk/debug/app-debug.apk AI-Drama-Search-test.apk
+              sha256sum AI-Drama-Search-test.apk > SHA256SUMS.txt
+              gh release create "$tag" AI-Drama-Search-test.apk SHA256SUMS.txt --target "$GITHUB_SHA" --title "AI 短劇搜搜 $version 測試版" --notes "測試簽章 APK。不可保證跨版覆蓋安裝，請勿解除安裝舊版而遺失紀錄。正式簽章尚未設定，不提供 App 內自動更新。" --prerelease --latest=false
+            fi
+            echo "::warning::Dedicated signing secrets not configured. Published test prerelease only; in-app formal update remains blocked."
+            echo "### 測試版已發布；正式一鍵更新仍缺固定簽章" >> "$GITHUB_STEP_SUMMARY"
+            echo "https://github.com/$GITHUB_REPOSITORY/releases/tag/$tag" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/drama-release.jks"
@@ -62,6 +76,22 @@ jobs:
           gradle --no-daemon :app:assembleRelease
           cp app/build/outputs/apk/release/app-release.apk AI-Drama-Search-release.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose AI-Drama-Search-release.apk
+          signer="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          new_cert=$("$signer" verify --print-certs AI-Drama-Search-release.apk | sed -n 's/.*certificate SHA-256 digest: //p' | head -1)
+          test -n "$new_cert"
+          previous_tag=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.draft == false and .prerelease == false) | select(.tag_name | startswith("ai-drama-v")) | select(any(.assets[]; .name == "AI-Drama-Search-release.apk")) | .tag_name' | sort -V | tail -1)
+          if [[ -n "$previous_tag" && "$previous_tag" != "ai-drama-v$version" ]]; then
+            mkdir -p "$RUNNER_TEMP/drama-previous"
+            gh release download "$previous_tag" --pattern AI-Drama-Search-release.apk --dir "$RUNNER_TEMP/drama-previous"
+            previous_cert=$("$signer" verify --print-certs "$RUNNER_TEMP/drama-previous/AI-Drama-Search-release.apk" | sed -n 's/.*certificate SHA-256 digest: //p' | head -1)
+            test "$new_cert" = "$previous_cert" || { echo "::error::Signing certificate changed. Refusing incompatible update."; exit 1; }
+            latest=$(printf '%s\n' "$previous_tag" "ai-drama-v$version" | sort -V | tail -1)
+            test "$latest" = "ai-drama-v$version" || { echo "::error::Version is older than existing release."; exit 1; }
+            aapt="$ANDROID_HOME/build-tools/35.0.0/aapt"
+            new_code=$("$aapt" dump badging AI-Drama-Search-release.apk | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -1)
+            old_code=$("$aapt" dump badging "$RUNNER_TEMP/drama-previous/AI-Drama-Search-release.apk" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -1)
+            test -n "$new_code" && test -n "$old_code" && test "$new_code" -gt "$old_code" || { echo "::error::versionCode must increase."; exit 1; }
+          fi
           sha256sum AI-Drama-Search-release.apk > SHA256SUMS.txt
           version=$(sed -n "s/.*versionName '\([^']*\)'.*/\1/p" app/build.gradle)
           test -n "$version"
