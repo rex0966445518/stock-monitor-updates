@@ -1,0 +1,64 @@
+name: AI Drama Android
+on:
+  push:
+    branches: [ai-drama-app]
+    paths:
+      - 'ai-drama/**'
+      - '.github/workflows/ai-drama-android.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    if: github.ref == 'refs/heads/ai-drama-app'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: ai-drama
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Install Android SDK
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Assemble debug APK
+        run: |
+          gradle --no-daemon :app:assembleDebug
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AI-Drama-Search-debug-APK
+          path: ai-drama/app/build/outputs/apk/debug/app-debug.apk
+      - name: Sign and release if dedicated credentials are configured
+        env:
+          KEYSTORE_B64: ${{ secrets.DRAMA_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.DRAMA_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.DRAMA_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.DRAMA_KEY_PASSWORD }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$KEYSTORE_B64" || -z "$ANDROID_KEYSTORE_PASSWORD" || -z "$ANDROID_KEY_ALIAS" || -z "$ANDROID_KEY_PASSWORD" ]]; then
+            echo "Dedicated signing secrets not configured; debug artifact only."
+            exit 0
+          fi
+          export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/drama-release.jks"
+          trap 'rm -f "$ANDROID_KEYSTORE_PATH"' EXIT
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
+          gradle --no-daemon :app:assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk AI-Drama-Search-release.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose AI-Drama-Search-release.apk
+          sha256sum AI-Drama-Search-release.apk > SHA256SUMS.txt
+          version=$(sed -n "s/.*versionName '\([^']*\)'.*/\1/p" app/build.gradle)
+          test -n "$version"
+          tag="ai-drama-v$version"
+          if gh release view "$tag" >/dev/null 2>&1; then echo "Release already exists; increment version before publishing."; exit 0; fi
+          gh release create "$tag" AI-Drama-Search-release.apk SHA256SUMS.txt --target "$GITHUB_SHA" --title "AI 短劇搜搜 $version" --notes "Signed Android APK" --latest=false

@@ -1,0 +1,24 @@
+plugins { id 'com.android.application' }
+android {
+ namespace 'com.ai.dramasearch'
+ compileSdk 35
+ defaultConfig {
+  applicationId 'com.ai.dramasearch'
+  minSdk 26
+  targetSdk 34
+  versionCode 4
+  versionName '0.3.1'
+ }
+ signingConfigs {
+  release {
+   if (System.getenv('ANDROID_KEYSTORE_PATH')) {
+    storeFile file(System.getenv('ANDROID_KEYSTORE_PATH'))
+    storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+    keyAlias System.getenv('ANDROID_KEY_ALIAS')
+    keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+   }
+  }
+ }
+ buildTypes { release { signingConfig signingConfigs.release } }
+ compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
