@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     if: github.ref == 'refs/heads/ai-drama-app'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: write
@@ -28,8 +28,13 @@ jobs:
         with:
           gradle-version: '8.9'
       - uses: android-actions/setup-android@v3
-      - name: Install Android SDK
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Verify Android SDK
+        run: |
+          test -f "$ANDROID_HOME/platforms/android-35/android.jar"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/apksigner"
       - name: Assemble debug APK
         run: |
           gradle --no-daemon :app:assembleDebug
